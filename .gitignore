@@ -1,0 +1,25 @@
+# Node / Angular
+node_modules/
+dist/
+.angular/
+
+# Java
+target/
+build/
+.gradle/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 環境變數
+.env
+
+# OSRM 資料檔（數百 MB～數 GB，絕對不能進 repo）
+*.osm.pbf
+*.osrm*
+
+# 系統
+.DS_Store
