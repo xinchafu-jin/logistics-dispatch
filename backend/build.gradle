@@ -19,7 +19,18 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    // spring data jpa
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // mysql connector: mysql 驅動
+    implementation 'com.mysql:mysql-connector-j'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // 程式碼修改後儲存會自動重啟 Application
+//    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+    // security
+//    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // 資料驗證
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
