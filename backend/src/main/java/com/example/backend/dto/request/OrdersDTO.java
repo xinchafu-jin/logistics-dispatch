@@ -1,6 +1,6 @@
 package com.example.backend.dto.request;
 
-import com.example.backend.constans.OrderStatus;
+import com.example.backend.constants.OrderStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
