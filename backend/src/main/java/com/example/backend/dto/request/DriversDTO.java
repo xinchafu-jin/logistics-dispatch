@@ -15,10 +15,10 @@ public class DriversDTO {
     private String account;
 
     @NotBlank(message = "司機姓名不能為空")
-    @Size(max = 50, message = "姓名長度不能超過 50 字元")
+    @Size(max = 30, message = "姓名長度不能超過 30 字元")
     private String name;
 
-    @Size(max = 30, message = "電話長度不能超過 30 字元")
+    @Size(max = 10, message = "電話長度不能超過 10 字元")
     private String phone;
 
     @NotNull(message = "上班時間不能為空")
