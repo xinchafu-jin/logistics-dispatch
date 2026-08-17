@@ -1,4 +1,4 @@
-package com.example.backend.dto;
+package com.example.backend.dto.request;
 
 import com.example.backend.constans.OrderStatus;
 import jakarta.validation.constraints.NotBlank;
@@ -31,7 +31,6 @@ public class OrdersDTO {
 
     @NotNull(message = "體積不能為空")
     @Min(value = 0, message = "體積不能小於 0")
-    private Double volume;
 
     private String notes;
 
@@ -67,8 +66,6 @@ public class OrdersDTO {
     public Integer getBoxCount() { return boxCount; }
     public void setBoxCount(Integer boxCount) { this.boxCount = boxCount; }
 
-    public Double getVolume() { return volume; }
-    public void setVolume(Double volume) { this.volume = volume; }
 
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }

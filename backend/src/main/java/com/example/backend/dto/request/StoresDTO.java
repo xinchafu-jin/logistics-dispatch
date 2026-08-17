@@ -1,4 +1,4 @@
-package com.example.backend.dto;
+package com.example.backend.dto.request;
 
 import com.example.backend.constans.StoreStatus;
 import jakarta.validation.constraints.NotBlank;

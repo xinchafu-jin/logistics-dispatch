@@ -1,7 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.VehiclesDAO;
-import com.example.backend.dto.VehiclesDTO;
+import com.example.backend.dto.request.VehiclesDTO;
 import com.example.backend.entity.VehiclesEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;

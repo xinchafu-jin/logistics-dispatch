@@ -1,5 +1,19 @@
 # 資料模型
 
+## 倉庫 Warehouse
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | Long | 主鍵 |
+| warehouseCode | String | 倉庫代碼，唯一 |
+| name | String | 名稱 |
+| address | String | 地址 |
+| lat, lng | Double | 座標（排車路線的起訖點 depot）|
+| phone | String | 電話 |
+| isActive | Boolean | 是否啟用 |
+
+V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
+
 ## 門市 Store
 
 | 欄位 | 型別 | 說明 |
@@ -13,7 +27,6 @@
 | phone | String | 電話 |
 | receivingStart, receivingEnd | Time | 收貨時段 |
 | notes | String | 卸貨限制／備註 |
-| regionId | Long | 常態負責區域（對應 Region）|
 | status | Enum | ACTIVE / SUSPENDED |
 
 ## 車輛 Vehicle
@@ -23,11 +36,11 @@
 | id | Long | 主鍵 |
 | plateNumber | String | 車牌 |
 | vehicleType | String | 車型 |
-| capacity | Double | 可用容量（立方公尺）|
+| capacity | Integer | **可裝箱數**（容量單位統一用「箱」，箱子規格一致）|
 | fuelConsumption | Double | 平均油耗 |
-| maxTripsPerDay | Integer | 趟次上限 |
-| status | Enum | AVAILABLE / IN_DELIVERY / MAINTENANCE / RETIRED |
-| assignedDriverId | Long | 常態配對司機（模式1）|
+| status | Enum | AVAILABLE / MAINTENANCE / RETIRED |
+
+「配送中」不存成狀態值，由當日 Route 推導，避免需要手動同步而卡住。
 
 ## 司機 Driver
 
@@ -40,7 +53,6 @@
 | workStart, workEnd | Time | 工作起訖時間 |
 | restDuration | Integer | 休息時長（分鐘，後台固定值）|
 | maxOvertimeMinutes | Integer | 加班上限 |
-| regionId | Long | 常態負責區域 |
 | isActive | Boolean | 在職狀態 |
 
 ## 訂單 Order
@@ -52,15 +64,19 @@
 | storeId | Long | 門市 |
 | sourceVendor | String | 來源商家 |
 | itemDescription | String | 品項描述 |
-| boxCount | Integer | 箱數 |
-| volume | Double | 體積小計（立方公尺，由匯入資料直接提供）|
+| boxCount | Integer | **箱數，系統的唯一容量單位**（排車、交貨、異常皆以箱計）|
 | notes | String | 備註 |
 | deliveryDate | Date | 配送日期 |
-| status | Enum | PENDING_CONFIRM / CONFIRMED / SCHEDULED / PUBLISHED / LOADED / IN_DELIVERY / COMPLETED / CANCELLED / FAILED |
+| status | Enum | PENDING_CONFIRM / CONFIRMED / SCHEDULED / PUBLISHED / IN_DELIVERY / COMPLETED / CANCELLED / FAILED |
+| routeId | Long | 所屬配送計畫 |
 | assignedVehicleId | Long | 指派車輛 |
 | assignedDriverId | Long | 指派司機 |
 | sequence | Integer | 建議配送順序（司機可自主調整，此為起點值）|
 | createdAt, updatedAt | DateTime | |
+
+**一張訂單 = 某商家給某門市某天的一批貨。** 同一門市同一天可有多張訂單（來自不同商家），排車時合併為同一個配送站。箱內混裝多種商品，`itemDescription` 僅為備註，不參與運算。
+
+容量以「箱」為單位：訂單需求 = `boxCount`，車輛容量 = `Vehicle.capacity`（可裝箱數），兩邊同單位直接比對，不經過體積換算。OR-Tools 的容量維度只吃整數，箱數天生就是整數，不需轉換。
 
 ## 配送計畫 Route
 
@@ -68,9 +84,9 @@
 |---|---|---|
 | id | Long | 主鍵 |
 | date | Date | 配送日期 |
+| warehouseId | Long | 出發與返回的倉庫（depot）|
 | vehicleId | Long | 車輛 |
 | driverId | Long | 司機 |
-| orderIds | Long[] | 本趟訂單清單 |
 | totalDistance | Double | 總里程（公尺）|
 | estimatedFuelCost | Double | 預估油耗成本 |
 | estimatedWorkMinutes | Integer | 預估總工時 |
@@ -78,16 +94,7 @@
 | status | Enum | DRAFT / PUBLISHED |
 | version | Integer | 發布後每次異動 +1 |
 
-## 點交紀錄 HandoverRecord
-
-| 欄位 | 型別 | 說明 |
-|---|---|---|
-| id | Long | 主鍵 |
-| routeId | Long | 對應配送計畫 |
-| expectedBoxCount | Integer | 應裝箱數 |
-| actualBoxCount | Integer | 實裝箱數 |
-| hasDiscrepancy | Boolean | 是否有落差 |
-| createdAt | DateTime | |
+本趟包含哪些訂單，由 `Order.routeId` 指向此表，Route 本身不存訂單清單。
 
 ## 交貨紀錄 DeliveryRecord
 
@@ -109,7 +116,7 @@
 |---|---|---|
 | id | Long | 主鍵 |
 | orderId | Long | 關聯訂單（可為空）|
-| type | Enum | NO_SIGNATURE / HANDOVER_MISMATCH / DRIVER_REPORT / PHONE_HANDLED |
+| type | Enum | NO_SIGNATURE / DRIVER_REPORT / PHONE_HANDLED |
 | description | String | 說明 |
 | createdAt | DateTime | |
 | handledBy | String | 處理人 |
@@ -142,14 +149,11 @@
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
-| fromId, toId | Long | 門市或倉庫 id |
+| id | Long | 主鍵 |
+| fromType, toType | Enum | WAREHOUSE / STORE |
+| fromId, toId | Long | 對應類型的 id |
 | distance | Integer | 公尺 |
 | duration | Integer | 秒 |
-| updatedAt | DateTime | 新增/修改門市座標時觸發重算 |
+| updatedAt | DateTime | 新增／修改座標時觸發重算 |
 
-## Region（區域，2-6 模式1 用）
-
-| 欄位 | 型別 | 說明 |
-|---|---|---|
-| id | Long | 主鍵 |
-| name | String | 區域名稱 |
+起訖點以「類型 + id」識別，倉庫與門市的編號空間各自獨立。`(fromType, fromId, toType, toId)` 為唯一鍵。

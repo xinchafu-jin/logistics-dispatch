@@ -17,9 +17,9 @@ public class VehiclesEntity {
     @Column(length = 50)
     private String vehicleType;
 
-    /** 可用容量（立方公尺）*/
+    /** 可裝箱數，容量單位統一用「箱」 */
     @Column(nullable = false)
-    private Double capacity;
+    private Integer capacity;
 
     /** 平均油耗（公里／公升）*/
     @Column
@@ -53,11 +53,11 @@ public class VehiclesEntity {
         this.vehicleType = vehicleType;
     }
 
-    public Double getCapacity() {
+    public Integer getCapacity() {
         return capacity;
     }
 
-    public void setCapacity(Double capacity) {
+    public void setCapacity(Integer capacity) {
         this.capacity = capacity;
     }
 
