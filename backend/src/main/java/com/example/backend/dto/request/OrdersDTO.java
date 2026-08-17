@@ -7,37 +7,38 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import static com.example.backend.constants.ValidMsg.*;
 
 public class OrdersDTO {
 
     private Long id;
 
-    @NotBlank(message = "訂單編號不能為空")
-    @Size(max = 30, message = "訂單編號不能超過 30 字元")
+    @NotBlank(message = ORDER_NUMBER_REQUIRED)
+    @Size(max = 30, message = ORDER_NUMBER_MAX_LENGTH)
     private String orderNumber;
 
-    @NotNull(message = "門市 ID 不能為空")
+    @NotNull(message = ORDER_STORE_ID_REQUIRED)
     private Long storeId;
 
-    @Size(max = 100, message = "來源商家長度不能超過 100 字元")
+    @Size(max = 100, message = ORDER_VENDOR_MAX_LENGTH)
     private String sourceVendor;
 
-    @Size(max = 255, message = "商品描述不能超過 255 字元")
+    @Size(max = 255, message = ORDER_ITEM_DESCRIPTION_MAX_LENGTH)
     private String itemDescription;
 
-    @NotNull(message = "箱數不能為空")
-    @Min(value = 1, message = "箱數至少為 1")
+    @NotNull(message = ORDER_BOX_COUNT_REQUIRED)
+    @Min(value = 1, message = ORDER_BOX_COUNT_MIN)
     private Integer boxCount;
 
-    @NotNull(message = "體積不能為空")
-    @Min(value = 0, message = "體積不能小於 0")
+    @NotNull(message = ORDER_BOX_VOLUME_REQUIRED)
+    @Min(value = 0, message = ORDER_BOX_VOLUME_MIN)
 
     private String notes;
 
-    @NotNull(message = "配送日期不能為空")
+    @NotNull(message = ORDER_DELIVERY_DATE_REQUIRED)
     private LocalDate deliveryDate;
 
-    @NotNull(message = "訂單狀態不能為空")
+    @NotNull(message = ORDER_STATUS_REQUIRED)
     private OrderStatus status;
 
     private Long assignedVehicleId;

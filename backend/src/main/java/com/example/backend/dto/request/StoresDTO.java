@@ -5,43 +5,44 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalTime;
+import static com.example.backend.constants.ValidMsg.*;
 
 public class StoresDTO {
 
     private Long id;
 
-    @NotBlank(message = "門市代碼不能為空")
-    @Size(max = 20, message = "門市代碼不能超過 20 字元")
+    @NotBlank(message = STORE_CODE_REQUIRED)
+    @Size(max = 20, message = STORE_CODE_MAX_LENGTH)
     private String storeCode;
 
-    @NotBlank(message = "門市名稱不能為空")
-    @Size(max = 100, message = "門市名稱不能超過 100 字元")
+    @NotBlank(message = STORE_NAME_REQUIRED)
+    @Size(max = 100, message = STORE_NAME_MAX_LENGTH)
     private String name;
 
-    @Size(max = 255, message = "地址長度不能超過 255 字元")
+    @Size(max = 255, message = STORE_ADDRESS_MAX_LENGTH)
     private String address;
 
-    @NotNull(message = "緯度(lat)不能為空")
+    @NotNull(message = STORE_LAT_REQUIRED)
     private Double lat;
 
-    @NotNull(message = "經度(lng)不能為空")
+    @NotNull(message = STORE_LNG_REQUIRED)
     private Double lng;
 
-    @Size(max = 50, message = "聯絡人名稱不能超過 50 字元")
+    @Size(max = 50, message = STORE_CONTACT_NAME_MAX_LENGTH)
     private String contactName;
 
-    @Size(max = 30, message = "電話長度不能超過 30 字元")
+    @Size(max = 30, message = STORE_PHONE_MAX_LENGTH)
     private String phone;
 
-    @NotNull(message = "收貨開始時間不能為空")
+    @NotNull(message = STORE_RECEIVING_START_REQUIRED)
     private LocalTime receivingStart;
 
-    @NotNull(message = "收貨結束時間不能為空")
+    @NotNull(message = STORE_RECEIVING_END_REQUIRED)
     private LocalTime receivingEnd;
 
     private String notes;
 
-    @NotNull(message = "門市狀態不能為空")
+    @NotNull(message = STORE_STATUS_REQUIRED)
     private StoreStatus status;
 
     // ===== Getter & Setter =====

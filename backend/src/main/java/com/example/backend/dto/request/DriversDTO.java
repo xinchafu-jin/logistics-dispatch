@@ -5,36 +5,38 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Min;
 import java.time.LocalTime;
+import static com.example.backend.constants.ValidMsg.*;
 
 public class DriversDTO {
 
     private Long id;
 
-    @NotBlank(message = "司機帳號不能為空")
-    @Size(max = 50, message = "帳號長度不能超過 50 字元")
+    @NotBlank(message = DRIVER_ACCOUNT_REQUIRED)
+    @Size(max = 50, message = DRIVER_ACCOUNT_MAX_LENGTH)
     private String account;
 
-    @NotBlank(message = "司機姓名不能為空")
-    @Size(max = 50, message = "姓名長度不能超過 50 字元")
+    @NotBlank(message = DRIVER_NAME_REQUIRED)
+    @Size(max = 30, message = DRIVER_NAME_MAX_LENGTH)
     private String name;
 
-    @Size(max = 30, message = "電話長度不能超過 30 字元")
+    @Size(max = 10, message = DRIVER_PHONE_MAX_LENGTH)
     private String phone;
 
-    @NotNull(message = "上班時間不能為空")
+    @NotNull(message = DRIVER_WORK_START_REQUIRED)
     private LocalTime workStart;
 
-    @NotNull(message = "下班時間不能為空")
+    @NotNull(message = DRIVER_WORK_END_REQUIRED)
     private LocalTime workEnd;
 
-    @NotNull(message = "休息時長不能為空")
-    @Min(value = 0, message = "休息時長不能小於 0")
+    @NotNull(message = DRIVER_REST_DURATION_REQUIRED)
+    @Min(value = 0, message = DRIVER_REST_DURATION_MIN)
     private Integer restDuration;
 
-    @Min(value = 0, message = "加班上限不能小於 0")
+    @Min(value = 0, message = DRIVER_OVERTIME_MIN)
     private Integer maxOvertimeMinutes;
 
-    private Boolean isActive;
+    @NotNull(message = DRIVER_ACTIVE_REQUIRED)
+    private Boolean isActive = true;
 
     // ===== Getter & Setter =====
     public Long getId() { return id; }
