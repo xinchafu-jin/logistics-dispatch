@@ -1,6 +1,6 @@
-package com.example.backend.dto;
+package com.example.backend.dto.request;
 
-import com.example.backend.constans.VehicleStatus;
+import com.example.backend.constants.VehicleStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -19,7 +19,7 @@ public class VehiclesDTO {
 
     @NotNull(message = "可用容量不能為空")
     @Min(value = 0, message = "容量不能小於 0")
-    private Double capacity;
+    private Integer capacity;
 
     @Min(value = 0, message = "平均油耗不能小於 0")
     private Double fuelConsumption;
@@ -37,8 +37,8 @@ public class VehiclesDTO {
     public String getVehicleType() { return vehicleType; }
     public void setVehicleType(String vehicleType) { this.vehicleType = vehicleType; }
 
-    public Double getCapacity() { return capacity; }
-    public void setCapacity(Double capacity) { this.capacity = capacity; }
+    public Integer getCapacity() { return capacity; }
+    public void setCapacity(Integer capacity) { this.capacity = capacity; }
 
     public Double getFuelConsumption() { return fuelConsumption; }
     public void setFuelConsumption(Double fuelConsumption) { this.fuelConsumption = fuelConsumption; }

@@ -1,4 +1,4 @@
-package com.example.backend.constans;
+package com.example.backend.constants;
 
 public enum StoreStatus {
     ACTIVE,

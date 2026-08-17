@@ -1,7 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.OrdersDAO;
-import com.example.backend.dto.OrdersDTO;
+import com.example.backend.dto.request.OrdersDTO;
 import com.example.backend.entity.OrdersEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
@@ -73,7 +73,6 @@ public class OrdersService {
         entity.setSourceVendor(dto.getSourceVendor());
         entity.setItemDescription(dto.getItemDescription());
         entity.setBoxCount(dto.getBoxCount());
-        entity.setVolume(dto.getVolume());
         entity.setNotes(dto.getNotes());
         entity.setDeliveryDate(dto.getDeliveryDate());
         entity.setAssignedVehicleId(dto.getAssignedVehicleId());
@@ -92,7 +91,6 @@ public class OrdersService {
         dto.setSourceVendor(entity.getSourceVendor());
         dto.setItemDescription(entity.getItemDescription());
         dto.setBoxCount(entity.getBoxCount());
-        dto.setVolume(entity.getVolume());
         dto.setNotes(entity.getNotes());
         dto.setDeliveryDate(entity.getDeliveryDate());
         dto.setStatus(entity.getStatus());

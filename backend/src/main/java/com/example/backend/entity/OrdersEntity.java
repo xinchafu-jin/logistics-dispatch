@@ -1,6 +1,6 @@
 package com.example.backend.entity;
 
-import com.example.backend.constans.OrderStatus;
+import com.example.backend.constants.OrderStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -25,15 +25,13 @@ public class OrdersEntity {
     @Column(length = 100)
     private String sourceVendor;
 
+    /** 箱內容物描述，備註性質，不參與運算，供異常處理時參考 */
     @Column(length = 255)
     private String itemDescription;
 
+    /** 箱數，系統的唯一容量單位 */
     @Column(nullable = false)
     private Integer boxCount;
-
-    /** 體積小計（立方公尺），由匯入資料提供 */
-    @Column(nullable = false)
-    private Double volume;
 
     @Column(length = 500)
     private String notes;
@@ -44,6 +42,10 @@ public class OrdersEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private OrderStatus status = OrderStatus.PENDING_CONFIRM;
+
+    /** 所屬配送計畫 */
+    @Column
+    private Long routeId;
 
     @Column
     private Long assignedVehicleId;
@@ -121,14 +123,6 @@ public class OrdersEntity {
         this.boxCount = boxCount;
     }
 
-    public Double getVolume() {
-        return volume;
-    }
-
-    public void setVolume(Double volume) {
-        this.volume = volume;
-    }
-
     public String getNotes() {
         return notes;
     }
@@ -151,6 +145,14 @@ public class OrdersEntity {
 
     public void setStatus(OrderStatus status) {
         this.status = status;
+    }
+
+    public Long getRouteId() {
+        return routeId;
+    }
+
+    public void setRouteId(Long routeId) {
+        this.routeId = routeId;
     }
 
     public Long getAssignedVehicleId() {

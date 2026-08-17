@@ -6,17 +6,17 @@
 
 ## 技術棧
 
-| 層 | 選擇 |
-|---|---|
-| 前端 | Angular |
-| 後端 | Java + Spring Boot + Gradle |
-| 排車演算法 | Google OR-Tools（Java）|
-| 距離矩陣／路徑幾何 | OSRM（自架，台灣路網）|
-| 路網資料 | OpenStreetMap（台灣）|
-| 地圖顯示 | Leaflet.js |
-| 地址轉座標 | Nominatim（公共服務）|
-| 拖曳看板 | Angular CDK DragDrop |
-| 報表圖表 | Chart.js |
+| 層                 | 選擇                        |
+| ------------------ | --------------------------- |
+| 前端               | Angular                     |
+| 後端               | Java + Spring Boot + Gradle |
+| 排車演算法         | Google OR-Tools（Java）     |
+| 距離矩陣／路徑幾何 | OSRM（自架，台灣路網）      |
+| 路網資料           | OpenStreetMap（台灣）       |
+| 地圖顯示           | Leaflet.js                  |
+| 地址轉座標         | Nominatim（公共服務）       |
+| 拖曳看板           | Angular CDK DragDrop        |
+| 報表圖表           | Chart.js                    |
 
 全開源、無需 API Key、無需綁定信用卡；OSRM／OR-Tools／Leaflet 皆可離線運作，僅 Nominatim（低頻、非硬依賴）走公共服務。
 

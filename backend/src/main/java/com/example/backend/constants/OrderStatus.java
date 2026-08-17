@@ -1,11 +1,10 @@
-package com.example.backend.constans;
+package com.example.backend.constants;
 
 public enum OrderStatus {
     PENDING_CONFIRM,
     CONFIRMED,
     SCHEDULED,
     PUBLISHED,
-    LOADED,
     IN_DELIVERY,
     COMPLETED,
     CANCELLED,
