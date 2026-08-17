@@ -1,6 +1,6 @@
 package com.example.backend.entity;
 
-import com.example.backend.constans.VehicleStatus;
+import com.example.backend.constants.VehicleStatus;
 import jakarta.persistence.*;
 
 @Entity

@@ -1,6 +1,6 @@
 package com.example.backend.entity;
 
-import com.example.backend.constans.OrderStatus;
+import com.example.backend.constants.OrderStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
