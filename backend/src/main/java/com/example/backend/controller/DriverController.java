@@ -43,6 +43,7 @@ public class DriverController {
         return ResponseEntity.ok(driversService.update(id, dto));
     }
 
+    //包含復職的功能
     @PatchMapping("/{id}/status")
     public ResponseEntity<DriversDTO> updateStatus(
             @PathVariable Long id,
