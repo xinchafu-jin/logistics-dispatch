@@ -1,5 +1,6 @@
 package com.example.backend.service;
 
+import com.example.backend.constants.StoreStatus;
 import com.example.backend.dao.StoresDAO;
 import com.example.backend.dto.request.StoresDTO;
 import com.example.backend.entity.StoresEntity;
@@ -56,6 +57,12 @@ public class StoresService {
             throw new IllegalArgumentException("門市代碼已存在：" + dto.getStoreCode());
         }
         apply(dto, entity);
+        return toDTO(storesDAO.save(entity));
+    }
+
+    public StoresDTO updateStatus(Long id, StoreStatus status) {
+        StoresEntity entity = findEntity(id);
+        entity.setStatus(status);
         return toDTO(storesDAO.save(entity));
     }
 

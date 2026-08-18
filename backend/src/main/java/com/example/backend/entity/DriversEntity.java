@@ -16,6 +16,10 @@ public class DriversEntity {
     @Column(nullable = false, unique = true, length = 50)
     private String account;
 
+    /** BCrypt 雜湊。允許 null 是為了相容已存在的舊司機資料。 */
+    @Column(length = 60)
+    private String password;
+
     @Column(nullable = false, length = 50)
     private String name;
 
@@ -53,6 +57,14 @@ public class DriversEntity {
 
     public void setAccount(String account) {
         this.account = account;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     public String getName() {

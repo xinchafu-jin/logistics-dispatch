@@ -1,0 +1,14 @@
+:host { display: block; min-height: 100dvh; background: #12372a; color: #f4f0e7; }
+main { min-height: 100dvh; max-width: 70rem; margin: auto; padding: 1.5rem clamp(1.2rem, 6vw, 5rem); box-sizing: border-box; }
+header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #416256; padding-bottom: 1.25rem; }
+.brand { width: 2.7rem; height: 2.7rem; border: 1px solid #d9ad5b; color: #d9ad5b; display: grid; place-items: center; font-weight: 850; }
+button { color: #f4f0e7; border: 1px solid #678077; background: transparent; padding: .55rem .9rem; cursor: pointer; }
+section { padding: clamp(5rem, 14vh, 9rem) 0 3rem; }
+.eyebrow { color: #d9ad5b; letter-spacing: .16em; font-size: .75rem; font-weight: 850; }
+h1 { font-size: clamp(2.5rem, 7vw, 5.5rem); letter-spacing: -.05em; line-height: 1; margin: 1rem 0 1.4rem; }
+.lead { max-width: 45rem; color: #bfd0c9; font-size: 1.05rem; line-height: 1.8; }
+.identity-card { margin-top: 3.5rem; background: #f4f0e7; color: #18231e; display: grid; grid-template-columns: repeat(2, 1fr); }
+.identity-card div { display: grid; gap: .5rem; padding: 1.5rem; border-right: 1px solid #d6d4cc; }
+.identity-card div:last-child { border-right: 0; }
+.identity-card span { color: #79817d; font-size: .75rem; }
+@media (max-width: 620px) { .identity-card { grid-template-columns: 1fr; } .identity-card div { border-right: 0; border-bottom: 1px solid #d6d4cc; } }
