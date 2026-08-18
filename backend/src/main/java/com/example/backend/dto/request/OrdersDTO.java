@@ -30,9 +30,6 @@ public class OrdersDTO {
     @Min(value = 1, message = ORDER_BOX_COUNT_MIN)
     private Integer boxCount;
 
-    @NotNull(message = ORDER_BOX_VOLUME_REQUIRED)
-    @Min(value = 0, message = ORDER_BOX_VOLUME_MIN)
-
     private String notes;
 
     @NotNull(message = ORDER_DELIVERY_DATE_REQUIRED)
