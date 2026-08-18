@@ -59,6 +59,13 @@ public class DriversService {
         return toDTO(driversDAO.save(entity));
     }
 
+    public DriversDTO updateStatus(Long id, Boolean isActive) {
+        DriversEntity entity = findEntity(id);
+        entity.setIsActive(isActive);
+
+        return toDTO(driversDAO.save(entity));
+    }
+
     public void delete(Long id) {
         driversDAO.delete(findEntity(id));
     }

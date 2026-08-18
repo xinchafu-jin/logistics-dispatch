@@ -1,5 +1,6 @@
 package com.example.backend.controller;
 
+import com.example.backend.dto.request.DriverStatusDTO;
 import com.example.backend.dto.request.DriversDTO;
 import com.example.backend.service.DriversService;
 import jakarta.validation.Valid;
@@ -42,9 +43,13 @@ public class DriverController {
         return ResponseEntity.ok(driversService.update(id, dto));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> delete(@PathVariable Long id) {
-        driversService.delete(id);
-        return ResponseEntity.noContent().build();
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<DriversDTO> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody DriverStatusDTO dto) {
+
+        return ResponseEntity.ok(
+                driversService.updateStatus(id, dto.getIsActive())
+        );
     }
 }
