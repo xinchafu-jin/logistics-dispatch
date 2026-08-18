@@ -1,0 +1,17 @@
+<main>
+  <header>
+    <div class="brand">LD</div>
+    <button type="button" (click)="auth.logout()">登出</button>
+  </header>
+
+  <section>
+    <p class="eyebrow">司機工作站</p>
+    <h1>{{ auth.user()?.name }}，登入成功</h1>
+    <p class="lead">你已以司機身分通過驗證。任務清單、導航、點交與 GPS 回傳會在後續階段加入。</p>
+
+    <div class="identity-card">
+      <div><span>登入帳號</span><strong>{{ auth.user()?.account }}</strong></div>
+      <div><span>身分權限</span><strong>配送司機</strong></div>
+    </div>
+  </section>
+</main>

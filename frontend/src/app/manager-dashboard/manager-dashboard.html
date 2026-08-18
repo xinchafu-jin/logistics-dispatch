@@ -1,0 +1,76 @@
+<div class="workspace">
+  <header>
+    <div>
+      <p class="eyebrow">管理後台</p>
+      <h1>物流調度中心</h1>
+    </div>
+    <div class="profile">
+      <span>{{ auth.user()?.name }}</span>
+      <button class="text-button" type="button" (click)="auth.logout()">登出</button>
+    </div>
+  </header>
+
+  <nav aria-label="主要功能">
+    <button class="active" type="button">司機帳號</button>
+    <button type="button" disabled>調度地圖（待開發）</button>
+    <button type="button" disabled>GPS 追蹤（待開發）</button>
+  </nav>
+
+  @if (errorMessage()) { <p class="message error" role="alert">{{ errorMessage() }}</p> }
+  @if (successMessage()) { <p class="message success">{{ successMessage() }}</p> }
+
+  <main>
+    <section class="card create-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">帳號建立</p>
+          <h2>新增司機</h2>
+        </div>
+        <span class="step">01</span>
+      </div>
+
+      <form [formGroup]="form" (ngSubmit)="createDriver()">
+        <div class="field"><label for="name">姓名</label><input id="name" formControlName="name" /></div>
+        <div class="field"><label for="account">登入帳號</label><input id="account" formControlName="account" autocomplete="off" /></div>
+        <div class="field full"><label for="password">初始密碼（至少 8 字元）</label><input id="password" type="password" formControlName="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="phone">電話</label><input id="phone" formControlName="phone" /></div>
+        <div class="field"><label for="rest">休息分鐘</label><input id="rest" type="number" formControlName="restDuration" /></div>
+        <div class="field"><label for="start">上班時間</label><input id="start" type="time" formControlName="workStart" /></div>
+        <div class="field"><label for="end">下班時間</label><input id="end" type="time" formControlName="workEnd" /></div>
+        <div class="field full"><label for="overtime">加班上限（分鐘）</label><input id="overtime" type="number" formControlName="maxOvertimeMinutes" /></div>
+        <button class="primary full" type="submit" [disabled]="saving()">
+          {{ saving() ? '建立中…' : '建立司機帳號' }}
+        </button>
+      </form>
+    </section>
+
+    <section class="card list-card">
+      <div class="section-heading">
+        <div><p class="eyebrow">人員管理</p><h2>司機清單</h2></div>
+        <span class="count">{{ drivers().length }} 人</span>
+      </div>
+
+      @if (loading()) {
+        <p class="empty">載入中…</p>
+      } @else if (drivers().length === 0) {
+        <p class="empty">還沒有司機，請先建立第一組帳號。</p>
+      } @else {
+        <div class="driver-list">
+          @for (driver of drivers(); track driver.id) {
+            <article class="driver-row">
+              <div class="avatar">{{ driver.name.slice(0, 1) }}</div>
+              <div class="driver-info">
+                <strong>{{ driver.name }}</strong>
+                <span>{{ driver.account }} · {{ driver.workStart.slice(0, 5) }}–{{ driver.workEnd.slice(0, 5) }}</span>
+              </div>
+              <span class="status" [class.inactive]="!driver.isActive">{{ driver.isActive ? '在職' : '已停用' }}</span>
+              <button class="status-button" type="button" (click)="toggleStatus(driver)">
+                {{ driver.isActive ? '停用' : '恢復' }}
+              </button>
+            </article>
+          }
+        </div>
+      }
+    </section>
+  </main>
+</div>
