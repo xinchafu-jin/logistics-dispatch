@@ -53,13 +53,4 @@ public final class ValidMsg {
     public static final String VEHICLE_CAPACITY_MIN = "容量不能小於 0";
     public static final String VEHICLE_FUEL_CONSUMPTION_MIN = "平均油耗不能小於 0";
     public static final String VEHICLE_STATUS_REQUIRED = "車輛狀態不能為空";
-
-    // Warehouse
-    public static final String WAREHOUSE_CODE_REQUIRED = "倉庫代碼不能為空";
-    public static final String WAREHOUSE_CODE_MAX_LENGTH = "倉庫代碼不能超過 20 字元";
-    public static final String WAREHOUSE_NAME_REQUIRED = "倉庫名稱不能為空";
-    public static final String WAREHOUSE_NAME_MAX_LENGTH = "倉庫名稱不能超過 100 字元";
-    public static final String WAREHOUSE_ADDRESS_MAX_LENGTH = "地址長度不能超過 255 字元";
-    public static final String WAREHOUSE_LAT_REQUIRED = "倉庫緯度不能為空";
-    public static final String WAREHOUSE_LNG_REQUIRED = "倉庫經度不能為空";
-    public static final String WAREHOUSE_PHONE_MAX_LENGTH = "電話長度不能超過 30 字元";}
+}

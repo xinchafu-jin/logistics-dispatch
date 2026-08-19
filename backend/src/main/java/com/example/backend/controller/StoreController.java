@@ -1,6 +1,5 @@
 package com.example.backend.controller;
 
-import com.example.backend.dto.request.StoreStatusDTO;
 import com.example.backend.dto.request.StoresDTO;
 import com.example.backend.service.StoresService;
 import jakarta.validation.Valid;
@@ -41,16 +40,6 @@ public class StoreController {
             @PathVariable Long id,
             @Valid @RequestBody StoresDTO dto) {
         return ResponseEntity.ok(storesService.update(id, dto));
-    }
-
-    @PatchMapping("/{id}/status")
-    public ResponseEntity<StoresDTO> updateStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody StoreStatusDTO dto) {
-
-        return ResponseEntity.ok(
-                storesService.updateStatus(id, dto.getStatus())
-        );
     }
 
     @DeleteMapping("/{id}")

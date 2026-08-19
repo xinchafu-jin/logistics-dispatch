@@ -3,7 +3,6 @@ package com.example.backend.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "admin_users")
 public class AdminUsersEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -12,8 +11,7 @@ public class AdminUsersEntity {
     @Column(nullable = false,unique = true,length = 60)
     private String account;
 
-    /** BCrypt 雜湊，不儲存明碼。 */
-    @Column(nullable = false, length = 60)
+    @Column(nullable = false,length = 60)
     private String password;
     @Column(nullable = false,length = 60)
     private String name;

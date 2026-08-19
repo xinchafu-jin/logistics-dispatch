@@ -4,8 +4,6 @@ import com.example.backend.entity.DriversEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
-
 @Repository
 public interface DriversDAO extends JpaRepository<DriversEntity, Long> {
 
@@ -14,6 +12,4 @@ public interface DriversDAO extends JpaRepository<DriversEntity, Long> {
      * 用於 Service 層新增/修改時的唯一值防呆
      */
     boolean existsByAccount(String account);
-
-    Optional<DriversEntity> findByAccount(String account);
 }

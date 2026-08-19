@@ -1,6 +1,5 @@
 package com.example.backend.controller;
 
-import com.example.backend.dto.request.DriverStatusDTO;
 import com.example.backend.dto.request.DriversDTO;
 import com.example.backend.service.DriversService;
 import jakarta.validation.Valid;
@@ -43,14 +42,9 @@ public class DriverController {
         return ResponseEntity.ok(driversService.update(id, dto));
     }
 
-    //包含復職的功能
-    @PatchMapping("/{id}/status")
-    public ResponseEntity<DriversDTO> updateStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody DriverStatusDTO dto) {
-
-        return ResponseEntity.ok(
-                driversService.updateStatus(id, dto.getIsActive())
-        );
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        driversService.delete(id);
+        return ResponseEntity.noContent().build();
     }
 }
