@@ -4,7 +4,6 @@ import com.example.backend.dao.DriversDAO;
 import com.example.backend.dto.request.DriversDTO;
 import com.example.backend.entity.DriversEntity;
 import jakarta.persistence.EntityNotFoundException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,11 +14,9 @@ import java.util.List;
 public class DriversService {
 
     private final DriversDAO driversDAO;
-    private final PasswordEncoder passwordEncoder;
 
-    public DriversService(DriversDAO driversDAO, PasswordEncoder passwordEncoder) {
+    public DriversService(DriversDAO driversDAO) {
         this.driversDAO = driversDAO;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @Transactional(readOnly = true)
@@ -36,12 +33,8 @@ public class DriversService {
         if (driversDAO.existsByAccount(dto.getAccount())) {
             throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
         }
-        if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-            throw new IllegalArgumentException("新增司機時必須設定至少 8 字元的密碼");
-        }
         DriversEntity entity = new DriversEntity();
         apply(dto, entity);
-        entity.setPassword(passwordEncoder.encode(dto.getPassword()));
         return toDTO(driversDAO.save(entity));
     }
 
@@ -50,12 +43,8 @@ public class DriversService {
             if (driversDAO.existsByAccount(dto.getAccount())) {
                 throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
             }
-            if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-                throw new IllegalArgumentException("新增司機時必須設定至少 8 字元的密碼");
-            }
             DriversEntity entity = new DriversEntity();
             apply(dto, entity);
-            entity.setPassword(passwordEncoder.encode(dto.getPassword()));
             return entity;
         }).toList();
         return driversDAO.saveAll(entities).stream().map(this::toDTO).toList();
@@ -67,9 +56,6 @@ public class DriversService {
             throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
         }
         apply(dto, entity);
-        if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
-            entity.setPassword(passwordEncoder.encode(dto.getPassword()));
-        }
         return toDTO(driversDAO.save(entity));
     }
 

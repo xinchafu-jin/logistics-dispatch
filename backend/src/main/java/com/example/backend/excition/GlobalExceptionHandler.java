@@ -9,12 +9,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(LoginFailedException.class)
-    public ResponseEntity<ApiResponse> handleLoginFailed(LoginFailedException e) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.failure(e.getMessage()));
-    }
-
     /**
      * 處理目前專案使用的業務邏輯例外。
      *

@@ -1,6 +1,5 @@
 package com.example.backend.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -15,14 +14,6 @@ public class DriversDTO {
     @NotBlank(message = DRIVER_ACCOUNT_REQUIRED)
     @Size(max = 50, message = DRIVER_ACCOUNT_MAX_LENGTH)
     private String account;
-
-    /**
-     * 只接受前端寫入，回傳司機資料時不會序列化密碼。
-     * 新增時 Service 會檢查必填；修改時留空表示不變更密碼。
-     */
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Size(min = 8, max = 72, message = "密碼長度必須介於 8 到 72 字元")
-    private String password;
 
     @NotBlank(message = DRIVER_NAME_REQUIRED)
     @Size(max = 30, message = DRIVER_NAME_MAX_LENGTH)
@@ -53,9 +44,6 @@ public class DriversDTO {
 
     public String getAccount() { return account; }
     public void setAccount(String account) { this.account = account; }
-
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

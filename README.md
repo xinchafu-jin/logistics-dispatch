@@ -53,13 +53,9 @@ cd logistics-dispatch
 
 ```bash
 cd backend
-# 首次使用先建立 MySQL 資料庫
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS logistics CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 ./gradlew build
 ./gradlew bootRun
 ```
-
-本機開發用的初始主管帳號是 `manager` / `Manager123!`，只會在管理員資料為空時建立。部署前必須以 `BOOTSTRAP_ADMIN_ACCOUNT`、`BOOTSTRAP_ADMIN_PASSWORD` 與 `JWT_SECRET` 環境變數覆寫預設值。資料庫連線可用 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 調整。
 
 第一次加完 OR-Tools 依賴後，務必先跑載入測試確認 native library 沒問題：
 
@@ -75,11 +71,6 @@ cd frontend
 npm install
 ng serve
 ```
-
-登入入口：
-
-- 物流主管：`http://localhost:4200/manager/login`
-- 司機：`http://localhost:4200/driver/login`
 
 ### OSRM
 

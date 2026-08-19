@@ -29,8 +29,7 @@ dependencies {
     // 程式碼修改後儲存會自動重啟 Application
 //    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     // security
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+//    implementation 'org.springframework.boot:spring-boot-starter-security'
     // 資料驗證
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

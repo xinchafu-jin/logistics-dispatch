@@ -1,16 +1,1 @@
-html {
-  font-family: Inter, "Noto Sans TC", "Segoe UI", sans-serif;
-  background: #f2efe7;
-  color: #18231e;
-}
-
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100dvh;
-}
-
-button,
-input {
-  font: inherit;
-}
+/* You can add global styles to this file, and also import other style files */
