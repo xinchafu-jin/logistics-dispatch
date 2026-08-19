@@ -1,0 +1,37 @@
+<section class="live-fleet-map" aria-labelledby="fleet-map-title">
+  <header class="fleet-map-header">
+    <div>
+      <p class="fleet-map-eyebrow">LIVE FLEET</p>
+      <h3 id="fleet-map-title">台南即時車隊位置</h3>
+    </div>
+
+    <div class="fleet-map-summary" aria-label="目前車隊定位摘要">
+      <span><i class="fleet-status-dot is-active" aria-hidden="true"></i>2 台配送中</span>
+      <span><i class="fleet-status-dot is-paused" aria-hidden="true"></i>1 台停靠</span>
+      <span><i class="fleet-status-dot is-delayed" aria-hidden="true"></i>1 台延遲</span>
+    </div>
+  </header>
+
+  <div
+    id="fleet-map-canvas"
+    class="fleet-map-canvas"
+    aria-label="台南市配送車隊即時定位地圖，含四輛示範車輛"
+  ></div>
+
+  <div class="fleet-map-overlay fleet-map-overlay--top" aria-hidden="true">
+    <span>GPS 定位</span>
+    <strong>30 秒回傳</strong>
+  </div>
+
+  <p class="fleet-map-overlay fleet-map-overlay--bottom">
+    顯示模擬定位資料，將於串接車機定位 API 後更新為即時資料。
+  </p>
+
+  <p class="fleet-map-attribution">
+    &copy;
+    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
+      >OpenStreetMap</a
+    >
+    &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
+  </p>
+</section>

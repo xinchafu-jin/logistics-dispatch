@@ -1,0 +1,118 @@
+<main class="driver-dashboard">
+  <header class="driver-header">
+    <a class="driver-brand" routerLink="/driver/dashboard" aria-label="捷流智慧物流，返回今日任務">
+      <app-brand-logo />
+    </a>
+
+    <div class="driver-account">
+      <div>
+        <span>DRIVER PORTAL</span>
+        <strong>{{ user()?.displayName ?? '配送夥伴' }}</strong>
+      </div>
+      <button
+        type="button"
+        class="icon-button"
+        [disabled]="isSigningOut()"
+        (click)="signOut()"
+        title="登出系統"
+        aria-label="登出系統"
+      >
+        <svg lucideLogOut aria-hidden="true"></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="driver-content">
+    <section class="driver-intro" aria-labelledby="driver-title">
+      <div>
+        <p class="page-eyebrow">TODAY'S DELIVERY</p>
+        <h1 id="driver-title">永康區 02 線</h1>
+        <p>今日共 4 個配送點，目前進行第 1 站配送作業。</p>
+      </div>
+      <span class="live-status"><i aria-hidden="true"></i>定位正常 · 8 秒前</span>
+    </section>
+
+    <section class="driver-summary" aria-label="今日任務摘要">
+      <article>
+        <span class="summary-icon"><svg lucideTruck aria-hidden="true"></svg></span>
+        <div>
+          <p>指派車輛</p>
+          <strong>KLD-205</strong><span>3.5 噸常溫貨車</span>
+        </div>
+      </article>
+      <article>
+        <span class="summary-icon"><svg lucidePackageCheck aria-hidden="true"></svg></span>
+        <div>
+          <p>載貨狀態</p>
+          <strong>32 箱</strong><span>460 kg · 已完成裝載</span>
+        </div>
+      </article>
+      <article>
+        <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
+        <div>
+          <p>預計完成</p>
+          <strong>12:10</strong><span>目前工時 2 小時 18 分</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="current-stop" aria-labelledby="current-stop-title">
+      <div class="current-stop-map" aria-hidden="true">
+        <span class="map-grid"></span><span class="route-line"></span>
+        <span class="route-point route-point-start"></span
+        ><span class="route-point route-point-active"></span>
+      </div>
+      <div class="current-stop-content">
+        <p class="page-eyebrow">CURRENT STOP</p>
+        <h2 id="current-stop-title">永康生鮮超市</h2>
+        <p>台南市永康區中華路 318 號</p>
+        <dl>
+          <div>
+            <dt>配送時段</dt>
+            <dd>09:50 - 10:20</dd>
+          </div>
+          <div>
+            <dt>貨物</dt>
+            <dd>32 箱 / 460 kg</dd>
+          </div>
+        </dl>
+        <div class="current-stop-actions">
+          <button type="button" class="primary-action">
+            <svg lucideNavigation aria-hidden="true"></svg>開始導航
+          </button>
+          <button type="button" class="secondary-action">
+            <svg lucidePhone aria-hidden="true"></svg>聯絡店家
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="route-plan" aria-labelledby="route-plan-title">
+      <header>
+        <div>
+          <p class="page-eyebrow">ROUTE PLAN</p>
+          <h2 id="route-plan-title">今日配送節點</h2>
+        </div>
+        <span>1 / 4 完成中</span>
+      </header>
+      <div class="stop-list">
+        @for (stop of stops; track stop.sequence) {
+          <article class="stop-row" [class.is-active]="stop.active">
+            <span class="stop-sequence">{{ stop.sequence }}</span>
+            <div class="stop-main">
+              <strong>{{ stop.store }}</strong>
+              <span><svg lucideMapPinned aria-hidden="true"></svg>{{ stop.address }}</span>
+            </div>
+            <div class="stop-meta">
+              <span>{{ stop.window }}</span
+              ><b>{{ stop.status }}</b>
+            </div>
+            @if (stop.active) {
+              <svg class="stop-check" lucideCircleCheck aria-hidden="true"></svg>
+            }
+          </article>
+        }
+      </div>
+    </section>
+  </section>
+</main>

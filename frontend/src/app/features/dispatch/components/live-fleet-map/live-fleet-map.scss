@@ -1,0 +1,333 @@
+.live-fleet-map {
+  position: relative;
+  min-height: 598px;
+  overflow: hidden;
+  background: #0b0e0f;
+  border: 1px solid var(--metal-edge);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 28px 48px rgb(0 0 0 / 24%);
+}
+
+.live-fleet-map::after {
+  position: absolute;
+  inset: 0;
+  z-index: 410;
+  border: 1px solid rgb(255 255 255 / 4%);
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}
+
+.fleet-map-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 500;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  background: linear-gradient(180deg, rgb(6 9 10 / 92%), rgb(6 9 10 / 0%));
+  pointer-events: none;
+}
+
+.fleet-map-eyebrow {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.fleet-map-header h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.fleet-map-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 10px 14px;
+  color: #dce5e4;
+  font-size: 0.75rem;
+}
+
+.fleet-map-summary span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fleet-status-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.fleet-status-dot.is-active {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgb(99 209 198 / 90%);
+}
+
+.fleet-status-dot.is-paused {
+  background: #b8c3c2;
+}
+
+.fleet-status-dot.is-delayed {
+  background: #d98d57;
+  box-shadow: 0 0 9px rgb(217 141 87 / 65%);
+}
+
+.fleet-map-canvas {
+  width: 100%;
+  min-height: 598px;
+  background: #0b0e0f;
+}
+
+.fleet-map-canvas .leaflet-pane,
+.fleet-map-canvas .leaflet-control {
+  filter: saturate(78%) contrast(108%);
+}
+
+.fleet-map-canvas .leaflet-control-zoom {
+  overflow: hidden;
+  margin: 0 18px 18px 0;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 6px;
+  box-shadow: 0 10px 20px rgb(0 0 0 / 36%);
+}
+
+.fleet-map-canvas .leaflet-control-zoom a {
+  width: 30px;
+  height: 30px;
+  color: var(--text);
+  background: rgb(17 22 23 / 92%);
+  border-color: rgb(255 255 255 / 12%);
+  line-height: 29px;
+}
+
+.fleet-map-canvas .leaflet-control-zoom a:hover {
+  color: var(--accent);
+  background: rgb(29 37 38 / 96%);
+}
+
+.fleet-map-overlay {
+  position: absolute;
+  z-index: 500;
+  margin: 0;
+  background: rgb(8 12 13 / 78%);
+  border: 1px solid rgb(255 255 255 / 12%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.fleet-map-overlay--top {
+  top: 104px;
+  left: 24px;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  color: var(--subtle);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+}
+
+.fleet-map-overlay--top strong {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.fleet-map-overlay--bottom {
+  right: 18px;
+  bottom: 16px;
+  left: 18px;
+  padding: 9px 12px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.fleet-map-attribution {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  z-index: 510;
+  margin: 0;
+  color: rgb(205 217 217 / 58%);
+  font-size: 0.5625rem;
+}
+
+.fleet-map-attribution a {
+  color: inherit;
+}
+
+.jflow-fleet-marker {
+  background: transparent;
+  border: 0;
+  transition: transform 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fleet-marker {
+  position: relative;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+}
+
+.fleet-marker__pulse,
+.fleet-marker__core {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.fleet-marker__pulse {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgb(99 209 198 / 50%);
+  background: rgb(99 209 198 / 8%);
+  animation: fleet-pulse 2.8s ease-out infinite;
+}
+
+.fleet-marker__core {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: #00110f;
+  background: var(--accent);
+  border: 2px solid rgb(233 255 252 / 72%);
+  box-shadow: 0 0 18px rgb(99 209 198 / 75%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.5rem;
+  font-weight: 800;
+}
+
+.fleet-marker--paused .fleet-marker__pulse {
+  border-color: rgb(196 207 207 / 35%);
+  background: rgb(196 207 207 / 8%);
+  animation: none;
+}
+
+.fleet-marker--paused .fleet-marker__core {
+  color: #101314;
+  background: #c0cbca;
+  box-shadow: 0 0 15px rgb(192 203 202 / 40%);
+}
+
+.fleet-marker--delayed .fleet-marker__pulse {
+  border-color: rgb(217 141 87 / 48%);
+  background: rgb(217 141 87 / 8%);
+  animation-duration: 3.6s;
+}
+
+.fleet-marker--delayed .fleet-marker__core {
+  color: #1a0c02;
+  background: #d98d57;
+  box-shadow: 0 0 16px rgb(217 141 87 / 64%);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  color: var(--text);
+  background: rgb(13 18 19 / 94%);
+  border: 1px solid rgb(255 255 255 / 15%);
+  box-shadow: 0 16px 34px rgb(0 0 0 / 46%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.leaflet-popup-content {
+  margin: 13px 14px;
+}
+
+.fleet-popup {
+  display: grid;
+  gap: 4px;
+}
+
+.fleet-popup__eyebrow {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.fleet-popup strong {
+  font-size: 0.8125rem;
+}
+
+.fleet-popup span {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
+@keyframes fleet-pulse {
+  0%,
+  100% {
+    transform: scale(0.72);
+    opacity: 0.28;
+  }
+
+  55% {
+    transform: scale(1.15);
+    opacity: 0.08;
+  }
+}
+
+@media (max-width: 760px) {
+  .live-fleet-map,
+  .fleet-map-canvas {
+    min-height: 500px;
+  }
+}
+
+@media (max-width: 560px) {
+  .live-fleet-map,
+  .fleet-map-canvas {
+    min-height: 440px;
+  }
+
+  .fleet-map-header {
+    padding: 18px;
+  }
+
+  .fleet-map-summary {
+    display: none;
+  }
+
+  .fleet-map-overlay--top {
+    top: 86px;
+    left: 18px;
+  }
+
+  .fleet-map-overlay--bottom {
+    right: 12px;
+    bottom: 14px;
+    left: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jflow-fleet-marker,
+  .fleet-marker__pulse {
+    animation: none;
+    transition: none;
+  }
+}
