@@ -48,12 +48,22 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 |---|---|---|
 | id | Long | 主鍵 |
 | account | String | 員工編號或手機號碼（登入帳號）|
+| password | String | BCrypt 密碼雜湊（不儲存明碼）|
 | name | String | 姓名 |
 | phone | String | 電話 |
 | workStart, workEnd | Time | 工作起訖時間 |
 | restDuration | Integer | 休息時長（分鐘，後台固定值）|
 | maxOvertimeMinutes | Integer | 加班上限 |
 | isActive | Boolean | 在職狀態 |
+
+## 物流主管 AdminUser
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| id | Long | 主鍵 |
+| account | String | 主管登入帳號，唯一 |
+| password | String | BCrypt 密碼雜湊（不儲存明碼）|
+| name | String | 主管姓名 |
 
 ## 訂單 Order
 

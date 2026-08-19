@@ -60,11 +60,42 @@ Response:
 GET/POST/PUT/DELETE /api/vehicles
 ```
 
+### 登入與權限
+
+```http
+POST /api/auth/admin/login
+POST /api/auth/driver/login
+GET  /api/auth/me
+```
+
+兩種登入的 request 相同：
+
+```json
+{
+  "account": "manager",
+  "password": "Manager123!"
+}
+```
+
+登入成功回傳 `accessToken`、`expiresAt`、`role`、`userId`、`account` 與 `name`。後續請求使用：
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+`ADMIN` 可存取後台主檔 API；`DRIVER` 不可存取司機管理等主管 API。
+
 ### 司機
 
+```http
+GET   /api/drivers
+GET   /api/drivers/{id}
+POST  /api/drivers
+PUT   /api/drivers/{id}
+PATCH /api/drivers/{id}/status
 ```
-GET/POST/PUT/DELETE /api/drivers
-```
+
+以 `isActive=false` 停用司機帳號，不做實體刪除。新增司機時 `password` 必填且至少 8 字元，只接受寫入不會回傳。以上 API 僅 `ADMIN` 可用。
 
 ## 訂單匯入
 

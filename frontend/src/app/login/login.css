@@ -1,0 +1,23 @@
+:host { display: block; min-height: 100dvh; }
+.login-shell { min-height: 100dvh; display: grid; grid-template-columns: 1.05fr .95fr; }
+.brand-panel { background: #12372a; color: #f5f1e8; padding: clamp(2rem, 7vw, 7rem); display: flex; flex-direction: column; justify-content: center; }
+.brand-mark { width: 3rem; height: 3rem; border: 1px solid #d9ad5b; color: #d9ad5b; display: grid; place-items: center; font-weight: 800; letter-spacing: .08em; margin-bottom: 4rem; }
+.brand-panel h1 { font-size: clamp(2.6rem, 5vw, 5.6rem); line-height: .98; letter-spacing: -.045em; margin: .75rem 0 1.6rem; font-weight: 650; }
+.brand-copy { color: #c8d4ce; max-width: 32rem; line-height: 1.8; }
+.eyebrow { color: #a77723; letter-spacing: .15em; text-transform: uppercase; font-size: .75rem; font-weight: 800; }
+.login-panel { background: #f3efe7; display: grid; place-items: center; padding: 2rem; }
+.login-card { width: min(100%, 27rem); }
+.login-card h2 { color: #16231d; font-size: 2rem; margin: .65rem 0 .65rem; }
+.muted { color: #68736e; line-height: 1.65; margin: 0 0 2rem; }
+form { display: grid; gap: .7rem; }
+label { color: #35443d; font-size: .86rem; font-weight: 700; margin-top: .5rem; }
+input { width: 100%; box-sizing: border-box; border: 1px solid #c9cec8; border-radius: .3rem; padding: .9rem 1rem; font: inherit; background: #fff; outline: none; }
+input:focus { border-color: #267256; box-shadow: 0 0 0 3px rgb(38 114 86 / 12%); }
+.primary { margin-top: .8rem; border: 0; border-radius: .3rem; padding: .95rem; background: #267256; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.primary:hover { background: #1e5d46; }
+.primary:disabled { opacity: .65; cursor: wait; }
+.error { color: #a22d26; background: #f9e6e2; padding: .7rem .85rem; border-radius: .3rem; font-size: .88rem; }
+.dev-hint { color: #737b77; font-size: .77rem; margin: 1.25rem 0 .8rem; }
+a { color: #1f674e; font-weight: 750; text-decoration: none; font-size: .9rem; }
+code { background: #e5dfd4; padding: .1rem .3rem; border-radius: .2rem; }
+@media (max-width: 760px) { .login-shell { grid-template-columns: 1fr; } .brand-panel { min-height: 34vh; padding: 2rem; } .brand-mark { margin-bottom: 2rem; } .brand-copy { display: none; } .login-panel { padding: 3rem 1.5rem; } }
