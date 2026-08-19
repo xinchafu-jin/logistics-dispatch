@@ -1,0 +1,115 @@
+<main class="login-page" [class.is-login-open]="showLoginForm()">
+  <section class="brand-panel" aria-label="系統資訊">
+    <div class="brand-content">
+      <app-brand-logo></app-brand-logo>
+      <h1>物流調度系統</h1>
+      <p class="brand-description">配送需求、運輸調度與即時配送管理。</p>
+    </div>
+
+    <app-electric-gaze-visual />
+
+    <p class="system-status">系統狀態：正常運作</p>
+  </section>
+
+  <section class="login-panel" aria-labelledby="login-title">
+    <div
+      class="login-content"
+      [attr.aria-hidden]="!showLoginForm()"
+      [attr.inert]="showLoginForm() ? null : ''"
+    >
+      <div class="login-heading">
+        <p class="section-label">系統登入</p>
+        <h2 id="login-title">歡迎回來</h2>
+        <p>請選擇登入入口並使用公司帳號登入。</p>
+      </div>
+
+      <div class="portal-switch" role="group" aria-label="登入入口">
+        <button
+          type="button"
+          [class.is-active]="portal() === 'ADMIN'"
+          [attr.aria-pressed]="portal() === 'ADMIN'"
+          [disabled]="isSubmitting()"
+          (click)="setPortal('ADMIN')"
+        >
+          物流後台
+        </button>
+
+        <button
+          type="button"
+          [class.is-active]="portal() === 'DRIVER'"
+          [attr.aria-pressed]="portal() === 'DRIVER'"
+          [disabled]="isSubmitting()"
+          (click)="setPortal('DRIVER')"
+        >
+          司機端
+        </button>
+      </div>
+
+      <p class="portal-description">
+        {{
+          portal() === 'ADMIN'
+            ? '管理配送訂單、人車資源與營運狀況。'
+            : '查看配送任務、路線與配送狀態。'
+        }}
+      </p>
+
+      <form class="login-form" (submit)="signIn($event)" novalidate>
+        <div class="form-field">
+          <label for="account">帳號</label>
+          <input
+            #accountInput
+            id="account"
+            type="text"
+            autocomplete="username"
+            placeholder="公司帳號或員工編號"
+            [value]="account()"
+            [disabled]="isSubmitting()"
+            (input)="account.set(accountInput.value)"
+          />
+        </div>
+
+        <div class="form-field">
+          <label for="password">密碼</label>
+          <input
+            #passwordInput
+            id="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="輸入密碼"
+            [value]="password()"
+            [disabled]="isSubmitting()"
+            (input)="password.set(passwordInput.value)"
+          />
+        </div>
+
+        <button type="submit" [disabled]="isSubmitting()">
+          {{ isSubmitting() ? '登入中...' : '登入系統' }}
+        </button>
+
+        @if (loginError()) {
+          <p class="login-error" role="alert" aria-live="polite">
+            {{ loginError() }}
+          </p>
+        }
+      </form>
+
+      <p class="support-text">帳號問題請聯絡系統管理員。</p>
+    </div>
+
+    <div
+      class="weather-entry"
+      aria-live="polite"
+      [attr.aria-hidden]="showLoginForm()"
+      [attr.inert]="showLoginForm() ? '' : null"
+    >
+      <p class="weather-location">{{ weather().city }} · 今日配送天氣</p>
+      <span class="weather-icon" aria-hidden="true">{{ weather().icon }}</span>
+      <p class="weather-temperature">{{ weather().temperature }}°</p>
+      <p class="weather-condition">{{ weather().condition }}</p>
+
+      <button class="open-login" type="button" (click)="openLogin()">
+        登入系統
+      </button>
+    </div>
+  </section>
+</main>
