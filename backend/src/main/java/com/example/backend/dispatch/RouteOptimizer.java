@@ -2,10 +2,11 @@ package com.example.backend.dispatch;
 
 import com.google.ortools.Loader;
 import com.google.ortools.constraintsolver.*;
+import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-
+@Component
 public class RouteOptimizer {
     static {
         Loader.loadNativeLibraries();

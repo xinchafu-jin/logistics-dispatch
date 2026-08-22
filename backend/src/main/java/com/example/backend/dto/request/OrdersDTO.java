@@ -44,6 +44,8 @@ public class OrdersDTO {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    @NotNull(message = ORDER_WAREHOUSE_ID_REQUIRED)
+    private Long warehouseId;
 
     // ===== Getter & Setter =====
     public Long getId() { return id; }
@@ -88,4 +90,7 @@ public class OrdersDTO {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
 }

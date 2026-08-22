@@ -20,29 +20,39 @@ public class RoutesEntity {
     @Column(nullable = false)
     private LocalDate date;
 
-    /** 出發與返回的倉庫（depot）*/
+    /**
+     * 出發與返回的倉庫（depot）
+     */
     @Column(nullable = false)
     private Long warehouseId;
 
     @Column(nullable = false)
     private Long vehicleId;
 
-    @Column(nullable = false)
+    @Column
     private Long driverId;
 
-    /** 總里程（公尺）*/
+    /**
+     * 總里程（公尺）
+     */
     @Column
     private Double totalDistance;
 
-    /** 預估油耗成本 */
+    /**
+     * 預估油耗成本
+     */
     @Column
     private Double estimatedFuelCost;
 
-    /** 預估總工時（分鐘）*/
+    /**
+     * 預估總工時（分鐘）
+     */
     @Column
     private Integer estimatedWorkMinutes;
 
-    /** 平均裝載率（0~1）*/
+    /**
+     * 平均裝載率（0~1）
+     */
     @Column
     private Double loadRate;
 
@@ -50,7 +60,9 @@ public class RoutesEntity {
     @Column(nullable = false, length = 20)
     private RouteStatus status = RouteStatus.DRAFT;
 
-    /** 發布後每次異動 +1 */
+    /**
+     * 發布後每次異動 +1
+     */
     @Column(nullable = false)
     private Integer version = 1;
 

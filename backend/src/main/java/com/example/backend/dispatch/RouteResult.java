@@ -34,8 +34,11 @@ public class RouteResult {
     }
 
     public static class VehicleRoute {
-        private long vehicleIndex;
+        /** 第幾台車，對應傳入 solve() 的 vehicleCapacities 索引 */
+        private int vehicleIndex;
+        /** 依序經過的 node，頭尾都是倉庫 */
         private List<Integer> nodeSequence;
+        /** 這台車的總距離（公尺） */
         private long distance;
 
         @Override
@@ -50,11 +53,11 @@ public class RouteResult {
         public VehicleRoute() {
         }
 
-        public long getVehicleIndex() {
+        public int getVehicleIndex() {
             return vehicleIndex;
         }
 
-        public void setVehicleIndex(long vehicleIndex) {
+        public void setVehicleIndex(int vehicleIndex) {
             this.vehicleIndex = vehicleIndex;
         }
 
