@@ -1,0 +1,28 @@
+### OSRM 路徑服務測試
+# 服務啟動：docker start logistics-osrm
+# 注意：座標順序是「經度,緯度」(lng,lat)，跟直覺相反
+
+@osrm = http://localhost:5001
+
+### 距離矩陣 — 餵給 OR-Tools 的資料來源
+# 三個點：台北車站 / 台北101 / 板橋車站
+# annotations=distance 一定要加，否則只會回 durations
+GET {{osrm}}/table/v1/driving/121.5170,25.0478;121.5654,25.0330;121.4628,25.0139?annotations=distance,duration
+Accept: application/json
+
+### 距離矩陣 — 只要距離
+GET {{osrm}}/table/v1/driving/121.5170,25.0478;121.5654,25.0330?annotations=distance
+Accept: application/json
+
+### 單一路徑 — 之後前端 Leaflet 畫線用
+GET {{osrm}}/route/v1/driving/121.5170,25.0478;121.5654,25.0330?overview=false
+Accept: application/json
+
+### 單一路徑 — 含 GeoJSON 幾何
+GET {{osrm}}/route/v1/driving/121.5170,25.0478;121.5654,25.0330?geometries=geojson&overview=full
+Accept: application/json
+
+### 座標吸附檢查 — 確認座標有落在道路上
+# 回傳的 waypoints[].distance 是偏移公尺數，數字太大代表座標有問題
+GET {{osrm}}/nearest/v1/driving/121.5170,25.0478
+Accept: application/json
