@@ -1,0 +1,117 @@
+<main class="fleet-monitor-page">
+  <section class="page-intro" aria-labelledby="fleet-title">
+    <div>
+      <p class="page-eyebrow">FLEET MONITOR</p>
+      <h2 id="fleet-title">即時車隊</h2>
+      <p>掌握台南配送車隊位置、回傳狀態與下一個配送節點。</p>
+    </div>
+
+    <p class="updated-at">定位資料每 30 秒更新</p>
+  </section>
+
+  <section class="fleet-summary" aria-label="即時車隊摘要">
+    <article class="summary-card tone-accent">
+      <span class="summary-icon"><svg lucideRoute aria-hidden="true"></svg></span>
+      <div>
+        <p>配送中</p>
+        <strong>2</strong>
+        <span>2 條路線正在執行</span>
+      </div>
+    </article>
+    <article class="summary-card">
+      <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
+      <div>
+        <p>短暫停靠</p>
+        <strong>1</strong>
+        <span>正在完成簽收或卸貨</span>
+      </div>
+    </article>
+    <article class="summary-card tone-warning">
+      <span class="summary-icon"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
+      <div>
+        <p>定位延遲</p>
+        <strong>1</strong>
+        <span>超過 10 分鐘未回傳</span>
+      </div>
+    </article>
+    <article class="summary-card">
+      <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
+      <div>
+        <p>平均回傳</p>
+        <strong>14<span>秒</span></strong>
+        <span>目前車機連線穩定</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="fleet-workspace" aria-label="台南車隊地圖與追蹤清單">
+    <section class="map-panel" aria-label="台南即時車隊地圖">
+      <app-live-fleet-map />
+    </section>
+
+    <aside class="tracking-panel" aria-labelledby="tracking-title">
+      <header class="tracking-header">
+        <div>
+          <p class="section-eyebrow">VEHICLE TRACKING</p>
+          <h3 id="tracking-title">車況追蹤</h3>
+        </div>
+        <span>{{ visibleVehicles().length }} 輛</span>
+      </header>
+
+      <div class="filter-control" role="group" aria-label="車隊狀態篩選">
+        @for (filter of filters; track filter.id) {
+          <button
+            type="button"
+            [class.is-active]="activeFilter() === filter.id"
+            [attr.aria-pressed]="activeFilter() === filter.id"
+            (click)="setFilter(filter.id)"
+          >
+            {{ filter.label }}
+          </button>
+        }
+      </div>
+
+      <div class="vehicle-list">
+        @for (vehicle of visibleVehicles(); track vehicle.driverId) {
+          <button
+            type="button"
+            class="vehicle-row"
+            [class.is-selected]="selectedVehicleId() === vehicle.driverId"
+            (click)="selectVehicle(vehicle.driverId)"
+          >
+            <span
+              class="vehicle-status"
+              [class]="'status-' + vehicle.filter"
+              aria-hidden="true"
+            ></span>
+            <span class="vehicle-row-main">
+              <strong>{{ vehicle.vehicle }} · {{ vehicle.driver }}</strong>
+              <span>{{ vehicle.route }} · 最後定位 {{ vehicle.lastSeen }}</span>
+            </span>
+            <span class="vehicle-row-meta">{{ vehicle.status }}</span>
+          </button>
+        } @empty {
+          <p class="empty-state">目前沒有符合此狀態的車輛。</p>
+        }
+      </div>
+
+      <section class="selected-vehicle" aria-label="目前選取車輛資訊">
+        <p>目前追蹤</p>
+        <div>
+          <strong>{{ selectedVehicle().vehicle }} · {{ selectedVehicle().driver }}</strong>
+          <span>{{ selectedVehicle().driverId }} · {{ selectedVehicle().route }}</span>
+        </div>
+        <dl>
+          <div>
+            <dt>下一站</dt>
+            <dd>{{ selectedVehicle().nextStop }}</dd>
+          </div>
+          <div>
+            <dt>任務狀態</dt>
+            <dd>{{ selectedVehicle().eta }}</dd>
+          </div>
+        </dl>
+      </section>
+    </aside>
+  </section>
+</main>

@@ -1,0 +1,179 @@
+<main class="anomaly-center-page">
+  <section class="page-intro" aria-labelledby="anomaly-title">
+    <div>
+      <p class="page-eyebrow">EXCEPTION CONTROL</p>
+      <h2 id="anomaly-title">異常中心</h2>
+      <p>集中處理定位、工時、配送資料與車輛設備的營運風險。</p>
+    </div>
+
+    <p class="updated-at">資料更新於 08:30</p>
+  </section>
+
+  <section class="anomaly-summary" aria-label="今日異常摘要">
+    <article class="summary-card tone-critical">
+      <p>需立即處理</p>
+      <strong>{{ summary().critical }}</strong>
+      <span>超過 10 分鐘未回傳定位</span>
+    </article>
+    <article class="summary-card tone-warning">
+      <p>待回覆</p>
+      <strong>{{ summary().pending }}</strong>
+      <span>已指派負責人持續跟進</span>
+    </article>
+    <article class="summary-card tone-accent">
+      <p>今日已結案</p>
+      <strong>{{ summary().resolved }}</strong>
+      <span>含已完成的例行提醒</span>
+    </article>
+    <article class="summary-card">
+      <p>平均處理時間</p>
+      <strong>18<span>分</span></strong>
+      <span>較上週縮短 3 分鐘</span>
+    </article>
+  </section>
+
+  <section class="anomaly-workspace" aria-label="異常處理工作區">
+    <section class="incident-list-panel" aria-labelledby="incident-list-title">
+      <header class="list-header">
+        <div>
+          <p class="section-eyebrow">ACTIVE INCIDENTS</p>
+          <h3 id="incident-list-title">異常清單</h3>
+        </div>
+        <span>{{ visibleIncidents().length }} 筆</span>
+      </header>
+
+      <div class="list-tools">
+        <div class="filter-control" role="group" aria-label="異常狀態篩選">
+          @for (filter of filters; track filter.id) {
+            <button
+              type="button"
+              [class.is-active]="activeFilter() === filter.id"
+              [attr.aria-pressed]="activeFilter() === filter.id"
+              (click)="setFilter(filter.id)"
+            >
+              {{ filter.label }}
+            </button>
+          }
+        </div>
+
+        <label class="search-field">
+          <svg lucideSearch aria-hidden="true"></svg>
+          <span class="sr-only">搜尋異常案件</span>
+          <input
+            type="search"
+            placeholder="搜尋案件、車號或司機"
+            [value]="searchTerm()"
+            (input)="updateSearch($event)"
+          />
+        </label>
+      </div>
+
+      <div class="incident-list">
+        @for (incident of visibleIncidents(); track incident.id) {
+          <button
+            type="button"
+            class="incident-row"
+            [class.is-selected]="selectedIncidentId() === incident.id"
+            (click)="selectIncident(incident.id)"
+          >
+            <span
+              class="severity-mark"
+              [class]="'severity-' + incident.severity"
+              aria-hidden="true"
+            ></span>
+            <span class="incident-main">
+              <span class="incident-line">
+                <strong>{{ incident.title }}</strong>
+                <span class="severity-label" [class]="'severity-' + incident.severity">{{
+                  severityLabel(incident.severity)
+                }}</span>
+              </span>
+              <span>{{ incident.vehicle }} · {{ incident.driver }} · {{ incident.zone }}</span>
+            </span>
+            <span class="incident-meta">
+              <span>{{ incident.status }}</span>
+              <small>{{ incident.occurredAt }}</small>
+            </span>
+          </button>
+        } @empty {
+          <p class="empty-state">沒有符合目前篩選條件的異常案件。</p>
+        }
+      </div>
+    </section>
+
+    <aside class="incident-detail-panel" aria-labelledby="incident-detail-title">
+      @if (selectedIncident(); as incident) {
+        <header class="detail-header">
+          <div>
+            <p class="section-eyebrow">INCIDENT DETAIL</p>
+            <h3 id="incident-detail-title">{{ incident.title }}</h3>
+            <span>{{ incident.id }} · {{ incident.category }}</span>
+          </div>
+          <span class="detail-status" [class]="'severity-' + incident.severity">
+            {{ severityLabel(incident.severity) }}
+          </span>
+        </header>
+
+        <dl class="incident-facts">
+          <div>
+            <dt><svg lucideClock3 aria-hidden="true"></svg>發生時間</dt>
+            <dd>{{ incident.occurredAt }}</dd>
+          </div>
+          <div>
+            <dt><svg lucideMapPinned aria-hidden="true"></svg>影響區域</dt>
+            <dd>{{ incident.zone }}</dd>
+          </div>
+          <div>
+            <dt><svg lucideUserRound aria-hidden="true"></svg>執行司機</dt>
+            <dd>{{ incident.driver }}</dd>
+          </div>
+          <div>
+            <dt><svg lucideTriangleAlert aria-hidden="true"></svg>目前狀態</dt>
+            <dd>{{ incident.status }}</dd>
+          </div>
+        </dl>
+
+        <section class="detail-block">
+          <p>異常說明</p>
+          <span>{{ incident.detail }}</span>
+        </section>
+
+        <section class="detail-block recommendation-block">
+          <p>建議處置</p>
+          <span>{{ incident.recommendation }}</span>
+        </section>
+
+        <section class="owner-block" aria-label="案件負責人">
+          <span>案件負責人</span>
+          <strong>{{ incident.owner }}</strong>
+        </section>
+
+        @if (actionMessage()) {
+          <p class="action-message">{{ actionMessage() }}</p>
+        }
+
+        <div class="detail-actions">
+          <button
+            type="button"
+            class="button-secondary"
+            [disabled]="incident.status === '已結案'"
+            (click)="assignIncident()"
+          >
+            指派處理
+          </button>
+          <button
+            type="button"
+            class="button-primary"
+            [disabled]="incident.status === '已結案'"
+            (click)="resolveIncident()"
+          >
+            <svg lucideCircleCheck aria-hidden="true"></svg>
+            標記已結案
+          </button>
+        </div>
+      } @else {
+        <p class="empty-state">請從左側清單選擇一筆異常案件。</p>
+      }
+    </aside>
+  </section>
+</main>
