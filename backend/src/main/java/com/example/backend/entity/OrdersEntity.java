@@ -2,6 +2,7 @@ package com.example.backend.entity;
 
 import com.example.backend.constants.OrderStatus;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -14,22 +15,30 @@ public class OrdersEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 系統產生，如 DO-20260921-00125 */
+    /**
+     * 系統產生，如 DO-20260921-00125
+     */
     @Column(nullable = false, unique = true, length = 30)
     private String orderNumber;
 
     @Column(nullable = false)
     private Long storeId;
 
-    /** 來源商家 */
+    /**
+     * 來源商家
+     */
     @Column(length = 100)
     private String sourceVendor;
 
-    /** 箱內容物描述，備註性質，不參與運算，供異常處理時參考 */
+    /**
+     * 箱內容物描述，備註性質，不參與運算，供異常處理時參考
+     */
     @Column(length = 255)
     private String itemDescription;
 
-    /** 箱數，系統的唯一容量單位 */
+    /**
+     * 箱數，系統的唯一容量單位
+     */
     @Column(nullable = false)
     private Integer boxCount;
 
@@ -43,7 +52,9 @@ public class OrdersEntity {
     @Column(nullable = false, length = 30)
     private OrderStatus status = OrderStatus.PENDING_CONFIRM;
 
-    /** 所屬配送計畫 */
+    /**
+     * 所屬配送計畫
+     */
     @Column
     private Long routeId;
 
@@ -52,8 +63,13 @@ public class OrdersEntity {
 
     @Column
     private Long assignedDriverId;
+    /** 出貨倉庫 */
+    @Column
+    private Long warehouseId;
 
-    /** 建議配送順序，司機可自行調整，此為起點值 */
+    /**
+     * 建議配送順序，司機可自行調整，此為起點值
+     */
     @Column
     private Integer sequence;
 
@@ -71,6 +87,7 @@ public class OrdersEntity {
     }
 
     @PreUpdate
+
     public void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
@@ -177,6 +194,14 @@ public class OrdersEntity {
 
     public void setSequence(Integer sequence) {
         this.sequence = sequence;
+    }
+
+    public Long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(Long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     public LocalDateTime getCreatedAt() {

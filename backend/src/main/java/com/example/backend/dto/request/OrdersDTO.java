@@ -30,9 +30,6 @@ public class OrdersDTO {
     @Min(value = 1, message = ORDER_BOX_COUNT_MIN)
     private Integer boxCount;
 
-    @NotNull(message = ORDER_BOX_VOLUME_REQUIRED)
-    @Min(value = 0, message = ORDER_BOX_VOLUME_MIN)
-
     private String notes;
 
     @NotNull(message = ORDER_DELIVERY_DATE_REQUIRED)
@@ -47,6 +44,8 @@ public class OrdersDTO {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    @NotNull(message = ORDER_WAREHOUSE_ID_REQUIRED)
+    private Long warehouseId;
 
     // ===== Getter & Setter =====
     public Long getId() { return id; }
@@ -91,4 +90,7 @@ public class OrdersDTO {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
 }

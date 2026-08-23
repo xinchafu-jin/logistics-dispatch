@@ -26,10 +26,9 @@ public final class ValidMsg {
     public static final String ORDER_ITEM_DESCRIPTION_MAX_LENGTH = "商品描述不能超過 255 字元";
     public static final String ORDER_BOX_COUNT_REQUIRED = "箱數不能為空";
     public static final String ORDER_BOX_COUNT_MIN = "箱數至少為 1";
-    public static final String ORDER_BOX_VOLUME_REQUIRED = "體積不能為空";
-    public static final String ORDER_BOX_VOLUME_MIN = "體積不能小於 0";
     public static final String ORDER_DELIVERY_DATE_REQUIRED = "配送日期不能為空";
     public static final String ORDER_STATUS_REQUIRED = "訂單狀態不能為空";
+    public static final String ORDER_WAREHOUSE_ID_REQUIRED = "出貨倉庫不能為空";
 
     // Store
     public static final String STORE_CODE_REQUIRED = "門市代碼不能為空";

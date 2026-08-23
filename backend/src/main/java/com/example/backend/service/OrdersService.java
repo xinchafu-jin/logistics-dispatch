@@ -70,6 +70,7 @@ public class OrdersService {
     private void apply(OrdersDTO dto, OrdersEntity entity) {
         entity.setOrderNumber(dto.getOrderNumber());
         entity.setStoreId(dto.getStoreId());
+        entity.setWarehouseId(dto.getWarehouseId());
         entity.setSourceVendor(dto.getSourceVendor());
         entity.setItemDescription(dto.getItemDescription());
         entity.setBoxCount(dto.getBoxCount());
@@ -88,6 +89,7 @@ public class OrdersService {
         dto.setId(entity.getId());
         dto.setOrderNumber(entity.getOrderNumber());
         dto.setStoreId(entity.getStoreId());
+        dto.setWarehouseId(entity.getWarehouseId());
         dto.setSourceVendor(entity.getSourceVendor());
         dto.setItemDescription(entity.getItemDescription());
         dto.setBoxCount(entity.getBoxCount());

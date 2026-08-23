@@ -154,10 +154,13 @@ PATCH Request（`action` 可為 `CONFIRM` / `MODIFY` / `REJECT` / `CANCEL`）：
 POST /api/dispatch/optimize
 ```
 
+一次排一個倉庫。要排多個倉庫就分別呼叫，各倉獨立最佳化。
+
 Request:
 ```json
 {
   "date": "2026-09-21",
+  "warehouseId": 1,
   "vehicleIds": [1, 2, 3, 4]
 }
 ```
@@ -168,19 +171,35 @@ Response:
   "routes": [
     {
       "vehicleId": 1,
-      "driverId": 1,
+      "driverId": null,
       "stops": [
         { "orderId": 101, "storeId": 1, "sequence": 1 }
       ],
       "totalDistance": 12000,
-      "estimatedFuelCost": 150,
-      "estimatedWorkMinutes": 240,
+      "estimatedFuelCost": null,
+      "estimatedWorkMinutes": null,
       "loadRate": 0.87
     }
   ],
   "unassignedOrderIds": [110]
 }
 ```
+
+行為說明：
+
+- 只處理 `deliveryDate = date`、`status = CONFIRMED`、`warehouseId` 相符的訂單
+- 排進路線的訂單狀態改為 `SCHEDULED`，並寫入 `routeId`、`sequence`、`assignedVehicleId`
+- 裝不下的訂單放在 `unassignedOrderIds`，狀態維持 `CONFIRMED`，下次排程仍會被撈到
+- 路線以 `status = DRAFT` 存入 `routes` 表；`driverId` 為 null，司機由主管另行手動指派
+- 沒有被排到訂單的車輛不會產生路線，也不會出現在 `routes` 裡
+
+目前尚未實作的欄位（皆回傳 null）：
+
+| 欄位 | 缺什麼 |
+|---|---|
+| `driverId` | 待手動指派功能 |
+| `estimatedFuelCost` | 系統尚無油價設定，只有車輛的 `fuelConsumption`（公里／公升） |
+| `estimatedWorkMinutes` | 需改 `OsrmClient` 一併取回 OSRM 的 `durations` 矩陣 |
 
 ### 取得當日調度看板狀態
 
