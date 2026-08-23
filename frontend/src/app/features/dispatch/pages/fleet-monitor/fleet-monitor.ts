@@ -1,107 +1,129 @@
-import { Component, computed, signal } from '@angular/core';
-import { LucideClock3, LucideMapPinned, LucideRoute, LucideTriangleAlert } from '@lucide/angular';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { LiveFleetMap } from '../../components/live-fleet-map/live-fleet-map';
+import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { DriverDto } from '../../../../core/services/dispatch-api.models';
+import {
+  LucideClock3,
+  LucideMapPinned,
+  LucideTriangleAlert,
+  LucideUserRound,
+} from '@lucide/angular';
 
-type FleetFilter = 'all' | 'delivering' | 'stopped' | 'delayed';
+type FleetFilter = 'all' | 'active' | 'inactive';
 
 interface FleetVehicle {
   driver: string;
   driverId: string;
   vehicle: string;
-  route: string;
-  nextStop: string;
   status: string;
   filter: Exclude<FleetFilter, 'all'>;
-  lastSeen: string;
-  eta: string;
+  locationStatus: string;
 }
 
 @Component({
   selector: 'app-fleet-monitor',
-  imports: [LiveFleetMap, LucideClock3, LucideMapPinned, LucideRoute, LucideTriangleAlert],
+  imports: [LiveFleetMap, LucideClock3, LucideMapPinned, LucideTriangleAlert, LucideUserRound],
   templateUrl: './fleet-monitor.html',
   styleUrl: './fleet-monitor.scss',
 })
-export class FleetMonitor {
+export class FleetMonitor implements OnInit {
+  private readonly api = inject(DispatchApiService);
+
   readonly activeFilter = signal<FleetFilter>('all');
-  readonly selectedVehicleId = signal('DR-017');
+  readonly selectedVehicleId = signal('');
+  readonly vehicles = signal<FleetVehicle[]>([]);
+  readonly loading = signal(true);
+  readonly errorMessage = signal('');
+  readonly updatedAt = signal('--:--');
 
   readonly filters: { id: FleetFilter; label: string }[] = [
-    { id: 'all', label: '全部車隊' },
-    { id: 'delivering', label: '配送中' },
-    { id: 'stopped', label: '短暫停靠' },
-    { id: 'delayed', label: '定位延遲' },
-  ];
-
-  readonly vehicles: FleetVehicle[] = [
-    {
-      driver: '陳志明',
-      driverId: 'DR-017',
-      vehicle: 'KLD-205',
-      route: '永康區 02 線',
-      nextStop: '中正北路 168 號',
-      status: '配送中',
-      filter: 'delivering',
-      lastSeen: '8 秒前',
-      eta: '預計 09:42 抵達',
-    },
-    {
-      driver: '林柏安',
-      driverId: 'DR-024',
-      vehicle: 'KLD-118',
-      route: '東區 01 線',
-      nextStop: '崇德路 721 號',
-      status: '配送中',
-      filter: 'delivering',
-      lastSeen: '18 秒前',
-      eta: '預計 09:55 抵達',
-    },
-    {
-      driver: '王雅雯',
-      driverId: 'DR-031',
-      vehicle: 'KLD-308',
-      route: '中西區 01 線',
-      nextStop: '民生路二段 138 號',
-      status: '短暫停靠',
-      filter: 'stopped',
-      lastSeen: '31 秒前',
-      eta: '完成簽收中',
-    },
-    {
-      driver: '黃信翔',
-      driverId: 'DR-044',
-      vehicle: 'KLD-412',
-      route: '安平區 03 線',
-      nextStop: '健康三街 221 號',
-      status: '定位延遲',
-      filter: 'delayed',
-      lastSeen: '12 分鐘前',
-      eta: '請確認車機狀態',
-    },
+    { id: 'all', label: '全部司機' },
+    { id: 'active', label: '可排班' },
+    { id: 'inactive', label: '未啟用' },
   ];
 
   readonly visibleVehicles = computed(() => {
     const filter = this.activeFilter();
     return filter === 'all'
-      ? this.vehicles
-      : this.vehicles.filter((vehicle) => vehicle.filter === filter);
+      ? this.vehicles()
+      : this.vehicles().filter((vehicle) => vehicle.filter === filter);
   });
 
   readonly selectedVehicle = computed(
     () =>
-      this.vehicles.find((vehicle) => vehicle.driverId === this.selectedVehicleId()) ??
-      this.vehicles[0],
+      this.vehicles().find((vehicle) => vehicle.driverId === this.selectedVehicleId()) ??
+      this.vehicles()[0] ??
+      null,
   );
+
+  readonly activeDriverCount = computed(
+    () => this.vehicles().filter((vehicle) => vehicle.filter === 'active').length,
+  );
+  readonly inactiveCount = computed(
+    () => this.vehicles().filter((vehicle) => vehicle.filter === 'inactive').length,
+  );
+
+  ngOnInit(): void {
+    this.loadFleet();
+  }
 
   setFilter(filter: FleetFilter): void {
     this.activeFilter.set(filter);
-    const firstVisible = this.visibleVehicles()[0];
-    if (firstVisible) {
-      this.selectedVehicleId.set(firstVisible.driverId);
-    }
+    this.selectedVehicleId.set(this.visibleVehicles()[0]?.driverId ?? '');
   }
 
   selectVehicle(driverId: string): void {
     this.selectedVehicleId.set(driverId);
+  }
+
+  private loadFleet(): void {
+    this.loading.set(true);
+    this.errorMessage.set('');
+
+    this.api.getDrivers().subscribe({
+      next: (drivers) => {
+        this.vehicles.set(drivers.map((driver) => this.toFleetVehicle(driver)));
+        this.selectedVehicleId.set(this.vehicles()[0]?.driverId ?? '');
+        this.updatedAt.set(this.formatCurrentTime());
+        this.loading.set(false);
+      },
+      error: () => {
+        this.errorMessage.set('無法取得司機資料，請確認後端服務與登入狀態。');
+        this.loading.set(false);
+      },
+    });
+  }
+
+  private toFleetVehicle(driver: DriverDto): FleetVehicle {
+    const backendId = driver.id ?? 0;
+    const driverId = backendId ? `DR-${String(backendId).padStart(3, '0')}` : driver.account;
+
+    if (!driver.isActive) {
+      return {
+        driver: driver.name,
+        driverId,
+        vehicle: '尚未提供車輛',
+        status: '司機未啟用',
+        filter: 'inactive',
+        locationStatus: 'GPS API 尚未提供',
+      };
+    }
+
+    return {
+      driver: driver.name,
+      driverId,
+      vehicle: '尚未提供車輛',
+      status: '可排班',
+      filter: 'active',
+      locationStatus: 'GPS API 尚未提供',
+    };
+  }
+
+  private formatCurrentTime(): string {
+    return new Intl.DateTimeFormat('zh-TW', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date());
   }
 }

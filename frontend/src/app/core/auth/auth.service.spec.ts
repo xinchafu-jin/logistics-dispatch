@@ -1,8 +1,5 @@
 import { provideHttpClient } from '@angular/common/http';
-import {
-  HttpTestingController,
-  provideHttpClientTesting,
-} from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { AuthService } from './auth.service';
 
@@ -19,7 +16,10 @@ describe('AuthService', () => {
     httpTesting = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpTesting.verify());
+  afterEach(() => {
+    localStorage.removeItem('logistics-dispatch.access-token');
+    httpTesting.verify();
+  });
 
   it('logs in an administrator using the backend JWT contract', () => {
     service

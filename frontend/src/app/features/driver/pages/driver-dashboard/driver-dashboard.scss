@@ -139,6 +139,15 @@
   border-radius: 8px;
   box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
+.driver-summary article.is-unavailable {
+  background: rgb(255 255 255 / 2%);
+  border-style: dashed;
+}
+.driver-summary article.is-unavailable .summary-icon {
+  color: var(--subtle);
+  background: rgb(255 255 255 / 4%);
+  border-color: var(--border);
+}
 .summary-icon {
   display: grid;
   width: 34px;
@@ -305,6 +314,76 @@
   border-color: var(--glass-highlight);
   background: rgb(255 255 255 / 6%);
 }
+.current-stop-actions button:disabled {
+  color: var(--subtle);
+  background: rgb(255 255 255 / 4%);
+  border-color: var(--border);
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.unavailable-workspace {
+  margin-top: 46px;
+  padding: 24px;
+  background: rgb(17 20 21 / 68%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+.unavailable-workspace header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.unavailable-workspace h2 {
+  margin: 7px 0 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+.unavailable-workspace header > span {
+  color: var(--subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+}
+.unavailable-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.unavailable-grid article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  background: rgb(255 255 255 / 2%);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+}
+.unavailable-grid .summary-icon {
+  color: var(--subtle);
+  background: rgb(255 255 255 / 4%);
+  border-color: var(--border);
+}
+.unavailable-grid h3,
+.unavailable-grid p {
+  margin: 0;
+}
+.unavailable-grid h3 {
+  color: var(--text);
+  font-size: 0.875rem;
+}
+.unavailable-grid p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
 
 .route-plan {
   margin-top: 46px;
@@ -435,6 +514,15 @@
   }
   .route-plan {
     padding: 20px;
+  }
+  .unavailable-workspace {
+    padding: 20px;
+  }
+  .unavailable-workspace header {
+    align-items: start;
+  }
+  .unavailable-grid {
+    grid-template-columns: 1fr;
   }
   .stop-row {
     grid-template-columns: 34px minmax(0, 1fr) 18px;

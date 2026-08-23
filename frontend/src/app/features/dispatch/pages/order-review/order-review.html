@@ -6,10 +6,16 @@
       <p>檢核台南配送需求，確認後送入待排車佇列。</p>
     </div>
 
-    <div class="review-summary" aria-label="今日審核狀態">
-      <span>今日待審核</span>
-      <strong>{{ reviewCount() }}</strong>
-      <small>{{ supplementCount() }} 筆資料待補</small>
+    <div class="intro-actions">
+      <button type="button" class="button-primary create-order-button" (click)="openCreateOrder()">
+        <svg lucidePlus aria-hidden="true"></svg>
+        新增訂單
+      </button>
+      <div class="review-summary" aria-label="今日審核狀態">
+        <span>今日待審核</span>
+        <strong>{{ reviewCount() }}</strong>
+        <small>{{ supplementCount() }} 筆資料待補</small>
+      </div>
     </div>
   </section>
 
@@ -163,7 +169,115 @@
             核准並待排車
           </button>
         </div>
+
+        <div class="manage-actions">
+          <button type="button" class="icon-action" title="編輯訂單" (click)="openEditOrder(order)">
+            <svg lucidePencil aria-hidden="true"></svg>
+            編輯
+          </button>
+          <button
+            type="button"
+            class="icon-action icon-action--danger"
+            title="刪除訂單"
+            (click)="requestDeleteOrder(order)"
+          >
+            <svg lucideTrash2 aria-hidden="true"></svg>
+            刪除
+          </button>
+        </div>
       }
     </aside>
   </section>
+
+  @if (activeForm(); as formMode) {
+    <div class="modal-backdrop" (click)="closeForm()">
+      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="order-form-title" (click)="$event.stopPropagation()">
+        <header class="modal-header">
+          <div>
+            <p class="section-eyebrow">BACKEND ORDER</p>
+            <h3 id="order-form-title">{{ formMode === 'edit' ? '編輯訂單' : '新增訂單' }}</h3>
+          </div>
+          <button type="button" class="modal-close" title="關閉" aria-label="關閉" (click)="closeForm()">
+            <svg lucideX aria-hidden="true"></svg>
+          </button>
+        </header>
+
+        <form class="order-form" (submit)="$event.preventDefault(); submitOrder()">
+          <label>
+            <span>訂單編號</span>
+            <input type="text" required [value]="orderForm().orderNumber" (input)="updateOrderText('orderNumber', $event)" />
+          </label>
+          <label>
+            <span>店家</span>
+            <select [value]="orderForm().storeId" (change)="updateOrderNumber('storeId', $event)">
+              @for (store of stores(); track store.id ?? store.storeCode) {
+                <option [value]="store.id">{{ store.storeCode }} · {{ store.name }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>配送日期</span>
+            <input type="date" required [value]="orderForm().deliveryDate" (input)="updateOrderText('deliveryDate', $event)" />
+          </label>
+          <label>
+            <span>箱數</span>
+            <input type="number" min="1" required [value]="orderForm().boxCount" (input)="updateOrderNumber('boxCount', $event)" />
+          </label>
+          <label>
+            <span>來源商家</span>
+            <input type="text" [value]="orderForm().sourceVendor" (input)="updateOrderText('sourceVendor', $event)" />
+          </label>
+          <label>
+            <span>訂單狀態</span>
+            <select [value]="orderForm().status" (change)="updateOrderStatusFromForm($event)">
+              <option value="PENDING_CONFIRM">待總部確認</option>
+              <option value="MODIFY">資料待補</option>
+              <option value="CONFIRMED">待排車</option>
+              <option value="SCHEDULED">已排程</option>
+              <option value="PUBLISHED">已發布</option>
+              <option value="IN_DELIVERY">配送中</option>
+              <option value="COMPLETED">已完成</option>
+              <option value="CANCELLED">已取消</option>
+              <option value="FAILED">配送失敗</option>
+            </select>
+          </label>
+          <label class="order-form__wide">
+            <span>貨物說明</span>
+            <input type="text" [value]="orderForm().itemDescription" (input)="updateOrderText('itemDescription', $event)" />
+          </label>
+          <label class="order-form__wide">
+            <span>備註</span>
+            <textarea rows="3" [value]="orderForm().notes" (input)="updateOrderText('notes', $event)"></textarea>
+          </label>
+
+          @if (formError()) {
+            <p class="form-error">{{ formError() }}</p>
+          }
+
+          <div class="modal-actions">
+            <button type="button" class="button-secondary" (click)="closeForm()">取消</button>
+            <button type="submit" class="button-primary" [disabled]="isSaving()">
+              {{ isSaving() ? '儲存中...' : formMode === 'edit' ? '儲存修改' : '建立訂單' }}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  }
+
+  @if (deleteTarget(); as order) {
+    <div class="modal-backdrop" (click)="cancelDelete()">
+      <section class="confirm-modal" role="alertdialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <p class="section-eyebrow">CONFIRM ACTION</p>
+        <h3>確定刪除訂單？</h3>
+        <p>即將刪除「{{ order.id }}」，此操作會呼叫後端 DELETE API。</p>
+        <div class="modal-actions">
+          <button type="button" class="button-secondary" (click)="cancelDelete()">取消</button>
+          <button type="button" class="danger-button" [disabled]="isDeleting()" (click)="confirmDelete()">
+            {{ isDeleting() ? '刪除中...' : '確定刪除' }}
+          </button>
+        </div>
+      </section>
+    </div>
+  }
 </main>

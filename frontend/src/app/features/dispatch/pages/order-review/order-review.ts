@@ -1,6 +1,15 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
-import { LucideClipboardCheck, LucideMapPinned, LucideSearch, LucideTruck } from '@lucide/angular';
+import {
+  LucideClipboardCheck,
+  LucideMapPinned,
+  LucidePencil,
+  LucidePlus,
+  LucideSearch,
+  LucideTrash2,
+  LucideTruck,
+  LucideX,
+} from '@lucide/angular';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   OrderDto,
@@ -17,6 +26,7 @@ type OrderReviewStatus =
   | '已取消'
   | '配送失敗';
 type FilterKey = 'all' | OrderReviewStatus;
+type OrderFormMode = 'create' | 'edit' | null;
 
 interface DeliveryOrder {
   id: string;
@@ -34,9 +44,31 @@ interface DeliveryOrder {
   raw: OrderDto;
 }
 
+function emptyOrder(storeId = 0): OrderDto {
+  return {
+    orderNumber: '',
+    storeId,
+    sourceVendor: '',
+    itemDescription: '',
+    boxCount: 1,
+    notes: '',
+    deliveryDate: new Date().toISOString().slice(0, 10),
+    status: 'PENDING_CONFIRM',
+  };
+}
+
 @Component({
   selector: 'app-order-review',
-  imports: [LucideClipboardCheck, LucideMapPinned, LucideSearch, LucideTruck],
+  imports: [
+    LucideClipboardCheck,
+    LucideMapPinned,
+    LucidePencil,
+    LucidePlus,
+    LucideSearch,
+    LucideTrash2,
+    LucideTruck,
+    LucideX,
+  ],
   templateUrl: './order-review.html',
   styleUrl: './order-review.scss',
 })
@@ -60,6 +92,13 @@ export class OrderReview implements OnInit {
   readonly actionMessage = signal('確認資料後，可將配送需求送入待排車佇列。');
   readonly loading = signal(true);
   readonly errorMessage = signal('');
+  readonly activeForm = signal<OrderFormMode>(null);
+  readonly orderForm = signal<OrderDto>(emptyOrder());
+  readonly editingOrderId = signal<number | null>(null);
+  readonly formError = signal('');
+  readonly isSaving = signal(false);
+  readonly deleteTarget = signal<DeliveryOrder | null>(null);
+  readonly isDeleting = signal(false);
 
   readonly filteredOrders = computed(() => {
     const filter = this.activeFilter();
@@ -101,6 +140,133 @@ export class OrderReview implements OnInit {
   selectOrder(orderId: string): void {
     this.selectedOrderId.set(orderId);
     this.actionMessage.set('確認資料後，可將配送需求送入待排車佇列。');
+  }
+
+  openCreateOrder(): void {
+    const firstStoreId = this.stores()[0]?.id ?? 0;
+    if (!firstStoreId) {
+      this.actionMessage.set('請先透過人車資源頁新增店家，再建立配送訂單。');
+      return;
+    }
+
+    this.orderForm.set(emptyOrder(firstStoreId));
+    this.editingOrderId.set(null);
+    this.formError.set('');
+    this.activeForm.set('create');
+  }
+
+  openEditOrder(order: DeliveryOrder): void {
+    this.orderForm.set({ ...order.raw });
+    this.editingOrderId.set(order.backendId);
+    this.formError.set('');
+    this.activeForm.set('edit');
+  }
+
+  closeForm(): void {
+    if (!this.isSaving()) {
+      this.activeForm.set(null);
+      this.editingOrderId.set(null);
+      this.formError.set('');
+    }
+  }
+
+  updateOrderText(
+    field: 'orderNumber' | 'sourceVendor' | 'itemDescription' | 'notes' | 'deliveryDate',
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.orderForm.update((order) => ({ ...order, [field]: value }));
+  }
+
+  updateOrderNumber(field: 'storeId' | 'boxCount', event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.orderForm.update((order) => ({ ...order, [field]: value }));
+  }
+
+  updateOrderStatusFromForm(event: Event): void {
+    const status = (event.target as HTMLSelectElement).value as BackendOrderStatus;
+    this.orderForm.update((order) => ({ ...order, status }));
+  }
+
+  submitOrder(): void {
+    const order = this.orderForm();
+    const editingId = this.editingOrderId();
+
+    if (!order.orderNumber.trim() || !order.deliveryDate) {
+      this.formError.set('請填寫訂單編號與配送日期。');
+      return;
+    }
+
+    if (!Number.isInteger(order.storeId) || order.storeId <= 0) {
+      this.formError.set('請選擇有效店家。');
+      return;
+    }
+
+    if (!Number.isInteger(order.boxCount) || order.boxCount < 1) {
+      this.formError.set('箱數至少要是 1。');
+      return;
+    }
+
+    this.isSaving.set(true);
+    this.formError.set('');
+    const request =
+      this.activeForm() === 'edit' && editingId !== null
+        ? this.api.updateOrder(editingId, order)
+        : this.api.createOrder(order);
+
+    request.subscribe({
+      next: (savedOrder) => {
+        const saved = this.toDeliveryOrder(savedOrder, this.stores());
+        if (this.activeForm() === 'edit') {
+          this.orders.update((orders) =>
+            orders.map((item) => (item.backendId === saved.backendId ? saved : item)),
+          );
+        } else {
+          this.orders.update((orders) => [saved, ...orders]);
+        }
+        this.selectedOrderId.set(saved.id);
+        this.actionMessage.set(`已將 ${saved.id} 儲存到後端。`);
+        this.isSaving.set(false);
+        this.activeForm.set(null);
+        this.editingOrderId.set(null);
+      },
+      error: () => {
+        this.formError.set('儲存失敗，請檢查訂單欄位與後端回應。');
+        this.isSaving.set(false);
+      },
+    });
+  }
+
+  requestDeleteOrder(order: DeliveryOrder): void {
+    this.deleteTarget.set(order);
+  }
+
+  cancelDelete(): void {
+    if (!this.isDeleting()) {
+      this.deleteTarget.set(null);
+    }
+  }
+
+  confirmDelete(): void {
+    const order = this.deleteTarget();
+    if (!order) {
+      return;
+    }
+
+    this.isDeleting.set(true);
+    this.api.deleteOrder(order.backendId).subscribe({
+      next: () => {
+        this.orders.update((orders) => orders.filter((item) => item.backendId !== order.backendId));
+        this.syncSelectedOrder();
+        this.actionMessage.set(`${order.id} 已從後端刪除。`);
+        this.deleteTarget.set(null);
+        this.isDeleting.set(false);
+      },
+      error: () => {
+        this.actionMessage.set('訂單刪除失敗，請確認後端回應。');
+        this.isDeleting.set(false);
+      },
+    });
   }
 
   approveSelected(): void {

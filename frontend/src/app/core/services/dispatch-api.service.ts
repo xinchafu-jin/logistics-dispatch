@@ -122,4 +122,5 @@ export class DispatchApiService {
   deleteOrder(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/orders/${id}`);
   }
+
 }
