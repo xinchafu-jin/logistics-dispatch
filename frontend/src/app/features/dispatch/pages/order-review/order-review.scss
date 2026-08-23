@@ -65,6 +65,26 @@
   line-height: 1;
 }
 
+.intro-actions {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+}
+
+.create-order-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.create-order-button svg,
+.icon-action svg,
+.modal-close svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
 .review-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.28fr) minmax(330px, 0.72fr);
@@ -399,6 +419,200 @@
   gap: 10px;
 }
 
+.manage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.icon-action,
+.modal-close,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.icon-action {
+  flex: 1;
+  color: var(--muted);
+  background: rgb(255 255 255 / 3%);
+  border: 1px solid var(--border);
+}
+
+.icon-action:hover,
+.icon-action:focus-visible {
+  color: var(--text);
+  border-color: rgb(99 209 198 / 48%);
+  outline: none;
+}
+
+.icon-action--danger:hover,
+.icon-action--danger:focus-visible {
+  color: #f4b196;
+  border-color: rgb(224 125 80 / 50%);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  overflow: auto;
+  padding: 24px;
+  place-items: center;
+  background: rgb(0 0 0 / 68%);
+  backdrop-filter: blur(8px);
+}
+
+.order-modal,
+.confirm-modal {
+  width: min(100%, 700px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  background: #151a1b;
+  border: 1px solid var(--metal-edge);
+  border-radius: 8px;
+  box-shadow: 0 28px 80px rgb(0 0 0 / 48%);
+}
+
+.confirm-modal {
+  width: min(100%, 420px);
+}
+
+.modal-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3,
+.confirm-modal h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.modal-close {
+  width: 34px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.modal-close:hover,
+.modal-close:focus-visible {
+  color: var(--text);
+  border-color: var(--accent);
+  outline: none;
+}
+
+.order-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 20px;
+}
+
+.order-form label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.order-form label > span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.order-form input,
+.order-form select,
+.order-form textarea {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  color: var(--text);
+  background: rgb(3 6 7 / 65%);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.order-form textarea {
+  min-height: 74px;
+  resize: vertical;
+}
+
+.order-form input:focus,
+.order-form select:focus,
+.order-form textarea:focus {
+  border-color: rgb(99 209 198 / 56%);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
+}
+
+.order-form__wide,
+.form-error,
+.modal-actions {
+  grid-column: 1 / -1;
+}
+
+.form-error {
+  margin: 0;
+  color: #f0a27b;
+  font-size: 0.75rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: end;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.danger-button {
+  padding: 0 14px;
+  color: #ffe9df;
+  background: rgb(166 75 43 / 80%);
+  border: 1px solid rgb(240 162 123 / 42%);
+}
+
+.danger-button:hover,
+.danger-button:focus-visible {
+  background: rgb(190 82 47 / 92%);
+  outline: none;
+}
+
+.button-primary:disabled,
+.button-secondary:disabled,
+.danger-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.confirm-modal > p:not(.section-eyebrow) {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
 .button-primary,
 .button-secondary {
   min-height: 42px;
@@ -483,6 +697,11 @@
     margin-top: 20px;
   }
 
+  .intro-actions {
+    align-items: start;
+    margin-top: 20px;
+  }
+
   .review-workspace {
     gap: 16px;
     margin-top: 26px;
@@ -522,6 +741,26 @@
   .order-detail-panel {
     padding-right: 16px;
     padding-left: 16px;
+  }
+
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .order-modal,
+  .confirm-modal {
+    max-height: calc(100vh - 24px);
+    padding: 18px;
+  }
+
+  .order-form {
+    grid-template-columns: 1fr;
+  }
+
+  .order-form__wide,
+  .form-error,
+  .modal-actions {
+    grid-column: auto;
   }
 
   .detail-grid {

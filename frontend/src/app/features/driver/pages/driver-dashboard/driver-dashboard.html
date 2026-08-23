@@ -25,93 +25,77 @@
   <section class="driver-content">
     <section class="driver-intro" aria-labelledby="driver-title">
       <div>
-        <p class="page-eyebrow">TODAY'S DELIVERY</p>
-        <h1 id="driver-title">永康區 02 線</h1>
-        <p>今日共 4 個配送點，目前進行第 1 站配送作業。</p>
+        <p class="page-eyebrow">DRIVER PORTAL</p>
+        <h1 id="driver-title">司機工作區</h1>
+        <p>目前可使用司機帳號登入與登出；配送任務、導航與定位要等後端 API 建立後才會開放。</p>
       </div>
-      <span class="live-status"><i aria-hidden="true"></i>定位正常 · 8 秒前</span>
+      <span class="live-status"><i aria-hidden="true"></i>{{ locationStatus() }}</span>
     </section>
 
-    <section class="driver-summary" aria-label="今日任務摘要">
+    <section class="driver-summary" aria-label="司機端串接狀態">
       <article>
-        <span class="summary-icon"><svg lucideTruck aria-hidden="true"></svg></span>
+        <span class="summary-icon"><svg lucideKeyRound aria-hidden="true"></svg></span>
         <div>
-          <p>指派車輛</p>
-          <strong>KLD-205</strong><span>3.5 噸常溫貨車</span>
+          <p>登入帳號</p>
+          <strong>{{ user()?.account ?? '--' }}</strong><span>資料來自 AuthController</span>
         </div>
       </article>
-      <article>
+      <article class="is-unavailable">
         <span class="summary-icon"><svg lucidePackageCheck aria-hidden="true"></svg></span>
         <div>
-          <p>載貨狀態</p>
-          <strong>32 箱</strong><span>460 kg · 已完成裝載</span>
+          <p>今日任務</p>
+          <strong>尚未開放</strong><span>後端尚未提供司機任務 Controller</span>
         </div>
       </article>
-      <article>
-        <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
+      <article class="is-unavailable">
+        <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
         <div>
-          <p>預計完成</p>
-          <strong>12:10</strong><span>目前工時 2 小時 18 分</span>
+          <p>即時位置</p>
+          <strong>尚未開放</strong><span>後端尚未提供 GPS Controller</span>
         </div>
       </article>
     </section>
 
-    <section class="current-stop" aria-labelledby="current-stop-title">
-      <div class="current-stop-map" aria-hidden="true">
-        <span class="map-grid"></span><span class="route-line"></span>
-        <span class="route-point route-point-start"></span
-        ><span class="route-point route-point-active"></span>
-      </div>
-      <div class="current-stop-content">
-        <p class="page-eyebrow">CURRENT STOP</p>
-        <h2 id="current-stop-title">永康生鮮超市</h2>
-        <p>台南市永康區中華路 318 號</p>
-        <dl>
-          <div>
-            <dt>配送時段</dt>
-            <dd>09:50 - 10:20</dd>
-          </div>
-          <div>
-            <dt>貨物</dt>
-            <dd>32 箱 / 460 kg</dd>
-          </div>
-        </dl>
-        <div class="current-stop-actions">
-          <button type="button" class="primary-action">
-            <svg lucideNavigation aria-hidden="true"></svg>開始導航
-          </button>
-          <button type="button" class="secondary-action">
-            <svg lucidePhone aria-hidden="true"></svg>聯絡店家
-          </button>
-        </div>
-      </div>
-    </section>
-
-    <section class="route-plan" aria-labelledby="route-plan-title">
+    <section class="unavailable-workspace" aria-labelledby="unavailable-title">
       <header>
         <div>
-          <p class="page-eyebrow">ROUTE PLAN</p>
-          <h2 id="route-plan-title">今日配送節點</h2>
+          <p class="page-eyebrow">BACKEND REQUIRED</p>
+          <h2 id="unavailable-title">待後端開放的司機功能</h2>
         </div>
-        <span>1 / 4 完成中</span>
+        <span>目前不使用假資料</span>
       </header>
-      <div class="stop-list">
-        @for (stop of stops; track stop.sequence) {
-          <article class="stop-row" [class.is-active]="stop.active">
-            <span class="stop-sequence">{{ stop.sequence }}</span>
-            <div class="stop-main">
-              <strong>{{ stop.store }}</strong>
-              <span><svg lucideMapPinned aria-hidden="true"></svg>{{ stop.address }}</span>
-            </div>
-            <div class="stop-meta">
-              <span>{{ stop.window }}</span
-              ><b>{{ stop.status }}</b>
-            </div>
-            @if (stop.active) {
-              <svg class="stop-check" lucideCircleCheck aria-hidden="true"></svg>
-            }
-          </article>
-        }
+
+      <div class="unavailable-grid">
+        <article>
+          <span class="summary-icon"><svg lucidePackageCheck aria-hidden="true"></svg></span>
+          <div>
+            <h3>配送任務與節點</h3>
+            <p>需要司機任務 Controller，才能讀取今日任務、店家、配送時段與完成狀態。</p>
+          </div>
+        </article>
+        <article>
+          <span class="summary-icon"><svg lucideTruck aria-hidden="true"></svg></span>
+          <div>
+            <h3>車輛與裝載資訊</h3>
+            <p>需要任務與車輛指派資料，才能顯示實際車輛、貨物箱數與裝載狀態。</p>
+          </div>
+        </article>
+        <article>
+          <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
+          <div>
+            <h3>GPS 即時定位</h3>
+            <p>需要 GPS Controller，才能上傳與讀取司機位置並在後台地圖顯示。</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="current-stop-actions" aria-label="尚未開放的司機操作">
+        <button type="button" class="primary-action" disabled title="需後端任務與座標資料後才可使用">
+          <svg lucideNavigation aria-hidden="true"></svg>開始導航（尚未開放）
+        </button>
+        <button type="button" class="secondary-action" disabled title="需後端任務中的店家聯絡資料後才可使用">
+          <svg lucidePhone aria-hidden="true"></svg>聯絡店家（尚未開放）
+        </button>
       </div>
     </section>
   </section>

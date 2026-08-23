@@ -1,5 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import {
+  LucideArrowRight,
+  LucideKeyRound,
+  LucideMapPinned,
+  LucideShieldCheck,
+  LucideTruck,
+} from '@lucide/angular';
 import { ElectricGazeVisual } from '../../components/electric-gaze-visual/electric-gaze-visual';
 import { BrandLogo } from '../../../../shared/ui/brand-logo/brand-logo';
 import { CurrentWeather, WeatherService } from '../../../../core/services/weather.service';
@@ -8,12 +15,20 @@ import { LoginPortal } from '../../../../core/auth/auth.models';
 
 @Component({
   selector: 'app-login',
-  imports: [BrandLogo, ElectricGazeVisual],
+  imports: [
+    BrandLogo,
+    ElectricGazeVisual,
+    LucideArrowRight,
+    LucideKeyRound,
+    LucideMapPinned,
+    LucideShieldCheck,
+    LucideTruck,
+  ],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
 export class Login {
-  protected readonly showLoginForm = signal(false);
+  protected readonly showLoginForm = signal(true);
   protected readonly account = signal('');
   protected readonly password = signal('');
   protected readonly portal = signal<LoginPortal>('ADMIN');
@@ -29,12 +44,11 @@ export class Login {
 
   private readonly weatherService = inject(WeatherService);
   private readonly authService = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   constructor() {
-    this.weatherService
-      .getCurrentWeather()
-      .subscribe((weather) => this.weather.set(weather));
+    this.weatherService.getCurrentWeather().subscribe((weather) => this.weather.set(weather));
   }
 
   protected openLogin(): void {
@@ -66,7 +80,7 @@ export class Login {
       .subscribe({
         next: (user) => {
           void this.router
-            .navigateByUrl(this.authService.dashboardPath(user.role))
+            .navigateByUrl(this.destinationAfterLogin(user.role))
             .then((navigated) => {
               this.isSubmitting.set(false);
 
@@ -84,5 +98,14 @@ export class Login {
           this.loginError.set('帳號或密碼不正確，請再次確認。');
         },
       });
+  }
+
+  private destinationAfterLogin(role: 'DRIVER' | 'DISPATCHER'): string {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrl?.startsWith('/') && !returnUrl.startsWith('//')) {
+      return returnUrl;
+    }
+
+    return this.authService.dashboardPath(role);
   }
 }

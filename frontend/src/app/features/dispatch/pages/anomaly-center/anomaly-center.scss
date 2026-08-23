@@ -51,6 +51,17 @@
   font-size: 0.8125rem;
 }
 
+.intro-actions {
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.intro-actions .button-secondary svg {
+  width: 16px;
+  height: 16px;
+}
+
 .anomaly-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -523,6 +534,89 @@
   color: var(--text);
   border-color: rgb(255 255 255 / 23%);
   outline: none;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  color: var(--text);
+  border-color: rgb(255 255 255 / 23%);
+  outline: none;
+}
+
+.icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  background: rgb(0 0 0 / 68%);
+}
+
+.exception-modal {
+  width: min(100%, 560px);
+  background: rgb(18 21 22 / 96%);
+  border: 1px solid var(--metal-edge);
+  border-radius: 8px;
+  box-shadow: 0 28px 70px rgb(0 0 0 / 40%);
+}
+
+.exception-form {
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+}
+
+.exception-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--field-label);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.exception-form input,
+.exception-form select,
+.exception-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 11px;
+  color: var(--text);
+  background: rgb(3 6 7 / 70%);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+.exception-form textarea {
+  resize: vertical;
+}
+
+.exception-form input:focus,
+.exception-form select:focus,
+.exception-form textarea:focus {
+  border-color: rgb(99 209 198 / 46%);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
 }
 
 .empty-state {

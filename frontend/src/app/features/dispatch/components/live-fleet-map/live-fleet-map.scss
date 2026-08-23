@@ -1,7 +1,9 @@
 .live-fleet-map {
   position: relative;
+  z-index: 0;
   min-height: 598px;
   overflow: hidden;
+  isolation: isolate;
   background: #0b0e0f;
   border: 1px solid var(--metal-edge);
   border-radius: 8px;
@@ -88,6 +90,9 @@
 }
 
 .fleet-map-canvas {
+  position: relative;
+  z-index: 0;
+  min-width: 0;
   width: 100%;
   min-height: 598px;
   background: #0b0e0f;
@@ -160,6 +165,148 @@
   font-size: 0.6875rem;
   line-height: 1.5;
   text-align: center;
+}
+
+.fleet-tracking-panel {
+  position: absolute;
+  top: 104px;
+  right: 24px;
+  z-index: 500;
+  width: min(282px, calc(100% - 48px));
+  padding: 14px;
+  border: 1px solid rgb(126 221 210 / 18%);
+  border-radius: 8px;
+  background: rgb(8 17 20 / 94%);
+  box-shadow: 0 16px 34px rgb(0 0 0 / 26%);
+  pointer-events: auto;
+}
+
+.fleet-tracking-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fleet-tracking-panel__header strong {
+  display: block;
+  margin-top: 3px;
+  color: #f4fbf9;
+  font-size: 0.95rem;
+}
+
+.tracking-stop-button,
+.tracking-action {
+  border: 1px solid rgb(126 221 210 / 30%);
+  border-radius: 5px;
+  background: transparent;
+  color: #8de3d8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 5px 8px;
+}
+
+.tracking-stop-button:hover,
+.tracking-stop-button:focus-visible,
+.tracking-action:hover:not(:disabled),
+.tracking-action:focus-visible:not(:disabled) {
+  background: rgb(99 209 198 / 14%);
+  outline: none;
+}
+
+.tracking-action:disabled {
+  border-color: rgb(141 227 216 / 55%);
+  color: #d7fffa;
+  cursor: default;
+}
+
+.tracking-help,
+.tracking-now {
+  margin: 12px 0;
+  color: #a8bdb9;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.tracking-now {
+  color: #d7fffa;
+}
+
+.tracking-driver-list {
+  display: grid;
+  gap: 6px;
+}
+
+.tracking-driver {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.tracking-driver.is-selected {
+  border-color: rgb(99 209 198 / 32%);
+  background: rgb(99 209 198 / 8%);
+}
+
+.tracking-driver-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tracking-driver-main span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.tracking-driver-main strong,
+.tracking-driver-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracking-driver-main strong {
+  color: #edf8f5;
+  font-size: 0.78rem;
+}
+
+.tracking-driver-main small {
+  color: #91aaa5;
+  font-size: 0.67rem;
+}
+
+.tracking-driver-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: #63d1c6;
+  box-shadow: 0 0 0 4px rgb(99 209 198 / 10%);
+}
+
+.tracking-driver-dot.is-paused {
+  background: #e7bd68;
+  box-shadow: 0 0 0 4px rgb(231 189 104 / 10%);
+}
+
+.tracking-driver-dot.is-delayed {
+  background: #c7834d;
+  box-shadow: 0 0 0 4px rgb(199 131 77 / 10%);
 }
 
 .fleet-map-attribution {
@@ -321,6 +468,13 @@
     right: 12px;
     bottom: 14px;
     left: 12px;
+  }
+
+  .fleet-tracking-panel {
+    top: 116px;
+    right: 18px;
+    left: 18px;
+    width: auto;
   }
 }
 

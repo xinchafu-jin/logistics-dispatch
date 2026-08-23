@@ -3,43 +3,43 @@
     <div>
       <p class="page-eyebrow">FLEET MONITOR</p>
       <h2 id="fleet-title">即時車隊</h2>
-      <p>掌握台南配送車隊位置、回傳狀態與下一個配送節點。</p>
+    <p>同步後端司機在職狀態；即時定位會在 GPS API 建立後接入。</p>
     </div>
 
-    <p class="updated-at">定位資料每 30 秒更新</p>
+    <p class="updated-at">後端司機資料更新於 {{ updatedAt() }}</p>
   </section>
 
   <section class="fleet-summary" aria-label="即時車隊摘要">
     <article class="summary-card tone-accent">
-      <span class="summary-icon"><svg lucideRoute aria-hidden="true"></svg></span>
+      <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
       <div>
-        <p>配送中</p>
-        <strong>2</strong>
-        <span>2 條路線正在執行</span>
+        <p>可排班司機</p>
+        <strong>{{ activeDriverCount() }}</strong>
+        <span>依後端 isActive 計算</span>
       </div>
     </article>
     <article class="summary-card">
-      <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
+      <span class="summary-icon"><svg lucideUserRound aria-hidden="true"></svg></span>
       <div>
-        <p>短暫停靠</p>
-        <strong>1</strong>
-        <span>正在完成簽收或卸貨</span>
+        <p>GPS 資料</p>
+        <strong>--</strong>
+        <span>後端尚未提供 GPS Controller</span>
       </div>
     </article>
     <article class="summary-card tone-warning">
       <span class="summary-icon"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
       <div>
-        <p>定位延遲</p>
-        <strong>1</strong>
-        <span>超過 10 分鐘未回傳</span>
+        <p>未啟用司機</p>
+        <strong>{{ inactiveCount() }}</strong>
+        <span>依後端 isActive 計算</span>
       </div>
     </article>
     <article class="summary-card">
       <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
       <div>
-        <p>平均回傳</p>
-        <strong>14<span>秒</span></strong>
-        <span>目前車機連線穩定</span>
+        <p>資料來源</p>
+        <strong>司機 API</strong>
+        <span>目前只讀取 /api/drivers</span>
       </div>
     </article>
   </section>
@@ -57,6 +57,12 @@
         </div>
         <span>{{ visibleVehicles().length }} 輛</span>
       </header>
+
+      @if (loading()) {
+        <p class="empty-state">正在從後端載入司機資料...</p>
+      } @else if (errorMessage()) {
+        <p class="empty-state">{{ errorMessage() }}</p>
+      }
 
       <div class="filter-control" role="group" aria-label="車隊狀態篩選">
         @for (filter of filters; track filter.id) {
@@ -86,7 +92,7 @@
             ></span>
             <span class="vehicle-row-main">
               <strong>{{ vehicle.vehicle }} · {{ vehicle.driver }}</strong>
-              <span>{{ vehicle.route }} · 最後定位 {{ vehicle.lastSeen }}</span>
+              <span>{{ vehicle.locationStatus }} · 車輛資料尚未由後端提供</span>
             </span>
             <span class="vehicle-row-meta">{{ vehicle.status }}</span>
           </button>
@@ -96,21 +102,25 @@
       </div>
 
       <section class="selected-vehicle" aria-label="目前選取車輛資訊">
-        <p>目前追蹤</p>
-        <div>
-          <strong>{{ selectedVehicle().vehicle }} · {{ selectedVehicle().driver }}</strong>
-          <span>{{ selectedVehicle().driverId }} · {{ selectedVehicle().route }}</span>
-        </div>
-        <dl>
+        @if (selectedVehicle(); as vehicle) {
+          <p>選取司機</p>
           <div>
-            <dt>下一站</dt>
-            <dd>{{ selectedVehicle().nextStop }}</dd>
+            <strong>{{ vehicle.driver }}</strong>
+            <span>{{ vehicle.driverId }} · {{ vehicle.vehicle }}</span>
           </div>
-          <div>
-            <dt>任務狀態</dt>
-            <dd>{{ selectedVehicle().eta }}</dd>
-          </div>
-        </dl>
+          <dl>
+            <div>
+              <dt>排班狀態</dt>
+              <dd>{{ vehicle.status }}</dd>
+            </div>
+            <div>
+              <dt>定位狀態</dt>
+              <dd>{{ vehicle.locationStatus }}</dd>
+            </div>
+          </dl>
+        } @else {
+          <p class="empty-state">後端目前沒有可顯示的司機資料。</p>
+        }
       </section>
     </aside>
   </section>

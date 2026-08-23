@@ -1,14 +1,10 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { catchError, map, Observable, of } from 'rxjs';
-import {
-  AuthUser,
-  LoginCredentials,
-  LoginPortal,
-  UserRole,
-} from './auth.models';
+import { AuthUser, LoginCredentials, LoginPortal, UserRole } from './auth.models';
 
 const AUTH_API = '/api/auth';
+const ACCESS_TOKEN_STORAGE_KEY = 'logistics-dispatch.access-token';
 
 interface LoginResponse {
   accessToken: string;
@@ -40,9 +36,7 @@ export class AuthService {
 
   login(credentials: LoginCredentials): Observable<AuthUser> {
     const endpoint =
-      credentials.portal === 'ADMIN'
-        ? `${AUTH_API}/admin/login`
-        : `${AUTH_API}/driver/login`;
+      credentials.portal === 'ADMIN' ? `${AUTH_API}/admin/login` : `${AUTH_API}/driver/login`;
 
     return this.http
       .post<LoginResponse>(endpoint, {
@@ -54,6 +48,7 @@ export class AuthService {
           const user = this.parseLoginResponse(response, credentials.portal);
 
           this.accessTokenState.set(response.accessToken);
+          this.saveToken(response.accessToken);
           this.user.set(user);
 
           return user;
@@ -71,11 +66,13 @@ export class AuthService {
   }
 
   restoreSession(): Observable<AuthUser | null> {
-    const token = this.accessTokenState();
+    const token = this.accessTokenState() ?? this.readStoredToken();
 
     if (!token) {
       return of(null);
     }
+
+    this.accessTokenState.set(token);
 
     return this.http.get<CurrentUserResponse>(`${AUTH_API}/me`).pipe(
       map((response) => {
@@ -95,10 +92,7 @@ export class AuthService {
     return of(void 0);
   }
 
-  private parseLoginResponse(
-    response: LoginResponse,
-    portal: LoginPortal,
-  ): AuthUser {
+  private parseLoginResponse(response: LoginResponse, portal: LoginPortal): AuthUser {
     const expectedRole = portal === 'ADMIN' ? 'ADMIN' : 'DRIVER';
 
     if (
@@ -119,9 +113,7 @@ export class AuthService {
     };
   }
 
-  private parseCurrentUserResponse(
-    response: CurrentUserResponse,
-  ): AuthUser {
+  private parseCurrentUserResponse(response: CurrentUserResponse): AuthUser {
     if (
       !response ||
       typeof response.account !== 'string' ||
@@ -145,5 +137,26 @@ export class AuthService {
   private clearSession(): void {
     this.accessTokenState.set(null);
     this.user.set(null);
+    this.removeStoredToken();
+  }
+
+  private saveToken(token: string): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+    }
+  }
+
+  private readStoredToken(): string | null {
+    if (typeof localStorage === 'undefined') {
+      return null;
+    }
+
+    return localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+  }
+
+  private removeStoredToken(): void {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    }
   }
 }

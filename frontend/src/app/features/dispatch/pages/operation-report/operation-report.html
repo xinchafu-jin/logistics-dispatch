@@ -3,7 +3,7 @@
     <div>
       <p class="page-eyebrow">OPERATIONS REPORT</p>
       <h2 id="report-title">營運報表</h2>
-      <p>檢視台南配送區的服務表現、時效與異常處理趨勢。</p>
+      <p>依後端訂單與店家資料檢視配送量和完成率；時效與異常仍待 API 提供。</p>
     </div>
 
     <div class="report-period" role="group" aria-label="報表期間">
@@ -20,6 +20,12 @@
       <span>{{ report().range }}</span>
     </div>
   </section>
+
+  @if (loading()) {
+    <p class="updated-at">正在從後端載入訂單與門市資料...</p>
+  } @else if (errorMessage()) {
+    <p class="updated-at">{{ errorMessage() }}</p>
+  }
 
   <section class="operational-readout" aria-label="營運健康度與核心訊號">
     <article class="health-instrument">
@@ -39,7 +45,7 @@
         <p class="section-eyebrow">SERVICE HEALTH</p>
         <h3>{{ report().healthLabel }}</h3>
         <p>{{ report().healthNote }}</p>
-        <span class="health-status"><i aria-hidden="true"></i>所有核心指標在監控範圍內</span>
+        <span class="health-status"><i aria-hidden="true"></i>資料來自後端訂單與門市 API</span>
       </div>
 
       <div class="health-footer">
@@ -49,7 +55,7 @@
         </div>
         <div>
           <span>覆蓋區域</span>
-          <strong>5<small>區</small></strong>
+          <strong>{{ areas().length }}<small>區</small></strong>
         </div>
         <div>
           <span>時效趨勢</span>
@@ -81,7 +87,7 @@
           <div>
             <p>準時送達率</p>
             <strong>{{ report().onTime }}</strong>
-            <span>較前期提升 {{ report().trend }}</span>
+            <span>{{ report().onTime }}</span>
           </div>
         </article>
         <article class="signal-item">
@@ -97,7 +103,7 @@
           <div>
             <p>異常發生率</p>
             <strong>{{ report().exceptionRate }}</strong>
-            <span>主要為定位與資料待補</span>
+            <span>待後端異常案件 Controller 提供</span>
           </div>
         </article>
       </div>
@@ -137,7 +143,7 @@
 
       <div class="chart-footnote">
         <svg lucideChartNoAxesCombined aria-hidden="true"></svg>
-        <span>週末配送量降低，準時送達率維持在 93% 以上。</span>
+        <span>趨勢依後端 deliveryDate 計算；準時率尚未由後端提供。</span>
       </div>
     </section>
 
@@ -151,7 +157,7 @@
       </header>
 
       <div class="area-list">
-        @for (area of areas; track area.area) {
+        @for (area of areas(); track area.area) {
           <article class="area-row">
             <div class="area-row-header">
               <strong>{{ area.area }}</strong>
@@ -164,16 +170,18 @@
               <span class="progress-value" [style.width.%]="area.completed"></span>
             </div>
             <div class="area-row-meta">
-              <span>準時 {{ area.onTime }}%</span>
-              <span>{{ area.routes }} 條路線</span>
+              <span>準時率 {{ area.onTime }}</span>
+              <span>{{ area.routes }} 筆需求</span>
             </div>
           </article>
+        } @empty {
+          <p class="empty-state">目前期間沒有後端配送需求。</p>
         }
       </div>
     </section>
   </section>
 
-  <section class="report-details" aria-label="配送與異常組成">
+  <section class="report-details" aria-label="配送狀態與異常 API 狀態">
     <section class="detail-panel" aria-labelledby="delivery-status-title">
       <header class="panel-header">
         <div>
@@ -183,38 +191,16 @@
       </header>
 
       <div class="status-breakdown">
-        <article>
-          <span class="status-dot tone-complete" aria-hidden="true"></span>
-          <div>
-            <strong>已完成</strong>
-            <span>正常簽收結案</span>
-          </div>
-          <b>92.4%</b>
-        </article>
-        <article>
-          <span class="status-dot tone-followup" aria-hidden="true"></span>
-          <div>
-            <strong>待商店確認</strong>
-            <span>等待收貨端完成確認</span>
-          </div>
-          <b>4.4%</b>
-        </article>
-        <article>
-          <span class="status-dot tone-exception" aria-hidden="true"></span>
-          <div>
-            <strong>異常處理中</strong>
-            <span>需追蹤或補正資料</span>
-          </div>
-          <b>2.1%</b>
-        </article>
-        <article>
-          <span class="status-dot tone-pending" aria-hidden="true"></span>
-          <div>
-            <strong>待排車</strong>
-            <span>已完成檢核等待指派</span>
-          </div>
-          <b>1.1%</b>
-        </article>
+        @for (status of statusBreakdown(); track status.label) {
+          <article>
+            <span class="status-dot" [class]="'tone-' + status.tone" aria-hidden="true"></span>
+            <div>
+              <strong>{{ status.label }}</strong>
+              <span>{{ status.detail }}</span>
+            </div>
+            <b>{{ status.percentage }}</b>
+          </article>
+        }
       </div>
     </section>
 
@@ -222,7 +208,7 @@
       <header class="panel-header">
         <div>
           <p class="section-eyebrow">EXCEPTION SOURCE</p>
-          <h3 id="exception-source-title">異常來源</h3>
+          <h3 id="exception-source-title">異常案件資料</h3>
         </div>
       </header>
 
@@ -232,26 +218,15 @@
           <span>件數</span>
           <span>處理狀態</span>
         </div>
-        <div class="source-table-row">
-          <span>車機定位</span>
-          <strong>4</strong>
-          <span class="source-status tone-warning">1 筆追蹤中</span>
-        </div>
-        <div class="source-table-row">
-          <span>配送資料</span>
-          <strong>3</strong>
-          <span class="source-status">已補正</span>
-        </div>
-        <div class="source-table-row">
-          <span>人員工時</span>
-          <strong>2</strong>
-          <span class="source-status tone-warning">待排班確認</span>
-        </div>
-        <div class="source-table-row">
-          <span>車輛設備</span>
-          <strong>1</strong>
-          <span class="source-status">已結案</span>
-        </div>
+        @for (source of exceptionSources(); track source.label) {
+          <div class="source-table-row">
+            <span>{{ source.label }}</span>
+            <strong>{{ source.count }}</strong>
+            <span class="source-status" [class.tone-warning]="source.tone === 'warning'">
+              {{ source.detail }}
+            </span>
+          </div>
+        }
       </div>
     </section>
   </section>

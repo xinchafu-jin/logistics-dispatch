@@ -6,25 +6,65 @@
     </div>
 
     <div class="fleet-map-summary" aria-label="目前車隊定位摘要">
-      <span><i class="fleet-status-dot is-active" aria-hidden="true"></i>2 台配送中</span>
-      <span><i class="fleet-status-dot is-paused" aria-hidden="true"></i>1 台停靠</span>
-      <span><i class="fleet-status-dot is-delayed" aria-hidden="true"></i>1 台延遲</span>
+      <span
+        ><i class="fleet-status-dot is-delayed" aria-hidden="true"></i
+        >{{ liveDriverCount() }} 筆定位資料</span
+      >
+      <span
+        ><i class="fleet-status-dot is-delayed" aria-hidden="true"></i
+        >{{ unreportedDriverCount() }} 位司機待定位 API</span
+      >
     </div>
   </header>
+
+  <aside class="fleet-tracking-panel" aria-label="司機追蹤">
+    <header class="fleet-tracking-panel__header">
+      <div>
+        <p class="fleet-map-eyebrow">DRIVER TRACKING</p>
+        <strong>司機清單</strong>
+      </div>
+    </header>
+
+    @if (selectedDriver(); as driver) {
+      <p class="tracking-now">{{ driver.name }} · {{ driver.lastSeen }}</p>
+    } @else {
+      <p class="tracking-help">最新 main 尚未提供 GPS Controller，因此不顯示假定位。</p>
+    }
+
+    <div class="tracking-driver-list">
+      @for (driver of drivers(); track driver.id) {
+        <div class="tracking-driver" [class.is-selected]="selectedDriverId() === driver.id">
+          <button type="button" class="tracking-driver-main" (click)="selectDriver(driver.id)">
+            <span
+              class="tracking-driver-dot"
+              [class]="'is-' + driver.tone"
+              aria-hidden="true"
+            ></span>
+            <span>
+              <strong>{{ driver.name }}</strong>
+              <small>{{ driver.id }} · {{ driver.status }}</small>
+            </span>
+          </button>
+        </div>
+      } @empty {
+        <p class="tracking-help">尚未取得司機資料，請確認後端與資料庫已啟動。</p>
+      }
+    </div>
+  </aside>
 
   <div
     id="fleet-map-canvas"
     class="fleet-map-canvas"
-    aria-label="台南市配送車隊即時定位地圖，含四輛示範車輛"
+    aria-label="台南市配送區域地圖，尚未提供即時定位資料"
   ></div>
 
-  <div class="fleet-map-overlay fleet-map-overlay--top" aria-hidden="true">
-    <span>GPS 定位</span>
-    <strong>30 秒回傳</strong>
+  <div class="fleet-map-overlay fleet-map-overlay--top">
+    <span>GPS API</span>
+    <strong>後端尚未提供</strong>
   </div>
 
   <p class="fleet-map-overlay fleet-map-overlay--bottom">
-    顯示模擬定位資料，將於串接車機定位 API 後更新為即時資料。
+    已同步司機資料；待新增 GPS Controller 後才會顯示車輛定位。
   </p>
 
   <p class="fleet-map-attribution">
