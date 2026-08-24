@@ -1,23 +1,28 @@
-package com.example.backend.entity;
+package com.example.backend.dto.request;
 
-import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
-@Entity
-public class AdminUsersEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+public class AdminUsersDTO {
+
     private Long id;
 
-    @Column(nullable = false,unique = true,length = 60)
+    @NotBlank(message = "主管帳號不可空白")
+    @Size(max = 60, message = "主管帳號長度不可超過 60 字元")
     private String account;
 
-    @Column(nullable = false,length = 60)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @NotBlank(message = "主管密碼不可空白")
+    @Size(min = 8, max = 12, message = "密碼長度必須介於 8 到 12 字元")
     private String password;
-    @Column(nullable = false,length = 60)
+
+    @NotBlank(message = "主管姓名不可空白")
+    @Size(max = 60, message = "主管姓名長度不可超過 60 字元")
     private String name;
 
-    /** 允許 null 是為了相容資料庫內已存在、尚未補手機號碼的主管帳號。 */
-    @Column(length = 30)
+    @NotBlank(message = "主管手機號碼不可空白")
+    @Size(max = 10, message = "手機號碼長度不可超過 10 字元")
     private String phone;
 
     public Long getId() {
