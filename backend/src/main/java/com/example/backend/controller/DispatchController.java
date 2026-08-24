@@ -4,6 +4,7 @@ import com.example.backend.dto.request.DispatchDTO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.service.DispatchService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,11 +21,13 @@ public class DispatchController {
     }
 
     @PostMapping("/optimize")
-    public DispatchResponse optimize(@Valid @RequestBody DispatchDTO request) {
-        return dispatchService.optimize(
-                request.getDate(),
-                request.getWarehouseId(),
-                request.getVehicleIds()
+    public ResponseEntity<DispatchResponse> optimize(@Valid @RequestBody DispatchDTO request) {
+        return ResponseEntity.ok(
+                dispatchService.optimize(
+                        request.getDate(),
+                        request.getWarehouseId(),
+                        request.getVehicleIds()
+                )
         );
     }
 }
