@@ -44,7 +44,12 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/admin/login", "/api/auth/driver/login").permitAll()
+                        .requestMatchers(
+                                "/api/auth/admin/login",
+                                "/api/auth/driver/login",
+                                "/api/auth/driver/forgot-password/verify",
+                                "/api/auth/driver/forgot-password/reset"
+                        ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
                                 "/api/vehicles/**", "/api/orders/**").hasRole(AuthService.ROLE_ADMIN)
