@@ -61,4 +61,11 @@ public final class ValidMsg {
     public static final String WAREHOUSE_ADDRESS_MAX_LENGTH = "地址長度不能超過 255 字元";
     public static final String WAREHOUSE_LAT_REQUIRED = "倉庫緯度不能為空";
     public static final String WAREHOUSE_LNG_REQUIRED = "倉庫經度不能為空";
-    public static final String WAREHOUSE_PHONE_MAX_LENGTH = "電話長度不能超過 30 字元";}
+    public static final String WAREHOUSE_PHONE_MAX_LENGTH = "電話長度不能超過 30 字元";
+
+    // Dispatch
+    public static final String DISPATCH_DATE_REQUIRED = "配送日期不可空白";
+    public static final String DISPATCH_WAREHOUSE_REQUIRED = "倉庫不可空白";
+    public static final String DISPATCH_VEHICLES_REQUIRED = "請至少選擇一台車輛";
+    public static final String DISPATCH_VEHICLE_ID_REQUIRED = "車輛 ID 不可空白";
+}
