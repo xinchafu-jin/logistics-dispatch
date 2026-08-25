@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.VehicleStatus;
 import com.example.backend.dao.*;
 import com.example.backend.dispatch.OsrmClient;
 import com.example.backend.dispatch.RouteOptimizer;
@@ -44,6 +45,7 @@ public class DispatchService {
     }
 
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds) {
+        // 撈當日訂單 已確認之狀態
         List<OrdersEntity> orders =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseId(
                         date, OrderStatus.CONFIRMED, warehouseId);
@@ -55,10 +57,19 @@ public class DispatchService {
         if (vehicles.size() != vehicleIds.size()) {
             throw new IllegalArgumentException("查無車輛");
         }
+        for (VehiclesEntity v : vehicles) {
+            if (!warehouseId.equals(v.getWarehouseId())) {
+                throw new IllegalArgumentException("車輛 " + v.getPlateNumber() + " 不屬於倉庫 " + warehouseId);
+            }
+            if (v.getStatus() != VehicleStatus.AVAILABLE) {
+                throw new IllegalArgumentException(
+                        "車輛 " + v.getPlateNumber() + " 目前狀態為 " + v.getStatus() + "，無法排入路線");
+            }
+        }
         WarehousesEntity warehousesEntity =
                 warehousesDAO.findById(warehouseId).
                         orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
-
+        // 撈商店id
         List<Long> storeIds = new ArrayList<>();
         for (OrdersEntity item : orders) {
             storeIds.add(item.getStoreId());
@@ -140,13 +151,13 @@ public class DispatchService {
         }
         List<Long> unassignedOrderIds = new ArrayList<>();
         for (Integer node : result.getDroppedNodes()) {
-            unassignedOrderIds.add(orders.get(node-1).getId());
+            unassignedOrderIds.add(orders.get(node - 1).getId());
         }
         DispatchResponse dispatchResponse = new DispatchResponse();
         dispatchResponse.setRoutes(routeResponses);
         dispatchResponse.setUnassignedOrderIds(unassignedOrderIds);
 
 
-        return dispatchResponse ;
+        return dispatchResponse;
     }
 }

@@ -64,7 +64,8 @@ public class OrdersEntity {
     @Column
     private Long assignedDriverId;
     /** 出貨倉庫 */
-    @Column
+
+    @Column(nullable = false)
     private Long warehouseId;
 
     /**

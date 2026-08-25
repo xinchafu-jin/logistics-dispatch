@@ -10,18 +10,23 @@ public class VehiclesEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    @Column(nullable = false)
+    private Long warehouseId;
     @Column(nullable = false, unique = true, length = 20)
     private String plateNumber;
 
     @Column(length = 50)
     private String vehicleType;
 
-    /** 可裝箱數，容量單位統一用「箱」 */
+    /**
+     * 可裝箱數，容量單位統一用「箱」
+     */
     @Column(nullable = false)
     private Integer capacity;
 
-    /** 平均油耗（公里／公升）*/
+    /**
+     * 平均油耗（公里／公升）
+     */
     @Column
     private Double fuelConsumption;
 
@@ -75,5 +80,13 @@ public class VehiclesEntity {
 
     public void setStatus(VehicleStatus status) {
         this.status = status;
+    }
+
+    public Long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(Long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 }
