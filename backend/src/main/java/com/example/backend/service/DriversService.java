@@ -1,6 +1,8 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dto.request.DriverPasswordResetDTO;
+import com.example.backend.dto.request.DriverPasswordResetVerificationDTO;
 import com.example.backend.dto.request.DriversDTO;
 import com.example.backend.entity.DriversEntity;
 import jakarta.persistence.EntityNotFoundException;
@@ -36,9 +38,7 @@ public class DriversService {
         if (driversDAO.existsByAccount(dto.getAccount())) {
             throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
         }
-        if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-            throw new IllegalArgumentException("新增司機時必須設定至少 8 字元的密碼");
-        }
+        validatePassword(dto.getPassword(), "新增司機時必須設定密碼");
         DriversEntity entity = new DriversEntity();
         apply(dto, entity);
         entity.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -50,9 +50,7 @@ public class DriversService {
             if (driversDAO.existsByAccount(dto.getAccount())) {
                 throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
             }
-            if (dto.getPassword() == null || dto.getPassword().isBlank()) {
-                throw new IllegalArgumentException("新增司機時必須設定至少 8 字元的密碼");
-            }
+            validatePassword(dto.getPassword(), "新增司機時必須設定密碼");
             DriversEntity entity = new DriversEntity();
             apply(dto, entity);
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -68,9 +66,28 @@ public class DriversService {
         }
         apply(dto, entity);
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
+            validatePassword(dto.getPassword(), "新密碼不可空白");
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
         return toDTO(driversDAO.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public void verifyPasswordResetIdentity(DriverPasswordResetVerificationDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("帳號或手機號碼不正確");
+        }
+        findDriverForPasswordReset(dto.getAccount(), dto.getPhone());
+    }
+
+    public void resetForgottenPassword(DriverPasswordResetDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("帳號或手機號碼不正確");
+        }
+        validatePassword(dto.getNewPassword(), "新密碼不可空白");
+        DriversEntity entity = findDriverForPasswordReset(dto.getAccount(), dto.getPhone());
+        entity.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        driversDAO.save(entity);
     }
 
     public DriversDTO updateStatus(Long id, Boolean isActive) {
@@ -86,6 +103,29 @@ public class DriversService {
 
     private DriversEntity findEntity(Long id) {
         return driversDAO.findById(id).orElseThrow(() -> new EntityNotFoundException("找不到司機，ID：" + id));
+    }
+
+    private DriversEntity findDriverForPasswordReset(String account, String phone) {
+        if (account == null || account.isBlank() || phone == null || phone.isBlank()) {
+            throw new IllegalArgumentException("帳號或手機號碼不正確");
+        }
+
+        DriversEntity entity = driversDAO.findByAccount(account.trim())
+                .orElseThrow(() -> new IllegalArgumentException("帳號或手機號碼不正確"));
+
+        if (!phone.trim().equals(entity.getPhone()) || !Boolean.TRUE.equals(entity.getIsActive())) {
+            throw new IllegalArgumentException("帳號或手機號碼不正確");
+        }
+        return entity;
+    }
+
+    private void validatePassword(String password, String blankMessage) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException(blankMessage);
+        }
+        if (password.length() < 8 || password.length() > 12) {
+            throw new IllegalArgumentException("密碼長度必須介於 8 到 12 字元");
+        }
     }
 
     private void apply(DriversDTO dto, DriversEntity entity) {
