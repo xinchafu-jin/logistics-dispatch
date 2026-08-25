@@ -9,5 +9,7 @@ import java.util.Optional;
 @Repository
 public interface AdminUsersDAO extends JpaRepository<AdminUsersEntity, Long> {
 
+    boolean existsByAccount(String account);
+
     Optional<AdminUsersEntity> findByAccount(String account);
 }
