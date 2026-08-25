@@ -54,7 +54,8 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
-                                "/api/vehicles/**", "/api/orders/**").hasRole(AuthService.ROLE_ADMIN)
+                                "/api/vehicles/**", "/api/orders/**")
+                        .hasRole(AuthService.ROLE_ADMIN)
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth -> oauth.jwt(jwt ->

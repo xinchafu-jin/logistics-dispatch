@@ -12,7 +12,7 @@ public class OsrmClient {
     private final RestClient restClient;
 
     //請求交易
-    public OsrmClient(@Value("{app.osrm.base-url}") String baseUrl) {
+    public OsrmClient(@Value("${app.osrm.base-url}") String baseUrl) {
         this.restClient = RestClient.builder().baseUrl(baseUrl).build();
     }
 
