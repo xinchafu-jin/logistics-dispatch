@@ -54,7 +54,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
-                                "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**")
+                                "/api/vehicles/**", "/api/orders/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .anyRequest().authenticated()
                 )
