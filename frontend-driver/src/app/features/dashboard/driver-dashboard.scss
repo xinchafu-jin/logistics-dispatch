@@ -1,0 +1,378 @@
+:host {
+  display: block;
+}
+
+.dashboard-page {
+  min-height: 100dvh;
+  color: #182824;
+  background: #f5f8f6;
+}
+
+.topbar {
+  display: flex;
+  min-height: 68px;
+  padding: 0 clamp(20px, 5vw, 76px);
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #dbe5e0;
+  background: #ffffff;
+}
+
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand {
+  --accent: #0f7665;
+  --brand-muted: #6c7d76;
+  --brand-node: #789089;
+  --brand-text: #213930;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand strong {
+  color: #17261f;
+}
+
+.separator {
+  color: #9aaba4;
+}
+
+.theme-toggle,
+.sign-out {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid #b9c8c1;
+  border-radius: 6px;
+  color: #24433a;
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.theme-toggle:hover,
+.sign-out:hover {
+  border-color: #0f7665;
+  color: #0f7665;
+}
+
+.theme-toggle {
+  display: grid;
+  width: 36px;
+  padding: 0;
+  place-items: center;
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.page-heading,
+.weather-card,
+.account-card,
+.pending-section {
+  width: min(100% - 40px, 1120px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.page-heading {
+  padding: 72px 0 40px;
+}
+
+.eyebrow {
+  margin: 0 0 9px;
+  color: #0f7665;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 12px;
+  color: #13251e;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.15;
+}
+
+.page-heading > p:last-child {
+  max-width: 620px;
+  margin-bottom: 0;
+  color: #5c6d66;
+  line-height: 1.65;
+}
+
+.weather-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  border: 1px solid #cfe1da;
+  border-radius: 8px;
+  background: #eaf7f2;
+}
+
+.weather-symbol {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #b6ddd1;
+  border-radius: 8px;
+  color: #0a715d;
+  background: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.weather-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.weather-copy strong {
+  color: #19362d;
+  font-size: 20px;
+}
+
+.weather-copy span:last-child {
+  color: #60776e;
+  font-size: 13px;
+}
+
+.account-card {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid #d6e1dc;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.account-card div {
+  display: grid;
+  gap: 8px;
+  padding: 24px;
+}
+
+.account-card div + div {
+  border-left: 1px solid #e1e9e5;
+}
+
+.label {
+  color: #71817a;
+  font-size: 13px;
+}
+
+.account-card strong {
+  color: #1c2f28;
+  font-size: 18px;
+}
+
+.account-card .active-status {
+  color: #08755f;
+}
+
+.pending-section {
+  padding: 64px 0 80px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 28px;
+  margin-bottom: 24px;
+}
+
+h2 {
+  margin-bottom: 0;
+  color: #1a2c25;
+  font-size: 26px;
+}
+
+.section-heading > p {
+  max-width: 360px;
+  margin-bottom: 0;
+  color: #64736d;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.pending-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+article {
+  min-height: 190px;
+  padding: 22px;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.status-label {
+  display: inline-block;
+  margin-bottom: 28px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: #9a6100;
+  background: #fff2cf;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+h3 {
+  margin-bottom: 10px;
+  color: #23352e;
+  font-size: 17px;
+}
+
+article p {
+  margin-bottom: 0;
+  color: #65746e;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.dashboard-page.is-dark-theme {
+  color: #dce9e4;
+  background: #0d1213;
+}
+
+.dashboard-page.is-dark-theme .topbar {
+  border-color: #2d3e3d;
+  background: #151d1f;
+}
+
+.dashboard-page.is-dark-theme .brand {
+  --accent: #63d1c6;
+  --brand-muted: #b6c9c3;
+  --brand-node: #90aaa1;
+  --brand-text: #eef7f3;
+}
+
+.dashboard-page.is-dark-theme .brand strong,
+.dashboard-page.is-dark-theme h1,
+.dashboard-page.is-dark-theme h2,
+.dashboard-page.is-dark-theme h3,
+.dashboard-page.is-dark-theme .account-card strong,
+.dashboard-page.is-dark-theme .weather-copy strong {
+  color: #eef7f3;
+}
+
+.dashboard-page.is-dark-theme .separator,
+.dashboard-page.is-dark-theme .label,
+.dashboard-page.is-dark-theme .weather-copy span:last-child,
+.dashboard-page.is-dark-theme .page-heading > p:last-child,
+.dashboard-page.is-dark-theme .section-heading > p,
+.dashboard-page.is-dark-theme article p {
+  color: #aabdb7;
+}
+
+.dashboard-page.is-dark-theme .theme-toggle,
+.dashboard-page.is-dark-theme .sign-out {
+  border-color: #3a514d;
+  color: #dce9e4;
+  background: #1b2728;
+}
+
+.dashboard-page.is-dark-theme .theme-toggle:hover,
+.dashboard-page.is-dark-theme .sign-out:hover {
+  border-color: #63d1c6;
+  color: #83e2d9;
+  background: #213334;
+}
+
+.dashboard-page.is-dark-theme .weather-card {
+  border-color: #28574f;
+  background: #132c2a;
+}
+
+.dashboard-page.is-dark-theme .weather-symbol {
+  border-color: #3a6a61;
+  color: #83e2d9;
+  background: #172322;
+}
+
+.dashboard-page.is-dark-theme .account-card,
+.dashboard-page.is-dark-theme article {
+  border-color: #2e4140;
+  background: #151e20;
+}
+
+.dashboard-page.is-dark-theme .account-card div + div {
+  border-color: #2e4140;
+}
+
+.dashboard-page.is-dark-theme .active-status {
+  color: #68d9bd;
+}
+
+.dashboard-page.is-dark-theme .status-label {
+  color: #ffd27c;
+  background: #4a3916;
+}
+
+@media (max-width: 800px) {
+  .account-card,
+  .pending-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .account-card div:nth-child(3) {
+    border-top: 1px solid #e1e9e5;
+    border-left: 0;
+  }
+
+  .section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    padding: 0 20px;
+  }
+
+  .brand span:nth-of-type(2),
+  .separator {
+    display: none;
+  }
+
+  .page-heading {
+    padding-top: 48px;
+  }
+
+  .weather-card {
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .account-card,
+  .pending-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-card div + div,
+  .account-card div:nth-child(3) {
+    border-top: 1px solid #e1e9e5;
+    border-left: 0;
+  }
+}

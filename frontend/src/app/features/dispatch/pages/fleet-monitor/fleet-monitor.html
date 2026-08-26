@@ -1,75 +1,57 @@
 <main class="fleet-monitor-page">
-  <section class="page-intro" aria-labelledby="fleet-title">
+  <section class="fleet-monitor-intro" aria-labelledby="fleet-title">
     <div>
       <p class="page-eyebrow">FLEET MONITOR</p>
       <h2 id="fleet-title">即時車隊</h2>
-    <p>同步後端司機在職狀態；即時定位會在 GPS API 建立後接入。</p>
+      <p>集中查看司機清單與定位回傳狀態；地圖只會呈現後端實際提供的資訊。</p>
     </div>
 
-    <p class="updated-at">後端司機資料更新於 {{ updatedAt() }}</p>
+    <div class="gps-state">
+      <svg lucideTriangleAlert aria-hidden="true"></svg>
+      <span>GPS Controller 尚未提供</span>
+    </div>
   </section>
 
-  <section class="fleet-summary" aria-label="即時車隊摘要">
-    <article class="summary-card tone-accent">
-      <span class="summary-icon"><svg lucideMapPinned aria-hidden="true"></svg></span>
-      <div>
-        <p>可排班司機</p>
-        <strong>{{ activeDriverCount() }}</strong>
-        <span>依後端 isActive 計算</span>
-      </div>
-    </article>
-    <article class="summary-card">
+  <section class="fleet-summary" aria-label="車隊摘要">
+    <article>
       <span class="summary-icon"><svg lucideUserRound aria-hidden="true"></svg></span>
       <div>
-        <p>GPS 資料</p>
-        <strong>--</strong>
-        <span>後端尚未提供 GPS Controller</span>
+        <p>司機總數</p>
+        <strong>{{ drivers().length }}</strong>
       </div>
     </article>
-    <article class="summary-card tone-warning">
-      <span class="summary-icon"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
+    <article>
+      <span class="summary-icon is-active"><svg lucideMapPinned aria-hidden="true"></svg></span>
       <div>
-        <p>未啟用司機</p>
+        <p>可排班</p>
+        <strong>{{ activeCount() }}</strong>
+      </div>
+    </article>
+    <article>
+      <span class="summary-icon is-muted"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
+      <div>
+        <p>未啟用</p>
         <strong>{{ inactiveCount() }}</strong>
-        <span>依後端 isActive 計算</span>
-      </div>
-    </article>
-    <article class="summary-card">
-      <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
-      <div>
-        <p>資料來源</p>
-        <strong>司機 API</strong>
-        <span>目前只讀取 /api/drivers</span>
       </div>
     </article>
   </section>
 
-  <section class="fleet-workspace" aria-label="台南車隊地圖與追蹤清單">
-    <section class="map-panel" aria-label="台南即時車隊地圖">
-      <app-live-fleet-map />
-    </section>
+  <section class="fleet-workspace" aria-label="車隊地圖與司機狀態">
+    <app-live-fleet-map />
 
-    <aside class="tracking-panel" aria-labelledby="tracking-title">
-      <header class="tracking-header">
+    <aside class="fleet-list-panel">
+      <header>
         <div>
-          <p class="section-eyebrow">VEHICLE TRACKING</p>
-          <h3 id="tracking-title">車況追蹤</h3>
+          <p class="page-eyebrow">DRIVER STATUS</p>
+          <h3>司機狀態</h3>
         </div>
-        <span>{{ visibleVehicles().length }} 輛</span>
       </header>
 
-      @if (loading()) {
-        <p class="empty-state">正在從後端載入司機資料...</p>
-      } @else if (errorMessage()) {
-        <p class="empty-state">{{ errorMessage() }}</p>
-      }
-
-      <div class="filter-control" role="group" aria-label="車隊狀態篩選">
+      <div class="filter-row" role="group" aria-label="司機篩選">
         @for (filter of filters; track filter.id) {
           <button
             type="button"
             [class.is-active]="activeFilter() === filter.id"
-            [attr.aria-pressed]="activeFilter() === filter.id"
             (click)="setFilter(filter.id)"
           >
             {{ filter.label }}
@@ -77,51 +59,26 @@
         }
       </div>
 
-      <div class="vehicle-list">
-        @for (vehicle of visibleVehicles(); track vehicle.driverId) {
-          <button
-            type="button"
-            class="vehicle-row"
-            [class.is-selected]="selectedVehicleId() === vehicle.driverId"
-            (click)="selectVehicle(vehicle.driverId)"
-          >
-            <span
-              class="vehicle-status"
-              [class]="'status-' + vehicle.filter"
-              aria-hidden="true"
-            ></span>
-            <span class="vehicle-row-main">
-              <strong>{{ vehicle.vehicle }} · {{ vehicle.driver }}</strong>
-              <span>{{ vehicle.locationStatus }} · 車輛資料尚未由後端提供</span>
-            </span>
-            <span class="vehicle-row-meta">{{ vehicle.status }}</span>
-          </button>
-        } @empty {
-          <p class="empty-state">目前沒有符合此狀態的車輛。</p>
-        }
-      </div>
-
-      <section class="selected-vehicle" aria-label="目前選取車輛資訊">
-        @if (selectedVehicle(); as vehicle) {
-          <p>選取司機</p>
-          <div>
-            <strong>{{ vehicle.driver }}</strong>
-            <span>{{ vehicle.driverId }} · {{ vehicle.vehicle }}</span>
-          </div>
-          <dl>
-            <div>
-              <dt>排班狀態</dt>
-              <dd>{{ vehicle.status }}</dd>
-            </div>
-            <div>
-              <dt>定位狀態</dt>
-              <dd>{{ vehicle.locationStatus }}</dd>
-            </div>
-          </dl>
-        } @else {
-          <p class="empty-state">後端目前沒有可顯示的司機資料。</p>
-        }
-      </section>
+      @if (loading()) {
+        <p class="panel-message">正在同步後端司機資料...</p>
+      } @else if (errorMessage()) {
+        <p class="panel-message is-error">{{ errorMessage() }}</p>
+      } @else {
+        <div class="fleet-driver-list">
+          @for (driver of visibleDrivers(); track driver.id) {
+            <article class="fleet-driver">
+              <i [class.is-active]="driver.isActive" aria-hidden="true"></i>
+              <div>
+                <strong>{{ driver.name }}</strong>
+                <span>{{ driver.id }}</span>
+                <small>{{ driver.state }}</small>
+              </div>
+            </article>
+          } @empty {
+            <p class="panel-message">此篩選條件下沒有司機資料。</p>
+          }
+        </div>
+      }
     </aside>
   </section>
 </main>

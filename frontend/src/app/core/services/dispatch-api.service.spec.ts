@@ -105,12 +105,37 @@ describe('DispatchApiService', () => {
     const driverRequest = httpTesting.expectOne('/api/drivers/8/status');
     expect(driverRequest.request.method).toBe('PATCH');
     expect(driverRequest.request.body).toEqual({ isActive: false });
-    driverRequest.flush({ id: 8, account: 'driver-08', name: '王小明', workStart: '08:00', workEnd: '17:00', restDuration: 60, isActive: false });
+    driverRequest.flush({
+      id: 8,
+      account: 'driver-08',
+      name: '王小明',
+      workStart: '08:00',
+      workEnd: '17:00',
+      restDuration: 60,
+      isActive: false,
+    });
 
     const storeRequest = httpTesting.expectOne('/api/stores/12/status');
     expect(storeRequest.request.method).toBe('PATCH');
     expect(storeRequest.request.body).toEqual({ status: 'SUSPENDED' });
-    storeRequest.flush({ id: 12, storeCode: 'ST-012', name: '永康門市', lat: 23, lng: 120, receivingStart: '09:00', receivingEnd: '18:00', status: 'SUSPENDED' });
+    storeRequest.flush({
+      id: 12,
+      storeCode: 'ST-012',
+      name: '永康門市',
+      lat: 23,
+      lng: 120,
+      receivingStart: '09:00',
+      receivingEnd: '18:00',
+      status: 'SUSPENDED',
+    });
+  });
+
+  it('deletes a driver through the backend DELETE contract', () => {
+    service.deleteDriver(8).subscribe();
+
+    const request = httpTesting.expectOne('/api/drivers/8');
+    expect(request.request.method).toBe('DELETE');
+    request.flush(null);
   });
 
   it('writes vehicles through the backend CRUD contract', () => {

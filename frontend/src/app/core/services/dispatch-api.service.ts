@@ -35,6 +35,10 @@ export class DispatchApiService {
     return this.http.put<DriverDto>(`${API_ROOT}/drivers/${id}`, driver);
   }
 
+  deleteDriver(id: number): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/drivers/${id}`);
+  }
+
   updateDriverStatus(id: number, payload: DriverStatusPayload): Observable<DriverDto> {
     return this.http.patch<DriverDto>(`${API_ROOT}/drivers/${id}/status`, payload);
   }
@@ -122,5 +126,4 @@ export class DispatchApiService {
   deleteOrder(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/orders/${id}`);
   }
-
 }

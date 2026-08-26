@@ -1,6 +1,4 @@
-export type UserRole = 'DRIVER' | 'DISPATCHER';
-
-export type LoginPortal = 'ADMIN' | 'DRIVER';
+export type UserRole = 'DISPATCHER';
 
 export interface AuthUser {
   account: string;
@@ -11,5 +9,4 @@ export interface AuthUser {
 export interface LoginCredentials {
   account: string;
   password: string;
-  portal: LoginPortal;
 }

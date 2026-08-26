@@ -1,18 +1,12 @@
 import { Routes } from '@angular/router';
 import { guestOnlyGuard, requireRole } from './core/auth/auth.guard';
 import { Login } from './features/auth/pages/login/login';
-import { DriverDashboard } from './features/driver/pages/driver-dashboard/driver-dashboard';
 
 export const routes: Routes = [
   {
     path: 'login',
     component: Login,
     canActivate: [guestOnlyGuard],
-  },
-  {
-    path: 'driver/dashboard',
-    component: DriverDashboard,
-    canActivate: [requireRole('DRIVER')],
   },
   {
     path: 'dispatch',
