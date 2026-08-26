@@ -1,7 +1,7 @@
 package com.example.backend.entity;
 
 import jakarta.persistence.*;
-
+@Table(name = "admin_users")
 @Entity
 public class AdminUsersEntity {
     @Id
@@ -11,7 +11,11 @@ public class AdminUsersEntity {
     @Column(nullable = false,unique = true,length = 60)
     private String account;
 
-    @Column(nullable = false,length = 60)
+    /**
+     * BCrypt 雜湊（60 字元）。長度放寬到 100 以容納帶前綴的編碼器
+     * （DelegatingPasswordEncoder 的 {bcrypt}... 為 68 字元）或 Argon2。
+     */
+    @Column(nullable = false,length = 100)
     private String password;
     @Column(nullable = false,length = 60)
     private String name;

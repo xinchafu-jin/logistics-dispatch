@@ -4,6 +4,7 @@ import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.service.DispatchService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +35,19 @@ public class DispatchController {
                         warehouseId,
                         vehicleIds
                 )
+        );
+    }
+
+    /**
+     * 調度看板：讀取某天已排定的路線，不會觸發重新排車。
+     */
+    @GetMapping("/board")
+    public ResponseEntity<DispatchResponse> board(
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam("warehouseId") Long warehouseId
+    ) {
+        return ResponseEntity.ok(
+                dispatchService.getBoard(date, warehouseId)
         );
     }
 }

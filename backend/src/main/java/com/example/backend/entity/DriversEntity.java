@@ -13,11 +13,15 @@ public class DriversEntity {
     private Long id;
 
     /** 員工編號或手機號碼，登入帳號 */
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, unique = true, length = 60)
     private String account;
 
-    /** BCrypt 雜湊。允許 null 是為了相容已存在的舊司機資料。 */
-    @Column(length = 60)
+    /**
+     * BCrypt 雜湊（60 字元）。長度放寬到 100 以容納帶前綴的編碼器
+     * （DelegatingPasswordEncoder 的 {bcrypt}... 為 68 字元）或 Argon2。
+     * 允許 null 是為了相容已存在的舊司機資料。
+     */
+    @Column(length = 100)
     private String password;
 
     @Column(nullable = false, length = 50)
