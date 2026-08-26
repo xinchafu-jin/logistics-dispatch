@@ -26,7 +26,6 @@ describe('AuthService', () => {
       .login({
         account: ' manager ',
         password: 'Manager123!',
-        portal: 'ADMIN',
       })
       .subscribe();
 
@@ -57,34 +56,6 @@ describe('AuthService', () => {
     expect(service.accessToken()).toBe('admin-token');
   });
 
-  it('uses the driver login endpoint and maps the driver role', () => {
-    service
-      .login({
-        account: 'driver01',
-        password: 'Driver123!',
-        portal: 'DRIVER',
-      })
-      .subscribe();
-
-    const request = httpTesting.expectOne('/api/auth/driver/login');
-
-    request.flush({
-      accessToken: 'driver-token',
-      tokenType: 'Bearer',
-      expiresAt: '2026-08-19T20:00:00Z',
-      role: 'DRIVER',
-      userId: 2,
-      account: 'driver01',
-      name: '司機一號',
-    });
-
-    expect(service.user()).toEqual({
-      account: 'driver01',
-      displayName: '司機一號',
-      role: 'DRIVER',
-    });
-  });
-
   it('does not call the backend when no in-memory token exists', () => {
     service.restoreSession().subscribe((user) => expect(user).toBeNull());
   });
@@ -94,7 +65,6 @@ describe('AuthService', () => {
       .login({
         account: 'manager',
         password: 'Manager123!',
-        portal: 'ADMIN',
       })
       .subscribe();
 
@@ -132,7 +102,6 @@ describe('AuthService', () => {
       .login({
         account: 'manager',
         password: 'Manager123!',
-        portal: 'ADMIN',
       })
       .subscribe();
 

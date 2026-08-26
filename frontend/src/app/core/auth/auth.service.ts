@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { catchError, map, Observable, of } from 'rxjs';
-import { AuthUser, LoginCredentials, LoginPortal, UserRole } from './auth.models';
+import { AuthUser, LoginCredentials } from './auth.models';
 
 const AUTH_API = '/api/auth';
 const ACCESS_TOKEN_STORAGE_KEY = 'logistics-dispatch.access-token';
@@ -10,7 +10,7 @@ interface LoginResponse {
   accessToken: string;
   tokenType: string;
   expiresAt: string;
-  role: 'ADMIN' | 'DRIVER';
+  role: 'ADMIN';
   userId: number;
   account: string;
   name: string;
@@ -20,7 +20,7 @@ interface CurrentUserResponse {
   userId: number;
   account: string;
   name: string;
-  role: 'ADMIN' | 'DRIVER';
+  role: 'ADMIN';
 }
 
 @Injectable({
@@ -35,17 +35,14 @@ export class AuthService {
   readonly accessToken = this.accessTokenState.asReadonly();
 
   login(credentials: LoginCredentials): Observable<AuthUser> {
-    const endpoint =
-      credentials.portal === 'ADMIN' ? `${AUTH_API}/admin/login` : `${AUTH_API}/driver/login`;
-
     return this.http
-      .post<LoginResponse>(endpoint, {
+      .post<LoginResponse>(`${AUTH_API}/admin/login`, {
         account: credentials.account.trim(),
         password: credentials.password,
       })
       .pipe(
         map((response) => {
-          const user = this.parseLoginResponse(response, credentials.portal);
+          const user = this.parseLoginResponse(response);
 
           this.accessTokenState.set(response.accessToken);
           this.saveToken(response.accessToken);
@@ -56,13 +53,8 @@ export class AuthService {
       );
   }
 
-  dashboardPath(role: UserRole): string {
-    const paths: Record<UserRole, string> = {
-      DRIVER: '/driver/dashboard',
-      DISPATCHER: '/dispatch/dashboard',
-    };
-
-    return paths[role];
+  dashboardPath(): string {
+    return '/dispatch/dashboard';
   }
 
   restoreSession(): Observable<AuthUser | null> {
@@ -92,16 +84,14 @@ export class AuthService {
     return of(void 0);
   }
 
-  private parseLoginResponse(response: LoginResponse, portal: LoginPortal): AuthUser {
-    const expectedRole = portal === 'ADMIN' ? 'ADMIN' : 'DRIVER';
-
+  private parseLoginResponse(response: LoginResponse): AuthUser {
     if (
       !response ||
       typeof response.accessToken !== 'string' ||
       !response.accessToken ||
       typeof response.account !== 'string' ||
       typeof response.name !== 'string' ||
-      response.role !== expectedRole
+      response.role !== 'ADMIN'
     ) {
       throw new Error('Invalid authentication response.');
     }
@@ -109,7 +99,7 @@ export class AuthService {
     return {
       account: response.account,
       displayName: response.name,
-      role: this.toFrontendRole(response.role),
+      role: this.toFrontendRole(),
     };
   }
 
@@ -118,7 +108,7 @@ export class AuthService {
       !response ||
       typeof response.account !== 'string' ||
       typeof response.name !== 'string' ||
-      (response.role !== 'ADMIN' && response.role !== 'DRIVER')
+      response.role !== 'ADMIN'
     ) {
       throw new Error('Invalid current user response.');
     }
@@ -126,12 +116,12 @@ export class AuthService {
     return {
       account: response.account,
       displayName: response.name,
-      role: this.toFrontendRole(response.role),
+      role: this.toFrontendRole(),
     };
   }
 
-  private toFrontendRole(role: 'ADMIN' | 'DRIVER'): UserRole {
-    return role === 'ADMIN' ? 'DISPATCHER' : 'DRIVER';
+  private toFrontendRole(): 'DISPATCHER' {
+    return 'DISPATCHER';
   }
 
   private clearSession(): void {

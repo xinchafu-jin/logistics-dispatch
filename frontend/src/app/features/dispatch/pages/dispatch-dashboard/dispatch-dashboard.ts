@@ -130,7 +130,9 @@ export class DispatchDashboard implements OnInit {
         this.warehouses.set(warehouses);
         this.pendingOrders.set(this.toPendingOrders(orders, stores));
         this.alerts.set(this.toAlerts(drivers, vehicles));
-        this.warehouseName.set(warehouses.find((warehouse) => warehouse.isActive)?.name ?? '台南配送區');
+        this.warehouseName.set(
+          warehouses.find((warehouse) => warehouse.isActive)?.name ?? '台南配送區',
+        );
         this.updatedAt.set(this.formatCurrentTime());
         this.loading.set(false);
       },

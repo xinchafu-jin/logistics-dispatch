@@ -1,0 +1,99 @@
+<main class="dashboard-page" [class.is-dark-theme]="isDarkTheme()">
+  <header class="topbar">
+    <div class="brand">
+      <app-brand-logo></app-brand-logo>
+      <span class="separator" aria-hidden="true">/</span>
+      <strong>司機工作台</strong>
+    </div>
+    <div class="topbar-actions">
+      <button
+        type="button"
+        class="theme-toggle"
+        (click)="toggleTheme()"
+        [title]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
+        [attr.aria-label]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
+      >
+        @if (isDarkTheme()) {
+          <svg lucideSun aria-hidden="true"></svg>
+        } @else {
+          <svg lucideMoon aria-hidden="true"></svg>
+        }
+      </button>
+      <button type="button" class="sign-out" (click)="signOut()">登出</button>
+    </div>
+  </header>
+
+  <section class="page-heading" aria-labelledby="dashboard-title">
+    <p class="eyebrow">已通過帳號驗證</p>
+    <h1 id="dashboard-title">你好，{{ user()?.name }}</h1>
+    <p>你的司機帳號已安全登入。工作任務會在後端介面開放後顯示於此。</p>
+  </section>
+
+  <section class="weather-card" aria-label="台南即時天氣">
+    <div class="weather-symbol" aria-hidden="true">
+      {{ weather()?.icon ?? (weatherUnavailable() ? '!' : '...') }}
+    </div>
+
+    <div class="weather-copy">
+      <span class="label">台南 · 即時配送天氣</span>
+      @if (weather(); as currentWeather) {
+        <strong>{{ currentWeather.condition }} {{ currentWeather.temperature }}°</strong>
+        <span>資料時間 {{ currentWeather.updatedAt }}</span>
+      } @else if (weatherUnavailable()) {
+        <strong>目前無法取得天氣資料</strong>
+        <span>請確認網路後重新整理頁面。</span>
+      } @else {
+        <strong>正在取得天氣資料</strong>
+        <span>資料來源：Open-Meteo</span>
+      }
+    </div>
+  </section>
+
+  <section class="account-card" aria-label="登入帳號資訊">
+    <div>
+      <span class="label">司機姓名</span>
+      <strong>{{ user()?.name }}</strong>
+    </div>
+    <div>
+      <span class="label">帳號</span>
+      <strong>{{ user()?.account }}</strong>
+    </div>
+    <div>
+      <span class="label">帳號狀態</span>
+      <strong class="active-status">已驗證</strong>
+    </div>
+  </section>
+
+  <section class="pending-section" aria-labelledby="pending-title">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">工作功能</p>
+        <h2 id="pending-title">等待後端資料介面</h2>
+      </div>
+      <p>以下項目目前沒有可串接的後端 API，因此不提供無效按鈕。</p>
+    </div>
+
+    <div class="pending-grid">
+      <article>
+        <span class="status-label">尚未開放</span>
+        <h3>今日配送任務</h3>
+        <p>需要取得司機本人任務的 API。</p>
+      </article>
+      <article>
+        <span class="status-label">尚未開放</span>
+        <h3>導航與路線</h3>
+        <p>需要配送站點與路線資料的 API。</p>
+      </article>
+      <article>
+        <span class="status-label">尚未開放</span>
+        <h3>即時定位回報</h3>
+        <p>需要司機 GPS 上傳與讀取 API。</p>
+      </article>
+      <article>
+        <span class="status-label">尚未開放</span>
+        <h3>配送完成回報</h3>
+        <p>需要更新任務配送狀態的 API。</p>
+      </article>
+    </div>
+  </section>
+</main>

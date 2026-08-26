@@ -34,11 +34,20 @@ type ResourceForm =
   | 'edit-warehouse'
   | null;
 
+type DeleteTargetKind = 'driver' | 'vehicle' | 'store' | 'warehouse';
+
 interface DeleteTarget {
-  kind: 'vehicle' | 'store' | 'warehouse';
+  kind: DeleteTargetKind;
   id: number;
   name: string;
 }
+
+const deleteTargetLabels: Record<DeleteTargetKind, string> = {
+  driver: '司機',
+  vehicle: '車輛',
+  store: '店家',
+  warehouse: '倉庫',
+};
 
 interface DriverResource {
   backendId?: number;
@@ -235,7 +244,8 @@ export class ResourceOverview implements OnInit {
       .map((warehouse) => this.toWarehouseResource(warehouse))
       .filter((warehouse) => {
         const matchesFilter = filter === 'all' || warehouse.status === filter;
-        const source = `${warehouse.id} ${warehouse.name} ${warehouse.address} ${warehouse.phone}`.toLowerCase();
+        const source =
+          `${warehouse.id} ${warehouse.name} ${warehouse.address} ${warehouse.phone}`.toLowerCase();
         return matchesFilter && (!term || source.includes(term));
       });
   });
@@ -463,10 +473,7 @@ export class ResourceOverview implements OnInit {
     this.storeForm.update((form) => ({ ...form, status }));
   }
 
-  updateWarehouseText(
-    field: 'warehouseCode' | 'name' | 'address' | 'phone',
-    event: Event,
-  ): void {
+  updateWarehouseText(field: 'warehouseCode' | 'name' | 'address' | 'phone', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.warehouseForm.update((form) => ({ ...form, [field]: value }));
   }
@@ -499,6 +506,11 @@ export class ResourceOverview implements OnInit {
 
     if (password && password.length < 8) {
       this.formError.set('司機密碼至少需要 8 個字元。');
+      return;
+    }
+
+    if (password.length > 12) {
+      this.formError.set('司機密碼最多只能有 12 個字元。');
       return;
     }
 
@@ -550,6 +562,15 @@ export class ResourceOverview implements OnInit {
         this.changingDriverStatusId.set(null);
       },
     });
+  }
+
+  requestDeleteDriver(driver: DriverResource): void {
+    if (driver.backendId === undefined) {
+      this.errorMessage.set('找不到司機編號，無法刪除。');
+      return;
+    }
+
+    this.deleteTarget.set({ kind: 'driver', id: driver.backendId, name: driver.name });
   }
 
   submitVehicle(): void {
@@ -714,36 +735,25 @@ export class ResourceOverview implements OnInit {
     }
 
     this.isDeleting.set(true);
-    const request =
-      target.kind === 'vehicle'
-        ? this.api.deleteVehicle(target.id)
-        : target.kind === 'store'
-          ? this.api.deleteStore(target.id)
-          : this.api.deleteWarehouse(target.id);
+    const request = this.deleteRequest(target);
 
     request.subscribe({
       next: () => {
-        if (target.kind === 'vehicle') {
-          this.vehicles.update((items) => items.filter((vehicle) => vehicle.id !== target.id));
-        } else if (target.kind === 'store') {
-          this.stores.update((items) => items.filter((store) => store.id !== target.id));
-        } else {
-          this.warehouses.update((items) =>
-            items.filter((warehouse) => warehouse.id !== target.id),
-          );
-        }
+        this.removeDeletedResource(target);
 
         this.updatedAt.set(this.formatCurrentTime());
         this.deleteTarget.set(null);
         this.isDeleting.set(false);
       },
       error: () => {
-        this.errorMessage.set(
-          `刪除${target.kind === 'vehicle' ? '車輛' : target.kind === 'store' ? '店家' : '倉庫'}失敗，請確認後端資料。`,
-        );
+        this.errorMessage.set(`刪除${this.deleteTargetLabel(target)}失敗，請確認後端資料。`);
         this.isDeleting.set(false);
       },
     });
+  }
+
+  deleteTargetLabel(target: DeleteTarget): string {
+    return deleteTargetLabels[target.kind];
   }
 
   stopEvent(event: Event): void {
@@ -781,6 +791,35 @@ export class ResourceOverview implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  private deleteRequest(target: DeleteTarget): Observable<void> {
+    switch (target.kind) {
+      case 'driver':
+        return this.api.deleteDriver(target.id);
+      case 'vehicle':
+        return this.api.deleteVehicle(target.id);
+      case 'store':
+        return this.api.deleteStore(target.id);
+      case 'warehouse':
+        return this.api.deleteWarehouse(target.id);
+    }
+  }
+
+  private removeDeletedResource(target: DeleteTarget): void {
+    switch (target.kind) {
+      case 'driver':
+        this.drivers.update((items) => items.filter((driver) => driver.id !== target.id));
+        return;
+      case 'vehicle':
+        this.vehicles.update((items) => items.filter((vehicle) => vehicle.id !== target.id));
+        return;
+      case 'store':
+        this.stores.update((items) => items.filter((store) => store.id !== target.id));
+        return;
+      case 'warehouse':
+        this.warehouses.update((items) => items.filter((warehouse) => warehouse.id !== target.id));
+    }
   }
 
   private toDriverResource(driver: DriverDto): DriverResource {

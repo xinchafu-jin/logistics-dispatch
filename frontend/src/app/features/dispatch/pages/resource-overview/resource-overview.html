@@ -149,10 +149,7 @@
                 <span class="status-badge" [class]="'status-' + driver.status">{{
                   driver.status
                 }}</span>
-                <label
-                  class="status-toggle"
-                  [title]="driver.isActive ? '設為停職' : '設為可排班'"
-                >
+                <label class="status-toggle" [title]="driver.isActive ? '設為停職' : '設為可排班'">
                   <span class="sr-only">{{ driver.isActive ? '設為停職' : '設為可排班' }}</span>
                   <input
                     type="checkbox"
@@ -180,6 +177,15 @@
                   (click)="openEditDriver(driver)"
                 >
                   <svg lucidePencil aria-hidden="true"></svg>
+                </button>
+                <button
+                  type="button"
+                  class="row-action row-action--danger"
+                  title="刪除司機"
+                  [attr.aria-label]="'刪除司機 ' + driver.name"
+                  (click)="requestDeleteDriver(driver)"
+                >
+                  <svg lucideTrash2 aria-hidden="true"></svg>
                 </button>
               </div>
             </article>
@@ -484,13 +490,16 @@
                 />
               </label>
               <label class="form-field">
-                <span>{{ formType === 'edit-driver' ? '新密碼（不修改可留白）' : '初始密碼' }}</span>
+                <span>{{
+                  formType === 'edit-driver' ? '新密碼（不修改可留白）' : '初始密碼'
+                }}</span>
                 <input
                   type="password"
                   autocomplete="new-password"
                   [attr.minlength]="formType === 'driver' ? 8 : null"
+                  maxlength="12"
                   [required]="formType === 'driver'"
-                  [placeholder]="formType === 'edit-driver' ? '留白則不變更密碼' : '至少 8 個字元'"
+                  [placeholder]="formType === 'edit-driver' ? '留白則不變更密碼' : '8 到 12 個字元'"
                   [value]="driverForm().password"
                   (input)="updateDriverText('password', $event)"
                 />
@@ -565,7 +574,9 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '儲存中...' : formType === 'edit-driver' ? '儲存修改' : '新增司機' }}
+                {{
+                  isSaving() ? '儲存中...' : formType === 'edit-driver' ? '儲存修改' : '新增司機'
+                }}
               </button>
             </div>
           </form>
@@ -626,7 +637,9 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '儲存中...' : formType === 'edit-vehicle' ? '儲存修改' : '新增車輛' }}
+                {{
+                  isSaving() ? '儲存中...' : formType === 'edit-vehicle' ? '儲存修改' : '新增車輛'
+                }}
               </button>
             </div>
           </form>
@@ -814,7 +827,9 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '儲存中...' : formType === 'edit-warehouse' ? '儲存修改' : '新增倉庫' }}
+                {{
+                  isSaving() ? '儲存中...' : formType === 'edit-warehouse' ? '儲存修改' : '新增倉庫'
+                }}
               </button>
             </div>
           </form>
@@ -832,7 +847,7 @@
         (click)="stopEvent($event)"
       >
         <p class="section-eyebrow">CONFIRM ACTION</p>
-        <h3>確定刪除{{ target.kind === 'vehicle' ? '車輛' : target.kind === 'store' ? '店家' : '倉庫' }}？</h3>
+        <h3>確定刪除{{ deleteTargetLabel(target) }}？</h3>
         <p>即將刪除「{{ target.name }}」，資料會透過後端 API 移除。</p>
         <div class="modal-actions">
           <button type="button" class="plain-button" (click)="cancelDelete()">取消</button>

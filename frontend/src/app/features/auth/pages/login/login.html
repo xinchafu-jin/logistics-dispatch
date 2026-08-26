@@ -20,69 +20,10 @@
       <div class="login-heading">
         <p class="section-label">系統登入</p>
         <h2 id="login-title">歡迎回來</h2>
-        <p>選擇你的工作入口，登入後直接進入對應工作區。</p>
+        <p>登入物流後台，管理配送訂單、人車資源與營運狀況。</p>
       </div>
 
-      <div class="portal-switch" role="group" aria-label="登入入口">
-        <button
-          type="button"
-          class="portal-card"
-          [class.is-active]="portal() === 'ADMIN'"
-          [attr.aria-pressed]="portal() === 'ADMIN'"
-          [disabled]="isSubmitting()"
-          (click)="setPortal('ADMIN')"
-        >
-          <span class="portal-icon" aria-hidden="true">
-            <svg lucideShieldCheck></svg>
-          </span>
-          <span class="portal-copy">
-            <strong>物流後台</strong>
-            <small>調度中心</small>
-          </span>
-          <span class="portal-arrow" aria-hidden="true">
-            <svg lucideArrowRight></svg>
-          </span>
-        </button>
-
-        <button
-          type="button"
-          class="portal-card"
-          [class.is-active]="portal() === 'DRIVER'"
-          [attr.aria-pressed]="portal() === 'DRIVER'"
-          [disabled]="isSubmitting()"
-          (click)="setPortal('DRIVER')"
-        >
-          <span class="portal-icon" aria-hidden="true">
-            <svg lucideTruck></svg>
-          </span>
-          <span class="portal-copy">
-            <strong>司機端</strong>
-            <small>帳號驗證</small>
-          </span>
-          <span class="portal-arrow" aria-hidden="true">
-            <svg lucideArrowRight></svg>
-          </span>
-        </button>
-      </div>
-
-      <p class="portal-description">
-        {{
-          portal() === 'ADMIN'
-            ? '管理配送訂單、人車資源與營運狀況。'
-            : '目前可驗證司機帳號；任務、路線與配送狀態待後端 API 開放。'
-        }}
-      </p>
-
-      <div class="portal-capabilities" aria-live="polite">
-        <span>
-          <svg lucideKeyRound aria-hidden="true"></svg>
-          公司帳號登入
-        </span>
-        <span>
-          <svg lucideMapPinned aria-hidden="true"></svg>
-          {{ portal() === 'ADMIN' ? '資源與訂單管理' : '任務功能待後端開放' }}
-        </span>
-      </div>
+      <p class="portal-description">物流後台帳號登入。</p>
 
       <form class="login-form" (submit)="signIn($event)" novalidate>
         <div class="form-field">

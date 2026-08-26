@@ -1,4 +1,4 @@
-<div class="dispatch-layout">
+<div class="dispatch-layout" [class.is-light-theme]="isLightTheme()">
   <header class="workspace-header">
     <div class="workspace-identity">
       <a
@@ -19,6 +19,19 @@
 
     <div class="workspace-actions">
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
+      <button
+        type="button"
+        class="theme-toggle"
+        (click)="toggleTheme()"
+        [title]="isLightTheme() ? '切換為深色模式' : '切換為淺色模式'"
+        [attr.aria-label]="isLightTheme() ? '切換為深色模式' : '切換為淺色模式'"
+      >
+        @if (isLightTheme()) {
+          <svg lucideMoon aria-hidden="true"></svg>
+        } @else {
+          <svg lucideSun aria-hidden="true"></svg>
+        }
+      </button>
       <button
         type="button"
         class="logout-button"

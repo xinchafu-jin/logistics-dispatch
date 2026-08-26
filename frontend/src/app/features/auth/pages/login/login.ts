@@ -1,29 +1,13 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import {
-  LucideArrowRight,
-  LucideKeyRound,
-  LucideMapPinned,
-  LucideShieldCheck,
-  LucideTruck,
-} from '@lucide/angular';
 import { ElectricGazeVisual } from '../../components/electric-gaze-visual/electric-gaze-visual';
 import { BrandLogo } from '../../../../shared/ui/brand-logo/brand-logo';
 import { CurrentWeather, WeatherService } from '../../../../core/services/weather.service';
 import { AuthService } from '../../../../core/auth/auth.service';
-import { LoginPortal } from '../../../../core/auth/auth.models';
 
 @Component({
   selector: 'app-login',
-  imports: [
-    BrandLogo,
-    ElectricGazeVisual,
-    LucideArrowRight,
-    LucideKeyRound,
-    LucideMapPinned,
-    LucideShieldCheck,
-    LucideTruck,
-  ],
+  imports: [BrandLogo, ElectricGazeVisual],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })
@@ -31,7 +15,6 @@ export class Login {
   protected readonly showLoginForm = signal(true);
   protected readonly account = signal('');
   protected readonly password = signal('');
-  protected readonly portal = signal<LoginPortal>('ADMIN');
   protected readonly loginError = signal('');
   protected readonly isSubmitting = signal(false);
 
@@ -55,11 +38,6 @@ export class Login {
     this.showLoginForm.set(true);
   }
 
-  protected setPortal(portal: LoginPortal): void {
-    this.portal.set(portal);
-    this.loginError.set('');
-  }
-
   protected signIn(event: Event): void {
     event.preventDefault();
     this.loginError.set('');
@@ -75,12 +53,11 @@ export class Login {
       .login({
         account: this.account(),
         password: this.password(),
-        portal: this.portal(),
       })
       .subscribe({
-        next: (user) => {
+        next: () => {
           void this.router
-            .navigateByUrl(this.destinationAfterLogin(user.role))
+            .navigateByUrl(this.destinationAfterLogin())
             .then((navigated) => {
               this.isSubmitting.set(false);
 
@@ -100,12 +77,12 @@ export class Login {
       });
   }
 
-  private destinationAfterLogin(role: 'DRIVER' | 'DISPATCHER'): string {
+  private destinationAfterLogin(): string {
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
     if (returnUrl?.startsWith('/') && !returnUrl.startsWith('//')) {
       return returnUrl;
     }
 
-    return this.authService.dashboardPath(role);
+    return this.authService.dashboardPath();
   }
 }

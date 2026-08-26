@@ -4,6 +4,13 @@
 }
 
 .dispatch-layout {
+  --workspace-bg: #0b0d0e;
+  --sidebar-bg: rgb(20 22 23 / 92%);
+  --header-bg: rgb(28 30 31 / 68%);
+  --nav-hover-bg: rgb(255 255 255 / 6%);
+  --nav-active-bg: rgb(99 209 198 / 10%);
+  --nav-active-border: rgb(99 209 198 / 24%);
+
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
   grid-template-rows: 88px minmax(0, 1fr);
@@ -11,6 +18,36 @@
   position: relative;
   isolation: isolate;
   background: var(--app-bg);
+}
+
+.dispatch-layout.is-light-theme {
+  --app-bg: #edf2f0;
+  --panel: rgb(255 255 255 / 90%);
+  --surface: rgb(255 255 255 / 82%);
+  --surface-active: #ffffff;
+  --border: rgb(27 52 45 / 16%);
+  --glass-highlight: rgb(255 255 255 / 76%);
+  --glass-shadow: rgb(20 39 33 / 10%);
+  --metal-edge: rgb(27 52 45 / 16%);
+  --metal-shadow: rgb(20 39 33 / 12%);
+  --text: #173129;
+  --muted: #5e746b;
+  --subtle: #768980;
+  --field-label: #365148;
+  --accent: #087c6b;
+  --accent-hover: #046c5d;
+  --button-text: #ffffff;
+  --brand-text: #183128;
+  --brand-muted: #5f736a;
+  --brand-node: #6d8479;
+  --brand-overlay: rgb(255 255 255 / 44%);
+  --brand-shadow: rgb(35 66 54 / 15%);
+  --workspace-bg: #eef4f1;
+  --sidebar-bg: rgb(247 251 249 / 92%);
+  --header-bg: rgb(255 255 255 / 76%);
+  --nav-hover-bg: rgb(8 124 107 / 8%);
+  --nav-active-bg: rgb(8 124 107 / 12%);
+  --nav-active-border: rgb(8 124 107 / 24%);
 }
 
 .dispatch-sidebar {
@@ -29,7 +66,7 @@
   padding: 20px 10px;
   overflow: hidden;
   isolation: isolate;
-  background: rgb(20 22 23 / 92%);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--metal-edge);
   box-shadow:
     inset -1px 0 0 rgb(0 0 0 / 72%),
@@ -162,14 +199,14 @@ app-brand-logo {
 
 .nav-item:not(.is-disabled):hover {
   color: var(--text);
-  background: rgb(255 255 255 / 6%);
+  background: var(--nav-hover-bg);
   border-color: var(--glass-highlight);
 }
 
 .nav-item.is-active {
   color: var(--text);
-  background: rgb(99 209 198 / 10%);
-  border-color: rgb(99 209 198 / 24%);
+  background: var(--nav-active-bg);
+  border-color: var(--nav-active-border);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
 }
 
@@ -196,7 +233,7 @@ app-brand-logo {
   min-width: 0;
   min-height: 100dvh;
   isolation: isolate;
-  background: #0b0d0e;
+  background: var(--workspace-bg);
 }
 
 .workspace-header {
@@ -210,7 +247,7 @@ app-brand-logo {
   justify-content: space-between;
   min-height: 88px;
   padding: 20px 36px;
-  background: rgb(28 30 31 / 68%);
+  background: var(--header-bg);
   border-bottom: 1px solid var(--metal-edge);
   box-shadow:
     inset 0 1px 0 var(--glass-highlight),
@@ -268,6 +305,7 @@ app-brand-logo {
   gap: 12px;
 }
 
+.theme-toggle,
 .logout-button {
   display: grid;
   width: 34px;
@@ -280,6 +318,7 @@ app-brand-logo {
   cursor: pointer;
 }
 
+.theme-toggle:hover,
 .logout-button:hover {
   color: var(--text);
   background: rgb(255 255 255 / 8%);
@@ -291,6 +330,7 @@ app-brand-logo {
   opacity: 0.62;
 }
 
+.theme-toggle svg,
 .logout-button svg {
   width: 16px;
   height: 16px;

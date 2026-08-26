@@ -1,0 +1,24 @@
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  ApplicationConfig,
+  inject,
+  provideAppInitializer,
+  provideBrowserGlobalErrorListeners,
+  provideZoneChangeDetection,
+} from '@angular/core';
+import { provideRouter } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+
+import { routes } from './app.routes';
+import { driverAuthInterceptor } from './core/auth/driver-auth.interceptor';
+import { DriverAuthService } from './core/auth/driver-auth.service';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideBrowserGlobalErrorListeners(),
+    provideZoneChangeDetection({ eventCoalescing: true }),
+    provideHttpClient(withInterceptors([driverAuthInterceptor])),
+    provideRouter(routes),
+    provideAppInitializer(() => firstValueFrom(inject(DriverAuthService).restoreSession())),
+  ],
+};

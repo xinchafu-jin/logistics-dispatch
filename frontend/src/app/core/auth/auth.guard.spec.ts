@@ -1,15 +1,21 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router, RouterStateSnapshot, UrlTree } from '@angular/router';
+import { firstValueFrom, Observable, of } from 'rxjs';
 import { AuthUser } from './auth.models';
 import { AuthService } from './auth.service';
 import { requireRole } from './auth.guard';
 
 class AuthServiceStub {
   readonly user = signal<AuthUser | null>(null);
+  readonly restoredUser = signal<AuthUser | null>(null);
 
-  dashboardPath(role: AuthUser['role']): string {
-    return role === 'DRIVER' ? '/driver/dashboard' : '/dispatch/dashboard';
+  dashboardPath(): string {
+    return '/dispatch/dashboard';
+  }
+
+  restoreSession() {
+    return of(this.restoredUser());
   }
 }
 
@@ -26,22 +32,37 @@ describe('requireRole', () => {
     router = TestBed.inject(Router);
   });
 
-  it('redirects unauthenticated users to login with the original URL', () => {
+  it('redirects unauthenticated users to login with the original URL', async () => {
     const result = TestBed.runInInjectionContext(() =>
       requireRole('DISPATCHER')({} as never, { url: '/dispatch/reports' } as RouterStateSnapshot),
     );
+    const resolvedResult = await firstValueFrom(result as Observable<UrlTree | boolean>);
 
-    expect(result).toBeInstanceOf(UrlTree);
-    expect((result as UrlTree).queryParams['returnUrl']).toBe('/dispatch/reports');
+    expect(resolvedResult).toBeInstanceOf(UrlTree);
+    expect((resolvedResult as UrlTree).queryParams['returnUrl']).toBe('/dispatch/reports');
   });
 
-  it('blocks a driver from entering the dispatcher workspace', () => {
-    authService.user.set({ account: 'driver@jflow.tw', displayName: '司機', role: 'DRIVER' });
+  it('allows an authenticated dispatcher into the dispatcher workspace', () => {
+    authService.user.set({ account: 'manager', displayName: '物流主管', role: 'DISPATCHER' });
 
     const result = TestBed.runInInjectionContext(() =>
       requireRole('DISPATCHER')({} as never, { url: '/dispatch/dashboard' } as RouterStateSnapshot),
     );
 
-    expect(router.serializeUrl(result as UrlTree)).toBe('/driver/dashboard');
+    expect(result).toBe(true);
+  });
+
+  it('restores the stored session before deciding the route', async () => {
+    authService.restoredUser.set({
+      account: 'manager',
+      displayName: '物流主管',
+      role: 'DISPATCHER',
+    });
+
+    const result = TestBed.runInInjectionContext(() =>
+      requireRole('DISPATCHER')({} as never, { url: '/dispatch/dashboard' } as RouterStateSnapshot),
+    );
+
+    await expect(firstValueFrom(result as Observable<UrlTree | boolean>)).resolves.toBe(true);
   });
 });
