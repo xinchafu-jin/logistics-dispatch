@@ -1,28 +1,21 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { LiveFleetMap } from '../../components/live-fleet-map/live-fleet-map';
+import { LucideMapPinned, LucideTriangleAlert, LucideUserRound } from '@lucide/angular';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import { DriverDto } from '../../../../core/services/dispatch-api.models';
-import {
-  LucideClock3,
-  LucideMapPinned,
-  LucideTriangleAlert,
-  LucideUserRound,
-} from '@lucide/angular';
+import { LiveFleetMap } from '../../components/live-fleet-map/live-fleet-map';
 
 type FleetFilter = 'all' | 'active' | 'inactive';
 
-interface FleetVehicle {
-  driver: string;
-  driverId: string;
-  vehicle: string;
-  status: string;
-  filter: Exclude<FleetFilter, 'all'>;
-  locationStatus: string;
+interface FleetDriver {
+  id: string;
+  name: string;
+  state: string;
+  isActive: boolean;
 }
 
 @Component({
   selector: 'app-fleet-monitor',
-  imports: [LiveFleetMap, LucideClock3, LucideMapPinned, LucideTriangleAlert, LucideUserRound],
+  imports: [LiveFleetMap, LucideMapPinned, LucideTriangleAlert, LucideUserRound],
   templateUrl: './fleet-monitor.html',
   styleUrl: './fleet-monitor.scss',
 })
@@ -30,11 +23,22 @@ export class FleetMonitor implements OnInit {
   private readonly api = inject(DispatchApiService);
 
   readonly activeFilter = signal<FleetFilter>('all');
-  readonly selectedVehicleId = signal('');
-  readonly vehicles = signal<FleetVehicle[]>([]);
+  readonly drivers = signal<FleetDriver[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
-  readonly updatedAt = signal('--:--');
+
+  readonly visibleDrivers = computed(() => {
+    const filter = this.activeFilter();
+    return filter === 'all'
+      ? this.drivers()
+      : this.drivers().filter((driver) =>
+          filter === 'active' ? driver.isActive : !driver.isActive,
+        );
+  });
+  readonly activeCount = computed(() => this.drivers().filter((driver) => driver.isActive).length);
+  readonly inactiveCount = computed(
+    () => this.drivers().filter((driver) => !driver.isActive).length,
+  );
 
   readonly filters: { id: FleetFilter; label: string }[] = [
     { id: 'all', label: '全部司機' },
@@ -42,49 +46,21 @@ export class FleetMonitor implements OnInit {
     { id: 'inactive', label: '未啟用' },
   ];
 
-  readonly visibleVehicles = computed(() => {
-    const filter = this.activeFilter();
-    return filter === 'all'
-      ? this.vehicles()
-      : this.vehicles().filter((vehicle) => vehicle.filter === filter);
-  });
-
-  readonly selectedVehicle = computed(
-    () =>
-      this.vehicles().find((vehicle) => vehicle.driverId === this.selectedVehicleId()) ??
-      this.vehicles()[0] ??
-      null,
-  );
-
-  readonly activeDriverCount = computed(
-    () => this.vehicles().filter((vehicle) => vehicle.filter === 'active').length,
-  );
-  readonly inactiveCount = computed(
-    () => this.vehicles().filter((vehicle) => vehicle.filter === 'inactive').length,
-  );
-
   ngOnInit(): void {
-    this.loadFleet();
+    this.loadDrivers();
   }
 
   setFilter(filter: FleetFilter): void {
     this.activeFilter.set(filter);
-    this.selectedVehicleId.set(this.visibleVehicles()[0]?.driverId ?? '');
   }
 
-  selectVehicle(driverId: string): void {
-    this.selectedVehicleId.set(driverId);
-  }
-
-  private loadFleet(): void {
+  private loadDrivers(): void {
     this.loading.set(true);
     this.errorMessage.set('');
 
     this.api.getDrivers().subscribe({
       next: (drivers) => {
-        this.vehicles.set(drivers.map((driver) => this.toFleetVehicle(driver)));
-        this.selectedVehicleId.set(this.vehicles()[0]?.driverId ?? '');
-        this.updatedAt.set(this.formatCurrentTime());
+        this.drivers.set(drivers.map((driver) => this.toFleetDriver(driver)));
         this.loading.set(false);
       },
       error: () => {
@@ -94,36 +70,13 @@ export class FleetMonitor implements OnInit {
     });
   }
 
-  private toFleetVehicle(driver: DriverDto): FleetVehicle {
-    const backendId = driver.id ?? 0;
-    const driverId = backendId ? `DR-${String(backendId).padStart(3, '0')}` : driver.account;
-
-    if (!driver.isActive) {
-      return {
-        driver: driver.name,
-        driverId,
-        vehicle: '尚未提供車輛',
-        status: '司機未啟用',
-        filter: 'inactive',
-        locationStatus: 'GPS API 尚未提供',
-      };
-    }
-
+  private toFleetDriver(driver: DriverDto): FleetDriver {
+    const id = driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account;
     return {
-      driver: driver.name,
-      driverId,
-      vehicle: '尚未提供車輛',
-      status: '可排班',
-      filter: 'active',
-      locationStatus: 'GPS API 尚未提供',
+      id,
+      name: driver.name,
+      state: driver.isActive ? '可排班，等待 GPS API 回傳位置' : '帳號未啟用',
+      isActive: driver.isActive,
     };
-  }
-
-  private formatCurrentTime(): string {
-    return new Intl.DateTimeFormat('zh-TW', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date());
   }
 }

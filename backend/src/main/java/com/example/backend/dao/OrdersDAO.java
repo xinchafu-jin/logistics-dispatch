@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -22,4 +23,10 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
      */
     List<OrdersEntity> findByDeliveryDateAndStatusAndWarehouseId(
             LocalDate deliveryDate, OrderStatus status, Long warehouseId);
+
+    List<OrdersEntity> findByRouteIdOrderBySequence(Long routeId);
+
+    List<OrdersEntity> findByDeliveryDateAndWarehouseIdAndRouteIdIsNull(LocalDate date, Long warehouseId);
+
+    List<OrdersEntity> findByRouteIdIn(List<Long> routeIds);
 }

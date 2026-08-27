@@ -1,24 +1,21 @@
 import {
   AfterViewInit,
   Component,
+  ElementRef,
+  OnDestroy,
+  ViewChild,
   computed,
   inject,
-  OnDestroy,
   signal,
-  ViewEncapsulation,
 } from '@angular/core';
 import * as L from 'leaflet';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import { DriverDto } from '../../../../core/services/dispatch-api.models';
 
 interface FleetDriver {
-  backendId: number;
   id: string;
   name: string;
-  vehicle: string;
-  status: 'GPS API 尚未提供';
-  lastSeen: string;
-  tone: 'delayed';
+  isActive: boolean;
 }
 
 @Component({
@@ -26,22 +23,30 @@ interface FleetDriver {
   imports: [],
   templateUrl: './live-fleet-map.html',
   styleUrl: './live-fleet-map.scss',
-  encapsulation: ViewEncapsulation.None,
 })
 export class LiveFleetMap implements AfterViewInit, OnDestroy {
+  @ViewChild('mapCanvas') private readonly mapCanvas?: ElementRef<HTMLDivElement>;
+
   readonly drivers = signal<FleetDriver[]>([]);
   readonly selectedDriverId = signal<string | null>(null);
   readonly selectedDriver = computed(() =>
     this.drivers().find((driver) => driver.id === this.selectedDriverId()),
   );
-  readonly liveDriverCount = computed(() => 0);
-  readonly unreportedDriverCount = computed(() => this.drivers().length);
+  readonly activeDriverCount = computed(
+    () => this.drivers().filter((driver) => driver.isActive).length,
+  );
 
   private readonly api = inject(DispatchApiService);
   private map?: L.Map;
+  private resizeObserver?: ResizeObserver;
 
   ngAfterViewInit(): void {
-    this.map = L.map('fleet-map-canvas', {
+    const canvas = this.mapCanvas?.nativeElement;
+    if (!canvas) {
+      return;
+    }
+
+    this.map = L.map(canvas, {
       attributionControl: false,
       zoomControl: false,
       preferCanvas: true,
@@ -52,14 +57,16 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       maxZoom: 19,
       subdomains: 'abcd',
     }).addTo(this.map);
-
     L.control.zoom({ position: 'bottomright' }).addTo(this.map);
-    this.refreshFleet();
 
+    this.resizeObserver = new ResizeObserver(() => this.map?.invalidateSize());
+    this.resizeObserver.observe(canvas);
     requestAnimationFrame(() => this.map?.invalidateSize());
+    this.loadDrivers();
   }
 
   ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
     this.map?.remove();
   }
 
@@ -67,7 +74,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     this.selectedDriverId.set(id);
   }
 
-  private refreshFleet(): void {
+  private loadDrivers(): void {
     this.api.getDrivers().subscribe({
       next: (drivers) => {
         this.drivers.set(drivers.map((driver) => this.toFleetDriver(driver)));
@@ -81,15 +88,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   }
 
   private toFleetDriver(driver: DriverDto): FleetDriver {
-    const backendId = driver.id ?? 0;
-    return {
-      backendId,
-      id: backendId ? `DR-${String(backendId).padStart(3, '0')}` : driver.account,
-      name: driver.name,
-      vehicle: '尚未指派車輛',
-      status: 'GPS API 尚未提供',
-      lastSeen: '尚無後端定位資料',
-      tone: 'delayed',
-    };
+    const id = driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account;
+    return { id, name: driver.name, isActive: driver.isActive };
   }
 }

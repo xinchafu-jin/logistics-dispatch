@@ -3,8 +3,10 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import {
   LucideChartNoAxesCombined,
   LucideClipboardCheck,
-  LucideMapPinned,
   LucideLogOut,
+  LucideMapPinned,
+  LucideMoon,
+  LucideSun,
   LucideTriangleAlert,
   LucideTruck,
   LucideWorkflow,
@@ -22,6 +24,8 @@ import { AuthService } from '../../../../core/auth/auth.service';
     LucideClipboardCheck,
     LucideTruck,
     LucideMapPinned,
+    LucideMoon,
+    LucideSun,
     LucideLogOut,
     LucideTriangleAlert,
     LucideChartNoAxesCombined,
@@ -33,6 +37,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
 export class DispatchShell {
   protected readonly user = inject(AuthService).user;
   protected readonly isSigningOut = signal(false);
+  protected readonly isLightTheme = signal(this.readSavedTheme() === 'light');
 
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
@@ -49,5 +54,24 @@ export class DispatchShell {
       },
       error: () => this.isSigningOut.set(false),
     });
+  }
+
+  protected toggleTheme(): void {
+    const nextTheme = this.isLightTheme() ? 'dark' : 'light';
+    this.isLightTheme.set(nextTheme === 'light');
+
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('logistics-dispatch.admin-theme', nextTheme);
+    }
+  }
+
+  private readSavedTheme(): 'light' | 'dark' {
+    if (typeof localStorage === 'undefined') {
+      return 'dark';
+    }
+
+    return localStorage.getItem('logistics-dispatch.admin-theme') === 'light'
+      ? 'light'
+      : 'dark';
   }
 }

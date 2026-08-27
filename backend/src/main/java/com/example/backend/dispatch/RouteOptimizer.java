@@ -2,10 +2,12 @@ package com.example.backend.dispatch;
 
 import com.google.ortools.Loader;
 import com.google.ortools.constraintsolver.*;
+import com.google.protobuf.Duration;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+
 @Component
 public class RouteOptimizer {
     static {
@@ -52,6 +54,8 @@ public class RouteOptimizer {
                 defaultRoutingSearchParameters().
                 toBuilder().
                 setFirstSolutionStrategy(FirstSolutionStrategy.Value.PATH_MOST_CONSTRAINED_ARC).
+                setLocalSearchMetaheuristic(LocalSearchMetaheuristic.Value.GUIDED_LOCAL_SEARCH).
+                setTimeLimit(Duration.newBuilder().setSeconds(5).build()).
                 build();
 
         Assignment solution = routingModel.solveWithParameters(searchParameters);
@@ -85,8 +89,8 @@ public class RouteOptimizer {
                 droppedNodes.add(i);
             }
         }
-            routeResult.setVehicleRoutes(vehicleRoutes);
-            routeResult.setDroppedNodes(droppedNodes);
+        routeResult.setVehicleRoutes(vehicleRoutes);
+        routeResult.setDroppedNodes(droppedNodes);
         return routeResult;
     }
 
