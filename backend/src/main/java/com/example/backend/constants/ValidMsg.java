@@ -22,13 +22,19 @@ public final class ValidMsg {
     public static final String ORDER_NUMBER_REQUIRED = "訂單編號不能為空";
     public static final String ORDER_NUMBER_MAX_LENGTH = "訂單編號不能超過 30 字元";
     public static final String ORDER_STORE_ID_REQUIRED = "門市 ID 不能為空";
+    public static final String ORDER_STORE_ID_POSITIVE = "門市 ID 必須大於 0";
     public static final String ORDER_VENDOR_MAX_LENGTH = "來源商家長度不能超過 100 字元";
     public static final String ORDER_ITEM_DESCRIPTION_MAX_LENGTH = "商品描述不能超過 255 字元";
     public static final String ORDER_BOX_COUNT_REQUIRED = "箱數不能為空";
     public static final String ORDER_BOX_COUNT_MIN = "箱數至少為 1";
+    public static final String ORDER_NOTES_MAX_LENGTH = "備註長度不能超過 500 字元";
     public static final String ORDER_DELIVERY_DATE_REQUIRED = "配送日期不能為空";
     public static final String ORDER_STATUS_REQUIRED = "訂單狀態不能為空";
     public static final String ORDER_WAREHOUSE_ID_REQUIRED = "出貨倉庫不能為空";
+    public static final String ORDER_WAREHOUSE_ID_POSITIVE = "出貨倉庫 ID 必須大於 0";
+    public static final String ORDER_ASSIGNED_VEHICLE_ID_POSITIVE = "指派車輛 ID 必須大於 0";
+    public static final String ORDER_ASSIGNED_DRIVER_ID_POSITIVE = "指派司機 ID 必須大於 0";
+    public static final String ORDER_SEQUENCE_POSITIVE = "配送順序必須大於 0";
 
     // Store
     public static final String STORE_CODE_REQUIRED = "門市代碼不能為空";
