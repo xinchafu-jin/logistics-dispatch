@@ -45,6 +45,8 @@ public final class ValidMsg {
     public static final String STORE_STATUS_REQUIRED = "門市狀態不能為空";
 
     // Vehicle
+    public static final String VEHICLE_WAREHOUSE_ID_REQUIRED = "所屬倉庫 ID 不能為空";
+    public static final String VEHICLE_WAREHOUSE_ID_MIN = "所屬倉庫 ID 必須大於 0";
     public static final String VEHICLE_PLATE_REQUIRED = "車牌號碼不能為空";
     public static final String VEHICLE_PLATE_MAX_LENGTH = "車牌號碼不能超過 20 字元";
     public static final String VEHICLE_TYPE_MAX_LENGTH = "車輛類型不能超過 50 字元";

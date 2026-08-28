@@ -11,6 +11,10 @@ public class VehiclesDTO {
 
     private Long id;
 
+    @NotNull(message = VEHICLE_WAREHOUSE_ID_REQUIRED)
+    @Min(value = 1, message = VEHICLE_WAREHOUSE_ID_MIN)
+    private Long warehouseId;
+
     @NotBlank(message = VEHICLE_PLATE_REQUIRED)
     @Size(max = 20, message = VEHICLE_PLATE_MAX_LENGTH)
     private String plateNumber;
@@ -31,6 +35,9 @@ public class VehiclesDTO {
     // ===== Getter & Setter =====
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
 
     public String getPlateNumber() { return plateNumber; }
     public void setPlateNumber(String plateNumber) { this.plateNumber = plateNumber; }
