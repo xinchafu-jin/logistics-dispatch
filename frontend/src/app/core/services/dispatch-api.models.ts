@@ -27,6 +27,8 @@ export interface DriverDto {
 
 export interface VehicleDto {
   id?: number;
+  /** 車輛所屬倉庫，後端必填 */
+  warehouseId: number;
   plateNumber: string;
   vehicleType?: string;
   capacity: number;
@@ -64,6 +66,8 @@ export interface OrderDto {
   id?: number;
   orderNumber: string;
   storeId: number;
+  /** 出貨倉庫，後端必填 */
+  warehouseId: number;
   sourceVendor?: string;
   itemDescription?: string;
   boxCount: number;
@@ -75,6 +79,118 @@ export interface OrderDto {
   sequence?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/**
+ * 排車結果。對應後端 DispatchResponse，
+ * POST /api/dispatch/optimize 與 GET /api/dispatch/board 都回這個形狀。
+ */
+export interface DispatchResultDto {
+  /** 配送日期，yyyy-MM-dd */
+  date: string;
+  warehouse: DispatchWarehouseDto;
+  /** 每台有出車的車輛各一筆；沒被用到的車不會出現 */
+  routes: RouteDto[];
+  /** 裝不下、沒排進去的訂單，狀態維持 CONFIRMED */
+  unassignedOrders: UnassignedOrderDto[];
+}
+
+/**
+ * 排車結果裡的倉庫，是路線的起訖點。
+ *
+ * 這是精簡版，欄位比 WarehouseDto 少（沒有 phone / isActive），
+ * 所以不共用同一個型別 —— 共用的話存取那兩個欄位會過編譯但執行時是 undefined。
+ */
+export interface DispatchWarehouseDto {
+  id: number;
+  warehouseCode: string;
+  name: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+}
+
+/** 一台車某天的一條路線 */
+export interface RouteDto {
+  routeId: number;
+  vehicleId: number;
+  plateNumber: string;
+  vehicleType: string | null;
+  /** 車輛容量（箱） */
+  capacity: number;
+  /** 草稿階段為 null，發布前才指派 */
+  driverId: number | null;
+  driverName: string | null;
+  stops: RouteStopDto[];
+  /** 等於 stops.length */
+  stopCount: number;
+  /** 實際載運箱數 */
+  loadedBoxes: number;
+  /** 總里程（公尺） */
+  totalDistance: number;
+  /** 後端尚未實作（系統無油價設定），目前一律為 null */
+  estimatedFuelCost: number | null;
+  /** 後端尚未實作（需 OSRM durations），目前一律為 null */
+  estimatedWorkMinutes: number | null;
+  /** 裝載率 0~1，實際載運箱數 ÷ 車輛容量 */
+  loadRate: number;
+}
+
+/** 路線上的一個停靠點，等於一張訂單 */
+export interface RouteStopDto {
+  /** 建議配送順序，從 1 開始 */
+  sequence: number;
+  orderId: number;
+  orderNumber: string;
+  boxCount: number;
+  itemDescription: string | null;
+  storeId: number;
+  storeCode: string;
+  storeName: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+  contactName: string | null;
+  phone: string | null;
+  /** 可收貨時間起，HH:mm:ss */
+  receivingStart: string;
+  /** 可收貨時間迄，HH:mm:ss */
+  receivingEnd: string;
+}
+
+/** 沒排進任何路線的訂單 */
+export interface UnassignedOrderDto {
+  orderId: number;
+  orderNumber: string;
+  boxCount: number;
+  storeId: number;
+  storeCode: string;
+  storeName: string;
+  address: string | null;
+  lat: number;
+  lng: number;
+}
+
+/**
+ * 拖曳改派的請求本體。對應後端 ReassignDTO，POST /api/dispatch/reassign。
+ *
+ * 沒出現在任何一條路線裡的當天訂單會被視為未排入，不需要另外傳。
+ */
+export interface ReassignRequest {
+  /** 配送日期，yyyy-MM-dd */
+  date: string;
+  warehouseId: number;
+  routes: RouteAssignment[];
+}
+
+/** 一台車要載哪些訂單 */
+export interface RouteAssignment {
+  vehicleId: number;
+  /**
+   * 陣列順序即配送順序，不另外傳 sequence。
+   * 不能是空陣列 —— 後端會擋，空車道要在組請求時就濾掉。
+   */
+  orderIds: number[];
 }
 
 export interface DriverStatusPayload {

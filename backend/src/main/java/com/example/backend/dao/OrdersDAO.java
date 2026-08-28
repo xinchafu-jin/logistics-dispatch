@@ -28,5 +28,11 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
 
     List<OrdersEntity> findByDeliveryDateAndWarehouseIdAndRouteIdIsNull(LocalDate date, Long warehouseId);
 
+    /**
+     * 拖曳改派用：撈某天某倉的全部訂單，不分狀態、不管有沒有排進路線。
+     * 用來驗證前端送來的 orderId 確實屬於這天這個倉。
+     */
+    List<OrdersEntity> findByDeliveryDateAndWarehouseId(LocalDate deliveryDate, Long warehouseId);
+
     List<OrdersEntity> findByRouteIdIn(List<Long> routeIds);
 }

@@ -18,6 +18,13 @@ public final class ValidMsg {
     public static final String DRIVER_OVERTIME_MIN = "加班上限不能小於 0";
     public static final String DRIVER_ACTIVE_REQUIRED = "請選擇司機是否在職";
 
+    // Reassign（拖曳改派）
+    public static final String REASSIGN_DATE_REQUIRED = "配送日期不能為空";
+    public static final String REASSIGN_WAREHOUSE_ID_REQUIRED = "倉庫不能為空";
+    public static final String REASSIGN_ROUTES_REQUIRED = "路線清單不能為空";
+    public static final String REASSIGN_VEHICLE_ID_REQUIRED = "車輛不能為空";
+    public static final String REASSIGN_ORDER_IDS_REQUIRED = "訂單清單不能為空";
+
     // Order
     public static final String ORDER_NUMBER_REQUIRED = "訂單編號不能為空";
     public static final String ORDER_NUMBER_MAX_LENGTH = "訂單編號不能超過 30 字元";
@@ -45,6 +52,7 @@ public final class ValidMsg {
     public static final String STORE_STATUS_REQUIRED = "門市狀態不能為空";
 
     // Vehicle
+    public static final String VEHICLE_WAREHOUSE_ID_REQUIRED = "所屬倉庫不能為空";
     public static final String VEHICLE_PLATE_REQUIRED = "車牌號碼不能為空";
     public static final String VEHICLE_PLATE_MAX_LENGTH = "車牌號碼不能超過 20 字元";
     public static final String VEHICLE_TYPE_MAX_LENGTH = "車輛類型不能超過 50 字元";

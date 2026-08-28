@@ -41,7 +41,7 @@
 
   <div class="dashboard-main">
     <section class="map-section" aria-label="即時車隊地圖">
-      <app-live-fleet-map />
+      <app-live-fleet-map/>
     </section>
 
     <aside class="operations-panel" aria-label="待確認配送與待處理提醒">
@@ -96,6 +96,91 @@
     </aside>
   </div>
 
+  <section class="board-toolbar" aria-label="排車條件">
+    <label class="toolbar-field">
+      <span>配送日期</span>
+      <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)" />
+    </label>
+
+    <label class="toolbar-field">
+      <span>出貨倉庫</span>
+      <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
+        @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+          <option [value]="warehouse.id">{{ warehouse.warehouseCode }} · {{ warehouse.name }}</option>
+        }
+      </select>
+    </label>
+
+    <p class="toolbar-hint">
+      可用車 {{ availableVehicles().length }} 台
+      @if (availableVehicles().length) {
+        （{{ availableVehicleSummary() }}）
+      }
+    </p>
+
+    <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
+      {{ optimizing() ? '排車中…' : '執行排車' }}
+    </button>
+  </section>
+
+  <div class="board" cdkDropListGroup>
+    <p class="board-status">
+      {{ routes().length }} 條路線
+      @if (saving()) {
+        · 儲存中…
+      }
+    </p>
+
+    @if (boardError()) {
+      <p class="board-error">{{ boardError() }}</p>
+    }
+
+    @for (route of routes(); track route.routeId) {
+      <div class="board-lane" [class.is-overloaded]="isOverloaded(route)">
+        <h4>
+          {{ route.plateNumber }} · {{ route.cards.length }} 站 ·
+          {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+          {{ route.totalDistance / 1000 | number: '1.1-1' }} km
+        </h4>
+
+        <div
+          class="board-dropzone"
+          cdkDropList
+          [cdkDropListData]="route.cards"
+          [cdkDropListDisabled]="saving()"
+          (cdkDropListDropped)="onDrop($event)"
+        >
+          @for (card of route.cards; track card.orderId) {
+            <p class="board-card" cdkDrag>
+              #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
+            </p>
+          } @empty {
+            <p class="board-empty">把訂單拖到這裡</p>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="board-lane">
+      <h4>未排入 {{ unassigned().length }} 筆</h4>
+
+      <div
+        class="board-dropzone"
+        cdkDropList
+        [cdkDropListData]="unassigned()"
+        [cdkDropListDisabled]="saving()"
+        (cdkDropListDropped)="onDrop($event)"
+      >
+        @for (card of unassigned(); track card.orderId) {
+          <p class="board-card" cdkDrag>
+            {{ card.orderNumber }} · {{ card.storeName }} · {{ card.boxCount }} 箱
+          </p>
+        } @empty {
+          <p class="board-empty">沒有未排入的訂單</p>
+        }
+      </div>
+    </div>
+  </div>
   @if (loading()) {
     <p class="dashboard-description">正在從後端同步訂單、門市、司機、車輛與倉庫資料...</p>
   } @else if (errorMessage()) {
