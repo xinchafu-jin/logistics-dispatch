@@ -26,10 +26,18 @@ docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-customize
 ## 3. 啟動服務
 
 ```bash
-docker run -t -i -p 5000:5000 -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-routed --algorithm mld /data/taiwan-latest.osrm
+docker run -t -i --name logistics-osrm -p 5001:5000 -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-routed --algorithm mld /data/taiwan-latest.osrm
 ```
 
-啟動後可用 `http://localhost:5000` 存取。
+啟動後可用 `http://localhost:5001` 存取。
+
+主機端用 **5001** 而不是 5000，因為 macOS 的 5000 被 AirPlay Receiver 佔用（會回 403，看起來像 OSRM 壞掉但其實根本沒連到）。容器內部仍是 5000，對應 `application.properties` 的 `app.osrm.base-url=http://localhost:5001`。
+
+容器建立過一次之後，之後只要：
+
+```bash
+docker start logistics-osrm
+```
 
 ## 常用端點
 
@@ -40,6 +48,6 @@ docker run -t -i -p 5000:5000 -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backen
 
 ## 注意事項
 
-- demo 前記得先啟動這個服務，backend 會呼叫 `localhost:5000`
+- demo 前記得先啟動這個服務，backend 會呼叫 `localhost:5001`；沒啟動的話排車 API 會回 `I/O error on GET request`
 - 門市座標固定，距離矩陣建議算一次後存入資料庫（見 `docs/data-model.md` 的 `DistanceMatrixCache`），只有新增／修改門市座標時才需要觸發重算
 - 開發初期若 OSRM 還沒架好，可先用直線距離頂著讓 OR-Tools 跑通，之後再抽換底層實作（見 `docs/api-contract.md` 距離矩陣相關端點）

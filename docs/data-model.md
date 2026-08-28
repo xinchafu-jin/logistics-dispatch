@@ -34,6 +34,7 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | id | Long | 主鍵 |
+| warehouseId | Long | 所屬倉庫，車輛隸屬於單一倉庫，排車時只會使用該倉的車 |
 | plateNumber | String | 車牌 |
 | vehicleType | String | 車型 |
 | capacity | Integer | **可裝箱數**（容量單位統一用「箱」，箱子規格一致）|
@@ -41,6 +42,8 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 | status | Enum | AVAILABLE / MAINTENANCE / RETIRED |
 
 「配送中」不存成狀態值，由當日 Route 推導，避免需要手動同步而卡住。
+
+車輛隸屬於單一倉庫。排車若未指定車輛，後端會自動取該倉所有 `AVAILABLE` 的車當候選車池，由 OR-Tools 決定實際出幾台、各跑哪些點；沒被用到的車不會出現在排車結果中。司機目前不綁倉庫，為全公司共用。
 
 ## 司機 Driver
 
@@ -62,6 +65,7 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 | id | Long | 主鍵 |
 | orderNumber | String | 訂單編號（系統產生，如 DO-20260921-00125）|
 | storeId | Long | 門市 |
+| warehouseId | Long | 出貨倉庫，排車以「日期 + 倉庫」為單位各自最佳化 |
 | sourceVendor | String | 來源商家 |
 | itemDescription | String | 品項描述 |
 | boxCount | Integer | **箱數，系統的唯一容量單位**（排車、交貨、異常皆以箱計）|
