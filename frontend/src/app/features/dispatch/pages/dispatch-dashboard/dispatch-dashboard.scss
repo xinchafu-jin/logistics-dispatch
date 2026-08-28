@@ -432,3 +432,148 @@
     display: none;
   }
 }
+
+// ── 調度看板（拖曳改派）───────────────────────────────
+// 目前只給最低限度的樣式：讓放置區有明確範圍、拖曳中看得出來。
+// 版面編排之後再一起處理。
+
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.board-lane {
+  flex: 1 1 260px;
+  padding: 0.75rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 8px;
+
+  h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+  }
+
+  // 載超過車輛容量
+  &.is-overloaded {
+    border-color: #d94b4b;
+
+    h4 {
+      color: #d94b4b;
+    }
+  }
+}
+
+.board-dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  // 空車道也要能放得進去，沒有高度的話滑鼠根本進不了這個區域
+  min-height: 72px;
+}
+
+.board-card {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 6px;
+  background: rgb(0 0 0 / 3%);
+  font-size: 0.8125rem;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.board-empty {
+  margin: 0;
+  padding: 0.5rem;
+  color: rgb(0 0 0 / 45%);
+  font-size: 0.75rem;
+}
+
+// 拖曳中跟著滑鼠跑的那張卡
+.cdk-drag-preview {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+}
+
+// 原位置留下的佔位空格
+.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+
+// 其他卡片讓位時的動畫
+.cdk-drop-list-dragging .board-card:not(.cdk-drag-placeholder) {
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.board-error {
+  margin: 0.5rem 0;
+  color: #d94b4b;
+  font-size: 0.8125rem;
+}
+
+// ── 排車動作列 ───────────────────────────────────────
+.board-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid rgb(0 0 0 / 10%);
+  border-radius: 8px;
+}
+
+.toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  span {
+    color: rgb(0 0 0 / 55%);
+    font-size: 0.75rem;
+  }
+
+  input,
+  select {
+    padding: 0.375rem 0.5rem;
+    border: 1px solid rgb(0 0 0 / 20%);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+  }
+}
+
+.toolbar-hint {
+  flex: 1;
+  margin: 0;
+  color: rgb(0 0 0 / 55%);
+  font-size: 0.75rem;
+}
+
+.toolbar-action {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.board-status {
+  width: 100%;
+  margin: 0;
+  color: rgb(0 0 0 / 55%);
+  font-size: 0.8125rem;
+}

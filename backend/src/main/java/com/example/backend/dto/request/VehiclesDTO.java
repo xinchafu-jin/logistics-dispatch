@@ -27,8 +27,20 @@ public class VehiclesDTO {
 
     @NotNull(message = VEHICLE_STATUS_REQUIRED)
     private VehicleStatus status;
+    @NotNull(message = VEHICLE_WAREHOUSE_ID_REQUIRED)
+    private Long warehouseId ;
 
     // ===== Getter & Setter =====
+
+
+    public Long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(Long warehouseId) {
+        this.warehouseId = warehouseId;
+    }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 

@@ -7,8 +7,10 @@ import com.example.backend.dao.*;
 import com.example.backend.dispatch.OsrmClient;
 import com.example.backend.dispatch.RouteOptimizer;
 import com.example.backend.dispatch.RouteResult;
+import com.example.backend.dto.request.ReassignDTO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.*;
+import com.google.protobuf.OptionOrBuilder;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,8 +49,12 @@ public class DispatchService {
         this.osrmClient = osrmClient;
         this.routeOptimizer = routeOptimizer;
     }
+
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds) {
-        clearExistingDraftRoutes(date,warehouseId);
+        WarehousesEntity warehousesEntity =
+                warehousesDAO.findById(warehouseId).
+                        orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
+        clearExistingDraftRoutes(date, warehouseId);
         // 撈當日訂單 已確認之狀態
         List<OrdersEntity> orders =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseId(
@@ -56,23 +62,29 @@ public class DispatchService {
         if (orders.isEmpty()) {
             throw new IllegalArgumentException("當天無已確認的訂單：" + date);
         }
-        List<VehiclesEntity> vehicles =
-                vehiclesDAO.findAllById(vehicleIds);
-        if (vehicles.size() != vehicleIds.size()) {
-            throw new IllegalArgumentException("查無車輛");
-        }
-        for (VehiclesEntity v : vehicles) {
-            if (!warehouseId.equals(v.getWarehouseId())) {
-                throw new IllegalArgumentException("車輛 " + v.getPlateNumber() + " 不屬於倉庫 " + warehouseId);
+        // 未指定車輛時，自動取該倉所有可用車當候選車池，交給 OR-Tools 決定實際出幾台
+        List<VehiclesEntity> vehicles;
+        if (vehicleIds == null || vehicleIds.isEmpty()) {
+            vehicles = vehiclesDAO.findByWarehouseIdAndStatus(warehouseId, VehicleStatus.AVAILABLE);
+            if (vehicles.isEmpty()) {
+                throw new IllegalArgumentException("倉庫 " + warehouseId + " 目前沒有可用車輛");
             }
-            if (v.getStatus() != VehicleStatus.AVAILABLE) {
-                throw new IllegalArgumentException(
-                        "車輛 " + v.getPlateNumber() + " 目前狀態為 " + v.getStatus() + "，無法排入路線");
+        } else {
+            vehicles = vehiclesDAO.findAllById(vehicleIds);
+            if (vehicles.size() != vehicleIds.size()) {
+                throw new IllegalArgumentException("查無車輛");
+            }
+            for (VehiclesEntity v : vehicles) {
+                if (!warehouseId.equals(v.getWarehouseId())) {
+                    throw new IllegalArgumentException("車輛 " + v.getPlateNumber() + " 不屬於倉庫 " + warehouseId);
+                }
+                if (v.getStatus() != VehicleStatus.AVAILABLE) {
+                    throw new IllegalArgumentException(
+                            "車輛 " + v.getPlateNumber() + " 目前狀態為 " + v.getStatus() + "，無法排入路線");
+                }
             }
         }
-        WarehousesEntity warehousesEntity =
-                warehousesDAO.findById(warehouseId).
-                        orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
+
         // 撈商店id
         List<Long> storeIds = new ArrayList<>();
         for (OrdersEntity item : orders) {
@@ -167,6 +179,150 @@ public class DispatchService {
         dispatchResponse.setUnassignedOrders(unassignedOrders);
 
         return dispatchResponse;
+    }
+
+    public DispatchResponse reassign(ReassignDTO dto) {
+        LocalDate date = dto.getDate();
+        Optional<WarehousesEntity> opt = warehousesDAO.findById(dto.getWarehouseId());
+        if (!opt.isPresent()) {
+            throw new IllegalArgumentException("查無倉庫" + dto.getWarehouseId());
+        }
+        WarehousesEntity warehousesEntity = opt.get();
+        Long warehouseId = dto.getWarehouseId();
+
+        // 當天該倉的全部訂單，不分狀態。驗證與後續綁定都從這裡取，避免逐筆查。
+        Map<Long, OrdersEntity> ordersMap = new HashMap<>();
+        for (OrdersEntity order : ordersDAO.findByDeliveryDateAndWarehouseId(date, warehouseId)) {
+            ordersMap.put(order.getId(), order);
+        }
+
+        // ── 訂單驗證：存在、狀態可排、沒有被重複指派 ──
+        Map<Long, Long> orderToVehicle = new HashMap<>();
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            for (Long orderId : ra.getOrderIds()) {
+                OrdersEntity order = ordersMap.get(orderId);
+                if (order == null) {
+                    // 這張單不在當天這個倉裡，沒有編號可顯示，只能給 id
+                    throw new IllegalArgumentException(
+                            "訂單 " + orderId + " 不屬於 " + date + " 的倉庫 " + warehouseId);
+                }
+                if (order.getStatus() != OrderStatus.CONFIRMED
+                        && order.getStatus() != OrderStatus.SCHEDULED) {
+                    throw new IllegalArgumentException(
+                            "訂單 " + order.getOrderNumber() + " 狀態為 " + order.getStatus()
+                                    + "，無法排入路線");
+                }
+                Long previous = orderToVehicle.putIfAbsent(orderId, ra.getVehicleId());
+                if (previous != null) {
+                    throw new IllegalArgumentException("訂單 " + order.getOrderNumber()
+                            + " 被重複指派給 " + plateNumberOf(previous)
+                            + " 和 " + plateNumberOf(ra.getVehicleId()));
+                }
+            }
+        }
+
+        // ── 車輛驗證：不重複、屬於該倉、狀態可用 ──
+        List<Long> vehicleIds = new ArrayList<>();
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            if (vehicleIds.contains(ra.getVehicleId())) {
+                throw new IllegalArgumentException(
+                        "車輛 " + plateNumberOf(ra.getVehicleId()) + " 出現在多條路線");
+            }
+            vehicleIds.add(ra.getVehicleId());
+        }
+        Map<Long, VehiclesEntity> vehiclesMap = new HashMap<>();
+        for (VehiclesEntity vehicle : vehiclesDAO.findAllById(vehicleIds)) {
+            vehiclesMap.put(vehicle.getId(), vehicle);
+        }
+        for (Long vehicleId : vehicleIds) {
+            VehiclesEntity vehicle = vehiclesMap.get(vehicleId);
+            if (vehicle == null) {
+                throw new IllegalArgumentException("查無車輛：" + vehicleId);
+            }
+            if (!warehouseId.equals(vehicle.getWarehouseId())) {
+                throw new IllegalArgumentException(
+                        "車輛 " + vehicle.getPlateNumber() + " 不屬於倉庫 " + warehouseId);
+            }
+            if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
+                throw new IllegalArgumentException("車輛 " + vehicle.getPlateNumber()
+                        + " 目前狀態為 " + vehicle.getStatus() + "，無法排入路線");
+            }
+        }
+
+        // ══ 驗證到此結束，以下開始改資料 ══
+
+        // 清掉當天既有草稿並解綁訂單；沒被重新指派的訂單就自動留在未排入池
+        clearExistingDraftRoutes(date, warehouseId);
+
+        // 距離矩陣的索引：0 是倉庫，其後依訂單在請求中出現的順序排列
+        List<OrdersEntity> assignedOrders = new ArrayList<>();
+        Map<Long, Integer> locationIndex = new HashMap<>();
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            for (Long orderId : ra.getOrderIds()) {
+                locationIndex.put(orderId, assignedOrders.size() + 1);
+                assignedOrders.add(ordersMap.get(orderId));
+            }
+        }
+
+        List<Long> storeIds = new ArrayList<>();
+        for (OrdersEntity order : assignedOrders) {
+            storeIds.add(order.getStoreId());
+        }
+        Map<Long, StoresEntity> storesMap = new HashMap<>();
+        for (StoresEntity store : storesDAO.findAllById(storeIds)) {
+            storesMap.put(store.getId(), store);
+        }
+
+        List<double[]> locations = new ArrayList<>();
+        locations.add(new double[]{warehousesEntity.getLng(), warehousesEntity.getLat()});
+        for (OrdersEntity order : assignedOrders) {
+            StoresEntity store = storesMap.get(order.getStoreId());
+            if (store == null) {
+                throw new IllegalStateException(
+                        "訂單 " + order.getId() + " 找不到門市：" + order.getStoreId());
+            }
+            locations.add(new double[]{store.getLng(), store.getLat()});
+        }
+
+        // 一次算完整矩陣，各路線再依索引累加相鄰兩點的距離
+        long[][] matrix = osrmClient.table(locations);
+
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            VehiclesEntity vehicle = vehiclesMap.get(ra.getVehicleId());
+
+            // 一律重建路線，不沿用 dto 的 routeId —— 上面已經把當天草稿整批清掉了
+            RoutesEntity route = new RoutesEntity();
+            route.setDate(date);
+            route.setWarehouseId(warehouseId);
+            route.setVehicleId(vehicle.getId());
+            RoutesEntity saveRoute = routesDAO.save(route);
+
+            int sequence = 1;
+            int loadedBoxes = 0;
+            long distance = 0;
+            int previousIndex = 0; // 從倉庫出發
+            for (Long orderId : ra.getOrderIds()) {
+                OrdersEntity order = ordersMap.get(orderId);
+                order.setRouteId(saveRoute.getId());
+                order.setSequence(sequence);
+                order.setAssignedVehicleId(vehicle.getId());
+                order.setStatus(OrderStatus.SCHEDULED);
+                ordersDAO.save(order);
+
+                int currentIndex = locationIndex.get(orderId);
+                distance += matrix[previousIndex][currentIndex];
+                previousIndex = currentIndex;
+
+                loadedBoxes += order.getBoxCount();
+                sequence++;
+            }
+            distance += matrix[previousIndex][0]; // 回倉庫
+
+            saveRoute.setTotalDistance((double) distance);
+            saveRoute.setLoadRate((double) loadedBoxes / vehicle.getCapacity());
+        }
+
+        return getBoard(date, warehouseId);
     }
 
     @Transactional(readOnly = true)
@@ -292,6 +448,9 @@ public class DispatchService {
         ordersDAO.saveAll(boundOrders);
         ordersDAO.flush();
         routesDAO.deleteAllById(draftRouteIds);
+        // 必須立刻送出 DELETE：Hibernate flush 時會先做 INSERT 再做 DELETE，
+        // 不先清掉舊路線的話，新路線會撞上 uk_routes_date_vehicle 唯一鍵
+        routesDAO.flush();
     }
 
     private String plateNumberOf(Long vehicleId) {

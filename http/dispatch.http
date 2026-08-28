@@ -1,0 +1,265 @@
+### 排車 API 測試
+#
+# 前置準備：
+#   1. OSRM 服務啟動   docker start logistics-osrm
+#   2. 灌測試資料      mysql -u root -proot --default-character-set=utf8mb4 logistics < seed/seed-data.sql
+#   3. 後端啟動        cd backend && ./gradlew bootRun
+#
+# 注意：/api/dispatch/** 需要 ADMIN 身分，所以要先登入拿 token。
+#      執行順序：先跑「1. 管理員登入」，再跑其他請求（token 會自動帶入）。
+
+@host = http://localhost:8080
+# seed-data.sql 灌進去的訂單配送日
+@date = 2026-08-26
+POST {{host}}/api/admin-users
+Content-Type: application/json
+
+{
+  "account": "admin",
+  "password": "Admin123!",
+  "name": "admin",
+  "phone": "0911111111"
+}
+
+### 1. 管理員登入（先跑這個，token 會存進變數）
+# @name adminLogin
+POST {{host}}/api/auth/admin/login
+Content-Type: application/json
+
+{
+  "account": "admin",
+  "password": "Admin123!"
+}
+
+> {%
+    client.global.set("token", response.body.accessToken);
+    client.log("token = " + response.body.accessToken);
+%}
+
+### 2. 執行排車 — 指定車輛
+# 注意：這支用 query string 傳參數，不是 JSON body
+POST {{host}}/api/dispatch/optimize?date={{date}}&warehouseId=1&vehicleIds=1,2,3
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 3. 執行排車 — 只用一台小車（測試「裝不下」的情境）
+# 車 3 容量 30 箱，訂單總共 118 箱 → unassignedOrderIds 應該會有一堆
+POST {{host}}/api/dispatch/optimize?date={{date}}&warehouseId=1&vehicleIds=3
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 4. 執行排車 — 用兩台大車
+POST {{host}}/api/dispatch/optimize?date={{date}}&warehouseId=1&vehicleIds=1,2
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 5. 錯誤情境 — 不存在的倉庫
+POST {{host}}/api/dispatch/optimize?date={{date}}&warehouseId=999&vehicleIds=1,2,3
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 6. 錯誤情境 — 沒有訂單的日期
+POST {{host}}/api/dispatch/optimize?date=2020-01-01&warehouseId=1&vehicleIds=1,2,3
+Authorization: Bearer {{token}}
+Accept: application/json
+
+
+###############################################
+# 拖曳改派 reassign
+#
+# 執行順序：先跑「7」（排車並記下結果），再跑「8」。
+# 8 之後的錯誤情境都依賴 7 存下來的變數，中途重跑 7 會讓變數更新。
+###############################################
+
+### 7. 排車並記下結果（reassign 測試的前置）
+# @name baseline
+POST {{host}}/api/dispatch/optimize?date={{date}}&warehouseId=1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+> {%
+    const routes = response.body.routes;
+    client.assert(routes.length >= 2, "需要至少兩條路線才能測跨車搬移");
+
+    // 把第一條路線的第一站，搬到第二條路線的最前面
+    const ordersA = routes[0].stops.map(s => s.orderId);
+    const ordersB = routes[1].stops.map(s => s.orderId);
+    const moved = ordersA.shift();
+    ordersB.unshift(moved);
+
+    client.global.set("vehicleA", routes[0].vehicleId);
+    client.global.set("vehicleB", routes[1].vehicleId);
+    client.global.set("plateA", routes[0].plateNumber);
+    client.global.set("plateB", routes[1].plateNumber);
+    client.global.set("ordersA", JSON.stringify(ordersA));
+    client.global.set("ordersB", JSON.stringify(ordersB));
+    client.global.set("movedOrderId", moved);
+    client.global.set("distanceA", routes[0].totalDistance);
+    client.global.set("distanceB", routes[1].totalDistance);
+
+    client.log("搬移訂單 " + moved + "：" + routes[0].plateNumber + " → " + routes[1].plateNumber);
+    client.log("搬移前 " + routes[0].plateNumber + " = " + routes[0].totalDistance + "m，"
+             + routes[1].plateNumber + " = " + routes[1].totalDistance + "m");
+%}
+
+### 8. 正常改派 — 把一張訂單從 A 車搬到 B 車
+# 預期：兩條路線的里程與裝載率都改變，A 車少一站、B 車多一站
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": {{vehicleA}}, "orderIds": {{ordersA}} },
+    { "vehicleId": {{vehicleB}}, "orderIds": {{ordersB}} }
+  ]
+}
+
+> {%
+    client.test("回應 200", () => client.assert(response.status === 200));
+
+    const byPlate = {};
+    response.body.routes.forEach(r => byPlate[r.plateNumber] = r);
+    const a = byPlate[client.global.get("plateA")];
+    const b = byPlate[client.global.get("plateB")];
+
+    client.test("被搬走的訂單不在 A 車", () => {
+        const stillThere = a.stops.some(s => s.orderId === Number(client.global.get("movedOrderId")));
+        client.assert(!stillThere, "訂單還留在 A 車");
+    });
+
+    client.test("被搬來的訂單是 B 車第一站", () => {
+        client.assert(b.stops[0].orderId === Number(client.global.get("movedOrderId")),
+                      "B 車第一站不是搬過來的那張單");
+    });
+
+    client.test("配送順序從 1 連續編號", () => {
+        b.stops.forEach((s, i) => client.assert(s.sequence === i + 1,
+                        "第 " + i + " 站的 sequence 是 " + s.sequence));
+    });
+
+    client.test("兩條路線的里程都重算了", () => {
+        client.assert(a.totalDistance !== Number(client.global.get("distanceA")), "A 車里程沒變");
+        client.assert(b.totalDistance !== Number(client.global.get("distanceB")), "B 車里程沒變");
+    });
+
+    client.log("搬移後 " + a.plateNumber + " = " + a.totalDistance + "m，"
+             + b.plateNumber + " = " + b.totalDistance + "m");
+%}
+
+### 9. 錯誤情境 — 同一張訂單指派給兩台車
+# 預期：訂單 DO-xxx 被重複指派給 TN-xxx 和 TN-xxx
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": {{vehicleA}}, "orderIds": [{{movedOrderId}}] },
+    { "vehicleId": {{vehicleB}}, "orderIds": [{{movedOrderId}}] }
+  ]
+}
+
+### 10. 錯誤情境 — 同一台車出現在兩條路線
+# 預期：車輛 TN-xxx 出現在多條路線
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": {{vehicleA}}, "orderIds": {{ordersA}} },
+    { "vehicleId": {{vehicleA}}, "orderIds": {{ordersB}} }
+  ]
+}
+
+### 11. 錯誤情境 — 訂單不屬於這天這個倉
+# 預期：訂單 999999 不屬於 2026-08-26 的倉庫 1
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": {{vehicleA}}, "orderIds": [999999] }
+  ]
+}
+
+### 12. 錯誤情境 — 車輛不屬於這個倉庫
+# 預期：查無車輛：999
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": 999, "orderIds": {{ordersA}} }
+  ]
+}
+
+### 13. 錯誤情境 — routes 為空
+# 預期：路線清單不能為空（@NotEmpty 擋下，不會進到 Service）
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": []
+}
+
+### 14. 錯誤情境 — 某條路線沒有訂單
+# 預期：訂單清單不能為空
+# 前端組請求時應該要濾掉空車道，這裡驗證後端也有擋
+POST {{host}}/api/dispatch/reassign
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "date": "{{date}}",
+  "warehouseId": 1,
+  "routes": [
+    { "vehicleId": {{vehicleA}}, "orderIds": [] }
+  ]
+}
+
+### 15. 改派後讀看板，確認結果真的寫進資料庫
+GET {{host}}/api/dispatch/board?date={{date}}&warehouseId=1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+
+###############################################
+# 輔助查詢（確認測試資料是否正確）
+###############################################
+
+### 查門市清單
+GET {{host}}/api/stores
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 查車輛清單
+GET {{host}}/api/vehicles
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 查訂單清單
+GET {{host}}/api/orders
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 查倉庫清單
+GET {{host}}/api/warehouses
+Authorization: Bearer {{token}}
+Accept: application/json

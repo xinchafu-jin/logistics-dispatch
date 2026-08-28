@@ -54,7 +54,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
-                                "/api/vehicles/**", "/api/orders/**")
+                                "/api/vehicles/**", "/api/orders/**","/api/dispatch/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .anyRequest().authenticated()
                 )
@@ -114,3 +114,5 @@ public class SecurityConfig {
         return source;
     }
 }
+//帳號：admin
+//密碼：Admin123!

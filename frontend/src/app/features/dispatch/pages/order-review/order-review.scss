@@ -77,7 +77,14 @@
   gap: 7px;
 }
 
+.import-order-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .create-order-button svg,
+.import-order-button svg,
 .icon-action svg,
 .modal-close svg {
   width: 16px;
@@ -611,6 +618,79 @@
   color: var(--muted);
   font-size: 0.8125rem;
   line-height: 1.6;
+}
+
+/* ===== Excel 匯入 ===== */
+
+.import-modal {
+  width: min(100%, 880px);
+}
+
+.import-hint,
+.import-summary {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.import-summary strong {
+  font-size: 0.95rem;
+}
+
+.import-ok {
+  color: var(--accent);
+}
+
+.import-bad {
+  color: #f0a27b;
+}
+
+.import-table-wrap {
+  max-height: 46vh;
+  margin-top: 14px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.import-table th,
+.import-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.import-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--muted);
+  background: #12191a;
+  font-weight: 600;
+}
+
+/* 錯誤訊息可能很長，讓最後一欄自己換行 */
+.import-table td:last-child {
+  white-space: normal;
+  min-width: 220px;
+}
+
+.import-row-error td {
+  color: #f0a27b;
+  background: rgb(166 75 43 / 12%);
+}
+
+.import-progress {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .button-primary,

@@ -54,6 +54,7 @@ describe('DispatchApiService', () => {
       .updateOrder(12, {
         orderNumber: 'DO-001',
         storeId: 3,
+        warehouseId: 1,
         boxCount: 4,
         notes: '',
         deliveryDate: '2026-08-19',
@@ -79,6 +80,7 @@ describe('DispatchApiService', () => {
     const order = {
       orderNumber: 'DO-002',
       storeId: 3,
+      warehouseId: 1,
       boxCount: 4,
       notes: '',
       deliveryDate: '2026-08-23',
@@ -140,6 +142,7 @@ describe('DispatchApiService', () => {
 
   it('writes vehicles through the backend CRUD contract', () => {
     const vehicle = {
+      warehouseId: 1,
       plateNumber: 'ABC-1234',
       vehicleType: '常溫貨車',
       capacity: 80,

@@ -72,6 +72,7 @@ public class VehiclesService {
         entity.setVehicleType(dto.getVehicleType());
         entity.setCapacity(dto.getCapacity());
         entity.setFuelConsumption(dto.getFuelConsumption());
+        entity.setWarehouseId(dto.getWarehouseId());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -85,6 +86,7 @@ public class VehiclesService {
         dto.setCapacity(entity.getCapacity());
         dto.setFuelConsumption(entity.getFuelConsumption());
         dto.setStatus(entity.getStatus());
+        dto.setWarehouseId(entity.getWarehouseId());
         return dto;
     }
 }
