@@ -52,9 +52,17 @@ public class SecurityConfig {
                                 "/api/auth/driver/forgot-password/verify",
                                 "/api/auth/driver/forgot-password/reset"
                         ).permitAll()
-                        .requestMatchers("/actuator/health").permitAll()
-                        .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
-                                "/api/vehicles/**", "/api/orders/**")
+                        .requestMatchers(
+                                "/actuator/health"
+                        ).permitAll()
+                        .requestMatchers(
+                                "/api/admin-users/**",
+                                "/api/drivers/**",
+                                "/api/warehouses/**",
+                                "/api/stores/**",
+                                "/api/vehicles/**",
+                                "/api/orders/**",
+                                "/api/fuel-prices/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .anyRequest().authenticated()
                 )
