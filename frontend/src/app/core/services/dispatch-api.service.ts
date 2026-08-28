@@ -1,10 +1,12 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  DispatchResultDto,
   DriverDto,
   DriverStatusPayload,
   OrderDto,
+  ReassignRequest,
   StoreDto,
   StoreStatusPayload,
   VehicleDto,
@@ -125,5 +127,48 @@ export class DispatchApiService {
 
   deleteOrder(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/orders/${id}`);
+  }
+
+  /**
+   * 執行排車。注意這不是唯讀操作：後端會清掉當天既有的草稿路線、
+   * 寫入新的 routes，並把排進去的訂單狀態改成 SCHEDULED。
+   *
+   * 參數走 query string 而不是 request body，所以 post() 的第二個引數是 null。
+   *
+   * @param vehicleIds 不傳則由後端自動取該倉所有可用車，交給 OR-Tools 決定出幾台
+   */
+  optimizeDispatch(
+    date: string,
+    warehouseId: number,
+    vehicleIds?: number[],
+  ): Observable<DispatchResultDto> {
+    let params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
+
+    if (vehicleIds?.length) {
+      params = params.set('vehicleIds', vehicleIds.join(','));
+    }
+
+    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize`, null, { params });
+  }
+
+  /**
+   * 拖曳改派：把調度員排出來的分派送給後端。
+   *
+   * 後端不會跑 OR-Tools、也不會調整送去的配送順序，只負責重算里程與裝載率，
+   * 然後回傳跟 board 相同形狀的完整結果，前端拿去整包重畫即可。
+   *
+   * 這支跟 optimize 一樣會寫入資料庫：清掉當天草稿後照送去的內容重建。
+   */
+  reassignDispatch(request: ReassignRequest): Observable<DispatchResultDto> {
+    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/reassign`, request);
+  }
+
+  /**
+   * 讀取某天已排定的路線，不會觸發重新排車。當天沒排過則 routes 為空陣列。
+   */
+  getDispatchBoard(date: string, warehouseId: number): Observable<DispatchResultDto> {
+    const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
+
+    return this.http.get<DispatchResultDto>(`${API_ROOT}/dispatch/board`, { params });
   }
 }

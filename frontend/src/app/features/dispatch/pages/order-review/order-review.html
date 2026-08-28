@@ -11,6 +11,21 @@
         <svg lucidePlus aria-hidden="true"></svg>
         新增訂單
       </button>
+      <input
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        hidden
+        #importInput
+        (change)="onImportFileSelected($event)"
+      />
+      <button
+        type="button"
+        class="button-secondary import-order-button"
+        (click)="importInput.click()"
+      >
+        <svg lucideFileUp aria-hidden="true"></svg>
+        匯入 Excel
+      </button>
       <div class="review-summary" aria-label="今日審核狀態">
         <span>今日待審核</span>
         <strong>{{ reviewCount() }}</strong>
@@ -216,6 +231,19 @@
             </select>
           </label>
           <label>
+            <span>出貨倉庫</span>
+            <select
+              [value]="orderForm().warehouseId"
+              (change)="updateOrderNumber('warehouseId', $event)"
+            >
+              @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+                <option [value]="warehouse.id">
+                  {{ warehouse.warehouseCode }} · {{ warehouse.name }}
+                </option>
+              }
+            </select>
+          </label>
+          <label>
             <span>配送日期</span>
             <input type="date" required [value]="orderForm().deliveryDate" (input)="updateOrderText('deliveryDate', $event)" />
           </label>
@@ -263,6 +291,154 @@
         </form>
       </section>
     </div>
+  }
+
+  @if (importState(); as state) {
+    @if (state.stage !== 'idle') {
+      <div class="modal-backdrop" (click)="closeImport()">
+        <section
+          class="order-modal import-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="import-title"
+          (click)="$event.stopPropagation()"
+        >
+          <header class="modal-header">
+            <div>
+              <p class="section-eyebrow">EXCEL IMPORT</p>
+              <h3 id="import-title">匯入 Excel</h3>
+            </div>
+            <button
+              type="button"
+              class="modal-close"
+              title="關閉"
+              aria-label="關閉"
+              (click)="closeImport()"
+            >
+              <svg lucideX aria-hidden="true"></svg>
+            </button>
+          </header>
+
+          @switch (state.stage) {
+            @case ('parsing') {
+              <p class="import-hint">正在解析 {{ state.fileName }}⋯</p>
+            }
+
+            @case ('failed') {
+              <p class="form-error">{{ state.message }}</p>
+              <div class="modal-actions">
+                <button type="button" class="button-secondary" (click)="downloadImportTemplate()">
+                  下載範本
+                </button>
+                <button type="button" class="button-primary" (click)="closeImport()">關閉</button>
+              </div>
+            }
+
+            @case ('preview') {
+              <p class="import-hint">
+                {{ state.fileName }}（工作表：{{ state.result.sheetName }}）
+              </p>
+              <p class="import-summary">
+                <strong class="import-ok">{{ state.result.validRows.length }}</strong> 筆可匯入
+                @if (state.result.errorRows.length > 0) {
+                  ／<strong class="import-bad">{{ state.result.errorRows.length }}</strong>
+                  筆有誤，不會送出
+                }
+              </p>
+
+              <div class="import-table-wrap">
+                <table class="import-table">
+                  <thead>
+                    <tr>
+                      <th>列</th>
+                      <th>訂單編號</th>
+                      <th>門市</th>
+                      <th>箱數</th>
+                      <th>配送日期</th>
+                      <th>檢查結果</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of state.result.rows; track row.row) {
+                      <tr [class.import-row-error]="row.errors.length > 0">
+                        <td>{{ row.row }}</td>
+                        <td>{{ row.data.orderNumber || '—' }}</td>
+                        <td>{{ storeLabel(row.data.storeId) }}</td>
+                        <td>{{ row.data.boxCount }}</td>
+                        <td>{{ row.data.deliveryDate || '—' }}</td>
+                        <td>{{ row.errors.length > 0 ? row.errors.join('；') : 'OK' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="modal-actions">
+                <button type="button" class="button-secondary" (click)="downloadImportTemplate()">
+                  下載範本
+                </button>
+                <button type="button" class="button-secondary" (click)="closeImport()">取消</button>
+                <button
+                  type="button"
+                  class="button-primary"
+                  [disabled]="state.result.validRows.length === 0"
+                  (click)="confirmImport()"
+                >
+                  匯入 {{ state.result.validRows.length }} 筆
+                </button>
+              </div>
+            }
+
+            @case ('saving') {
+              <p class="import-hint">
+                匯入中... {{ state.done }} / {{ state.result.validRows.length }}
+              </p>
+              <progress
+                class="import-progress"
+                [value]="state.done"
+                [max]="state.result.validRows.length"
+              ></progress>
+            }
+
+            @case ('done') {
+              <p class="import-summary">
+                成功 <strong class="import-ok">{{ state.succeeded }}</strong> 筆
+                @if (state.failures.length > 0) {
+                  ／失敗 <strong class="import-bad">{{ state.failures.length }}</strong> 筆
+                }
+              </p>
+
+              @if (state.failures.length > 0) {
+                <div class="import-table-wrap">
+                  <table class="import-table">
+                    <thead>
+                      <tr>
+                        <th>列</th>
+                        <th>訂單編號</th>
+                        <th>後端回應</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (failure of state.failures; track failure.row) {
+                        <tr class="import-row-error">
+                          <td>{{ failure.row }}</td>
+                          <td>{{ failure.orderNumber }}</td>
+                          <td>{{ failure.message }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+
+              <div class="modal-actions">
+                <button type="button" class="button-primary" (click)="closeImport()">完成</button>
+              </div>
+            }
+          }
+        </section>
+      </div>
+    }
   }
 
   @if (deleteTarget(); as order) {

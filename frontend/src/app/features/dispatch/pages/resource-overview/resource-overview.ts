@@ -126,8 +126,9 @@ function emptyWarehouse(): WarehouseDto {
   };
 }
 
-function emptyVehicle(): VehicleDto {
+function emptyVehicle(warehouseId = 0): VehicleDto {
   return {
+    warehouseId,
     plateNumber: '',
     vehicleType: '',
     capacity: 0,
@@ -280,6 +281,12 @@ export class ResourceOverview implements OnInit {
       this.warehouses().filter((warehouse) => !warehouse.isActive).length,
   );
 
+  /** 新增車輛時的預設倉庫：第一個啟用中的倉庫，沒有就退回第一筆 */
+  readonly defaultWarehouseId = computed(() => {
+    const warehouses = this.warehouses();
+    return warehouses.find((warehouse) => warehouse.isActive)?.id ?? warehouses[0]?.id ?? 0;
+  });
+
   ngOnInit(): void {
     this.loadResources();
   }
@@ -329,7 +336,14 @@ export class ResourceOverview implements OnInit {
 
   openCreateVehicle(): void {
     this.activeView.set('vehicles');
-    this.vehicleForm.set(emptyVehicle());
+
+    const warehouseId = this.defaultWarehouseId();
+    if (!warehouseId) {
+      this.errorMessage.set('請先建立倉庫，再新增車輛。');
+      return;
+    }
+
+    this.vehicleForm.set(emptyVehicle(warehouseId));
     this.editingVehicleId.set(null);
     this.formError.set('');
     this.activeForm.set('vehicle');
@@ -440,6 +454,11 @@ export class ResourceOverview implements OnInit {
       ...form,
       [field]: value === '' && field === 'fuelConsumption' ? undefined : Number(value),
     }));
+  }
+
+  updateVehicleWarehouse(event: Event): void {
+    const warehouseId = Number((event.target as HTMLSelectElement).value);
+    this.vehicleForm.update((form) => ({ ...form, warehouseId }));
   }
 
   updateVehicleStatus(event: Event): void {
@@ -580,6 +599,11 @@ export class ResourceOverview implements OnInit {
 
     if (!vehicle.plateNumber.trim()) {
       this.formError.set('請填寫車牌號碼。');
+      return;
+    }
+
+    if (!Number.isInteger(vehicle.warehouseId) || vehicle.warehouseId <= 0) {
+      this.formError.set('請選擇所屬倉庫。');
       return;
     }
 

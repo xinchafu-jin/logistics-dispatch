@@ -26,7 +26,6 @@ interface FleetDriver {
 })
 export class LiveFleetMap implements AfterViewInit, OnDestroy {
   @ViewChild('mapCanvas') private readonly mapCanvas?: ElementRef<HTMLDivElement>;
-
   readonly drivers = signal<FleetDriver[]>([]);
   readonly selectedDriverId = signal<string | null>(null);
   readonly selectedDriver = computed(() =>

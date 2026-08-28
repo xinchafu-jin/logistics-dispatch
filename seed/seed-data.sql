@@ -1,5 +1,10 @@
 -- 排車測試資料
--- 台南地區：1 個倉庫 + 10 個門市 + 3 台車 + 3 位司機 + 15 張訂單
+-- 台南地區：2 個倉庫 + 10 個門市 + 5 台車 + 3 位司機 + 21 張訂單
+--
+-- 兩個倉庫各自有車、各自有訂單，用來驗證「排車以倉庫為單位、車輛不跨倉」：
+--   WH001 莊敬物流中心（安南區，西北）3 台車 / 15 張訂單
+--   WH002 仁德轉運站（仁德區，東南）  2 台車 / 6 張訂單
+-- 門市是共用的，同一間門市可以同時收到兩個倉庫出的貨。
 --
 -- 使用方式：
 --   mysql -u root -proot logistics < seed/seed-data.sql
@@ -29,7 +34,8 @@ ALTER TABLE warehouses AUTO_INCREMENT = 1;
 -- 倉庫（id = 1）
 -- ══════════════════════════════════════════
 INSERT INTO warehouses (warehouse_code, name, address, lat, lng, phone, is_active) VALUES
-('WH001', '莊敬物流中心', '台南市安南區工業二路100號', 23.0355, 120.1875, '06-2846000', b'1');
+('WH001', '莊敬物流中心', '台南市安南區工業二路100號', 23.0355, 120.1875, '06-2846000', b'1'),
+('WH002', '仁德轉運站',   '台南市仁德區中山路500號',   22.9700, 120.2530, '06-2793000', b'1');
 
 -- ══════════════════════════════════════════
 -- 門市（id = 1~10，台南各區真實位置）
@@ -53,9 +59,13 @@ INSERT INTO stores (store_code, name, address, lat, lng, contact_name, phone, re
 -- 總容量 = 40+60+30 = 130 箱
 -- ══════════════════════════════════════════
 INSERT INTO vehicles (warehouse_id, plate_number, vehicle_type, capacity, fuel_consumption, status) VALUES
+-- WH001 莊敬物流中心
 (1, 'TN-1001', '3.5噸貨車', 40, 8.5,  'AVAILABLE'),
 (1, 'TN-1002', '5噸貨車',   60, 6.2,  'AVAILABLE'),
-(1, 'TN-1003', '小貨車',    30, 12.0, 'AVAILABLE');
+(1, 'TN-1003', '小貨車',    30, 12.0, 'AVAILABLE'),
+-- WH002 仁德轉運站
+(2, 'TN-2001', '3.5噸貨車', 40, 8.0,  'AVAILABLE'),
+(2, 'TN-2002', '小貨車',    25, 11.5, 'AVAILABLE');
 
 -- ══════════════════════════════════════════
 -- 司機（id = 1~3）
@@ -87,7 +97,15 @@ INSERT INTO orders
 ('DO-TEST-012', 10, 1, '商家丙', '清潔用品', 9,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
 ('DO-TEST-013', 4,  1, '商家甲', '民生用品', 6,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
 ('DO-TEST-014', 7,  1, '商家丙', '清潔用品', 8,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
-('DO-TEST-015', 10, 1, '商家乙', '飲料',     6,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW());
+('DO-TEST-015', 10, 1, '商家乙', '飲料',     6,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
+-- WH002 仁德轉運站，服務東南側門市（東區、仁德、歸仁、關廟）
+-- 總計 52 箱，車隊容量 65 箱，正常情況下裝得完
+('DO-TEST-201', 4,  2, '商家丁', '生鮮',     12, NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
+('DO-TEST-202', 4,  2, '商家戊', '冷凍食品', 9,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
+('DO-TEST-203', 5,  2, '商家丁', '生鮮',     10, NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
+('DO-TEST-204', 6,  2, '商家戊', '冷凍食品', 8,  '山區路段，注意配送時間', CURDATE(), 'CONFIRMED', NOW(), NOW()),
+('DO-TEST-205', 1,  2, '商家丁', '生鮮',     7,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW()),
+('DO-TEST-206', 5,  2, '商家戊', '冷凍食品', 6,  NULL, CURDATE(), 'CONFIRMED', NOW(), NOW());
 
 -- ══════════════════════════════════════════
 -- 確認結果
@@ -98,6 +116,12 @@ UNION ALL SELECT 'vehicles', COUNT(*) FROM vehicles
 UNION ALL SELECT 'drivers',  COUNT(*) FROM drivers
 UNION ALL SELECT 'orders',   COUNT(*) FROM orders;
 
+-- 各倉庫的訂單量與車隊容量，確認裝得下
 SELECT
-    (SELECT SUM(box_count) FROM orders WHERE status = 'CONFIRMED') AS 訂單總箱數,
-    (SELECT SUM(capacity) FROM vehicles WHERE status = 'AVAILABLE') AS 車隊總容量;
+    w.warehouse_code AS 倉庫,
+    w.name           AS 名稱,
+    (SELECT COUNT(*)       FROM orders   o WHERE o.warehouse_id = w.id AND o.status = 'CONFIRMED') AS 訂單數,
+    (SELECT SUM(box_count) FROM orders   o WHERE o.warehouse_id = w.id AND o.status = 'CONFIRMED') AS 總箱數,
+    (SELECT COUNT(*)       FROM vehicles v WHERE v.warehouse_id = w.id AND v.status = 'AVAILABLE') AS 車輛數,
+    (SELECT SUM(capacity)  FROM vehicles v WHERE v.warehouse_id = w.id AND v.status = 'AVAILABLE') AS 車隊容量
+FROM warehouses w ORDER BY w.id;

@@ -584,6 +584,19 @@
           <form class="resource-form" (submit)="$event.preventDefault(); submitVehicle()">
             <div class="form-grid">
               <label class="form-field">
+                <span>所屬倉庫</span>
+                <select
+                  [value]="vehicleForm().warehouseId"
+                  (change)="updateVehicleWarehouse($event)"
+                >
+                  @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+                    <option [value]="warehouse.id">
+                      {{ warehouse.warehouseCode }} · {{ warehouse.name }}
+                    </option>
+                  }
+                </select>
+              </label>
+              <label class="form-field">
                 <span>車牌號碼</span>
                 <input
                   type="text"
