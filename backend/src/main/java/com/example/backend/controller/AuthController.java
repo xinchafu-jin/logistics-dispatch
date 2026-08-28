@@ -2,11 +2,13 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.request.AdminPasswordResetDTO;
 import com.example.backend.dto.request.AdminPasswordResetVerificationDTO;
+import com.example.backend.dto.request.DriverPasswordResetDTO;
 import com.example.backend.dto.request.LoginRequest;
 import com.example.backend.dto.respones.CurrentUserResponse;
 import com.example.backend.dto.respones.LoginResponse;
 import com.example.backend.service.AdminUsersService;
 import com.example.backend.service.AuthService;
+import com.example.backend.service.DriversService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,10 +28,16 @@ public class AuthController {
 
     private final AuthService authService;
     private final AdminUsersService adminUsersService;
+    private final DriversService driversService;
 
-    public AuthController(AuthService authService, AdminUsersService adminUsersService) {
+    public AuthController(
+            AuthService authService,
+            AdminUsersService adminUsersService,
+            DriversService driversService
+    ) {
         this.authService = authService;
         this.adminUsersService = adminUsersService;
+        this.driversService = driversService;
     }
 
     @PostMapping("/admin/login")
@@ -53,6 +61,13 @@ public class AuthController {
     public ResponseEntity<Void> resetAdminPassword(
             @Valid @RequestBody AdminPasswordResetDTO request) {
         adminUsersService.resetForgottenPassword(request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/driver/forgot-password/reset")
+    public ResponseEntity<Void> resetDriverPassword(
+            @Valid @RequestBody DriverPasswordResetDTO request) {
+        driversService.resetForgottenPassword(request);
         return ResponseEntity.noContent().build();
     }
 
