@@ -68,7 +68,6 @@ public class VehiclesService {
     }
 
     private void apply(VehiclesDTO dto, VehiclesEntity entity) {
-        entity.setWarehouseId(dto.getWarehouseId());
         entity.setPlateNumber(dto.getPlateNumber());
         entity.setVehicleType(dto.getVehicleType());
         entity.setCapacity(dto.getCapacity());
@@ -82,7 +81,6 @@ public class VehiclesService {
     private VehiclesDTO toDTO(VehiclesEntity entity) {
         VehiclesDTO dto = new VehiclesDTO();
         dto.setId(entity.getId());
-        dto.setWarehouseId(entity.getWarehouseId());
         dto.setPlateNumber(entity.getPlateNumber());
         dto.setVehicleType(entity.getVehicleType());
         dto.setCapacity(entity.getCapacity());

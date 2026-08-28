@@ -31,8 +31,6 @@ public class VehiclesDTO {
 
     @NotNull(message = VEHICLE_STATUS_REQUIRED)
     private VehicleStatus status;
-    @NotNull(message = VEHICLE_WAREHOUSE_ID_REQUIRED)
-    private Long warehouseId ;
 
     // ===== Getter & Setter =====
 
@@ -47,9 +45,6 @@ public class VehiclesDTO {
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
-
-    public Long getWarehouseId() { return warehouseId; }
-    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
 
     public String getPlateNumber() { return plateNumber; }
     public void setPlateNumber(String plateNumber) { this.plateNumber = plateNumber; }
