@@ -1,12 +1,14 @@
 package com.example.backend.dto.request;
 
 import com.example.backend.constants.OrderStatus;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 import static com.example.backend.constants.ValidMsg.*;
 
@@ -19,6 +21,7 @@ public class OrdersDTO {
     private String orderNumber;
 
     @NotNull(message = ORDER_STORE_ID_REQUIRED)
+    @Positive(message = ORDER_STORE_ID_POSITIVE)
     private Long storeId;
 
     @Size(max = 100, message = ORDER_VENDOR_MAX_LENGTH)
@@ -31,6 +34,7 @@ public class OrdersDTO {
     @Min(value = 1, message = ORDER_BOX_COUNT_MIN)
     private Integer boxCount;
 
+    @Size(max = 500, message = ORDER_NOTES_MAX_LENGTH)
     private String notes;
 
     @NotNull(message = ORDER_DELIVERY_DATE_REQUIRED)
@@ -39,15 +43,21 @@ public class OrdersDTO {
     @NotNull(message = ORDER_STATUS_REQUIRED)
     private OrderStatus status;
 
+    @Positive(message = ORDER_ASSIGNED_VEHICLE_ID_POSITIVE)
     private Long assignedVehicleId;
+
+    @Positive(message = ORDER_ASSIGNED_DRIVER_ID_POSITIVE)
     private Long assignedDriverId;
+
+    @Positive(message = ORDER_SEQUENCE_POSITIVE)
     private Integer sequence;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    @NotNull(message = ORDER_WAREHOUSE_ID_REQUIRED)
-    private Long warehouseId;
 
+    @NotNull(message = ORDER_WAREHOUSE_ID_REQUIRED)
+    @Positive(message = ORDER_WAREHOUSE_ID_POSITIVE)
+    private Long warehouseId;
 
     // ===== Getter & Setter =====
     public Long getId() { return id; }
