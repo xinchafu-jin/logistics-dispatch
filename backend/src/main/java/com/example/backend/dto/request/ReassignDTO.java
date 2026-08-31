@@ -29,6 +29,7 @@ public class ReassignDTO {
      * <p>{@code @Valid} 不能省：Bean Validation 預設不會遞迴進集合元素，
      * 少了它 RouteAssignment 裡的標註完全不會執行。</p>
      */
+
     @NotEmpty(message = REASSIGN_ROUTES_REQUIRED)
     @Valid
     private List<RouteAssignment> routes;
@@ -69,7 +70,10 @@ public class ReassignDTO {
         @NotNull(message = REASSIGN_VEHICLE_ID_REQUIRED)
         private Long vehicleId;
 
-        /** 陣列順序即配送順序，不另外傳 sequence */
+        private Long driverId;
+        /**
+         * 陣列順序即配送順序，不另外傳 sequence
+         */
         @NotEmpty(message = REASSIGN_ORDER_IDS_REQUIRED)
         private List<Long> orderIds;
 
@@ -87,6 +91,14 @@ public class ReassignDTO {
 
         public void setOrderIds(List<Long> orderIds) {
             this.orderIds = orderIds;
+        }
+
+        public Long getDriverId() {
+            return driverId;
+        }
+
+        public void setDriverId(Long driverId) {
+            this.driverId = driverId;
         }
     }
 }

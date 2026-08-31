@@ -36,6 +36,16 @@ public final class ValidMsg {
     public static final String ORDER_DELIVERY_DATE_REQUIRED = "配送日期不能為空";
     public static final String ORDER_STATUS_REQUIRED = "訂單狀態不能為空";
     public static final String ORDER_WAREHOUSE_ID_REQUIRED = "出貨倉庫不能為空";
+    public static final String ORDER_BATCH_ROWS_REQUIRED = "訂單清單不能為空";
+
+    // Template（常配編組）
+    public static final String TEMPLATE_NAME_REQUIRED = "編組名稱不能為空";
+    public static final String TEMPLATE_NAME_MAX_LENGTH = "編組名稱不能超過 100 字元";
+    public static final String TEMPLATE_NOTES_MAX_LENGTH = "備註不能超過 500 字元";
+    public static final String TEMPLATE_ROUTES_REQUIRED = "編組至少要有一條路線";
+    public static final String TEMPLATE_WAREHOUSE_ID_REQUIRED = "倉庫不能為空";
+    public static final String TEMPLATE_VEHICLE_ID_REQUIRED = "車輛不能為空";
+    public static final String TEMPLATE_STORE_IDS_REQUIRED = "路線至少要有一個停靠門市";
 
     // Store
     public static final String STORE_CODE_REQUIRED = "門市代碼不能為空";

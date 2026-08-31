@@ -465,6 +465,29 @@
   }
 }
 
+.board-driver {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+
+  // 未指派是待辦事項而不是錯誤，用虛線提示，不搶超載那條紅框的注意力
+  &.is-unassigned {
+    border-style: dashed;
+    color: rgb(0 0 0 / 55%);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
 .board-dropzone {
   display: flex;
   flex-direction: column;

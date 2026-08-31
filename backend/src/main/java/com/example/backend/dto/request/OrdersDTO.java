@@ -1,12 +1,13 @@
 package com.example.backend.dto.request;
 
 import com.example.backend.constants.OrderStatus;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
+
 import static com.example.backend.constants.ValidMsg.*;
 
 public class OrdersDTO {
@@ -46,6 +47,7 @@ public class OrdersDTO {
     private LocalDateTime updatedAt;
     @NotNull(message = ORDER_WAREHOUSE_ID_REQUIRED)
     private Long warehouseId;
+
 
     // ===== Getter & Setter =====
     public Long getId() { return id; }
