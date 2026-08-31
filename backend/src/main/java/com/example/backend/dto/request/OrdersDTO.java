@@ -57,7 +57,7 @@ public class OrdersDTO {
     @Positive(message = ORDER_WAREHOUSE_ID_POSITIVE)
     private Long warehouseId;
 
-    // ===== Getter & Setter =====
+    // ===== Getter & Setter ======
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 

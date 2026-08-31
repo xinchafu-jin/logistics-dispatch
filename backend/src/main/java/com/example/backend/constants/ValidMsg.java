@@ -8,7 +8,7 @@ public final class ValidMsg {
     // Driver
     public static final String DRIVER_ACCOUNT_REQUIRED = "司機帳號不能為空";
     public static final String DRIVER_ACCOUNT_MAX_LENGTH = "帳號長度不能超過 50 字元";
-    public static final String DRIVER_NAME_REQUIRED = "司機姓名不能為空";
+    public static final String DRIVER_NAME_REQUIRED = "司機姓名不能為空白";
     public static final String DRIVER_NAME_MAX_LENGTH = "姓名長度不能超過 30 字元";
     public static final String DRIVER_PHONE_MAX_LENGTH = "電話長度不能超過 10 字元";
     public static final String DRIVER_WORK_START_REQUIRED = "上班時間不能為空";
