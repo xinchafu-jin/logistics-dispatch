@@ -7,7 +7,9 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -39,7 +41,11 @@ public class OrdersService {
     }
 
     public List<OrdersDTO> createAll(List<OrdersDTO> dtos) {
+        Set<String> seen = new HashSet<>();
         List<OrdersEntity> entities = dtos.stream().map(dto -> {
+            if (!seen.add(dto.getOrderNumber())) {
+                throw new IllegalArgumentException("同一批資料中訂單編號重複：" + dto.getOrderNumber());
+            }
             if (ordersDAO.existsByOrderNumber(dto.getOrderNumber())) {
                 throw new IllegalArgumentException("訂單編號已存在：" + dto.getOrderNumber());
             }

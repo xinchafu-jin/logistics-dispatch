@@ -143,6 +143,29 @@
           {{ route.totalDistance / 1000 | number: '1.1-1' }} km
         </h4>
 
+        <!--
+          選中狀態綁在 option 上而不是 select 的 [value]：
+          Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
+          瀏覽器找不到對應值就會退回第一個選項（這裡是「未指派司機」）。
+        -->
+        <select
+          class="board-driver"
+          [class.is-unassigned]="route.driverId === null"
+          [disabled]="busy()"
+          (change)="onDriverChange(route, $event)"
+        >
+          <option value="" [selected]="route.driverId === null">未指派司機</option>
+          @for (option of driverOptions(route); track option.id) {
+            <option
+              [value]="option.id"
+              [selected]="option.id === route.driverId"
+              [disabled]="option.takenNote !== null"
+            >
+              {{ option.name }}@if (option.takenNote) { · {{ option.takenNote }} }
+            </option>
+          }
+        </select>
+
         <div
           class="board-dropzone"
           cdkDropList

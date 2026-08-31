@@ -93,6 +93,24 @@ export interface DispatchResultDto {
   routes: RouteDto[];
   /** 裝不下、沒排進去的訂單，狀態維持 CONFIRMED */
   unassignedOrders: UnassignedOrderDto[];
+  /**
+   * 當天已在「其他倉庫」被指派的司機。
+   *
+   * 看板是按倉庫切的，但「一個司機一天只開一條路線」是跨倉的約束
+   * （drivers 沒有 warehouse_id，兩倉共用同一個司機池）。少了這份清單，
+   * 前端會把別倉已經用掉的司機也列成可選，選下去才被資料庫擋。
+   *
+   * 後端尚未實作，所以是選填；沒有這個欄位時當成空陣列。
+   */
+  driversTakenElsewhere?: DriverTakenDto[];
+}
+
+/** 當天已被其他倉庫排走的司機，附上排在哪裡好讓畫面說明原因 */
+export interface DriverTakenDto {
+  driverId: number;
+  driverName: string;
+  plateNumber: string;
+  warehouseName: string;
 }
 
 /**
@@ -183,9 +201,16 @@ export interface ReassignRequest {
   routes: RouteAssignment[];
 }
 
-/** 一台車要載哪些訂單 */
+/** 一台車要載哪些訂單、由誰開 */
 export interface RouteAssignment {
   vehicleId: number;
+  /**
+   * 指派的司機，未指派為 null。
+   *
+   * 司機跟著改派整包送，是因為後端 reassign 會清掉當天草稿、整批重建路線 ——
+   * 不一起帶的話，每拖一次訂單就會把已經指派好的司機清光。
+   */
+  driverId: number | null;
   /**
    * 陣列順序即配送順序，不另外傳 sequence。
    * 不能是空陣列 —— 後端會擋，空車道要在組請求時就濾掉。

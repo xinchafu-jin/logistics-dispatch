@@ -32,6 +32,9 @@ public class RoutesEntity {
     @Column
     private Long driverId;
 
+    @Column
+    private Long templateId;
+
     /**
      * 總里程（公尺）
      */
@@ -104,6 +107,14 @@ public class RoutesEntity {
 
     public void setDriverId(Long driverId) {
         this.driverId = driverId;
+    }
+
+    public Long getTemplateId() {
+        return templateId;
+    }
+
+    public void setTemplateId(Long templateId) {
+        this.templateId = templateId;
     }
 
     public Double getTotalDistance() {

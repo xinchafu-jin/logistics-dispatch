@@ -24,6 +24,15 @@ public class DispatchResponse {
     /** 車輛裝不下、沒排進去的訂單，狀態維持 CONFIRMED，下次排程還會被撈到 */
     private List<UnassignedOrderResponse> unassignedOrders;
 
+    /**
+     * 當天已在「其他倉庫」被指派的司機。
+     *
+     * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線。
+     * 看板是按倉切的，少了這份清單前端會把別倉用掉的司機也列成可選，
+     * 選下去才被 uk_routes_date_driver 擋，錯誤訊息還是資料庫原文。
+     */
+    private List<DriverTakenResponse> driversTakenElsewhere;
+
     public DispatchResponse() {
     }
 
@@ -57,6 +66,64 @@ public class DispatchResponse {
 
     public void setUnassignedOrders(List<UnassignedOrderResponse> unassignedOrders) {
         this.unassignedOrders = unassignedOrders;
+    }
+
+    public List<DriverTakenResponse> getDriversTakenElsewhere() {
+        return driversTakenElsewhere;
+    }
+
+    public void setDriversTakenElsewhere(List<DriverTakenResponse> driversTakenElsewhere) {
+        this.driversTakenElsewhere = driversTakenElsewhere;
+    }
+
+    /**
+     * 當天被其他倉庫排走的一位司機。附上排在哪裡，畫面才能說明不能選的原因。
+     */
+    public static class DriverTakenResponse {
+
+        private Long driverId;
+
+        private String driverName;
+
+        /** 那條路線用的車，讓調度員知道去哪裡調整 */
+        private String plateNumber;
+
+        private String warehouseName;
+
+        public DriverTakenResponse() {
+        }
+
+        public Long getDriverId() {
+            return driverId;
+        }
+
+        public void setDriverId(Long driverId) {
+            this.driverId = driverId;
+        }
+
+        public String getDriverName() {
+            return driverName;
+        }
+
+        public void setDriverName(String driverName) {
+            this.driverName = driverName;
+        }
+
+        public String getPlateNumber() {
+            return plateNumber;
+        }
+
+        public void setPlateNumber(String plateNumber) {
+            this.plateNumber = plateNumber;
+        }
+
+        public String getWarehouseName() {
+            return warehouseName;
+        }
+
+        public void setWarehouseName(String warehouseName) {
+            this.warehouseName = warehouseName;
+        }
     }
 
     /**
