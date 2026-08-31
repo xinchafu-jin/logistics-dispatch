@@ -1,6 +1,8 @@
 package com.example.backend.controller;
 
+import com.example.backend.dto.request.OrdersBatchDto;
 import com.example.backend.dto.request.OrdersDTO;
+import com.example.backend.entity.OrdersEntity;
 import com.example.backend.service.OrdersService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -47,4 +49,9 @@ public class OrderController {
         ordersService.delete(id);
         return ResponseEntity.noContent().build();
     }
+    @PostMapping("/batch")
+    public ResponseEntity<List<OrdersDTO>> createAll(@Valid @RequestBody OrdersBatchDto request){
+        return ResponseEntity.status(HttpStatus.CREATED).body(ordersService.createAll(request.getOrders()));
+    }
+
 }

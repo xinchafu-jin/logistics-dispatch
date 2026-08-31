@@ -248,6 +248,45 @@ public class DispatchService {
                         + " 目前狀態為 " + vehicle.getStatus() + "，無法排入路線");
             }
         }
+        // ── 司機驗證：不重複、在職 ──
+        List<Long> driverIds = new ArrayList<>();
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            // 未指派是合法的：草稿階段可以先排車後派人，發布前才要求一定要有
+            if (ra.getDriverId() == null) {
+                continue;
+            }
+            if (driverIds.contains(ra.getDriverId())) {
+                throw new IllegalArgumentException(
+                        "司機 " + driverNameOf(ra.getDriverId()) + " 被指派給多台車");
+            }
+            driverIds.add(ra.getDriverId());
+        }
+        Map<Long, DriversEntity> driversMap = new HashMap<>();
+        for (DriversEntity driver : driversDAO.findAllById(driverIds)) {
+            driversMap.put(driver.getId(), driver);
+        }
+        for (Long driverId : driverIds) {
+            DriversEntity driver = driversMap.get(driverId);
+            if (driver == null) {
+                throw new IllegalArgumentException("查無司機：" + driverId);
+            }
+            if (!Boolean.TRUE.equals(driver.getIsActive())) {
+                throw new IllegalArgumentException(
+                        "司機 " + driver.getName() + " 目前非在職狀態，無法指派");
+            }
+        }
+        // 司機不綁倉庫，但一天只開一條路線，所以要查整天而不是只查這個倉。
+        // 本倉的草稿等一下就會被 clearExistingDraftRoutes 清掉，不算佔用。
+        for (RoutesEntity other : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
+            if (warehouseId.equals(other.getWarehouseId())) {
+                continue;
+            }
+            if (driverIds.contains(other.getDriverId())) {
+                throw new IllegalArgumentException(
+                        "司機 " + driverNameOf(other.getDriverId()) + " 當天已排在 "
+                                + plateNumberOf(other.getVehicleId()) + "，無法重複指派");
+            }
+        }
 
         // ══ 驗證到此結束，以下開始改資料 ══
 
@@ -295,6 +334,8 @@ public class DispatchService {
             route.setDate(date);
             route.setWarehouseId(warehouseId);
             route.setVehicleId(vehicle.getId());
+            // 未指派時是 null，正好對上 uk_routes_date_driver（NULL 不參與唯一性比對）
+            route.setDriverId(ra.getDriverId());
             RoutesEntity saveRoute = routesDAO.save(route);
 
             int sequence = 1;
@@ -306,6 +347,8 @@ public class DispatchService {
                 order.setRouteId(saveRoute.getId());
                 order.setSequence(sequence);
                 order.setAssignedVehicleId(vehicle.getId());
+                // 跟著路線一起寫。司機端要從訂單查任務，這欄留 null 的話會落空
+                order.setAssignedDriverId(ra.getDriverId());
                 order.setStatus(OrderStatus.SCHEDULED);
                 ordersDAO.save(order);
 
@@ -411,7 +454,70 @@ public class DispatchService {
         response.setWarehouse(toWarehouse(warehouse));
         response.setRoutes(routeResponses);
         response.setUnassignedOrders(unassignedOrders);
+        response.setDriversTakenElsewhere(driversTakenElsewhere(date, warehouseId));
         return response;
+    }
+
+    /**
+     * 當天已被「其他倉庫」排走的司機。
+     *
+     * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線，
+     * 而看板是按倉切的 —— 只看當前倉的話，會把別倉用掉的司機也列成可選。
+     */
+    private List<DispatchResponse.DriverTakenResponse> driversTakenElsewhere(
+            LocalDate date, Long warehouseId) {
+
+        List<RoutesEntity> others = new ArrayList<>();
+        for (RoutesEntity route : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
+            if (!warehouseId.equals(route.getWarehouseId())) {
+                others.add(route);
+            }
+        }
+        if (others.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 同樣先收集 id 再一次撈，不要在迴圈裡逐筆查
+        List<Long> driverIds = new ArrayList<>();
+        List<Long> vehicleIds = new ArrayList<>();
+        List<Long> warehouseIds = new ArrayList<>();
+        for (RoutesEntity route : others) {
+            driverIds.add(route.getDriverId());
+            vehicleIds.add(route.getVehicleId());
+            warehouseIds.add(route.getWarehouseId());
+        }
+        Map<Long, DriversEntity> driversMap = new HashMap<>();
+        for (DriversEntity driver : driversDAO.findAllById(driverIds)) {
+            driversMap.put(driver.getId(), driver);
+        }
+        Map<Long, VehiclesEntity> vehiclesMap = new HashMap<>();
+        for (VehiclesEntity vehicle : vehiclesDAO.findAllById(vehicleIds)) {
+            vehiclesMap.put(vehicle.getId(), vehicle);
+        }
+        Map<Long, WarehousesEntity> warehousesMap = new HashMap<>();
+        for (WarehousesEntity item : warehousesDAO.findAllById(warehouseIds)) {
+            warehousesMap.put(item.getId(), item);
+        }
+
+        List<DispatchResponse.DriverTakenResponse> taken = new ArrayList<>();
+        for (RoutesEntity route : others) {
+            DispatchResponse.DriverTakenResponse item = new DispatchResponse.DriverTakenResponse();
+            item.setDriverId(route.getDriverId());
+            DriversEntity driver = driversMap.get(route.getDriverId());
+            if (driver != null) {
+                item.setDriverName(driver.getName());
+            }
+            VehiclesEntity vehicle = vehiclesMap.get(route.getVehicleId());
+            if (vehicle != null) {
+                item.setPlateNumber(vehicle.getPlateNumber());
+            }
+            WarehousesEntity itemWarehouse = warehousesMap.get(route.getWarehouseId());
+            if (itemWarehouse != null) {
+                item.setWarehouseName(itemWarehouse.getName());
+            }
+            taken.add(item);
+        }
+        return taken;
     }
 
     private void clearExistingDraftRoutes(LocalDate date, Long warehouseId) {
@@ -510,5 +616,10 @@ public class DispatchService {
 
 
         return response;
+    }
+
+    private String driverNameOf(Long driverId) {
+        Optional<DriversEntity> driver = driversDAO.findById(driverId);
+        return driver.map(DriversEntity::getName).orElse("司機" + driverId);
     }
 }

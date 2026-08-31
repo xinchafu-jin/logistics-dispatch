@@ -11,12 +11,17 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
+import {FormsModule} from '@angular/forms';
+import {MatInputModule} from '@angular/material/input';
+import {MatSelectModule} from '@angular/material/select';
+import {MatFormFieldModule} from '@angular/material/form-field';
 import {forkJoin} from 'rxjs';
 import {LiveFleetMap} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {
   DispatchResultDto,
   DriverDto,
+  DriverTakenDto,
   OrderDto,
   OrderStatus,
   ReassignRequest,
@@ -50,6 +55,8 @@ interface BoardRoute {
   plateNumber: string;
   vehicleType: string | null;
   capacity: number;
+  /** 指派的司機，未指派為 null。發布前必須指派，否則司機端查不到任務 */
+  driverId: number | null;
   /** 上一次由後端算出的里程；拖曳後會失準，要等 reassign 重算 */
   totalDistance: number;
   cards: BoardCard[];
@@ -64,6 +71,14 @@ function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
     storeName: source.storeName,
     boxCount: source.boxCount,
   };
+}
+
+/** 車道司機下拉的一個選項 */
+interface DriverOption {
+  id: number;
+  name: string;
+  /** 不是 null 就代表當天已排在別處，選單要 disabled 並顯示這句原因 */
+  takenNote: string | null;
 }
 
 interface SummaryCard {
@@ -98,6 +113,8 @@ interface DashboardAlert {
 export class DispatchDashboard implements OnInit {
   readonly routes = signal<BoardRoute[]>([]);
   readonly unassigned = signal<BoardCard[]>([]);
+  /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
+  readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
   /** 改派送出中，此時鎖住看板避免兩個請求互相覆蓋 */
   readonly saving = signal(false);
   readonly boardError = signal('');
@@ -358,6 +375,65 @@ export class DispatchDashboard implements OnInit {
     return this.loadedBoxes(route) > route.capacity;
   }
 
+  /**
+   * 這條車道的司機選項。已被佔用的不隱藏，改成 disabled 並附上原因 ——
+   * 人憑空消失會讓調度員以為是系統壞了，寫明「已排在哪」才知道要去哪裡調整。
+   *
+   * 佔用有兩種來源：同一個倉的其他車道（看板上看得到），以及當天其他倉
+   * （看板看不到，要靠後端的 driversTakenElsewhere 補）。
+   *
+   * 自己這條已指派的司機永遠可選，否則 select 找不到對應 option，
+   * 畫面會退回第一個選項（看起來像沒指派）。
+   */
+  driverOptions(route: BoardRoute): DriverOption[] {
+    const takenHere = new Map<number, string>();
+    for (const item of this.routes()) {
+      if (item.routeId !== route.routeId && item.driverId !== null) {
+        takenHere.set(item.driverId, `已排在 ${item.plateNumber}`);
+      }
+    }
+
+    const takenElsewhere = new Map<number, string>();
+    for (const taken of this.driversTakenElsewhere()) {
+      takenElsewhere.set(taken.driverId, `已排在 ${taken.warehouseName} ${taken.plateNumber}`);
+    }
+
+    return this.drivers()
+      .filter((driver): driver is DriverDto & {id: number} => driver.id != null && driver.isActive)
+      .map((driver) => ({
+        id: driver.id,
+        name: driver.name,
+        takenNote:
+          driver.id === route.driverId
+            ? null
+            : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
+      }));
+  }
+
+  /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
+  readonly routesWithoutDriver = computed(
+    () => this.routes().filter((route) => route.driverId === null).length,
+  );
+
+  /**
+   * 指派或清除司機。不另外開端點，直接走 reassign 整包送 ——
+   * 因為 reassign 本來就會重建當天路線，司機沒跟著送就會被清掉。
+   */
+  onDriverChange(route: BoardRoute, event: Event): void {
+    if (this.saving()) {
+      return;
+    }
+
+    const selected = (event.target as HTMLSelectElement).value;
+    const driverId = selected === '' ? null : Number(selected);
+
+    this.routes.update((routes) =>
+      routes.map((item) => (item.routeId === route.routeId ? {...item, driverId} : item)),
+    );
+
+    this.submitReassign();
+  }
+
   onDrop(event: CdkDragDrop<BoardCard[]>): void {
     if (this.saving()) {
       return;
@@ -424,6 +500,7 @@ export class DispatchDashboard implements OnInit {
         .filter((route) => route.cards.length > 0)
         .map((route) => ({
           vehicleId: route.vehicleId,
+          driverId: route.driverId,
           orderIds: route.cards.map((card) => card.orderId),
         })),
     };
@@ -453,10 +530,12 @@ export class DispatchDashboard implements OnInit {
         plateNumber: route.plateNumber,
         vehicleType: route.vehicleType,
         capacity: route.capacity,
+        driverId: route.driverId,
         totalDistance: route.totalDistance,
         cards: route.stops.map(toBoardCard),
       })),
     );
     this.unassigned.set(result.unassignedOrders.map(toBoardCard));
+    this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
   }
 }
