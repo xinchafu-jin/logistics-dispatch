@@ -66,25 +66,4 @@ public class DispatchController {
                 dispatchService.getBoard(date, warehouseId)
         );
     }
-
-    /** 檢查指定日期的草稿路線是否符合發布條件。 */
-    @GetMapping("/publish-check")
-    public ResponseEntity<Map<String, Object>> publishCheck(
-            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return pending("GET /api/dispatch/publish-check?date=" + date);
-    }
-
-    /** 正式發布指定日期的路線與司機任務。 */
-    @PostMapping("/publish")
-    public ResponseEntity<Map<String, Object>> publish(@RequestBody Map<String, Object> request) {
-        return pending("POST /api/dispatch/publish");
-    }
-
-    private ResponseEntity<Map<String, Object>> pending(String api) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
-                "success", false,
-                "message", "Controller 已建立，尚未接上 Service",
-                "api", api
-        ));
-    }
 }
