@@ -95,15 +95,6 @@ public class DriverPortalController {
         return pending("GET /api/driver/tasks/today");
     }
 
-    /** 司機出車前確認路線中每張訂單的實際點交箱數。 */
-    @PostMapping("/handover")
-    public ResponseEntity<Map<String, Object>> handover(
-            @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/handover");
-    }
-
     /** 記錄司機抵達門市的時間。 */
     @PostMapping("/arrive")
     public ResponseEntity<Map<String, Object>> arrive(
