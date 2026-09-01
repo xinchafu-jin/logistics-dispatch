@@ -116,7 +116,7 @@ public class TemplatesService {
         dispatchTemplatesDAO.delete(template);
     }
 
-    private TemplatesDTO findById(Long id) {
+    public TemplatesDTO findById(Long id) {
         DispatchTemplatesEntity template = findEntity(id);
         List<TemplateRoutesEntity> routes = templateRoutesDAO.findByTemplateIdOrderByIdAsc(id);
         List<Long> routeIds = routes.stream().map(TemplateRoutesEntity::getId).toList();
