@@ -3,9 +3,14 @@ package com.example.backend.controller;
 import com.example.backend.dto.request.AttendanceRecordDTO;
 import com.example.backend.dto.request.DriverShiftDTO;
 import com.example.backend.dto.request.GpsPingDTO;
+import com.example.backend.dto.request.MileageRequestDTO;
+import com.example.backend.dto.respones.DriverTasksResponse;
+import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.service.AttendanceService;
 import com.example.backend.service.DriverScheduleService;
+import com.example.backend.service.DriverTasksService;
 import com.example.backend.service.GpsPingsService;
+import com.example.backend.service.MileageLogsService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -33,16 +38,22 @@ public class DriverPortalController {
 
     private final AttendanceService attendanceService;
     private final DriverScheduleService driverScheduleService;
+    private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
+    private final MileageLogsService mileageLogsService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
             DriverScheduleService driverScheduleService,
-            GpsPingsService gpsPingsService
+            DriverTasksService driverTasksService,
+            GpsPingsService gpsPingsService,
+            MileageLogsService mileageLogsService
     ) {
         this.attendanceService = attendanceService;
         this.driverScheduleService = driverScheduleService;
+        this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
+        this.mileageLogsService = mileageLogsService;
     }
 
     /** 查詢今天的打卡、休息及 GPS 上傳狀態。 */
@@ -90,9 +101,8 @@ public class DriverPortalController {
 
     /** 取得登入司機今天已發布的配送任務。 */
     @GetMapping("/tasks/today")
-    public ResponseEntity<Map<String, Object>> findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
-        driverId(jwt);
-        return pending("GET /api/driver/tasks/today");
+    public DriverTasksResponse findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
+        return driverTasksService.findToday(driverId(jwt));
     }
 
     /** 記錄司機抵達門市的時間。 */
@@ -133,20 +143,18 @@ public class DriverPortalController {
 
     /** 記錄今日出車時的里程表讀數。 */
     @PostMapping("/mileage/start")
-    public ResponseEntity<Map<String, Object>> startMileage(
+    public MileageLogResponse startMileage(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/mileage/start");
+            @Valid @RequestBody MileageRequestDTO request) {
+        return mileageLogsService.start(driverId(jwt), request);
     }
 
     /** 記錄今日收工時的里程表讀數。 */
     @PostMapping("/mileage/end")
-    public ResponseEntity<Map<String, Object>> endMileage(
+    public MileageLogResponse endMileage(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/mileage/end");
+            @Valid @RequestBody MileageRequestDTO request) {
+        return mileageLogsService.end(driverId(jwt), request);
     }
 
     /** 從登入 Token 取得資料庫中的司機 ID。 */
