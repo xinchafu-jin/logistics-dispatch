@@ -26,7 +26,6 @@ import {
 
 type OrderReviewStatus =
   | '待總部確認'
-  | '資料待補'
   | '待排車'
   | '配送中'
   | '已完成'
@@ -118,7 +117,6 @@ export class OrderReview implements OnInit {
   readonly filters: { key: FilterKey; label: string }[] = [
     { key: 'all', label: '全部' },
     { key: '待總部確認', label: '待確認' },
-    { key: '資料待補', label: '待補件' },
     { key: '待排車', label: '待排車' },
     { key: '配送中', label: '配送中' },
     { key: '已完成', label: '已完成' },
@@ -160,9 +158,6 @@ export class OrderReview implements OnInit {
 
   readonly reviewCount = computed(
     () => this.orders().filter((order) => order.status === '待總部確認').length,
-  );
-  readonly supplementCount = computed(
-    () => this.orders().filter((order) => order.status === '資料待補').length,
   );
 
   /** 建單時的預設倉庫：第一個啟用中的倉庫，沒有就退回第一筆 */
@@ -452,19 +447,6 @@ export class OrderReview implements OnInit {
     );
   }
 
-  requestSupplement(): void {
-    const selected = this.selectedOrder();
-    if (!selected || !this.canReview(selected)) {
-      return;
-    }
-
-    this.updateOrderStatus(
-      selected,
-      'MODIFY',
-      `${selected.id} 已標記為待補件，將由客服通知店家補齊資料。`,
-    );
-  }
-
   canReview(order: DeliveryOrder): boolean {
     return order.status === '待總部確認';
   }
@@ -555,11 +537,7 @@ export class OrderReview implements OnInit {
     switch (status) {
       case 'PENDING_CONFIRM':
         return '待總部確認';
-      case 'MODIFY':
-        return '資料待補';
       case 'CONFIRMED':
-      case 'SCHEDULED':
-      case 'PUBLISHED':
         return '待排車';
       case 'IN_DELIVERY':
         return '配送中';

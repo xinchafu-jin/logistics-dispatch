@@ -64,4 +64,27 @@ public class DispatchController {
                 dispatchService.getBoard(date, warehouseId)
         );
     }
+
+    /**
+     * 發布：一次把當天所有倉庫的草稿排班發出去，司機端才查得到任務。
+     *
+     * <p>不帶 warehouseId —— 發布是整天一次的動作，不像排車是一次一倉。
+     * 回傳每個有路線的倉庫各一包看板資料。</p>
+     */
+    @PostMapping("/publish")
+    public ResponseEntity<List<DispatchResponse>> publish(
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(dispatchService.publish(date));
+    }
+
+    /**
+     * 撤回：把當天所有倉庫的發布翻回草稿，之後才能重新排車。
+     */
+    @PostMapping("/withdraw")
+    public ResponseEntity<List<DispatchResponse>> withdraw(
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return ResponseEntity.ok(dispatchService.withdraw(date));
+    }
 }

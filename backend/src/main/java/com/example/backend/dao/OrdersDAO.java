@@ -19,9 +19,11 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
     boolean existsByOrderNumber(String orderNumber);
 
     /**
-     * 排程用：撈某天、某狀態的訂單
+     * 排程用：撈某天、某狀態、且尚未排入路線（route_id IS NULL）的訂單。
+     * 取消 SCHEDULED 狀態後，排過的單一樣是 CONFIRMED，只能靠 route_id 判斷排了沒，
+     * 因此排車撈候選單時要同時篩狀態與 route_id，避免把已排的單重撈回來重排。
      */
-    List<OrdersEntity> findByDeliveryDateAndStatusAndWarehouseId(
+    List<OrdersEntity> findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
             LocalDate deliveryDate, OrderStatus status, Long warehouseId);
 
     List<OrdersEntity> findByRouteIdOrderBySequence(Long routeId);

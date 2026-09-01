@@ -1,32 +1,42 @@
 package com.example.backend.dto.respones;
 
+import com.example.backend.constants.RouteStatus;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
 /**
  * 排車結果。對應 POST /api/dispatch/optimize 的回應。
- *
+ * <p>
  * 除了 id 之外一併帶出前端畫面需要的名稱與座標，避免前端還要逐筆回打
  * /api/stores、/api/vehicles 才能顯示。
  */
 public class DispatchResponse {
 
-    /** 配送日期 */
+    /**
+     * 配送日期
+     */
     private LocalDate date;
 
-    /** 出發倉庫，地圖上的起訖點 */
+    /**
+     * 出發倉庫，地圖上的起訖點
+     */
     private WarehouseResponse warehouse;
 
-    /** 每台有出車的車輛各一筆 */
+    /**
+     * 每台有出車的車輛各一筆
+     */
     private List<RouteResponse> routes;
 
-    /** 車輛裝不下、沒排進去的訂單，狀態維持 CONFIRMED，下次排程還會被撈到 */
+    /**
+     * 車輛裝不下、沒排進去的訂單，狀態維持 CONFIRMED，下次排程還會被撈到
+     */
     private List<UnassignedOrderResponse> unassignedOrders;
 
     /**
      * 當天已在「其他倉庫」被指派的司機。
-     *
+     * <p>
      * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線。
      * 看板是按倉切的，少了這份清單前端會把別倉用掉的司機也列成可選，
      * 選下去才被 uk_routes_date_driver 擋，錯誤訊息還是資料庫原文。
@@ -85,7 +95,9 @@ public class DispatchResponse {
 
         private String driverName;
 
-        /** 那條路線用的車，讓調度員知道去哪裡調整 */
+        /**
+         * 那條路線用的車，讓調度員知道去哪裡調整
+         */
         private String plateNumber;
 
         private String warehouseName;
@@ -200,44 +212,77 @@ public class DispatchResponse {
      */
     public static class RouteResponse {
 
-        /** routes 表的主鍵，前端要指派司機、調整順序時用得到 */
+        /**
+         * routes 表的主鍵，前端要指派司機、調整順序時用得到
+         */
         private Long routeId;
 
         private Long vehicleId;
 
-        /** 車牌，畫面上顯示這個而不是 vehicleId */
+        /**
+         * 車牌，畫面上顯示這個而不是 vehicleId
+         */
         private String plateNumber;
 
         private String vehicleType;
 
-        /** 車輛容量（箱） */
+        /**
+         * 車輛容量（箱）
+         */
         private Integer capacity;
 
-        /** 草稿階段為 null，發布前才指派 */
+        /**
+         * 草稿階段為 null，發布前才指派
+         */
         private Long driverId;
 
-        /** 司機姓名，未指派時為 null */
+        /**
+         * 司機姓名，未指派時為 null
+         */
         private String driverName;
 
         private List<StopResponse> stops;
 
-        /** 停靠點數量，等於 stops.size() */
+        /**
+         * 停靠點數量，等於 stops.size()
+         */
         private Integer stopCount;
 
-        /** 實際載運箱數 */
+        /**
+         * 實際載運箱數
+         */
         private Integer loadedBoxes;
 
-        /** 總里程（公尺） */
+        /**
+         * 總里程（公尺）
+         */
         private Double totalDistance;
 
-        /** 預估油耗成本，目前未計算（系統尚無油價設定） */
+        /**
+         * 預估油耗成本，目前未計算（系統尚無油價設定）
+         */
         private Double estimatedFuelCost;
 
-        /** 預估總工時（分鐘），目前未計算（需 OSRM durations） */
+        /**
+         * 預估總工時（分鐘），目前未計算（需 OSRM durations）
+         */
         private Integer estimatedWorkMinutes;
 
-        /** 裝載率 0~1，實際載運箱數 ÷ 車輛容量 */
+        /**
+         * 裝載率 0~1，實際載運箱數 ÷ 車輛容量
+         */
         private Double loadRate;
+
+        /** DRAFT / PUBLISHED，前端據此決定顯示「發布」還是「撤回」 */
+        private RouteStatus status;
+
+        public RouteStatus getStatus() {
+            return status;
+        }
+
+        public void setStatus(RouteStatus status) {
+            this.status = status;
+        }
 
         public RouteResponse() {
         }
@@ -360,14 +405,18 @@ public class DispatchResponse {
      */
     public static class StopResponse {
 
-        /** 建議配送順序，從 1 開始 */
+        /**
+         * 建議配送順序，從 1 開始
+         */
         private Integer sequence;
 
         private Long orderId;
 
         private String orderNumber;
 
-        /** 箱數 */
+        /**
+         * 箱數
+         */
         private Integer boxCount;
 
         private String itemDescription;
@@ -388,10 +437,14 @@ public class DispatchResponse {
 
         private String phone;
 
-        /** 可收貨時間起，前端顯示時段用 */
+        /**
+         * 可收貨時間起，前端顯示時段用
+         */
         private LocalTime receivingStart;
 
-        /** 可收貨時間迄 */
+        /**
+         * 可收貨時間迄
+         */
         private LocalTime receivingEnd;
 
         public StopResponse() {

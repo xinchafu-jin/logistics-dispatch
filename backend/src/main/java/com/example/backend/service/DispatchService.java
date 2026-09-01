@@ -12,6 +12,7 @@ import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.*;
 import com.google.protobuf.OptionOrBuilder;
 import jakarta.validation.Valid;
+import org.springframework.boot.actuate.web.exchanges.HttpExchange;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.RouteMatcher;
@@ -55,9 +56,11 @@ public class DispatchService {
                 warehousesDAO.findById(warehouseId).
                         orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
         clearExistingDraftRoutes(date, warehouseId);
-        // 撈當日訂單 已確認之狀態
+        // 撈當日「已確認且尚未排入路線」的訂單。
+        // 取消 SCHEDULED 狀態後，排過的單也留在 CONFIRMED，靠 route_id 區分排了沒，
+        // 所以這裡要多篩 route_id IS NULL，不能只看狀態（否則會把已排的單重撈回來重排）。
         List<OrdersEntity> orders =
-                ordersDAO.findByDeliveryDateAndStatusAndWarehouseId(
+                ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.CONFIRMED, warehouseId);
         if (orders.isEmpty()) {
             throw new IllegalArgumentException("當天無已確認的訂單：" + date);
@@ -144,7 +147,7 @@ public class DispatchService {
                 order.setRouteId(saveRoute.getId());
                 order.setSequence(sequence);
                 order.setAssignedVehicleId(vehicle.getId());
-                order.setStatus(OrderStatus.SCHEDULED);
+                // 排進路線＝route_id 有值即可，不再另設狀態；訂單留在 CONFIRMED
                 ordersDAO.save(order);
 
                 stops.add(toStop(order, storesMap.get(order.getStoreId()), sequence));
@@ -165,6 +168,7 @@ public class DispatchService {
             routeResponse.setLoadedBoxes(loadedBoxes);
             routeResponse.setTotalDistance((double) vr.getDistance());
             routeResponse.setLoadRate(loadRate);
+            routeResponse.setStatus(saveRoute.getStatus());
             routeResponses.add(routeResponse);
         }
         List<DispatchResponse.UnassignedOrderResponse> unassignedOrders = new ArrayList<>();
@@ -206,8 +210,9 @@ public class DispatchService {
                     throw new IllegalArgumentException(
                             "訂單 " + orderId + " 不屬於 " + date + " 的倉庫 " + warehouseId);
                 }
-                if (order.getStatus() != OrderStatus.CONFIRMED
-                        && order.getStatus() != OrderStatus.SCHEDULED) {
+                // 只有已確認的單能排入。排過的單也是 CONFIRMED（差別在 route_id），
+                // 所以移動既有路線裡的單同樣落在這個條件內，不必再列 SCHEDULED。
+                if (order.getStatus() != OrderStatus.CONFIRMED) {
                     throw new IllegalArgumentException(
                             "訂單 " + order.getOrderNumber() + " 狀態為 " + order.getStatus()
                                     + "，無法排入路線");
@@ -349,7 +354,7 @@ public class DispatchService {
                 order.setAssignedVehicleId(vehicle.getId());
                 // 跟著路線一起寫。司機端要從訂單查任務，這欄留 null 的話會落空
                 order.setAssignedDriverId(ra.getDriverId());
-                order.setStatus(OrderStatus.SCHEDULED);
+                // 排進路線＝route_id 有值即可，不再另設狀態；訂單留在 CONFIRMED
                 ordersDAO.save(order);
 
                 int currentIndex = locationIndex.get(orderId);
@@ -422,6 +427,7 @@ public class DispatchService {
 
             DispatchResponse.RouteResponse routeResponse = new DispatchResponse.RouteResponse();
             routeResponse.setRouteId(route.getId());
+            routeResponse.setStatus(route.getStatus());
             routeResponse.setVehicleId(route.getVehicleId());
             VehiclesEntity vehicle = vehiclesMap.get(route.getVehicleId());
             if (vehicle != null) {
@@ -459,8 +465,73 @@ public class DispatchService {
     }
 
     /**
-     * 當天已被「其他倉庫」排走的司機。
+     * 發布當天全部倉庫的排班：把草稿路線翻成 PUBLISHED，司機端才查得到任務。
      *
+     * <p>發布同時也是防刪保護 —— clearExistingDraftRoutes 只清 DRAFT，
+     * 遇到 PUBLISHED 會擋下整個重排，所以發布後要改就得先撤回。</p>
+     *
+     * <p>採「全有或全無」：任一條路線沒指派司機就整批擋下，一條都不翻。
+     * 允許部分成功的話，會留下有些司機看得到、有些看不到的狀態，調度員不見得會發現。</p>
+     *
+     * @return 每個有路線的倉庫各一包看板資料，前端據此重繪
+     */
+    public List<DispatchResponse> publish(LocalDate date) {
+        List<RoutesEntity> routes = routesDAO.findByDate(date);
+        if (routes.isEmpty()) {
+            throw new IllegalArgumentException("當天沒有可發布的路線：" + date);
+        }
+
+        // 司機端靠 driver_id 找任務，沒指派就發布等於發了個空的。
+        // 先整批收集完才判斷，否則會邊翻邊發現問題，讀的人搞不清楚翻到哪裡。
+        List<String> missing = new ArrayList<>();
+        for (RoutesEntity route : routes) {
+            if (route.getStatus() == RouteStatus.DRAFT && route.getDriverId() == null) {
+                missing.add(plateNumberOf(route.getVehicleId()));
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "尚未指派司機（" + String.join("、", missing) + "），無法發布");
+        }
+
+        for (RoutesEntity route : routes) {
+            if (route.getStatus() == RouteStatus.DRAFT) {
+                route.setStatus(RouteStatus.PUBLISHED);
+            }
+        }
+        routesDAO.saveAll(routes);
+
+        return boardsOf(date, routes);
+    }
+
+    /**
+     * 撤回當天全部倉庫的發布：PUBLISHED 翻回 DRAFT。
+     *
+     * <p>撤回本身不刪任何東西，路線與訂單綁定都還在，只是司機端看不到了。
+     * 但翻回 DRAFT 後這批路線就重新落入 clearExistingDraftRoutes 的清除範圍，
+     * 下一次排車會把它們整批刪掉重建。</p>
+     */
+    public List<DispatchResponse> withdraw(LocalDate date) {
+        List<RoutesEntity> routes = routesDAO.findByDate(date);
+        if (routes.isEmpty()) {
+            throw new IllegalArgumentException("當天沒有可撤回的路線：" + date);
+        }
+
+        for (RoutesEntity route : routes) {
+            if (route.getStatus() == RouteStatus.PUBLISHED) {
+                route.setStatus(RouteStatus.DRAFT);
+            }
+        }
+        routesDAO.saveAll(routes);
+
+        return boardsOf(date, routes);
+    }
+
+
+
+    /**
+     * 當天已被「其他倉庫」排走的司機。
+     * <p>
      * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線，
      * 而看板是按倉切的 —— 只看當前倉的話，會把別倉用掉的司機也列成可選。
      */
@@ -546,10 +617,7 @@ public class DispatchService {
             order.setSequence(null);
             order.setAssignedVehicleId(null);
             order.setAssignedDriverId(null);
-            if (order.getStatus() == OrderStatus.SCHEDULED) {
-                order.setStatus(OrderStatus.CONFIRMED);
-            }
-
+            // 訂單本來就停在 CONFIRMED，清掉 route_id 就回到「已確認未排入」，不必改狀態
         }
         ordersDAO.saveAll(boundOrders);
         ordersDAO.flush();
@@ -613,13 +681,33 @@ public class DispatchService {
             response.setLat(store.getLat());
             response.setLng(store.getLng());
         }
-
-
         return response;
     }
 
     private String driverNameOf(Long driverId) {
         Optional<DriversEntity> driver = driversDAO.findById(driverId);
         return driver.map(DriversEntity::getName).orElse("司機" + driverId);
+    }
+
+    /**
+     * 把整批路線按倉庫拆開，各組一包看板資料。
+     *
+     * <p>DispatchResponse 結構上綁單一倉庫（帶 warehouse 當地圖起訖點），
+     * 所以跨倉的發布／撤回只能回傳多包。routes 只用來得知「有哪些倉」，
+     * 內容由 getBoard 自己重撈。</p>
+     */
+    private List<DispatchResponse> boardsOf(LocalDate date, List<RoutesEntity> routes) {
+        // LinkedHashSet 去重，同時保住第一次出現的順序；
+        // 用 HashSet 的話回傳的倉庫順序會不固定
+        Set<Long> warehouseIds = new LinkedHashSet<>();
+        for (RoutesEntity route : routes) {
+            warehouseIds.add(route.getWarehouseId());
+        }
+        List<DispatchResponse> board = new ArrayList<>();
+        for (Long warehouseId : warehouseIds) {
+            board.add(getBoard(date, warehouseId));
+        }
+        return board;
+
     }
 }
