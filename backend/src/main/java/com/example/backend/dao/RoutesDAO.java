@@ -1,5 +1,6 @@
 package com.example.backend.dao;
 
+import com.example.backend.constants.RouteStatus;
 import com.example.backend.entity.RoutesEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -18,5 +19,12 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
      * 所以「誰還能指派」必須看整天而不是只看當前倉。
      */
     List<RoutesEntity> findByDateAndDriverIdIsNotNull(LocalDate date);
+
+    /** 司機端只讀取已正式發布給本人的路線。 */
+    List<RoutesEntity> findByDateAndDriverIdAndStatusOrderByIdAsc(
+            LocalDate date, Long driverId, RouteStatus status);
+
+    boolean existsByDateAndDriverIdAndStatus(
+            LocalDate date, Long driverId, RouteStatus status);
 }
 
