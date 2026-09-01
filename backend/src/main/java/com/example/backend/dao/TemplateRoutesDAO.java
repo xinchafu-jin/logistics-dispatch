@@ -9,7 +9,5 @@ import java.util.List;
 @Repository
 public interface TemplateRoutesDAO extends JpaRepository<TemplateRoutesEntity, Long> {
 
-    List<TemplateRoutesEntity> findByTemplateId(Long templateId);
-
-
+    List<TemplateRoutesEntity> findByTemplateIdOrderByIdAsc(Long templateId);
 }
