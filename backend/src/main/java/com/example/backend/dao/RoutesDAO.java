@@ -15,7 +15,7 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
     /**
      * 當天全部倉庫的路線。
      *
-     * 發布與撤回是一次涵蓋所有倉庫的動作，不像排車是一次一倉，
+     * 發布與撤回是一次涵蓋所有倉庫的動作，不像排車是一次一倉
      * 所以這裡不帶 warehouseId。
      */
     List<RoutesEntity> findByDate(LocalDate date);
