@@ -8,6 +8,8 @@ import com.example.backend.service.DriverScheduleService;
 import com.example.backend.service.GpsPingsService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 司機端使用的出勤、GPS 與班表 API。
@@ -85,6 +88,76 @@ public class DriverPortalController {
         return driverScheduleService.findPublishedForDriver(driverId(jwt), from, to);
     }
 
+    /** 取得登入司機今天已發布的配送任務。 */
+    @GetMapping("/tasks/today")
+    public ResponseEntity<Map<String, Object>> findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
+        driverId(jwt);
+        return pending("GET /api/driver/tasks/today");
+    }
+
+    /** 司機出車前確認路線中每張訂單的實際點交箱數。 */
+    @PostMapping("/handover")
+    public ResponseEntity<Map<String, Object>> handover(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/handover");
+    }
+
+    /** 記錄司機抵達門市的時間。 */
+    @PostMapping("/arrive")
+    public ResponseEntity<Map<String, Object>> arrive(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/arrive");
+    }
+
+    /** 寫入交貨結果、箱數、備註及照片。 */
+    @PostMapping("/deliver")
+    public ResponseEntity<Map<String, Object>> deliver(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/deliver");
+    }
+
+    /** 登記無人簽收並保留現場照片。 */
+    @PostMapping("/no-signature")
+    public ResponseEntity<Map<String, Object>> noSignature(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/no-signature");
+    }
+
+    /** 司機回報配送途中發生的異常。 */
+    @PostMapping("/exception")
+    public ResponseEntity<Map<String, Object>> reportException(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/exception");
+    }
+
+    /** 記錄今日出車時的里程表讀數。 */
+    @PostMapping("/mileage/start")
+    public ResponseEntity<Map<String, Object>> startMileage(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/mileage/start");
+    }
+
+    /** 記錄今日收工時的里程表讀數。 */
+    @PostMapping("/mileage/end")
+    public ResponseEntity<Map<String, Object>> endMileage(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> request) {
+        driverId(jwt);
+        return pending("POST /api/driver/mileage/end");
+    }
+
     /** 從登入 Token 取得資料庫中的司機 ID。 */
     private Long driverId(Jwt jwt) {
         Number userId = jwt.getClaim("userId");
@@ -92,5 +165,13 @@ public class DriverPortalController {
             throw new IllegalArgumentException("JWT 缺少 userId");
         }
         return userId.longValue();
+    }
+
+    private ResponseEntity<Map<String, Object>> pending(String api) {
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
+                "success", false,
+                "message", "Controller 已建立，尚未接上 Service",
+                "api", api
+        ));
     }
 }
