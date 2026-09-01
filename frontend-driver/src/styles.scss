@@ -1,3 +1,5 @@
+@import 'leaflet/dist/leaflet.css';
+
 * {
   box-sizing: border-box;
 }
@@ -9,7 +11,7 @@ body {
   margin: 0;
   color: #182824;
   background: #f5f8f6;
-  font-family: Inter, "Noto Sans TC", "Segoe UI", sans-serif;
+  font-family: Inter, 'Noto Sans TC', 'Segoe UI', sans-serif;
 }
 
 button,

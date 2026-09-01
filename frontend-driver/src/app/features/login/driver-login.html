@@ -1,66 +1,65 @@
-<main class="login-page">
-  <video
-    class="ascii-background"
-    src="https://assets.21st.dev/ascii-recipes/videos/user_2xJxXqdwWohYrdd6fiMYrS9hbmO/2e358adb-cfc9-4ec4-a600-1abc8836f02b.mp4"
-    poster="https://assets.21st.dev/ascii-recipes/thumbnails/user_2xJxXqdwWohYrdd6fiMYrS9hbmO/eae3b158-33e1-442d-8e17-3b4fb6656a7f.webp"
-    autoplay
-    loop
-    muted
-    playsinline
-    aria-hidden="true"
-  ></video>
-
-  <section class="identity-panel" aria-label="司機工作台資訊">
-    <app-brand-logo></app-brand-logo>
-    <h1>司機工作台</h1>
-
-    <div class="availability-note">
-      <strong>服務狀態</strong>
-      <span>帳號驗證已啟用</span>
+<main class="login-page" [class.is-dark-theme]="isDarkTheme()">
+  <header class="topbar">
+    <div class="brand">
+      <app-brand-logo></app-brand-logo>
+      <strong>司機工作台</strong>
     </div>
-  </section>
+    <button
+      type="button"
+      class="theme-toggle"
+      (click)="toggleTheme()"
+      [title]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
+      [attr.aria-label]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
+    >
+      @if (isDarkTheme()) {
+        <svg lucideSun aria-hidden="true"></svg>
+      } @else {
+        <svg lucideMoon aria-hidden="true"></svg>
+      }
+    </button>
+  </header>
 
-  <section class="login-panel" aria-labelledby="login-title">
-    <div class="login-content">
+  <section class="login-shell" aria-labelledby="login-title">
+    <div class="login-copy">
       <p class="eyebrow">司機登入</p>
-      <h2 id="login-title">開始今天的工作</h2>
-      <p class="supporting-copy">請使用主管建立的司機帳號登入。</p>
-
-      <form (submit)="submit($event)" novalidate>
-        <label for="account">帳號</label>
-        <input
-          #accountInput
-          id="account"
-          type="text"
-          autocomplete="username"
-          placeholder="輸入司機帳號"
-          [value]="account()"
-          [disabled]="isSubmitting()"
-          (input)="account.set(accountInput.value)"
-        />
-
-        <label for="password">密碼</label>
-        <input
-          #passwordInput
-          id="password"
-          type="password"
-          autocomplete="current-password"
-          placeholder="輸入密碼"
-          [value]="password()"
-          [disabled]="isSubmitting()"
-          (input)="password.set(passwordInput.value)"
-        />
-
-        <button type="submit" [disabled]="isSubmitting()">
-          {{ isSubmitting() ? '登入驗證中...' : '登入工作台' }}
-        </button>
-
-        @if (errorMessage()) {
-          <p class="error-message" role="alert">{{ errorMessage() }}</p>
-        }
-      </form>
-
-      <p class="help-text">帳號無法登入時，請聯絡物流後台管理員確認帳號狀態。</p>
+      <h1 id="login-title">開始今天的工作</h1>
+      <p>登入後可查看今日出勤狀態與已發布班表。</p>
     </div>
+
+    <form (submit)="submit($event)" novalidate>
+      <label for="account">帳號</label>
+      <input
+        #accountInput
+        id="account"
+        type="text"
+        autocomplete="username"
+        placeholder="輸入司機帳號"
+        [value]="account()"
+        [disabled]="isSubmitting()"
+        (input)="account.set(accountInput.value)"
+      />
+
+      <label for="password">密碼</label>
+      <input
+        #passwordInput
+        id="password"
+        type="password"
+        autocomplete="current-password"
+        placeholder="輸入密碼"
+        [value]="password()"
+        [disabled]="isSubmitting()"
+        (input)="password.set(passwordInput.value)"
+      />
+
+      <button type="submit" [disabled]="isSubmitting()">
+        {{ isSubmitting() ? (isLocating() ? '正在定位...' : '登入驗證中...') : '登入工作台' }}
+      </button>
+
+      @if (errorMessage()) {
+        <p class="error-message" role="alert">{{ errorMessage() }}</p>
+      }
+    </form>
+
+    <p class="help-text">帳號無法登入時，請聯絡物流後台管理員確認帳號狀態。</p>
   </section>
 </main>

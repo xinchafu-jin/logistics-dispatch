@@ -6,6 +6,7 @@ import {
   DriverUser,
   LoginResponse,
 } from './driver-auth.models';
+import { DriverGpsTrackingService } from '../services/driver-gps-tracking.service';
 
 const ACCESS_TOKEN_STORAGE_KEY = 'logistics-dispatch.driver-access-token';
 
@@ -14,6 +15,7 @@ export class DriverAuthService {
   readonly user = signal<DriverUser | null>(null);
 
   private readonly http = inject(HttpClient);
+  private readonly gpsTracking = inject(DriverGpsTrackingService);
   private readonly accessTokenState = signal<string | null>(null);
 
   readonly accessToken = this.accessTokenState.asReadonly();
@@ -57,6 +59,7 @@ export class DriverAuthService {
   }
 
   logout(): void {
+    this.gpsTracking.stop();
     this.accessTokenState.set(null);
     this.user.set(null);
 
