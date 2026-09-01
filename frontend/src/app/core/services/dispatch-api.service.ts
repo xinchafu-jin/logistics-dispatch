@@ -131,7 +131,7 @@ export class DispatchApiService {
 
   /**
    * 執行排車。注意這不是唯讀操作：後端會清掉當天既有的草稿路線、
-   * 寫入新的 routes，並把排進去的訂單狀態改成 SCHEDULED。
+   * 寫入新的 routes，並把排進去的訂單填上 route_id（狀態仍維持 CONFIRMED，靠 route_id 區分排了沒）。
    *
    * 參數走 query string 而不是 request body，所以 post() 的第二個引數是 null。
    *

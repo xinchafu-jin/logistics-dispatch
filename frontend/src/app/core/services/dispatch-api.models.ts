@@ -4,9 +4,6 @@ export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
 export type OrderStatus =
   | 'PENDING_CONFIRM'
   | 'CONFIRMED'
-  | 'SCHEDULED'
-  | 'MODIFY'
-  | 'PUBLISHED'
   | 'IN_DELIVERY'
   | 'COMPLETED'
   | 'CANCELLED'

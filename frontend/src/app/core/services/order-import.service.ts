@@ -59,12 +59,8 @@ const DEFAULT_STATUS: OrderStatus = 'PENDING_CONFIRM';
 const STATUS_ALIASES: Readonly<Record<string, OrderStatus>> = {
   待總部確認: 'PENDING_CONFIRM',
   待確認: 'PENDING_CONFIRM',
-  資料待補: 'MODIFY',
   待排車: 'CONFIRMED',
   已確認: 'CONFIRMED',
-  已排車: 'SCHEDULED',
-  已發佈: 'PUBLISHED',
-  已發布: 'PUBLISHED',
   配送中: 'IN_DELIVERY',
   已完成: 'COMPLETED',
   已取消: 'CANCELLED',

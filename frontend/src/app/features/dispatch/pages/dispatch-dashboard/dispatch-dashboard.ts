@@ -139,9 +139,7 @@ export class DispatchDashboard implements OnInit {
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
-    const waitingSchedule = orders.filter((order) =>
-      ['CONFIRMED', 'SCHEDULED', 'PUBLISHED'].includes(order.status),
-    ).length;
+    const waitingSchedule = orders.filter((order) => order.status === 'CONFIRMED').length;
     const delivering = orders.filter((order) => order.status === 'IN_DELIVERY').length;
 
     return [
@@ -156,9 +154,7 @@ export class DispatchDashboard implements OnInit {
   readonly summaryCards = computed<SummaryCard[]>(() => {
     const orders = this.orders();
     const pendingConfirm = orders.filter((order) => order.status === 'PENDING_CONFIRM').length;
-    const waitingSchedule = orders.filter((order) =>
-      ['CONFIRMED', 'SCHEDULED', 'PUBLISHED'].includes(order.status),
-    ).length;
+    const waitingSchedule = orders.filter((order) => order.status === 'CONFIRMED').length;
     const delivering = orders.filter((order) => order.status === 'IN_DELIVERY').length;
 
     return [
@@ -171,7 +167,7 @@ export class DispatchDashboard implements OnInit {
       {
         label: '待排車',
         value: String(waitingSchedule),
-        detail: '來自 CONFIRMED / SCHEDULED / PUBLISHED',
+        detail: '來自後端 CONFIRMED',
         tone: 'default',
       },
       {
@@ -314,9 +310,6 @@ export class DispatchDashboard implements OnInit {
     const labels: Record<OrderStatus, string> = {
       PENDING_CONFIRM: '待總部確認',
       CONFIRMED: '待排車',
-      SCHEDULED: '待排車',
-      MODIFY: '資料待補',
-      PUBLISHED: '已發布',
       IN_DELIVERY: '配送中',
       COMPLETED: '已完成',
       CANCELLED: '已取消',
