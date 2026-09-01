@@ -11,6 +11,10 @@ public class VehiclesDTO {
 
     private Long id;
 
+    @NotNull(message = VEHICLE_WAREHOUSE_ID_REQUIRED)
+    @Min(value = 1, message = VEHICLE_WAREHOUSE_ID_MIN)
+    private Long warehouseId;
+
     @NotBlank(message = VEHICLE_PLATE_REQUIRED)
     @Size(max = 20, message = VEHICLE_PLATE_MAX_LENGTH)
     private String plateNumber;
@@ -27,8 +31,6 @@ public class VehiclesDTO {
 
     @NotNull(message = VEHICLE_STATUS_REQUIRED)
     private VehicleStatus status;
-    @NotNull(message = VEHICLE_WAREHOUSE_ID_REQUIRED)
-    private Long warehouseId ;
 
     // ===== Getter & Setter =====
 

@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -52,6 +53,34 @@ public class OrderController {
     @PostMapping("/batch")
     public ResponseEntity<List<OrdersDTO>> createAll(@Valid @RequestBody OrdersBatchDto request){
         return ResponseEntity.status(HttpStatus.CREATED).body(ordersService.createAll(request.getOrders()));
+    }
+
+    /** 驗證匯入資料，但不寫入資料庫。 */
+    @PostMapping("/import/validate")
+    public ResponseEntity<Map<String, Object>> validateImport(@RequestBody Map<String, Object> request) {
+        return pending("POST /api/orders/import/validate");
+    }
+
+    /** 將驗證通過的匯入資料正式寫入。 */
+    @PostMapping("/import/confirm")
+    public ResponseEntity<Map<String, Object>> confirmImport(@RequestBody Map<String, Object> request) {
+        return pending("POST /api/orders/import/confirm");
+    }
+
+    /** 執行確認、修改、退回或取消等訂單審核動作。 */
+    @PatchMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> review(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> request) {
+        return pending("PATCH /api/orders/" + id);
+    }
+
+    private ResponseEntity<Map<String, Object>> pending(String api) {
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
+                "success", false,
+                "message", "Controller 已建立，尚未接上 Service",
+                "api", api
+        ));
     }
 
 }

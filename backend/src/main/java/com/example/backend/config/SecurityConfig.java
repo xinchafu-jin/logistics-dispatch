@@ -53,6 +53,10 @@ public class SecurityConfig {
                                 "/api/auth/driver/forgot-password/reset"
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/driver/**")
+                        .hasRole(AuthService.ROLE_DRIVER)
+                        .requestMatchers("/api/driver-schedules/**", "/api/fleet/**")
+                        .hasRole(AuthService.ROLE_ADMIN)
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
                                 "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**","/api/fuel-prices/**")
                         .hasRole(AuthService.ROLE_ADMIN)
@@ -105,7 +109,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:4200", "http://127.0.0.1:4200"));
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:4200",
+                "http://127.0.0.1:4200",
+                "http://localhost:4001",
+                "http://127.0.0.1:4001",
+                "http://localhost:4204",
+                "http://127.0.0.1:4204"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 
