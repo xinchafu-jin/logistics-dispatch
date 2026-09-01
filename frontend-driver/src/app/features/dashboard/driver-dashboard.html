@@ -1,14 +1,42 @@
-<main class="dashboard-page" [class.is-dark-theme]="isDarkTheme()">
-  <header class="topbar">
+<main class="driver-app" [class.is-dark-theme]="isDarkTheme()">
+  <section class="map-surface" [class.is-hidden]="activeTab() !== 'map'" aria-label="司機地圖">
+    <div #driverMap class="driver-map"></div>
+  </section>
+
+  <header class="app-topbar">
     <div class="brand">
       <app-brand-logo></app-brand-logo>
-      <span class="separator" aria-hidden="true">/</span>
       <strong>司機工作台</strong>
     </div>
     <div class="topbar-actions">
+      <span class="icon-button weather-indicator" role="img" [title]="weatherLabel()" [attr.aria-label]="weatherLabel()">
+        @switch (weather()?.icon) {
+          @case ('晴') {
+            <svg lucideSun aria-hidden="true"></svg>
+          }
+          @case ('雨') {
+            <svg lucideCloudRain aria-hidden="true"></svg>
+          }
+          @case ('霧') {
+            <svg lucideCloudFog aria-hidden="true"></svg>
+          }
+          @case ('雪') {
+            <svg lucideCloudSnow aria-hidden="true"></svg>
+          }
+          @case ('雷') {
+            <svg lucideCloudLightning aria-hidden="true"></svg>
+          }
+          @default {
+            <svg lucideCloudSun aria-hidden="true"></svg>
+          }
+        }
+        @if (weather(); as currentWeather) {
+          <small>{{ currentWeather.temperature }}°</small>
+        }
+      </span>
       <button
         type="button"
-        class="theme-toggle"
+        class="icon-button"
         (click)="toggleTheme()"
         [title]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
         [attr.aria-label]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
@@ -19,81 +47,198 @@
           <svg lucideMoon aria-hidden="true"></svg>
         }
       </button>
-      <button type="button" class="sign-out" (click)="signOut()">登出</button>
     </div>
   </header>
 
-  <section class="page-heading" aria-labelledby="dashboard-title">
-    <p class="eyebrow">已通過帳號驗證</p>
-    <h1 id="dashboard-title">你好，{{ user()?.name }}</h1>
-    <p>你的司機帳號已安全登入。工作任務會在後端介面開放後顯示於此。</p>
-  </section>
+  @if (activeTab() === 'map') {
+    <section class="map-content" aria-label="配送地圖">
 
-  <section class="weather-card" aria-label="台南即時天氣">
-    <div class="weather-symbol" aria-hidden="true">
-      {{ weather()?.icon ?? (weatherUnavailable() ? '!' : '...') }}
-    </div>
+      <button
+        type="button"
+        class="locate-control"
+        (click)="locateOnMap()"
+        title="取得目前位置"
+        aria-label="取得目前位置"
+      >
+        <svg lucideLocateFixed aria-hidden="true"></svg>
+      </button>
 
-    <div class="weather-copy">
-      <span class="label">台南 · 即時配送天氣</span>
-      @if (weather(); as currentWeather) {
-        <strong>{{ currentWeather.condition }} {{ currentWeather.temperature }}°</strong>
-        <span>資料時間 {{ currentWeather.updatedAt }}</span>
-      } @else if (weatherUnavailable()) {
-        <strong>目前無法取得天氣資料</strong>
-        <span>請確認網路後重新整理頁面。</span>
+      <section class="attendance-sheet" aria-labelledby="attendance-title">
+        <div class="sheet-heading">
+          <div>
+            <p class="eyebrow">出勤狀態</p>
+            <h2 id="attendance-title">{{ statusLabel() }}</h2>
+          </div>
+          @if (attendance()?.gpsAllowed) {
+            <span class="gps-status is-active"
+              ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
+            >
+          } @else {
+            <span class="gps-status">GPS 已停止</span>
+          }
+        </div>
+
+        <div class="route-summary" aria-label="配送路線狀態">
+          <div class="route-stop">
+            <span class="route-marker is-current" aria-hidden="true">A</span>
+            <span>
+              <strong>目前位置</strong>
+              <small>{{ mapLocationStatus() }}</small>
+            </span>
+          </div>
+          <span class="route-connector" aria-hidden="true"></span>
+          <div class="route-stop is-pending">
+            <span class="route-marker" aria-hidden="true">B</span>
+            <span>
+              <strong>下一送達點</strong>
+              <small>等待派送任務</small>
+            </span>
+          </div>
+        </div>
+
+        @if (attendanceViewState() === 'loading') {
+          <p class="sheet-copy">正在取得今日出勤狀態...</p>
+        } @else if (attendanceViewState() === 'error') {
+          <p class="sheet-copy">今日出勤資料暫時無法取得。</p>
+          <button type="button" class="outline-action" (click)="refreshAttendance()">
+            重新取得狀態
+          </button>
+        } @else if (attendanceViewState() === 'not-clocked-in') {
+          <p class="sheet-copy">尚未完成今日上班打卡。</p>
+          <button
+            type="button"
+            class="primary-action"
+            (click)="clockIn()"
+            [disabled]="isSubmitting()"
+          >
+            <svg lucidePlay aria-hidden="true"></svg>
+            {{ isSubmitting() ? '處理中...' : '上班打卡' }}
+          </button>
+        } @else if (attendance(); as todayAttendance) {
+          <div class="attendance-meta">
+            <span>上班 {{ formatTime(todayAttendance.clockInAt) }}</span>
+            <span>下班 {{ formatTime(todayAttendance.clockOutAt) }}</span>
+            <span>{{ gpsTracking.lastUploadedAt() ? '定位已回報' : '等待定位' }}</span>
+          </div>
+
+          @if (todayAttendance.status === 'WORKING') {
+            <div class="attendance-actions">
+              <button
+                type="button"
+                class="outline-action"
+                (click)="startBreak()"
+                [disabled]="isSubmitting() || todayAttendance.breakUsed"
+              >
+                <svg lucideCoffee aria-hidden="true"></svg>
+                {{ todayAttendance.breakUsed ? '今日休息已使用' : '休息' }}
+              </button>
+              <button
+                type="button"
+                class="danger-action"
+                (click)="clockOut()"
+                [disabled]="isSubmitting()"
+              >
+                <svg lucideCircleStop aria-hidden="true"></svg>
+                下班
+              </button>
+            </div>
+          } @else if (todayAttendance.status === 'ON_BREAK') {
+            <div class="break-status">
+              <span>休息倒數</span>
+              <strong>{{ formatBreakCountdown() }}</strong>
+            </div>
+          } @else {
+            <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
+          }
+        }
+      </section>
+    </section>
+  } @else {
+    <section class="content-panel">
+      @if (activeTab() === 'tasks') {
+        <div class="panel-heading">
+          <p class="eyebrow">任務</p>
+          <h1>今日任務</h1>
+        </div>
+        <div class="empty-state">
+          <svg lucideListTodo aria-hidden="true"></svg>
+          <h2>尚無可顯示任務</h2>
+          <p>後端尚未提供司機任務清單，因此這裡不會顯示假資料。</p>
+        </div>
+      } @else if (activeTab() === 'schedule') {
+        <div class="panel-heading">
+          <p class="eyebrow">班表</p>
+          <h1>本月班表</h1>
+        </div>
+        @if (publishedShifts().length) {
+          <div class="shift-list">
+            @for (shift of publishedShifts(); track shift.id) {
+              <article class="shift-row">
+                <strong>{{ shift.workDate }}</strong>
+                <span>{{ formatShiftType(shift.shiftType) }}</span>
+                <span>{{
+                  shift.shiftType === 'WORK'
+                    ? formatTime(shift.workStart) + ' - ' + formatTime(shift.workEnd)
+                    : ''
+                }}</span>
+              </article>
+            }
+          </div>
+        } @else {
+          <div class="empty-state">
+            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <h2>尚未有已發布班表</h2>
+            <p>主管發布班表後，司機端會在這裡顯示。</p>
+          </div>
+        }
       } @else {
-        <strong>正在取得天氣資料</strong>
-        <span>資料來源：Open-Meteo</span>
+        <div class="panel-heading">
+          <p class="eyebrow">個人資料</p>
+          <h1>我的帳號</h1>
+        </div>
+        <dl class="profile-list">
+          <div>
+            <dt>姓名</dt>
+            <dd>{{ user()?.name }}</dd>
+          </div>
+          <div>
+            <dt>帳號</dt>
+            <dd>{{ user()?.account }}</dd>
+          </div>
+        </dl>
+        <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
-    </div>
-  </section>
+    </section>
+  }
 
-  <section class="account-card" aria-label="登入帳號資訊">
-    <div>
-      <span class="label">司機姓名</span>
-      <strong>{{ user()?.name }}</strong>
-    </div>
-    <div>
-      <span class="label">帳號</span>
-      <strong>{{ user()?.account }}</strong>
-    </div>
-    <div>
-      <span class="label">帳號狀態</span>
-      <strong class="active-status">已驗證</strong>
-    </div>
-  </section>
-
-  <section class="pending-section" aria-labelledby="pending-title">
-    <div class="section-heading">
-      <div>
-        <p class="eyebrow">工作功能</p>
-        <h2 id="pending-title">等待後端資料介面</h2>
-      </div>
-      <p>以下項目目前沒有可串接的後端 API，因此不提供無效按鈕。</p>
-    </div>
-
-    <div class="pending-grid">
-      <article>
-        <span class="status-label">尚未開放</span>
-        <h3>今日配送任務</h3>
-        <p>需要取得司機本人任務的 API。</p>
-      </article>
-      <article>
-        <span class="status-label">尚未開放</span>
-        <h3>導航與路線</h3>
-        <p>需要配送站點與路線資料的 API。</p>
-      </article>
-      <article>
-        <span class="status-label">尚未開放</span>
-        <h3>即時定位回報</h3>
-        <p>需要司機 GPS 上傳與讀取 API。</p>
-      </article>
-      <article>
-        <span class="status-label">尚未開放</span>
-        <h3>配送完成回報</h3>
-        <p>需要更新任務配送狀態的 API。</p>
-      </article>
-    </div>
-  </section>
+  <nav class="bottom-navigation" aria-label="司機工作台導覽">
+    <button type="button" [class.is-active]="activeTab() === 'map'" (click)="setActiveTab('map')">
+      <svg lucideMap aria-hidden="true"></svg>
+      <span>地圖</span>
+    </button>
+    <button
+      type="button"
+      [class.is-active]="activeTab() === 'tasks'"
+      (click)="setActiveTab('tasks')"
+    >
+      <svg lucideListTodo aria-hidden="true"></svg>
+      <span>任務</span>
+    </button>
+    <button
+      type="button"
+      [class.is-active]="activeTab() === 'profile'"
+      (click)="setActiveTab('profile')"
+    >
+      <svg lucideUserRound aria-hidden="true"></svg>
+      <span>個資</span>
+    </button>
+    <button
+      type="button"
+      [class.is-active]="activeTab() === 'schedule'"
+      (click)="setActiveTab('schedule')"
+    >
+      <svg lucideCalendarDays aria-hidden="true"></svg>
+      <span>班表</span>
+    </button>
+  </nav>
 </main>
