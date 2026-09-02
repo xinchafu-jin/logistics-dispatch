@@ -182,9 +182,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.saveMapLocation(location);
         this.mapLocationStatus.set('已定位至目前位置');
       },
-      () => {
+      (error) => {
         if (isManualRequest || !this.hasStoredMapLocation()) {
-          this.mapLocationStatus.set('無法取得定位，請確認瀏覽器定位權限');
+          this.mapLocationStatus.set(this.getLocationErrorMessage(error));
         }
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
@@ -387,6 +387,22 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private saveMapLocation(location: L.LatLng): void {
     saveStoredMapLocation({ lat: location.lat, lng: location.lng });
+  }
+
+  private getLocationErrorMessage(error: GeolocationPositionError): string {
+    if (error.code === error.PERMISSION_DENIED) {
+      return '定位權限被拒絕，請允許瀏覽器存取位置';
+    }
+
+    if (error.code === error.POSITION_UNAVAILABLE) {
+      return '裝置暫時無法取得定位訊號';
+    }
+
+    if (error.code === error.TIMEOUT) {
+      return '定位逾時，請確認網路與定位服務後再試';
+    }
+
+    return '目前無法取得定位';
   }
 
   private isNotClockedInError(error: unknown): boolean {
