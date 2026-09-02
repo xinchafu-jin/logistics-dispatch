@@ -137,7 +137,7 @@ GET   /api/orders?date=2026-09-21&status=PENDING_CONFIRM
 PATCH /api/orders/{id}
 ```
 
-PATCH Request（`action` 可為 `CONFIRM` / `MODIFY` / `REJECT` / `CANCEL`）：
+PATCH Request（`action` 可為 `CONFIRM` / `CANCEL`）：
 ```json
 {
   "action": "CONFIRM",
@@ -145,6 +145,8 @@ PATCH Request（`action` 可為 `CONFIRM` / `MODIFY` / `REJECT` / `CANCEL`）：
   "reason": ""
 }
 ```
+
+不做商店端，訂單全由後台建立／匯入，審核只是資料品質關卡，不需要「退回補件（MODIFY）」這種等外部補件的中間狀態；發現問題就直接修欄位或取消（CANCEL）。
 
 ## 排車
 

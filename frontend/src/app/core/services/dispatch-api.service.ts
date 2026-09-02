@@ -1,10 +1,11 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import {HttpClient, HttpParams} from '@angular/common/http';
+import {Injectable, inject} from '@angular/core';
+import {Observable} from 'rxjs';
 import {
   DispatchResultDto,
   DriverDto,
   DriverStatusPayload,
+  GpsPingDto,
   OrderDto,
   ReassignRequest,
   StoreDto,
@@ -150,7 +151,7 @@ export class DispatchApiService {
       params = params.set('vehicleIds', vehicleIds.join(','));
     }
 
-    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize`, null, { params });
+    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize`, null, {params});
   }
 
   /**
@@ -171,7 +172,7 @@ export class DispatchApiService {
   getDispatchBoard(date: string, warehouseId: number): Observable<DispatchResultDto> {
     const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
 
-    return this.http.get<DispatchResultDto>(`${API_ROOT}/dispatch/board`, { params });
+    return this.http.get<DispatchResultDto>(`${API_ROOT}/dispatch/board`, {params});
   }
 
   /**
@@ -184,7 +185,7 @@ export class DispatchApiService {
   publishDispatch(date: string): Observable<DispatchResultDto[]> {
     const params = new HttpParams().set('date', date);
 
-    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, { params });
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, {params});
   }
 
   /**
@@ -196,7 +197,7 @@ export class DispatchApiService {
   withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
     const params = new HttpParams().set('date', date);
 
-    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, { params });
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, {params});
   }
 
   // ── 常配編組 ──────────────────────────────────────────
@@ -231,7 +232,16 @@ export class DispatchApiService {
     return this.http.post<DispatchResultDto[]>(
       `${API_ROOT}/dispatch/templates/${templateId}/apply`,
       null,
-      { params },
+      {params},
     );
+  }
+
+  /**
+   * 目前工作中、且 GPS 未超過後端新鮮度門檻（預設 10 分鐘）的司機位置。
+   * 沒有 date 參數 —— api-contract.md 上寫的那個是舊文件，controller 沒有這個查詢條件，
+   * 永遠只回「現在」這一刻的位置。
+   */
+  getLiveFleet(): Observable<GpsPingDto[]> {
+    return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/live`);
   }
 }

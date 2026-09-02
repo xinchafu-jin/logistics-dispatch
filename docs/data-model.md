@@ -58,6 +58,15 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 | maxOvertimeMinutes | Integer | 加班上限 |
 | isActive | Boolean | 在職狀態 |
 
+**司機不綁倉庫**，沒有 `warehouseId` 欄位——這是刻意的，不是漏掉。車輛屬於倉庫（`Vehicle.warehouseId`，排車時會驗「車輛不跨倉」），司機則是公司級的共用資源，由調度員按天指派到任何一倉的路線。
+
+理由是人車比例：司機少於車輛，綁死在單一倉會讓該倉的車出不滿。
+
+代價是「一位司機一天只開一條路線」（`uk_routes_date_driver`）變成**跨倉的約束**，而調度看板是按倉切的。因此凡是要列出可指派司機的地方，都必須額外查當天其他倉的佔用狀況，不能只看當前倉的路線：
+
+- `GET /api/dispatch/board` 回應帶 `driversTakenElsewhere`，讓前端把別倉已用的司機標成不可選
+- `POST /api/dispatch/reassign` 驗證時要查當天全部路線，不能只檢查同一個請求內部
+
 ## 訂單 Order
 
 | 欄位 | 型別 | 說明 |

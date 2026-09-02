@@ -18,6 +18,7 @@ export const routes: Routes = [
     children: [
       {
         path: 'dashboard',
+        data: { title: '今日配送總覽' },
         loadComponent: () =>
           import('./features/dispatch/pages/dispatch-dashboard/dispatch-dashboard').then(
             (component) => component.DispatchDashboard,
@@ -25,6 +26,7 @@ export const routes: Routes = [
       },
       {
         path: 'orders',
+        data: { title: '訂單審核' },
         loadComponent: () =>
           import('./features/dispatch/pages/order-review/order-review').then(
             (component) => component.OrderReview,
@@ -32,6 +34,7 @@ export const routes: Routes = [
       },
       {
         path: 'resources',
+        data: { title: '人車資源' },
         loadComponent: () =>
           import('./features/dispatch/pages/resource-overview/resource-overview').then(
             (component) => component.ResourceOverview,
@@ -39,6 +42,7 @@ export const routes: Routes = [
       },
       {
         path: 'fleet',
+        data: { title: '即時車隊' },
         loadComponent: () =>
           import('./features/dispatch/pages/fleet-monitor/fleet-monitor').then(
             (component) => component.FleetMonitor,
@@ -46,6 +50,7 @@ export const routes: Routes = [
       },
       {
         path: 'anomalies',
+        data: { title: '異常中心' },
         loadComponent: () =>
           import('./features/dispatch/pages/anomaly-center/anomaly-center').then(
             (component) => component.AnomalyCenter,
@@ -53,6 +58,7 @@ export const routes: Routes = [
       },
       {
         path: 'reports',
+        data: { title: '營運報表' },
         loadComponent: () =>
           import('./features/dispatch/pages/operation-report/operation-report').then(
             (component) => component.OperationReport,
