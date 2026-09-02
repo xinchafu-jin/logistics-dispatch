@@ -87,14 +87,28 @@
             </span>
           </div>
           <span class="route-connector" aria-hidden="true"></span>
-          <div class="route-stop is-pending">
+          <div class="route-stop" [class.is-pending]="!selectedTask()">
             <span class="route-marker" aria-hidden="true">B</span>
             <span>
               <strong>下一送達點</strong>
-              <small>等待派送任務</small>
+              <small>{{ destinationName() }}</small>
             </span>
           </div>
         </div>
+
+        @if (navigationUrl(); as navigationUrl) {
+          <a
+            class="navigation-action"
+            [href]="navigationUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg lucideNavigation aria-hidden="true"></svg>
+            開始導航
+          </a>
+        } @else {
+          <p class="destination-copy">{{ destinationDetail() }}</p>
+        }
 
         @if (attendanceViewState() === 'loading') {
           <p class="sheet-copy">正在取得今日出勤狀態...</p>
@@ -160,41 +174,204 @@
           <p class="eyebrow">任務</p>
           <h1>今日任務</h1>
         </div>
-        <div class="empty-state">
-          <svg lucideListTodo aria-hidden="true"></svg>
-          <h2>尚無可顯示任務</h2>
-          <p>後端尚未提供司機任務清單，因此這裡不會顯示假資料。</p>
-        </div>
+        @if (taskActionMessage()) {
+          <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
+        }
+        @if (taskActionError()) {
+          <p class="task-feedback is-error">{{ taskActionError() }}</p>
+        }
+        @if (taskViewState() === 'loading') {
+          <div class="empty-state">
+            <svg lucideListTodo aria-hidden="true"></svg>
+            <h2>正在取得今日任務</h2>
+          </div>
+        } @else if (taskViewState() === 'error') {
+          <div class="empty-state">
+            <svg lucideListTodo aria-hidden="true"></svg>
+            <h2>任務暫時無法取得</h2>
+            <p>{{ taskError() }}</p>
+          </div>
+        } @else if (taskViewState() === 'empty') {
+          <div class="empty-state">
+            <svg lucideListTodo aria-hidden="true"></svg>
+            <h2>今天沒有已發布任務</h2>
+            <p>主管發布路線後，任務與導航目的地會顯示在這裡。</p>
+          </div>
+        } @else if (todayTasks(); as tasks) {
+          <div class="task-route-list">
+            @for (route of tasks.routes; track route.routeId) {
+              <article class="task-route-card">
+                <header class="task-route-heading">
+                  <div>
+                    <p>路線 {{ route.routeId }}</p>
+                    <h2>{{ route.warehouse.name }}</h2>
+                  </div>
+                  <span>{{ route.vehicle.plateNumber }}</span>
+                </header>
+                <p class="task-route-meta">
+                  {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
+                </p>
+                <ol class="task-stop-list">
+                  @for (stop of route.stops; track stop.orderId) {
+                    <li class="task-stop" [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)">
+                      <span class="stop-sequence">{{ stop.sequence }}</span>
+                      <div class="task-stop-copy">
+                        <strong>{{ stop.storeName }}</strong>
+                        <small>{{ stop.address }}</small>
+                        <span>
+                          {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
+                            · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
+                          }
+                        </span>
+                        <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                          {{ taskStatusLabel(stop.orderStatus) }}
+                        </em>
+                      </div>
+                      <div class="task-stop-actions">
+                        <button
+                          type="button"
+                          class="task-navigation-button"
+                          (click)="selectTaskForNavigation(route, stop)"
+                          [disabled]="!canNavigate(stop)"
+                          [title]="canNavigate(stop) ? '在地圖顯示並開始導航' : '後端尚未提供這個站點的座標'"
+                        >
+                          <svg lucideNavigation aria-hidden="true"></svg>
+                          <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
+                        </button>
+                        @if (canMarkArrived(stop)) {
+                          <button
+                            type="button"
+                            class="task-arrive-button"
+                            (click)="arriveAtStop(stop)"
+                            [disabled]="isTaskSubmitting()"
+                          >
+                            <svg lucideMapPin aria-hidden="true"></svg>
+                            <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
+                          </button>
+                        } @else if (canCompleteDelivery(stop)) {
+                          <button
+                            type="button"
+                            class="task-delivery-button"
+                            (click)="openDeliveryAction(stop)"
+                            [disabled]="isTaskSubmitting()"
+                          >
+                            <svg lucidePackageCheck aria-hidden="true"></svg>
+                            <span>交貨</span>
+                          </button>
+                        }
+                      </div>
+                      @if (isDeliveryActionOpen(stop)) {
+                        <section class="delivery-action-panel" aria-label="交貨處理">
+                          <p>預計 {{ stop.expectedBoxCount }} 箱。交貨與無人簽收皆須使用已上傳完成的照片憑證。</p>
+                          <label>
+                            <span>照片憑證網址</span>
+                            <input
+                              type="url"
+                              inputmode="url"
+                              placeholder="貼上照片上傳服務回傳的網址"
+                              [value]="deliveryPhotoUrl()"
+                              (input)="updateDeliveryPhoto($event)"
+                            />
+                          </label>
+                          <label>
+                            <span>備註（選填）</span>
+                            <textarea
+                              rows="2"
+                              maxlength="500"
+                              placeholder="例如收貨人、現場狀況"
+                              [value]="deliveryNotes()"
+                              (input)="updateDeliveryNotes($event)"
+                            ></textarea>
+                          </label>
+                          <div class="delivery-action-buttons">
+                            <button
+                              type="button"
+                              class="delivery-complete-button"
+                              (click)="completeDelivery(stop)"
+                              [disabled]="isTaskSubmitting()"
+                            >
+                              <svg lucideCircleCheck aria-hidden="true"></svg>
+                              {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
+                            </button>
+                            <button
+                              type="button"
+                              class="delivery-exception-button"
+                              (click)="reportNoSignature(stop)"
+                              [disabled]="isTaskSubmitting()"
+                            >
+                              <svg lucideTriangleAlert aria-hidden="true"></svg>
+                              無人簽收
+                            </button>
+                            <button type="button" class="delivery-cancel-button" (click)="closeDeliveryAction()">
+                              取消
+                            </button>
+                          </div>
+                          <small>後端會在抵達滿 10 分鐘後才接受無人簽收。</small>
+                        </section>
+                      }
+                    </li>
+                  }
+                </ol>
+              </article>
+            }
+          </div>
+        }
       } @else if (activeTab() === 'schedule') {
         <div class="panel-heading">
           <p class="eyebrow">班表</p>
           <h1>本月班表</h1>
         </div>
-        @if (publishedShifts().length) {
+        <div class="month-selector" aria-label="選擇班表月份">
+          <button type="button" (click)="changeScheduleMonth(-1)" title="上個月" aria-label="上個月">
+            <svg lucideChevronLeft aria-hidden="true"></svg>
+          </button>
+          <strong>{{ scheduleMonthLabel() }}</strong>
+          <button type="button" (click)="changeScheduleMonth(1)" title="下個月" aria-label="下個月">
+            <svg lucideChevronRight aria-hidden="true"></svg>
+          </button>
+        </div>
+        @if (scheduleViewState() === 'loading') {
+          <div class="empty-state">
+            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <h2>正在取得已發布班表</h2>
+          </div>
+        } @else if (scheduleViewState() === 'error') {
+          <div class="empty-state">
+            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <h2>班表暫時無法取得</h2>
+            <p>{{ scheduleError() }}</p>
+          </div>
+        } @else if (scheduleViewState() === 'ready') {
           <div class="shift-list">
             @for (shift of publishedShifts(); track shift.id) {
               <article class="shift-row">
-                <strong>{{ shift.workDate }}</strong>
-                <span>{{ formatShiftType(shift.shiftType) }}</span>
-                <span>{{
-                  shift.shiftType === 'WORK'
-                    ? formatTime(shift.workStart) + ' - ' + formatTime(shift.workEnd)
-                    : ''
-                }}</span>
+                <strong>{{ formatShiftDate(shift.workDate) }}</strong>
+                <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{ formatShiftType(shift.shiftType) }}</span>
+                <div class="shift-details">
+                  @if (shift.shiftType === 'WORK') {
+                    <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
+                  }
+                  @if (formatOvertime(shift.overtimeMinutes); as overtime) {
+                    <span>{{ overtime }}</span>
+                  }
+                  @if (shift.changeReason) {
+                    <small>{{ shift.changeReason }}</small>
+                  }
+                </div>
               </article>
             }
           </div>
         } @else {
           <div class="empty-state">
             <svg lucideCalendarDays aria-hidden="true"></svg>
-            <h2>尚未有已發布班表</h2>
+            <h2>這個月沒有已發布班表</h2>
             <p>主管發布班表後，司機端會在這裡顯示。</p>
           </div>
         }
       } @else {
         <div class="panel-heading">
-          <p class="eyebrow">個人資料</p>
-          <h1>我的帳號</h1>
+          <p class="eyebrow">司機</p>
+          <h1>司機資訊</h1>
         </div>
         <dl class="profile-list">
           <div>
@@ -205,7 +382,82 @@
             <dt>帳號</dt>
             <dd>{{ user()?.account }}</dd>
           </div>
+          <div>
+            <dt>司機編號</dt>
+            <dd>#{{ user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>登入狀態</dt>
+            <dd>已安全登入</dd>
+          </div>
         </dl>
+        <section class="mileage-panel" aria-labelledby="mileage-title">
+          <div class="mileage-heading">
+            <div>
+              <p class="eyebrow">車輛</p>
+              <h2 id="mileage-title">今日里程</h2>
+            </div>
+            <svg lucideGauge aria-hidden="true"></svg>
+          </div>
+          <p>請在上班後記錄出車里程，並於下班前記錄收車里程。</p>
+          <div class="mileage-form-row">
+            <label>
+              <span>出車表讀數（km）</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                placeholder="例如 18400"
+                [value]="startMileageReading()"
+                (input)="updateStartMileage($event)"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              />
+            </label>
+            <button
+              type="button"
+              class="mileage-start-button"
+              (click)="submitStartMileage()"
+              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+            >
+              <svg lucidePlay aria-hidden="true"></svg>
+              出車
+            </button>
+          </div>
+          <div class="mileage-form-row">
+            <label>
+              <span>收車表讀數（km）</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                placeholder="例如 18438"
+                [value]="endMileageReading()"
+                (input)="updateEndMileage($event)"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              />
+            </label>
+            <button
+              type="button"
+              class="mileage-end-button"
+              (click)="submitEndMileage()"
+              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+            >
+              <svg lucideCircleStop aria-hidden="true"></svg>
+              收車
+            </button>
+          </div>
+          @if (!canRecordMileage()) {
+            <small class="mileage-note">完成上班打卡後才能登記；休息與下班狀態不會送出里程。</small>
+          }
+          @if (mileageMessage()) {
+            <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>
+          }
+          @if (mileageError()) {
+            <p class="mileage-feedback is-error">{{ mileageError() }}</p>
+          }
+        </section>
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>
@@ -214,7 +466,7 @@
   <nav class="bottom-navigation" aria-label="司機工作台導覽">
     <button type="button" [class.is-active]="activeTab() === 'map'" (click)="setActiveTab('map')">
       <svg lucideMap aria-hidden="true"></svg>
-      <span>地圖</span>
+      <span>導航</span>
     </button>
     <button
       type="button"
@@ -230,7 +482,7 @@
       (click)="setActiveTab('profile')"
     >
       <svg lucideUserRound aria-hidden="true"></svg>
-      <span>個資</span>
+      <span>司機</span>
     </button>
     <button
       type="button"
