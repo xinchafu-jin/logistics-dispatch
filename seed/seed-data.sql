@@ -74,7 +74,13 @@ INSERT INTO vehicles (warehouse_id, plate_number, vehicle_type, capacity, fuel_c
 INSERT INTO drivers (account, name, phone, work_start, work_end, rest_duration, max_overtime_minutes, is_active, password) VALUES
 ('D001', '陳大明', '0912345001', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
 ('D002', '林志偉', '0912345002', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
-('D003', '黃俊宏', '0912345003', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
+('D003', '黃俊宏', '0912345003', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+-- D006 早退、D007 早班且加班上限較低，用來驗證班表與工時限制不是寫死的
+('D004', '張家豪', '0912345004', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+('D005', '李冠廷', '0912345005', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+('D006', '王詩涵', '0912345006', '09:00:00', '18:00:00', 60, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+('D007', '吳建良', '0912345007', '07:30:00', '16:30:00', 90,  60, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+('D008', '蔡佩君', '0912345008', '08:30:00', '17:30:00', 90, 120, b'1', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
 
 -- ══════════════════════════════════════════
 -- 訂單（15 張，狀態 CONFIRMED、倉庫 1、今天配送）

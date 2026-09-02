@@ -1,6 +1,8 @@
 export type DriverStatus = 'ACTIVE' | 'INACTIVE';
 export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
+/** 路線的發布狀態。訂單層沒有「已發布」，發布是路線層的事。 */
+export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
   | 'PENDING_CONFIRM'
   | 'CONFIRMED'
@@ -149,6 +151,11 @@ export interface RouteDto {
   estimatedWorkMinutes: number | null;
   /** 裝載率 0~1，實際載運箱數 ÷ 車輛容量 */
   loadRate: number;
+  /**
+   * 發布狀態。發布後司機端才查得到任務，而且路線不再被排車清掉
+   * （clearExistingDraftRoutes 只清 DRAFT，遇到 PUBLISHED 會擋下整個重排）。
+   */
+  status: RouteStatus;
 }
 
 /** 路線上的一個停靠點，等於一張訂單 */
@@ -221,4 +228,43 @@ export interface DriverStatusPayload {
 
 export interface StoreStatusPayload {
   status: StoreStatus;
+}
+
+/* ── 常配編組 ───────────────────────────────────────────────
+ * 編組是「哪台車固定跑哪幾間門市」的樣板，不含訂單也不含司機：
+ * 訂單綁日期、會取消，只能在套用當下才去撈；司機由調度員逐日指派。
+ */
+
+export interface TemplateStopDto {
+  id: number;
+  storeId: number;
+  /** 停靠順序，套用時原封成為 orders.sequence */
+  sequence: number;
+}
+
+export interface TemplateRouteDto {
+  id: number;
+  warehouseId: number;
+  vehicleId: number;
+  stops: TemplateStopDto[];
+}
+
+export interface TemplateDto {
+  id: number;
+  name: string;
+  notes?: string;
+  routes: TemplateRouteDto[];
+}
+
+/** 建立／修改編組。storeIds 的陣列順序就是停靠順序。 */
+export interface TemplateRequest {
+  name: string;
+  notes?: string;
+  routes: TemplateRouteRequest[];
+}
+
+export interface TemplateRouteRequest {
+  warehouseId: number;
+  vehicleId: number;
+  storeIds: number[];
 }

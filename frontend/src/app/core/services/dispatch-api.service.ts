@@ -9,6 +9,8 @@ import {
   ReassignRequest,
   StoreDto,
   StoreStatusPayload,
+  TemplateDto,
+  TemplateRequest,
   VehicleDto,
   WarehouseDto,
 } from './dispatch-api.models';
@@ -170,5 +172,66 @@ export class DispatchApiService {
     const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
 
     return this.http.get<DispatchResultDto>(`${API_ROOT}/dispatch/board`, { params });
+  }
+
+  /**
+   * 發布當天全部倉庫的排班：草稿路線翻成 PUBLISHED，司機端才查得到任務。
+   *
+   * 不帶 warehouseId —— 發布是整天一次的動作，不像排車是一次一倉。
+   * 任一條路線沒指派司機就整批擋下（後端全有或全無），錯誤訊息會指出車牌。
+   * 回傳每個有路線的倉庫各一包看板，前端要挑出目前正在看的那一倉。
+   */
+  publishDispatch(date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, { params });
+  }
+
+  /**
+   * 撤回發布：PUBLISHED 翻回 DRAFT。
+   *
+   * 撤回本身不刪東西，但路線會重新落入排車的清除範圍 ——
+   * 撤回後再排車，這批路線就會被整批刪掉重建。
+   */
+  withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, { params });
+  }
+
+  // ── 常配編組 ──────────────────────────────────────────
+
+  getTemplates(): Observable<TemplateDto[]> {
+    return this.http.get<TemplateDto[]>(`${API_ROOT}/dispatch/templates`);
+  }
+
+  createTemplate(request: TemplateRequest): Observable<TemplateDto> {
+    return this.http.post<TemplateDto>(`${API_ROOT}/dispatch/templates`, request);
+  }
+
+  /** 覆蓋既有編組。後端會把舊的路線與停靠點整批刪掉重建。 */
+  updateTemplate(id: number, request: TemplateRequest): Observable<TemplateDto> {
+    return this.http.put<TemplateDto>(`${API_ROOT}/dispatch/templates/${id}`, request);
+  }
+
+  deleteTemplate(id: number): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/dispatch/templates/${id}`);
+  }
+
+  /**
+   * 套用編組到指定日期：依編組的車輛與門市撈當天訂單組成路線。
+   *
+   * 跟 optimize / reassign 一樣是寫入操作，會清掉當天該倉的草稿路線並重建。
+   * 編組可跨倉，所以回傳的是「每個有排到路線的倉庫各一包」，
+   * 前端要自己挑出目前正在看的那一倉。
+   */
+  applyTemplate(templateId: number, date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+
+    return this.http.post<DispatchResultDto[]>(
+      `${API_ROOT}/dispatch/templates/${templateId}/apply`,
+      null,
+      { params },
+    );
   }
 }

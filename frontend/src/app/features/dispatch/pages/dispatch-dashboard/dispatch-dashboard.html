@@ -96,32 +96,166 @@
     </aside>
   </div>
 
-  <section class="board-toolbar" aria-label="排車條件">
-    <label class="toolbar-field">
-      <span>配送日期</span>
-      <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)" />
-    </label>
-
-    <label class="toolbar-field">
-      <span>出貨倉庫</span>
-      <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
-        @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
-          <option [value]="warehouse.id">{{ warehouse.warehouseCode }} · {{ warehouse.name }}</option>
-        }
-      </select>
-    </label>
-
-    <p class="toolbar-hint">
-      可用車 {{ availableVehicles().length }} 台
-      @if (availableVehicles().length) {
-        （{{ availableVehicleSummary() }}）
+  <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
+  <section class="template-tabs" aria-label="常配編組">
+    <div class="tab-strip" role="tablist">
+      @for (template of templates(); track template.id) {
+        <button
+          type="button"
+          role="tab"
+          class="tab"
+          [class.is-active]="activeTemplateId() === template.id"
+          [attr.aria-selected]="activeTemplateId() === template.id"
+          (click)="selectTemplate(template.id)"
+        >
+          {{ template.name }}
+        </button>
       }
-    </p>
+      <button
+        type="button"
+        class="tab tab-add"
+        [class.is-active]="creatingTemplate()"
+        (click)="openCreateTemplate()"
+        aria-label="新增編組"
+      >
+        ＋
+      </button>
+    </div>
 
-    <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
-      {{ optimizing() ? '排車中…' : '執行排車' }}
-    </button>
-  </section>
+    @if (templateError()) {
+      <p class="template-error">{{ templateError() }}</p>
+    }
+
+    <!-- 分頁內層：排車條件 + 編成盤面 -->
+    <div class="tab-panel">
+      <!-- 加號分頁：盤面已清空，編好之後命名存成編組 -->
+      @if (creatingTemplate()) {
+        <div class="template-detail">
+          <label class="toolbar-field">
+            <span>編組名稱</span>
+            <input
+              type="text"
+              placeholder="例如：台南東區常配線"
+              [value]="templateName()"
+              (input)="updateTemplateName($event)"
+            />
+          </label>
+          <div class="template-actions">
+            <button
+              type="button"
+              class="toolbar-action"
+              (click)="saveTemplate()"
+              [disabled]="templateBusy()"
+            >
+              {{ templateBusy() ? '儲存中…' : '存成編組' }}
+            </button>
+            <button type="button" class="template-secondary" (click)="closeCreateTemplate()">
+              取消
+            </button>
+          </div>
+          <p class="draft-hint">
+            訂單都在下方未排入池。拖進車輛槽位，或按「一鍵編組」讓演算法先排一版再微調。
+          </p>
+        </div>
+      }
+
+      <section class="board-toolbar" aria-label="排車條件">
+        <label class="toolbar-field">
+          <span>配送日期</span>
+          <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)" />
+        </label>
+
+        <label class="toolbar-field">
+          <span>出貨倉庫</span>
+          <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
+            @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+              <option [value]="warehouse.id">
+                {{ warehouse.warehouseCode }} · {{ warehouse.name }}
+              </option>
+            }
+          </select>
+        </label>
+
+        <p class="toolbar-hint">
+          可用車 {{ availableVehicles().length }} 台
+          @if (availableVehicles().length) {
+            （{{ availableVehicleSummary() }}）
+          }
+        </p>
+
+        <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
+          {{ optimizing() ? '編組中…' : '一鍵編組' }}
+        </button>
+
+        <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->
+        @if (published()) {
+          <button
+            type="button"
+            class="template-secondary"
+            (click)="withdraw()"
+            [disabled]="publishing() || busy()"
+          >
+            {{ publishing() ? '撤回中…' : '撤回發布' }}
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="toolbar-action"
+            (click)="publish()"
+            [disabled]="publishing() || busy()"
+          >
+            {{ publishing() ? '發布中…' : '發布' }}
+          </button>
+        }
+      </section>
+
+      @if (published()) {
+        <p class="board-status">已發布：司機端看得到任務，要修改請先撤回。</p>
+      }
+      @if (publishError()) {
+        <p class="board-error">{{ publishError() }}</p>
+      }
+
+      @if (activeTemplate(); as template) {
+        <div class="template-detail">
+          <div class="template-actions">
+            <button
+              type="button"
+              class="template-secondary"
+              (click)="applyActiveTemplate()"
+              [disabled]="templateBusy() || busy()"
+            >
+              {{ templateBusy() ? '套用中…' : '重新套用' }}
+            </button>
+            <button
+              type="button"
+              class="template-secondary"
+              (click)="overwriteActiveTemplate()"
+              [disabled]="templateBusy() || busy()"
+              title="用目前盤面的排法覆蓋這個編組"
+            >
+              以現在盤面覆蓋
+            </button>
+            <button
+              type="button"
+              class="template-delete"
+              (click)="deleteActiveTemplate()"
+              [disabled]="templateBusy()"
+            >
+              刪除編組
+            </button>
+          </div>
+
+          @for (route of template.routes; track route.id) {
+            <p class="template-line">
+              <strong>{{ vehicleLabel(route.vehicleId) }}</strong>
+              @for (stop of route.stops; track stop.id) {
+                <span class="template-stop">{{ stop.sequence }}. {{ storeName(stop.storeId) }}</span>
+              }
+            </p>
+          }
+        </div>
+      }
 
   <div class="board" cdkDropListGroup>
     <p class="board-status">
@@ -135,12 +269,20 @@
       <p class="board-error">{{ boardError() }}</p>
     }
 
-    @for (route of routes(); track route.routeId) {
-      <div class="board-lane" [class.is-overloaded]="isOverloaded(route)">
+    @for (route of routes(); track route.vehicleId) {
+      <div
+        class="board-lane"
+        [class.is-overloaded]="isOverloaded(route)"
+        [class.is-unavailable]="route.status !== 'AVAILABLE'"
+      >
         <h4>
-          {{ route.plateNumber }} · {{ route.cards.length }} 站 ·
-          {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
-          {{ route.totalDistance / 1000 | number: '1.1-1' }} km
+          {{ route.plateNumber }}
+          @if (route.status !== 'AVAILABLE') {
+            <span class="lane-status">{{ statusLabel(route.status) }}</span>
+          } @else {
+            · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+            {{ route.totalDistance / 1000 | number: '1.1-1' }} km
+          }
         </h4>
 
         <!--
@@ -151,7 +293,7 @@
         <select
           class="board-driver"
           [class.is-unassigned]="route.driverId === null"
-          [disabled]="busy()"
+          [disabled]="busy() || route.status !== 'AVAILABLE'"
           (change)="onDriverChange(route, $event)"
         >
           <option value="" [selected]="route.driverId === null">未指派司機</option>
@@ -170,7 +312,7 @@
           class="board-dropzone"
           cdkDropList
           [cdkDropListData]="route.cards"
-          [cdkDropListDisabled]="saving()"
+          [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE'"
           (cdkDropListDropped)="onDrop($event)"
         >
           @for (card of route.cards; track card.orderId) {
@@ -178,7 +320,13 @@
               #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
             </p>
           } @empty {
-            <p class="board-empty">把訂單拖到這裡</p>
+            <p class="board-empty">
+              @if (route.status === 'AVAILABLE') {
+                把訂單拖到這裡
+              } @else {
+                {{ statusLabel(route.status) }}，無法排入
+              }
+            </p>
           }
         </div>
       </div>
@@ -204,6 +352,8 @@
       </div>
     </div>
   </div>
+    </div>
+  </section>
   @if (loading()) {
     <p class="dashboard-description">正在從後端同步訂單、門市、司機、車輛與倉庫資料...</p>
   } @else if (errorMessage()) {

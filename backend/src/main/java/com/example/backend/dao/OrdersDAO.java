@@ -37,4 +37,13 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
     List<OrdersEntity> findByDeliveryDateAndWarehouseId(LocalDate deliveryDate, Long warehouseId);
 
     List<OrdersEntity> findByRouteIdIn(List<Long> routeIds);
+
+    //撈當天、指定倉庫、這些門市、已確認且尚未排入路線之訂單。
+    List<OrdersEntity> findByDeliveryDateAndStatusAndWarehouseIdAndStoreIdInAndRouteIdIsNull
+    (
+            LocalDate deliveryDate,
+            OrderStatus status,
+            Long warehouseId,
+            Collection<Long> storeIds
+    );
 }

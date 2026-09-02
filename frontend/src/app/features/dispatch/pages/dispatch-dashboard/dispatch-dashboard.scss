@@ -600,3 +600,175 @@
   color: rgb(0 0 0 / 55%);
   font-size: 0.8125rem;
 }
+
+/* ── 常配編組分頁 ───────────────────────────────── */
+
+.template-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.tab-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid rgb(0 0 0 / 15%);
+}
+
+.tab {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid rgb(0 0 0 / 15%);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &.is-active {
+    background: rgb(0 0 0 / 6%);
+    font-weight: 600;
+  }
+}
+
+.tab-add {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.template-error {
+  margin: 0;
+  color: #a3352a;
+  font-size: 0.8125rem;
+}
+
+.template-detail,
+.template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 6px;
+}
+
+.template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.template-secondary,
+.template-delete {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.template-delete {
+  color: #a3352a;
+}
+
+.template-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.template-stop {
+  color: rgb(0 0 0 / 65%);
+}
+
+.draft-route {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px dashed rgb(0 0 0 / 20%);
+  border-radius: 6px;
+}
+
+.draft-hint {
+  margin: 0;
+  color: rgb(0 0 0 / 55%);
+  font-size: 0.8125rem;
+}
+
+.store-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.store-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+
+  &.is-picked {
+    background: rgb(0 0 0 / 8%);
+    font-weight: 600;
+  }
+}
+
+.chip-order {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 65%);
+  color: #fff;
+  font-size: 0.6875rem;
+}
+
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+}
+
+.board-lane.is-unavailable {
+  opacity: 0.45;
+
+  .board-dropzone {
+    background: rgb(0 0 0 / 4%);
+  }
+}
+
+.lane-status {
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid rgb(0 0 0 / 25%);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 400;
+}

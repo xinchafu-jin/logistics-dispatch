@@ -1,25 +1,24 @@
 package com.example.backend.service;
 
-import com.example.backend.dao.DispatchTemplatesDAO;
-import com.example.backend.dao.StoresDAO;
-import com.example.backend.dao.TemplateRoutesDAO;
-import com.example.backend.dao.TemplateStopsDAO;
-import com.example.backend.dao.VehiclesDAO;
-import com.example.backend.dao.WarehousesDAO;
+import com.example.backend.constants.OrderStatus;
+import com.example.backend.dao.*;
+import com.example.backend.dto.request.ReassignDTO;
 import com.example.backend.dto.request.TemplatesRequestDTO;
+import com.example.backend.dto.respones.DispatchResponse;
+import com.example.backend.entity.OrdersEntity;
 import com.example.backend.dto.respones.TemplatesDTO;
 import com.example.backend.entity.DispatchTemplatesEntity;
 import com.example.backend.entity.TemplateRoutesEntity;
 import com.example.backend.entity.TemplateStopsEntity;
 import com.example.backend.entity.VehiclesEntity;
+import com.sun.jna.platform.win32.COM.Dispatch;
 import jakarta.persistence.EntityNotFoundException;
+import org.hibernate.sql.Template;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDate;
+import java.util.*;
 
 @Service
 @Transactional
@@ -30,6 +29,9 @@ public class TemplatesService {
     private final WarehousesDAO warehousesDAO;
     private final VehiclesDAO vehiclesDAO;
     private final StoresDAO storesDAO;
+    private final OrdersDAO ordersDAO;
+    private final DispatchService dispatchService;
+
 
     public TemplatesService(
             DispatchTemplatesDAO dispatchTemplatesDAO,
@@ -37,7 +39,9 @@ public class TemplatesService {
             TemplateStopsDAO templateStopsDAO,
             WarehousesDAO warehousesDAO,
             VehiclesDAO vehiclesDAO,
-            StoresDAO storesDAO
+            StoresDAO storesDAO,
+            OrdersDAO ordersDAO,
+            DispatchService dispatchService
     ) {
         this.dispatchTemplatesDAO = dispatchTemplatesDAO;
         this.templateRoutesDAO = templateRoutesDAO;
@@ -45,6 +49,8 @@ public class TemplatesService {
         this.warehousesDAO = warehousesDAO;
         this.vehiclesDAO = vehiclesDAO;
         this.storesDAO = storesDAO;
+        this.ordersDAO = ordersDAO;
+        this.dispatchService = dispatchService;
     }
 
     @Transactional(readOnly = true)
@@ -131,6 +137,107 @@ public class TemplatesService {
             stopsByRoute.computeIfAbsent(stop.getTemplateRouteId(), key -> new ArrayList<>()).add(stop);
         }
         return toDTO(template, routesByTemplate, stopsByRoute);
+    }
+
+    /**
+     * 把編組套用到某一天：依編組的車輛與門市，撈當天訂單組成路線。
+     *
+     * <p>編組存的是門市不是訂單（訂單綁日期、會取消，不能當樣板內容），
+     * 所以每次套用都要現查那天有哪些單。實際建路線交給
+     * {@link DispatchService#reassign} —— 它會清掉當天草稿並整批重建。</p>
+     *
+     * <p>套用後路線的司機是 null（編組不存司機），由調度員指派後才能發布。</p>
+     *
+     * @return 每個有排到路線的倉庫各一包看板資料
+     */
+    public List<DispatchResponse> applyToDate(Long templateId, LocalDate date) {
+        TemplatesDTO template = findById(templateId);
+
+        // 車輛調倉後，編組記的倉庫會跟車輛實際的倉庫對不上。
+        // 不擋的話那條線會靜默消失（門市的訂單屬於舊倉，撈不到）
+        for (TemplatesDTO.TemplateRouteResponse route : template.getRoutes()) {
+            VehiclesEntity vehicle = vehiclesDAO.findById(route.getVehicleId())
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "找不到車輛，ID：" + route.getVehicleId()));
+            if (!route.getWarehouseId().equals(vehicle.getWarehouseId())) {
+                throw new IllegalArgumentException(
+                        "車輛 " + vehicle.getPlateNumber() + " 已調至其他倉庫，請重新設定編組");
+            }
+        }
+
+        // 編組可跨倉（第二層每列各帶 warehouseId），但 reassign 一次只處理一個倉
+        Map<Long, List<TemplatesDTO.TemplateRouteResponse>> byWarehouse = new LinkedHashMap<>();
+        for (TemplatesDTO.TemplateRouteResponse route : template.getRoutes()) {
+            byWarehouse.computeIfAbsent(route.getWarehouseId(), key -> new ArrayList<>())
+                    .add(route);
+        }
+
+        List<DispatchResponse> boards = new ArrayList<>();
+        for (Map.Entry<Long, List<TemplatesDTO.TemplateRouteResponse>> entry : byWarehouse.entrySet()) {
+            Long warehouseId = entry.getKey();
+            List<TemplatesDTO.TemplateRouteResponse> templateRoutes = entry.getValue();
+
+            // 這個倉所有停靠點的門市，一次撈完當天訂單，不要在迴圈裡逐間查
+            Set<Long> storeIds = new LinkedHashSet<>();
+            for (TemplatesDTO.TemplateRouteResponse route : templateRoutes) {
+                for (TemplatesDTO.TemplateStopResponse stop : route.getStops()) {
+                    storeIds.add(stop.getStoreId());
+                }
+            }
+            if (storeIds.isEmpty()) {
+                continue;
+            }
+
+            List<OrdersEntity> orders =
+                    ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndStoreIdInAndRouteIdIsNull(
+                            date, OrderStatus.CONFIRMED, warehouseId, storeIds);
+
+            // 依門市分組，等一下照 stops 的順序逐站取用
+            Map<Long, List<OrdersEntity>> ordersByStore = new HashMap<>();
+            for (OrdersEntity order : orders) {
+                ordersByStore.computeIfAbsent(order.getStoreId(), key -> new ArrayList<>())
+                        .add(order);
+            }
+
+            List<ReassignDTO.RouteAssignment> assignments = new ArrayList<>();
+            for (TemplatesDTO.TemplateRouteResponse route : templateRoutes) {
+                // stops 已由 DAO 依 sequence 排好，陣列順序就是配送順序：
+                // reassign 不重排，會原封成為 orders.sequence
+                List<Long> orderIds = new ArrayList<>();
+                for (TemplatesDTO.TemplateStopResponse stop : route.getStops()) {
+                    List<OrdersEntity> storeOrders = ordersByStore.get(stop.getStoreId());
+                    if (storeOrders == null) {
+                        continue; // 這間門市當天沒單，跳過這站
+                    }
+                    for (OrdersEntity order : storeOrders) {
+                        orderIds.add(order.getId());
+                    }
+                }
+                if (orderIds.isEmpty()) {
+                    continue; // 整條線都沒單，不建空車路線
+                }
+
+                ReassignDTO.RouteAssignment assignment = new ReassignDTO.RouteAssignment();
+                assignment.setVehicleId(route.getVehicleId());
+                // 編組不存司機，套用後由調度員指派，發布時才強制要求
+                assignment.setDriverId(null);
+                assignment.setOrderIds(orderIds);
+                assignments.add(assignment);
+            }
+
+            // 這個倉當天完全沒單就不要呼叫 reassign，
+            // 否則它會清掉當天草稿卻什麼都不建，等於把手動排的也刪了
+            if (assignments.isEmpty()) {
+                continue;
+            }
+
+            ReassignDTO dto = new ReassignDTO();
+            dto.setDate(date);
+            dto.setWarehouseId(warehouseId);
+            dto.setRoutes(assignments);
+            boards.add(dispatchService.reassign(dto));
+        }
+        return boards;
     }
 
     private void apply(TemplatesRequestDTO dto, DispatchTemplatesEntity template) {

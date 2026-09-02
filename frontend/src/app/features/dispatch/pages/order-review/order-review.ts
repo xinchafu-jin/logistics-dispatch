@@ -70,6 +70,18 @@ interface DeliveryOrder {
   raw: OrderDto;
 }
 
+/**
+ * 今天的本地日期（YYYY-MM-DD）。不能用 `new Date().toISOString().slice(0, 10)`——
+ * toISOString 是轉成 UTC 再取日期，台灣時區凌晨 00:00~07:59 會被算成前一天。
+ */
+function todayLocalDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
   return {
     orderNumber: '',
@@ -79,7 +91,7 @@ function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
     itemDescription: '',
     boxCount: 1,
     notes: '',
-    deliveryDate: new Date().toISOString().slice(0, 10),
+    deliveryDate: todayLocalDate(),
     status: 'PENDING_CONFIRM',
   };
 }

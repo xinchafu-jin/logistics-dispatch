@@ -24,6 +24,10 @@ DROP TABLE IF EXISTS mileage_logs;
 DROP TABLE IF EXISTS distance_matrix_cache;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS routes;
+DROP TABLE IF EXISTS template_stops;
+DROP TABLE IF EXISTS template_routes;
+DROP TABLE IF EXISTS dispatch_templates;
+-- 舊版常配編組（單倉單車），已被上面三張表取代
 DROP TABLE IF EXISTS route_template_stores;
 DROP TABLE IF EXISTS route_templates;
 DROP TABLE IF EXISTS vehicles;
@@ -116,39 +120,58 @@ CREATE TABLE admin_users (
 
 
 -- ══════════════════════════════════════════════════════════════
--- 常配編組（可重複套用的「哪幾間門市歸哪台車」定義）
+-- 常配編組（可重複套用的整天排班樣板）
+--
+-- 三層：編組 → 路線（一倉一車）→ 站點（門市 + 順序）。
+-- 一個編組可以涵蓋多個倉庫，因為第二層每一列各自帶 warehouse_id；
+-- 第一層完全不碰倉庫。
+--
+-- 樣板存的是「門市」不是「訂單」——訂單綁日期、會完成會取消，
+-- 不能當樣板內容。套用時才去找當天這些門市各有哪些已確認訂單。
 -- ══════════════════════════════════════════════════════════════
 
-CREATE TABLE route_templates (
-  id                 BIGINT       NOT NULL AUTO_INCREMENT,
-  name               VARCHAR(100) NOT NULL,
-  warehouse_id       BIGINT       NOT NULL,
-  -- 預設車輛，套用時可臨時覆寫成別台
-  default_vehicle_id BIGINT       DEFAULT NULL,
-  notes              VARCHAR(500) DEFAULT NULL,
-  is_active          BIT(1)       NOT NULL,
-  created_at         DATETIME(6)  NOT NULL,
-  updated_at         DATETIME(6)  NOT NULL,
+CREATE TABLE dispatch_templates (
+  id         BIGINT       NOT NULL AUTO_INCREMENT,
+  name       VARCHAR(100) NOT NULL,
+  notes      VARCHAR(500) DEFAULT NULL,
+  created_at DATETIME(6)  NOT NULL,
+  updated_at DATETIME(6)  NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_route_templates_wh_name (warehouse_id, name),
-  CONSTRAINT fk_route_templates_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
-  CONSTRAINT fk_route_templates_vehicle   FOREIGN KEY (default_vehicle_id) REFERENCES vehicles (id)
+  UNIQUE KEY uk_dispatch_templates_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
-CREATE TABLE route_template_stores (
-  id          BIGINT NOT NULL AUTO_INCREMENT,
-  template_id BIGINT NOT NULL,
-  store_id    BIGINT NOT NULL,
-  -- 預設停靠順序；套用時可選擇沿用或用 OSRM 重算
-  `sequence`  INT    NOT NULL,
+CREATE TABLE template_routes (
+  id           BIGINT NOT NULL AUTO_INCREMENT,
+  template_id  BIGINT NOT NULL,
+  -- 設定當下認定的倉庫。刻意跟 vehicles.warehouse_id 存兩份：
+  -- 車輛調倉後兩者會不一致，套用時據此擋下並提示重新設定，
+  -- 不存的話那條線只會靜默消失（門市的訂單屬於舊倉，撈不到）
+  warehouse_id BIGINT NOT NULL,
+  vehicle_id   BIGINT NOT NULL,
   PRIMARY KEY (id),
-  -- 同一間門市在同一個編組裡只能出現一次
-  UNIQUE KEY uk_tpl_stores_tpl_store (template_id, store_id),
-  KEY idx_tpl_stores_tpl_seq (template_id, `sequence`),
-  -- 編組刪除時成員清單一併刪除（成員沒有獨立存在的意義）
-  CONSTRAINT fk_tpl_stores_template FOREIGN KEY (template_id) REFERENCES route_templates (id) ON DELETE CASCADE,
-  CONSTRAINT fk_tpl_stores_store    FOREIGN KEY (store_id)    REFERENCES stores (id)
+  -- 同一個編組裡一台車只出現一次
+  UNIQUE KEY uk_tpl_routes_tpl_vehicle (template_id, vehicle_id),
+  -- 編組刪除時路線一併刪除（沒有獨立存在的意義）
+  CONSTRAINT fk_tpl_routes_template  FOREIGN KEY (template_id)  REFERENCES dispatch_templates (id) ON DELETE CASCADE,
+  CONSTRAINT fk_tpl_routes_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
+  CONSTRAINT fk_tpl_routes_vehicle   FOREIGN KEY (vehicle_id)   REFERENCES vehicles (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE template_stops (
+  id                BIGINT NOT NULL AUTO_INCREMENT,
+  template_route_id BIGINT NOT NULL,
+  store_id          BIGINT NOT NULL,
+  -- 配送順序。套用時照這個順序組 orderIds 交給 reassign，
+  -- reassign 不會重排（陣列順序即配送順序），所以會原封變成 orders.sequence
+  `sequence`        INT    NOT NULL,
+  PRIMARY KEY (id),
+  -- 同一條路線裡一間門市只跑一次
+  UNIQUE KEY uk_template_stops (template_route_id, store_id),
+  KEY idx_template_stops_seq (template_route_id, `sequence`),
+  CONSTRAINT fk_template_stops_route FOREIGN KEY (template_route_id) REFERENCES template_routes (id) ON DELETE CASCADE,
+  CONSTRAINT fk_template_stops_store FOREIGN KEY (store_id)          REFERENCES stores (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -174,12 +197,16 @@ CREATE TABLE routes (
   -- 一台車一天只跑一條路線。擋掉 optimize 重跑產生的第二組路線
   -- （若日後實作多趟次，這裡要改成 (date, vehicle_id, trip_no)）
   UNIQUE KEY uk_routes_date_vehicle (`date`, vehicle_id),
+  -- 一個司機一天只開一條路線。MySQL 的 UNIQUE 不把多個 NULL 視為重複，
+  -- 所以草稿階段一堆尚未指派（driver_id IS NULL）的路線不會互相衝突。
+  -- Service 層要先擋一次並給看得懂的訊息，這裡是繞過 API 時的最後一道。
+  UNIQUE KEY uk_routes_date_driver (`date`, driver_id),
   KEY idx_routes_date_warehouse (`date`, warehouse_id),
   CONSTRAINT fk_routes_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
   CONSTRAINT fk_routes_vehicle   FOREIGN KEY (vehicle_id)   REFERENCES vehicles (id),
   CONSTRAINT fk_routes_driver    FOREIGN KEY (driver_id)    REFERENCES drivers (id),
   -- 刪編組不該擋住，路線只是失去來源標記
-  CONSTRAINT fk_routes_template  FOREIGN KEY (template_id)  REFERENCES route_templates (id) ON DELETE SET NULL
+  CONSTRAINT fk_routes_template  FOREIGN KEY (template_id)  REFERENCES dispatch_templates (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -193,7 +220,7 @@ CREATE TABLE orders (
   box_count           INT          NOT NULL,
   notes               VARCHAR(500) DEFAULT NULL,
   delivery_date       DATE         NOT NULL,
-  status              ENUM('PENDING_CONFIRM','CONFIRMED','SCHEDULED','MODIFY','PUBLISHED',
+  status              ENUM('PENDING_CONFIRM','CONFIRMED',
                            'IN_DELIVERY','COMPLETED','CANCELLED','FAILED') NOT NULL,
   route_id            BIGINT       DEFAULT NULL,
   assigned_vehicle_id BIGINT       DEFAULT NULL,
