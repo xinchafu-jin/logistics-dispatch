@@ -2,15 +2,25 @@ package com.example.backend.dao;
 
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.entity.OrdersEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
+
+    /** 鎖住交貨流程中的訂單，讓抵達、交貨與無人簽收依序執行。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select orders from OrdersEntity orders where orders.id = :id")
+    Optional<OrdersEntity> findForUpdate(@Param("id") Long id);
 
     /**
      * 檢查訂單編號是否已存在

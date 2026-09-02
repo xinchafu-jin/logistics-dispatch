@@ -1,12 +1,17 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.request.AttendanceRecordDTO;
+import com.example.backend.dto.request.ArriveRequestDTO;
+import com.example.backend.dto.request.DeliverRequestDTO;
 import com.example.backend.dto.request.DriverShiftDTO;
 import com.example.backend.dto.request.GpsPingDTO;
 import com.example.backend.dto.request.MileageRequestDTO;
+import com.example.backend.dto.request.NoSignatureRequestDTO;
+import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.service.AttendanceService;
+import com.example.backend.service.DeliveryService;
 import com.example.backend.service.DriverScheduleService;
 import com.example.backend.service.DriverTasksService;
 import com.example.backend.service.GpsPingsService;
@@ -37,6 +42,7 @@ import java.util.Map;
 public class DriverPortalController {
 
     private final AttendanceService attendanceService;
+    private final DeliveryService deliveryService;
     private final DriverScheduleService driverScheduleService;
     private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
@@ -44,12 +50,14 @@ public class DriverPortalController {
 
     public DriverPortalController(
             AttendanceService attendanceService,
+            DeliveryService deliveryService,
             DriverScheduleService driverScheduleService,
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService
     ) {
         this.attendanceService = attendanceService;
+        this.deliveryService = deliveryService;
         this.driverScheduleService = driverScheduleService;
         this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
@@ -107,29 +115,26 @@ public class DriverPortalController {
 
     /** 記錄司機抵達門市的時間。 */
     @PostMapping("/arrive")
-    public ResponseEntity<Map<String, Object>> arrive(
+    public DeliveryRecordResponse arrive(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/arrive");
+            @Valid @RequestBody ArriveRequestDTO request) {
+        return deliveryService.arrive(driverId(jwt), request);
     }
 
     /** 寫入交貨結果、箱數、備註及照片。 */
     @PostMapping("/deliver")
-    public ResponseEntity<Map<String, Object>> deliver(
+    public DeliveryRecordResponse deliver(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/deliver");
+            @Valid @RequestBody DeliverRequestDTO request) {
+        return deliveryService.deliver(driverId(jwt), request);
     }
 
     /** 登記無人簽收並保留現場照片。 */
     @PostMapping("/no-signature")
-    public ResponseEntity<Map<String, Object>> noSignature(
+    public DeliveryRecordResponse noSignature(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/no-signature");
+            @Valid @RequestBody NoSignatureRequestDTO request) {
+        return deliveryService.noSignature(driverId(jwt), request);
     }
 
     /** 司機回報配送途中發生的異常。 */
