@@ -42,7 +42,14 @@ export class Login {
     event.preventDefault();
     this.loginError.set('');
 
-    if (!this.account().trim() || !this.password()) {
+    const form = event.currentTarget as HTMLFormElement;
+    const account = form.querySelector<HTMLInputElement>('#account')?.value.trim() ?? '';
+    const password = form.querySelector<HTMLInputElement>('#password')?.value ?? '';
+
+    this.account.set(account);
+    this.password.set(password);
+
+    if (!account || !password) {
       this.loginError.set('請輸入帳號與密碼。');
       return;
     }
@@ -51,8 +58,8 @@ export class Login {
 
     this.authService
       .login({
-        account: this.account(),
-        password: this.password(),
+        account,
+        password,
       })
       .subscribe({
         next: () => {
