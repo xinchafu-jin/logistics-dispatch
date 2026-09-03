@@ -113,6 +113,22 @@ export interface DriverTakenDto {
 }
 
 /**
+ * 司機 GPS 回報點。對應後端 GpsPingDTO，GET /api/fleet/live 用。
+ *
+ * 沒有司機姓名，只有 driverId —— 要顯示名字得自己拿 drivers() join。
+ * timestamp 是後端用 LocalDateTime.now(Asia/Taipei) 產生，字串沒有時區標記
+ * （例如 "2026-09-02T14:23:11"），用 `new Date()` 解析會被當成瀏覽器本地時間，
+ * 只有在瀏覽器也是台北時區時才會算對。
+ */
+export interface GpsPingDto {
+  id: number;
+  driverId: number;
+  lat: number;
+  lng: number;
+  timestamp: string;
+}
+
+/**
  * 排車結果裡的倉庫，是路線的起訖點。
  *
  * 這是精簡版，欄位比 WarehouseDto 少（沒有 phone / isActive），
@@ -267,4 +283,12 @@ export interface TemplateRouteRequest {
   warehouseId: number;
   vehicleId: number;
   storeIds: number[];
+}
+
+export interface GpsPingDTO {
+  id: number;
+  driverIda: number;
+  lat: number;
+  lng: number;
+  timestamp: number;
 }

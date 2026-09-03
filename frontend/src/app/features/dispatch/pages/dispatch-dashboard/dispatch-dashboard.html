@@ -1,34 +1,32 @@
 <main class="dispatch-dashboard">
-  <section class="dashboard-intro" aria-labelledby="dashboard-title">
+  <section class="dashboard-intro" aria-label="今日配送總覽">
     <div>
       <p class="dashboard-eyebrow">DAILY OPERATIONS</p>
-      <h2 id="dashboard-title">今日配送總覽</h2>
       <p class="dashboard-description">優先確認待審核配送需求，再依車輛與司機狀況完成排車。</p>
     </div>
 
     <p class="updated-at">{{ warehouseName() }} · 資料更新於 {{ updatedAt() }}</p>
   </section>
 
-  <section class="dispatch-ticker" aria-label="即時調度訊息">
-    <p class="ticker-label">即時調度</p>
+  <!--  <section class="dispatch-ticker" aria-label="即時調度訊息">-->
+  <!--    <p class="ticker-label">即時調度</p>-->
 
-    <div class="ticker-window">
-      <div class="ticker-track">
-        <div class="ticker-group">
-          @for (message of tickerMessages(); track message) {
-            <span [class.ticker-alert]="$index === 2">{{ message }}</span>
-          }
-        </div>
+  <!--    <div class="ticker-window">-->
+  <!--      <div class="ticker-track">-->
+  <!--        <div class="ticker-group">-->
+  <!--          @for (message of tickerMessages(); track message) {-->
+  <!--            <span [class.ticker-alert]="$index === 2">{{ message }}</span>-->
+  <!--          }-->
+  <!--        </div>-->
 
-        <div class="ticker-group" aria-hidden="true">
-          @for (message of tickerMessages(); track message) {
-            <span [class.ticker-alert]="$index === 2">{{ message }}</span>
-          }
-        </div>
-      </div>
-    </div>
-  </section>
-
+  <!--        <div class="ticker-group" aria-hidden="true">-->
+  <!--          @for (message of tickerMessages(); track message) {-->
+  <!--            <span [class.ticker-alert]="$index === 2">{{ message }}</span>-->
+  <!--          }-->
+  <!--        </div>-->
+  <!--      </div>-->
+  <!--    </div>-->
+  <!--  </section>-->
   <section class="summary-grid" aria-label="今日配送狀態">
     @for (card of summaryCards(); track card.label) {
       <article class="summary-card" [class]="'tone-' + card.tone">
@@ -41,7 +39,13 @@
 
   <div class="dashboard-main">
     <section class="map-section" aria-label="即時車隊地圖">
-      <app-live-fleet-map/>
+      <app-live-fleet-map
+        [warehousePoint]="mapWarehouse()"
+        [storePoints]="mapStores()"
+        [showPoints]="showMapPoints()"
+        [driverPoints]="mapDrivers()"
+        [showDriverPoints]="showDriverPoints()"
+      />
     </section>
 
     <aside class="operations-panel" aria-label="待確認配送與待處理提醒">
@@ -95,6 +99,41 @@
       </section>
     </aside>
   </div>
+  <div>
+    <ul>
+      <li>
+        <p>
+          <mat-slide-toggle
+            [checked]="showMapPoints()"
+            (change)="toggleMapPoints($event.checked)"
+          >商店 門市
+          </mat-slide-toggle
+          >
+        </p>
+      </li>
+      <li>
+        <p>
+          <mat-slide-toggle
+            [checked]="showDriverPoints()"
+            (change)="toggleDriverPoints($event.checked)"
+          >
+            司機位置
+          </mat-slide-toggle>
+        </p>
+      </li>
+      <li>
+        <p>
+          <mat-slide-toggle>Slide me!</mat-slide-toggle>
+        </p>
+      </li>
+      <li>
+        <p>
+          <mat-slide-toggle>Slide me!</mat-slide-toggle>
+        </p>
+      </li>
+    </ul>
+  </div>
+
 
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
@@ -162,7 +201,7 @@
       <section class="board-toolbar" aria-label="排車條件">
         <label class="toolbar-field">
           <span>配送日期</span>
-          <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)" />
+          <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)"/>
         </label>
 
         <label class="toolbar-field">
@@ -257,101 +296,103 @@
         </div>
       }
 
-  <div class="board" cdkDropListGroup>
-    <p class="board-status">
-      {{ routes().length }} 條路線
-      @if (saving()) {
-        · 儲存中…
-      }
-    </p>
-
-    @if (boardError()) {
-      <p class="board-error">{{ boardError() }}</p>
-    }
-
-    @for (route of routes(); track route.vehicleId) {
-      <div
-        class="board-lane"
-        [class.is-overloaded]="isOverloaded(route)"
-        [class.is-unavailable]="route.status !== 'AVAILABLE'"
-      >
-        <h4>
-          {{ route.plateNumber }}
-          @if (route.status !== 'AVAILABLE') {
-            <span class="lane-status">{{ statusLabel(route.status) }}</span>
-          } @else {
-            · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
-            {{ route.totalDistance / 1000 | number: '1.1-1' }} km
+      <div class="board" cdkDropListGroup>
+        <p class="board-status">
+          {{ routes().length }} 條路線
+          @if (saving()) {
+            · 儲存中…
           }
-        </h4>
+        </p>
 
-        <!--
-          選中狀態綁在 option 上而不是 select 的 [value]：
-          Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
-          瀏覽器找不到對應值就會退回第一個選項（這裡是「未指派司機」）。
-        -->
-        <select
-          class="board-driver"
-          [class.is-unassigned]="route.driverId === null"
-          [disabled]="busy() || route.status !== 'AVAILABLE'"
-          (change)="onDriverChange(route, $event)"
-        >
-          <option value="" [selected]="route.driverId === null">未指派司機</option>
-          @for (option of driverOptions(route); track option.id) {
-            <option
-              [value]="option.id"
-              [selected]="option.id === route.driverId"
-              [disabled]="option.takenNote !== null"
-            >
-              {{ option.name }}@if (option.takenNote) { · {{ option.takenNote }} }
-            </option>
-          }
-        </select>
+        @if (boardError()) {
+          <p class="board-error">{{ boardError() }}</p>
+        }
 
-        <div
-          class="board-dropzone"
-          cdkDropList
-          [cdkDropListData]="route.cards"
-          [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE'"
-          (cdkDropListDropped)="onDrop($event)"
-        >
-          @for (card of route.cards; track card.orderId) {
-            <p class="board-card" cdkDrag>
-              #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
-            </p>
-          } @empty {
-            <p class="board-empty">
-              @if (route.status === 'AVAILABLE') {
-                把訂單拖到這裡
+        @for (route of routes(); track route.vehicleId) {
+          <div
+            class="board-lane"
+            [class.is-overloaded]="isOverloaded(route)"
+            [class.is-unavailable]="route.status !== 'AVAILABLE'"
+          >
+            <h4>
+              {{ route.plateNumber }}
+              @if (route.status !== 'AVAILABLE') {
+                <span class="lane-status">{{ statusLabel(route.status) }}</span>
               } @else {
-                {{ statusLabel(route.status) }}，無法排入
+                · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+                {{ route.totalDistance / 1000 | number: '1.1-1' }} km
               }
-            </p>
-          }
+            </h4>
+
+            <!--
+              選中狀態綁在 option 上而不是 select 的 [value]：
+              Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
+              瀏覽器找不到對應值就會退回第一個選項（這裡是「未指派司機」）。
+            -->
+            <select
+              class="board-driver"
+              [class.is-unassigned]="route.driverId === null"
+              [disabled]="busy() || route.status !== 'AVAILABLE'"
+              (change)="onDriverChange(route, $event)"
+            >
+              <option value="" [selected]="route.driverId === null">未指派司機</option>
+              @for (option of driverOptions(route); track option.id) {
+                <option
+                  [value]="option.id"
+                  [selected]="option.id === route.driverId"
+                  [disabled]="option.takenNote !== null"
+                >
+                  {{ option.name }}@if (option.takenNote) {
+                  · {{ option.takenNote }}
+                }
+                </option>
+              }
+            </select>
+
+            <div
+              class="board-dropzone"
+              cdkDropList
+              [cdkDropListData]="route.cards"
+              [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE'"
+              (cdkDropListDropped)="onDrop($event)"
+            >
+              @for (card of route.cards; track card.orderId) {
+                <p class="board-card" cdkDrag>
+                  #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
+                </p>
+              } @empty {
+                <p class="board-empty">
+                  @if (route.status === 'AVAILABLE') {
+                    把訂單拖到這裡
+                  } @else {
+                    {{ statusLabel(route.status) }}，無法排入
+                  }
+                </p>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="board-lane">
+          <h4>未排入 {{ unassigned().length }} 筆</h4>
+
+          <div
+            class="board-dropzone"
+            cdkDropList
+            [cdkDropListData]="unassigned()"
+            [cdkDropListDisabled]="saving()"
+            (cdkDropListDropped)="onDrop($event)"
+          >
+            @for (card of unassigned(); track card.orderId) {
+              <p class="board-card" cdkDrag>
+                {{ card.orderNumber }} · {{ card.storeName }} · {{ card.boxCount }} 箱
+              </p>
+            } @empty {
+              <p class="board-empty">沒有未排入的訂單</p>
+            }
+          </div>
         </div>
       </div>
-    }
-
-    <div class="board-lane">
-      <h4>未排入 {{ unassigned().length }} 筆</h4>
-
-      <div
-        class="board-dropzone"
-        cdkDropList
-        [cdkDropListData]="unassigned()"
-        [cdkDropListDisabled]="saving()"
-        (cdkDropListDropped)="onDrop($event)"
-      >
-        @for (card of unassigned(); track card.orderId) {
-          <p class="board-card" cdkDrag>
-            {{ card.orderNumber }} · {{ card.storeName }} · {{ card.boxCount }} 箱
-          </p>
-        } @empty {
-          <p class="board-empty">沒有未排入的訂單</p>
-        }
-      </div>
-    </div>
-  </div>
     </div>
   </section>
   @if (loading()) {

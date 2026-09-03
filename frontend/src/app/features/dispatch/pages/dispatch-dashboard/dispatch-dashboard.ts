@@ -12,17 +12,15 @@ import {
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
-import {FormsModule} from '@angular/forms';
-import {MatInputModule} from '@angular/material/input';
-import {MatSelectModule} from '@angular/material/select';
-import {MatFormFieldModule} from '@angular/material/form-field';
-import {forkJoin} from 'rxjs';
-import {LiveFleetMap} from '../../components/live-fleet-map/live-fleet-map';
+import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
+import {LiveFleetMap, MapPoint} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {
   DispatchResultDto,
   DriverDto,
   DriverTakenDto,
+  GpsPingDto,
   OrderDto,
   OrderStatus,
   ReassignRequest,
@@ -36,6 +34,7 @@ import {
   VehicleStatus,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
+import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
 
 /** 車輛狀態顯示用的中文，灰掉的槽位要說明為什麼不能用 */
 const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
@@ -65,6 +64,17 @@ function todayLocalDate(): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * GPS 回報時間距現在幾分鐘。
+ *
+ * timestamp 是後端用 Asia/Taipei 產生、不帶時區標記的字串，`new Date()` 解析時
+ * 會當成瀏覽器本地時間 —— 只有瀏覽器也在台北時區時這裡的差值才準確。
+ */
+function minutesAgo(timestamp: string): number {
+  const elapsedMs = Date.now() - new Date(timestamp).getTime();
+  return Math.max(0, Math.round(elapsedMs / 60_000));
 }
 
 /**
@@ -151,7 +161,7 @@ interface DashboardAlert {
 
 @Component({
   selector: 'app-dispatch-dashboard',
-  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag],
+  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule],
   templateUrl: './dispatch-dashboard.html',
   styleUrl: './dispatch-dashboard.scss',
 })
@@ -272,6 +282,131 @@ export class DispatchDashboard implements OnInit {
 
   /** 排車中或改派儲存中都不該再觸發排車 */
   readonly busy = computed(() => this.optimizing() || this.saving());
+
+  // ── 地圖圖層 ──────────────────────────────────────────
+
+  /** 地圖上的配送點開關。預設開著，否則進頁面看不到任何點，會以為地圖壞了 */
+  readonly showMapPoints = signal(true);
+
+  /** mat-slide-toggle 的 change 事件帶的是 MatSlideToggleChange，不是 DOM Event，直接收 checked */
+  toggleMapPoints(checked: boolean): void {
+    this.showMapPoints.set(checked);
+  }
+
+  /**
+   * 地圖上的倉庫點。
+   *
+   * 取自倉庫清單而不是 dispatchResult().warehouse —— 清單在 loadDashboard 就回來了，
+   * 看板還在載（或當天完全沒單）時倉庫仍畫得出來。
+   */
+  readonly mapWarehouse = computed<MapPoint | null>(() => {
+    const warehouse = this.warehouses().find((item) => item.id === this.warehouseId());
+    if (!warehouse?.id) {
+      return null;
+    }
+
+    return {
+      id: warehouse.id,
+      label: warehouse.name,
+      detail: warehouse.address ?? '',
+      lat: warehouse.lat,
+      lng: warehouse.lng,
+    };
+  });
+
+  /**
+   * 今天這一倉要配送的門市。看板本來就是用 dispatchDate + warehouseId 查的，
+   * 所以車道上的卡片加上未排入池，就等於當天要送的門市。
+   *
+   * 用 routes()/unassigned() 而不是 dispatchResult()：前者是拖曳當下就更新的樂觀狀態，
+   * 後者要等後端回應才換。代價是卡片沒有座標（BoardCard 只留 storeId），要回頭 join stores()。
+   */
+  readonly mapStores = computed<MapPoint[]>(() => {
+    const storeById = new Map(
+      this.stores()
+        .filter((store) => store.id != null)
+        .map((store) => [store.id!, store]),
+    );
+
+    // 同一間門市當天可能有多張訂單，以 storeId 去重並加總箱數；
+    // 不去重就是同一個座標疊好幾個圈，只點得到最上面那一個。
+    const boxesByStore = new Map<number, number>();
+    for (const card of [...this.routes().flatMap((route) => route.cards), ...this.unassigned()]) {
+      boxesByStore.set(card.storeId, (boxesByStore.get(card.storeId) ?? 0) + card.boxCount);
+    }
+
+    const points: MapPoint[] = [];
+    for (const [storeId, boxCount] of boxesByStore) {
+      const store = storeById.get(storeId);
+      // 沒有座標的門市直接跳過：0 或 undefined 會畫到幾內亞灣，把自動框選拉到整個地球
+      if (!store?.lat || !store?.lng) {
+        continue;
+      }
+
+      points.push({
+        id: storeId,
+        label: store.name,
+        detail: `${store.storeCode} · ${boxCount} 箱`,
+        lat: store.lat,
+        lng: store.lng,
+      });
+    }
+
+    return points;
+  });
+
+  /**
+   * 司機位置圖層開關。預設關閉 ——
+   * 跟門市不同，這個一開就是持續輪詢的背景請求，不該預設一直跑。
+   */
+  readonly showDriverPoints = signal(false);
+
+  toggleDriverPoints(checked: boolean): void {
+    this.showDriverPoints.set(checked);
+  }
+
+  /**
+   * 輪詢 /api/fleet/live。用 switchMap 接開關：關掉的瞬間換成 of([])，
+   * 舊的 timer 訂閱被自動取消，不必自己管 clearInterval。
+   *
+   * catchError 刻意放在「每次請求」這層而不是整條 pipe 外層 —— 放外層的話，
+   * 一次 401 或後端重啟就會讓整條 stream complete，之後永遠不會再重試。
+   */
+  private readonly livePings = toSignal(
+    toObservable(this.showDriverPoints).pipe(
+      switchMap((on) =>
+        on
+          ? timer(0, 1_000).pipe(
+              switchMap(() => this.api.getLiveFleet().pipe(catchError(() => of<GpsPingDto[]>([])))),
+            )
+          : of<GpsPingDto[]>([]),
+      ),
+    ),
+    {initialValue: [] as GpsPingDto[]},
+  );
+
+  /**
+   * 地圖上的司機點。GPS 回報只有 driverId，姓名要拿 drivers() 補回來。
+   *
+   * 地圖空白（沒有任何點）是正常狀態，不是壞掉 —— 後端只回工作中且
+   * GPS 未過期（預設 10 分鐘內）的司機，司機端每 5 分鐘才傳一次，
+   * 只要漏傳一次就會從清單消失。detail 附上分鐘數，讓調度員自己判斷新鮮度。
+   */
+  readonly mapDrivers = computed<MapPoint[]>(() => {
+    const nameById = new Map(
+      this.drivers()
+        .filter((driver) => driver.id != null)
+        .map((driver) => [driver.id!, driver.name]),
+    );
+
+    return this.livePings().map((ping) => ({
+      id: ping.driverId,
+      label: nameById.get(ping.driverId) ?? `司機 #${ping.driverId}`,
+      detail: `${minutesAgo(ping.timestamp)} 分鐘前回報`,
+      lat: ping.lat,
+      lng: ping.lng,
+    }));
+  });
 
   ngOnInit(): void {
     this.loadDashboard();
@@ -466,7 +601,7 @@ export class DispatchDashboard implements OnInit {
     }
 
     return this.drivers()
-      .filter((driver): driver is DriverDto & {id: number} => driver.id != null && driver.isActive)
+      .filter((driver): driver is DriverDto & { id: number } => driver.id != null && driver.isActive)
       .map((driver) => ({
         id: driver.id,
         name: driver.name,
@@ -714,7 +849,7 @@ export class DispatchDashboard implements OnInit {
     for (const lane of this.routes()) {
       pooled.push(...lane.cards);
     }
-    this.routes.update((lanes) => lanes.map((lane) => ({ ...lane, cards: [], driverId: null })));
+    this.routes.update((lanes) => lanes.map((lane) => ({...lane, cards: [], driverId: null})));
     this.unassigned.set(pooled);
   }
 
@@ -747,7 +882,7 @@ export class DispatchDashboard implements OnInit {
     }
 
     this.templateBusy.set(true);
-    this.api.createTemplate({ name, routes }).subscribe({
+    this.api.createTemplate({name, routes}).subscribe({
       next: (created) => {
         this.templates.update((templates) => [...templates, created]);
         this.activeTemplateId.set(created.id);
@@ -789,7 +924,7 @@ export class DispatchDashboard implements OnInit {
 
     this.templateBusy.set(true);
     this.templateError.set('');
-    this.api.updateTemplate(template.id, { name: template.name, routes }).subscribe({
+    this.api.updateTemplate(template.id, {name: template.name, routes}).subscribe({
       next: (updated) => {
         this.templates.update((templates) =>
           templates.map((item) => (item.id === updated.id ? updated : item)),

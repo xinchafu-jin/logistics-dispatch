@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { DriverOperationsService } from './driver-operations.service';
-
-const GPS_UPLOAD_INTERVAL_MS = 5 * 60 * 1000;
+// 輪詢速度
+const GPS_UPLOAD_INTERVAL_MS =  1 * 1000;
 
 @Injectable({ providedIn: 'root' })
 export class DriverGpsTrackingService {
