@@ -12,9 +12,7 @@ import * as L from 'leaflet';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DriverDto} from '../../../../core/services/dispatch-api.models';
 
-const HOT_TILE_URL = 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png';
-const OSM_DE_TILE_URL = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
-const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 interface FleetDriver {
   id: number;
@@ -103,7 +101,11 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       preferCanvas: true,
     }).setView([23.006, 120.219], 13);
 
-    this.addBaseTiles(this.map);
+    L.tileLayer(OSM_TILE_URL, {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+      subdomains: 'abc',
+    }).addTo(this.map);
     L.control.zoom({position: 'bottomright'}).addTo(this.map);
 
     this.resizeObserver = new ResizeObserver(() => this.map?.invalidateSize());
@@ -237,25 +239,4 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     };
   }
 
-  private addBaseTiles(map: L.Map): void {
-    const primaryLayer = this.createTileLayer(HOT_TILE_URL, true);
-    primaryLayer.once('tileerror', () => {
-      // 公司或瀏覽器擋掉某個圖磚網域時，改用另一個同樣不需金鑰的 OSM 來源。
-      if (this.map !== map || !map.hasLayer(primaryLayer)) {
-        return;
-      }
-
-      map.removeLayer(primaryLayer);
-      this.createTileLayer(OSM_DE_TILE_URL, false).addTo(map);
-    });
-    primaryLayer.addTo(map);
-  }
-
-  private createTileLayer(url: string, useSubdomains: boolean): L.TileLayer {
-    return L.tileLayer(url, {
-      attribution: TILE_ATTRIBUTION,
-      maxZoom: 19,
-      ...(useSubdomains ? {subdomains: 'abc'} : {}),
-    });
-  }
 }
