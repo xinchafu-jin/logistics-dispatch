@@ -1,4 +1,4 @@
-<section class="live-fleet-map" [class.is-light-theme]="isLightTheme()" aria-labelledby="fleet-map-title">
+<section class="live-fleet-map" aria-labelledby="fleet-map-title">
   <header class="fleet-map-header">
     <div>
       <p class="fleet-map-eyebrow">FLEET MONITOR</p>
@@ -48,11 +48,12 @@
     </div>
   </aside>
 
-  <p class="fleet-map-notice">定位功能將在後端新增 GPS API 後自動接上。</p>
+  <p class="fleet-map-notice">僅顯示正在上班、且最新定位未超過 10 分鐘的司機。</p>
   <p class="fleet-map-attribution">
     &copy;
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
       >OpenStreetMap</a
     >
+    · HOT
   </p>
 </section>

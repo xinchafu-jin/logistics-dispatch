@@ -11,7 +11,10 @@ import {
 import * as L from 'leaflet';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DriverDto} from '../../../../core/services/dispatch-api.models';
-import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
+
+const HOT_TILE_URL = 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png';
+const OSM_DE_TILE_URL = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
+const TILE_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 
 interface FleetDriver {
   id: number;
@@ -64,8 +67,6 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   );
 
   private readonly api = inject(DispatchApiService);
-  private readonly theme = inject(AdminThemeService);
-  readonly isLightTheme = this.theme.isLightTheme;
   private map?: L.Map;
   private resizeObserver?: ResizeObserver;
   private markerLayer?: L.LayerGroup;
@@ -102,10 +103,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       preferCanvas: true,
     }).setView([23.006, 120.219], 13);
 
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-      maxZoom: 19,
-    }).addTo(this.map);
+    this.addBaseTiles(this.map);
     L.control.zoom({position: 'bottomright'}).addTo(this.map);
 
     this.resizeObserver = new ResizeObserver(() => this.map?.invalidateSize());
@@ -237,5 +235,27 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       name: driver.name,
       isActive: driver.isActive,
     };
+  }
+
+  private addBaseTiles(map: L.Map): void {
+    const primaryLayer = this.createTileLayer(HOT_TILE_URL, true);
+    primaryLayer.once('tileerror', () => {
+      // 公司或瀏覽器擋掉某個圖磚網域時，改用另一個同樣不需金鑰的 OSM 來源。
+      if (this.map !== map || !map.hasLayer(primaryLayer)) {
+        return;
+      }
+
+      map.removeLayer(primaryLayer);
+      this.createTileLayer(OSM_DE_TILE_URL, false).addTo(map);
+    });
+    primaryLayer.addTo(map);
+  }
+
+  private createTileLayer(url: string, useSubdomains: boolean): L.TileLayer {
+    return L.tileLayer(url, {
+      attribution: TILE_ATTRIBUTION,
+      maxZoom: 19,
+      ...(useSubdomains ? {subdomains: 'abc'} : {}),
+    });
   }
 }
