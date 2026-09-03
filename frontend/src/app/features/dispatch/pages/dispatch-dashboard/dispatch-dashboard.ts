@@ -227,7 +227,7 @@ export class DispatchDashboard implements OnInit {
     return [
       `今日配送需求 ${orders.length} 筆`,
       `${waitingSchedule} 筆待排車，資料來自 OrderController`,
-      `${delivering} 筆配送中，後端目前未提供即時 GPS Controller`,
+      `${delivering} 筆配送中，可開啟地圖的司機位置查看有效 GPS 回傳`,
       `已同步 ${this.drivers().length} 位司機與 ${this.vehicles().length} 台車輛`,
       `目前 ${this.warehouseName()} 已納入首頁資料來源`,
     ];
@@ -376,7 +376,7 @@ export class DispatchDashboard implements OnInit {
     toObservable(this.showDriverPoints).pipe(
       switchMap((on) =>
         on
-          ? timer(0, 1_000).pipe(
+          ? timer(0, 30_000).pipe(
               switchMap(() => this.api.getLiveFleet().pipe(catchError(() => of<GpsPingDto[]>([])))),
             )
           : of<GpsPingDto[]>([]),
@@ -508,7 +508,7 @@ export class DispatchDashboard implements OnInit {
     if (alerts.length === 0) {
       alerts.push({
         title: '目前沒有資源提醒',
-        detail: '後端目前尚未提供即時異常 Controller。',
+        detail: '目前沒有資源異常；異常案件 API 尚未完成 Service 串接。',
         tone: 'normal',
       });
     }

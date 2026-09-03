@@ -1,6 +1,8 @@
 export type DriverStatus = 'ACTIVE' | 'INACTIVE';
 export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
+export type ScheduleStatus = 'DRAFT' | 'PUBLISHED';
+export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
 /** 路線的發布狀態。訂單層沒有「已發布」，發布是路線層的事。 */
 export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
@@ -22,6 +24,47 @@ export interface DriverDto {
   restDuration: number;
   maxOvertimeMinutes?: number;
   isActive: boolean;
+}
+
+/** 每月司機班表主檔。 */
+export interface ScheduleMonthDto {
+  id: number;
+  /** yyyy-MM-dd，永遠是該月份的第一天。 */
+  scheduleMonth: string;
+  status: ScheduleStatus;
+  generatedAt: string;
+  publishedAt: string | null;
+}
+
+/** 指定月份中，一位司機的一日班次。 */
+export interface DriverShiftDto {
+  id: number;
+  scheduleMonthId: number;
+  driverId: number;
+  /** yyyy-MM-dd */
+  workDate: string;
+  shiftType: ShiftType;
+  /** HH:mm 或 HH:mm:ss；休假與請假為 null。 */
+  workStart: string | null;
+  workEnd: string | null;
+  overtimeMinutes: number;
+  changeReason: string;
+  lastModifiedAt: string | null;
+  version: number | null;
+}
+
+/** 對應 PUT /api/driver-schedules/shifts/{shiftId}。 */
+export interface DriverShiftUpdateRequest {
+  shiftType: ShiftType;
+  workStart: string | null;
+  workEnd: string | null;
+  overtimeMinutes: number;
+  changeReason: string;
+}
+
+/** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
+export interface LeaveRequest {
+  reason: string;
 }
 
 export interface VehicleDto {

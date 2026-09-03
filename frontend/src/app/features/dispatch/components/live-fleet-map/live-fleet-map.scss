@@ -26,11 +26,6 @@
   background: #0b0e0f;
 }
 
-.fleet-map-canvas .leaflet-pane,
-.fleet-map-canvas .leaflet-control {
-  filter: saturate(78%) contrast(108%);
-}
-
 .fleet-map-canvas .leaflet-control-zoom {
   overflow: hidden;
   margin: 0 18px 18px 0;

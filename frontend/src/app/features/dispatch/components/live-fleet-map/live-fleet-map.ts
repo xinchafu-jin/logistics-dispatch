@@ -12,8 +12,11 @@ import * as L from 'leaflet';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DriverDto} from '../../../../core/services/dispatch-api.models';
 
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
 interface FleetDriver {
-  id: string;
+  id: number;
+  displayId: string;
   name: string;
   isActive: boolean;
 }
@@ -49,10 +52,14 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   /** 司機圖層開關，跟 showPoints 分開：門市是靜態資料，司機位置背後是持續輪詢 */
   readonly showDriverPoints = input(false);
   readonly drivers = signal<FleetDriver[]>([]);
-  readonly selectedDriverId = signal<string | null>(null);
+  readonly selectedDriverId = signal<number | null>(null);
   readonly selectedDriver = computed(() =>
     this.drivers().find((driver) => driver.id === this.selectedDriverId()),
   );
+  readonly selectedDriverPoint = computed(() => {
+    const driver = this.selectedDriver();
+    return driver ? this.driverPoints().find((point) => point.id === driver.id) ?? null : null;
+  });
   readonly activeDriverCount = computed(
     () => this.drivers().filter((driver) => driver.isActive).length,
   );
@@ -94,10 +101,10 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       preferCanvas: true,
     }).setView([23.006, 120.219], 13);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer(OSM_TILE_URL, {
+      attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
-      subdomains: 'abcd',
+      subdomains: 'abc',
     }).addTo(this.map);
     L.control.zoom({position: 'bottomright'}).addTo(this.map);
 
@@ -113,7 +120,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     this.map?.remove();
   }
 
-  selectDriver(id: string): void {
+  selectDriver(id: number): void {
     this.selectedDriverId.set(id);
   }
 
@@ -224,7 +231,12 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   }
 
   private toFleetDriver(driver: DriverDto): FleetDriver {
-    const id = driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account;
-    return {id, name: driver.name, isActive: driver.isActive};
+    return {
+      id: driver.id ?? 0,
+      displayId: driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account,
+      name: driver.name,
+      isActive: driver.isActive,
+    };
   }
+
 }

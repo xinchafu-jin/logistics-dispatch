@@ -10,6 +10,7 @@ import {
 } from '@angular/router';
 import { filter, map } from 'rxjs';
 import {
+  LucideCalendarDays,
   LucideChartNoAxesCombined,
   LucideClipboardCheck,
   LucideLogOut,
@@ -22,6 +23,7 @@ import {
 } from '@lucide/angular';
 import { BrandLogo } from '../../../../shared/ui/brand-logo/brand-logo';
 import { AuthService } from '../../../../core/auth/auth.service';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 
 @Component({
   selector: 'app-dispatch-shell',
@@ -29,6 +31,7 @@ import { AuthService } from '../../../../core/auth/auth.service';
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
+    LucideCalendarDays,
     LucideWorkflow,
     LucideClipboardCheck,
     LucideTruck,
@@ -44,9 +47,10 @@ import { AuthService } from '../../../../core/auth/auth.service';
   styleUrl: './dispatch-shell.scss',
 })
 export class DispatchShell {
+  private readonly theme = inject(AdminThemeService);
   protected readonly user = inject(AuthService).user;
   protected readonly isSigningOut = signal(false);
-  protected readonly isLightTheme = signal(this.readSavedTheme() === 'light');
+  protected readonly isLightTheme = this.theme.isLightTheme;
 
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
@@ -82,12 +86,7 @@ export class DispatchShell {
   }
 
   protected toggleTheme(): void {
-    const nextTheme = this.isLightTheme() ? 'dark' : 'light';
-    this.isLightTheme.set(nextTheme === 'light');
-
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('logistics-dispatch.admin-theme', nextTheme);
-    }
+    this.theme.toggle();
   }
 
   /** 沿著路由樹走到最深一層取標題：標題掛在子路由上，shell 這一層沒有 */
@@ -101,15 +100,5 @@ export class DispatchShell {
     }
 
     return title;
-  }
-
-  private readSavedTheme(): 'light' | 'dark' {
-    if (typeof localStorage === 'undefined') {
-      return 'dark';
-    }
-
-    return localStorage.getItem('logistics-dispatch.admin-theme') === 'light'
-      ? 'light'
-      : 'dark';
   }
 }

@@ -66,21 +66,30 @@ public class MileageLogsService {
 
     public MileageLogResponse end(Long driverId, MileageRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
-        MileageLogsEntity mileage = mileageLogsDAO.findForUpdate(driverId, now.toLocalDate())
-                .orElseThrow(() -> new IllegalArgumentException("今天尚未登記出車里程"));
+
+        // 確認司機存在且目前仍在職
+        requireActiveDriver(driverId);
+
+        MileageLogsEntity mileage =
+                mileageLogsDAO.findForUpdate(driverId, now.toLocalDate())
+                        .orElseThrow(() ->
+                                new IllegalArgumentException("今天尚未登記出車里程"));
 
         if (mileage.getEndTime() != null || mileage.getEndOdometer() != null) {
             throw new IllegalArgumentException("今天已經登記過收車里程");
         }
+
         if (mileage.getStartOdometer() == null || mileage.getStartTime() == null) {
             throw new IllegalStateException("里程紀錄缺少出車資料，無法登記收車里程");
         }
+
         if (request.getOdometer() < mileage.getStartOdometer()) {
             throw new IllegalArgumentException("收車里程不能小於出車里程");
         }
 
         mileage.setEndOdometer(request.getOdometer());
         mileage.setEndTime(now);
+
         return toResponse(mileageLogsDAO.save(mileage));
     }
 

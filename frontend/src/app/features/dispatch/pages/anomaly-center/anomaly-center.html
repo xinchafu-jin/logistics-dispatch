@@ -4,7 +4,7 @@
       <p class="page-eyebrow">EXCEPTION CONTROL</p>
       <p>統一查看配送異常；目前畫面不使用示範案件或假資料。</p>
     </div>
-    <p class="updated-at">資料狀態：等待後端異常案件 API</p>
+    <p class="updated-at">資料狀態：API Controller 已建立，尚未接上 Service</p>
   </section>
 
   <section class="anomaly-workspace" aria-label="異常案件串接狀態">
@@ -12,12 +12,13 @@
       <header class="list-header">
         <div>
           <p class="section-eyebrow">BACKEND CONTRACT</p>
-          <h3 id="incident-list-title">尚未提供異常案件 Controller</h3>
+          <h3 id="incident-list-title">異常案件 API 尚未完成</h3>
         </div>
         <svg lucideTriangleAlert aria-hidden="true"></svg>
       </header>
       <p class="empty-state">
-        最新 main 目前沒有 <code>/api/exceptions</code> 端點，因此此頁不會送出讀取、新增或結案請求。
+        <code>GET /api/exceptions</code> 與 <code>PATCH /api/exceptions/:id</code> 已有 Controller，
+        但目前固定回傳 501 Not Implemented。此頁不會把 501 偽裝成空案件清單。
       </p>
     </section>
 
@@ -36,17 +37,17 @@
           <dd>GET /api/exceptions</dd>
         </div>
         <div>
-          <dt>建立案件</dt>
-          <dd>POST /api/exceptions</dd>
+          <dt>取得清單</dt>
+          <dd>GET /api/exceptions?status=OPEN</dd>
         </div>
         <div>
-          <dt>更新狀態</dt>
-          <dd>PATCH /api/exceptions/:id/status</dd>
+          <dt>處理案件</dt>
+          <dd>PATCH /api/exceptions/:id</dd>
         </div>
       </dl>
 
       <p class="empty-state">
-        等後端 Controller 與 DTO 確定後，再依實際欄位加入表單、案件列表與結案互動。
+        等後端將 Controller 接上 Service 並確定 DTO 後，再依實際欄位加入案件列表與處理互動。
       </p>
     </aside>
   </section>

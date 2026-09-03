@@ -49,6 +49,14 @@ describe('DispatchApiService', () => {
     }
   });
 
+  it('reads the live fleet through the administrator GPS endpoint', () => {
+    service.getLiveFleet().subscribe((pings) => expect(pings).toEqual([]));
+
+    const request = httpTesting.expectOne('/api/fleet/live');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
   it('writes order status using the backend PUT contract', () => {
     service
       .updateOrder(12, {
@@ -130,6 +138,71 @@ describe('DispatchApiService', () => {
       receivingEnd: '18:00',
       status: 'SUSPENDED',
     });
+  });
+
+  it('uses the driver schedule endpoints with the backend request shapes', () => {
+    service.getScheduleMonth('2026-09').subscribe();
+    service.generateScheduleMonth('2026-09').subscribe();
+    service.getScheduleMonthShifts(41).subscribe();
+    service
+      .updateDriverShift(86, {
+        shiftType: 'WORK',
+        workStart: '08:30',
+        workEnd: '17:30',
+        overtimeMinutes: 30,
+        changeReason: '支援月初配送量',
+      })
+      .subscribe();
+    service.syncScheduleDrivers(41).subscribe();
+    service.markDriverShiftLeave(87, {reason: '已核准特休'}).subscribe();
+    service.publishScheduleMonth(41).subscribe();
+
+    const getMonth = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams === '/api/driver-schedules/months?month=2026-09' &&
+        request.method === 'GET',
+    );
+    expect(getMonth.request.method).toBe('GET');
+    getMonth.flush({id: 41, scheduleMonth: '2026-09-01', status: 'DRAFT'});
+
+    const createMonth = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams === '/api/driver-schedules/months?month=2026-09' &&
+        request.method === 'POST',
+    );
+    expect(createMonth.request.method).toBe('POST');
+    expect(createMonth.request.body).toBeNull();
+    createMonth.flush({id: 41, scheduleMonth: '2026-09-01', status: 'DRAFT'});
+
+    const shifts = httpTesting.expectOne('/api/driver-schedules/months/41/shifts');
+    expect(shifts.request.method).toBe('GET');
+    shifts.flush([]);
+
+    const updateShift = httpTesting.expectOne('/api/driver-schedules/shifts/86');
+    expect(updateShift.request.method).toBe('PUT');
+    expect(updateShift.request.body).toEqual({
+      shiftType: 'WORK',
+      workStart: '08:30',
+      workEnd: '17:30',
+      overtimeMinutes: 30,
+      changeReason: '支援月初配送量',
+    });
+    updateShift.flush({id: 86, shiftType: 'WORK'});
+
+    const syncDrivers = httpTesting.expectOne('/api/driver-schedules/months/41/sync-drivers');
+    expect(syncDrivers.request.method).toBe('POST');
+    expect(syncDrivers.request.body).toBeNull();
+    syncDrivers.flush([]);
+
+    const leave = httpTesting.expectOne('/api/driver-schedules/shifts/87/leave');
+    expect(leave.request.method).toBe('PATCH');
+    expect(leave.request.body).toEqual({reason: '已核准特休'});
+    leave.flush({id: 87, shiftType: 'LEAVE'});
+
+    const publish = httpTesting.expectOne('/api/driver-schedules/months/41/publish');
+    expect(publish.request.method).toBe('POST');
+    expect(publish.request.body).toBeNull();
+    publish.flush({id: 41, scheduleMonth: '2026-09-01', status: 'PUBLISHED'});
   });
 
   it('deletes a driver through the backend DELETE contract', () => {
