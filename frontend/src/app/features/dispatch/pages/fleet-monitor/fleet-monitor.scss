@@ -49,6 +49,50 @@
   border-radius: 6px;
 }
 
+.gps-state small {
+  color: inherit;
+  font: inherit;
+  opacity: 0.72;
+}
+
+.refresh-gps {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  margin: -4px -5px -4px 2px;
+  padding: 0;
+  color: inherit;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.refresh-gps:hover:not(:disabled) {
+  background: rgb(240 192 122 / 14%);
+}
+
+.refresh-gps:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.refresh-gps svg {
+  width: 15px;
+  height: 15px;
+}
+
+.refresh-gps svg.is-spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .gps-state svg {
   width: 16px;
   height: 16px;
@@ -217,6 +261,26 @@
 
 .panel-message.is-error {
   color: #ef9d9d;
+}
+
+:host-context(.dispatch-layout.is-light-theme) {
+  .fleet-summary article,
+  .fleet-list-panel {
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 92%),
+      0 12px 28px rgb(20 52 42 / 10%);
+  }
+
+  .gps-state,
+  .summary-icon {
+    color: #89500a;
+  }
+
+  .panel-message.is-error {
+    color: #a3483e;
+  }
 }
 
 @media (max-width: 1080px) {

@@ -4,10 +4,14 @@ import {Observable} from 'rxjs';
 import {
   DispatchResultDto,
   DriverDto,
+  DriverShiftDto,
+  DriverShiftUpdateRequest,
   DriverStatusPayload,
   GpsPingDto,
+  LeaveRequest,
   OrderDto,
   ReassignRequest,
+  ScheduleMonthDto,
   StoreDto,
   StoreStatusPayload,
   TemplateDto,
@@ -26,6 +30,55 @@ export class DispatchApiService {
 
   getDrivers(): Observable<DriverDto[]> {
     return this.http.get<DriverDto[]>(`${API_ROOT}/drivers`);
+  }
+
+  // ── 司機月班表 ────────────────────────────────────────
+
+  getScheduleMonth(month: string): Observable<ScheduleMonthDto> {
+    const params = new HttpParams().set('month', month);
+
+    return this.http.get<ScheduleMonthDto>(`${API_ROOT}/driver-schedules/months`, {params});
+  }
+
+  /** 建立指定月份的草稿；後端對同月份為冪等操作。 */
+  generateScheduleMonth(month: string): Observable<ScheduleMonthDto> {
+    const params = new HttpParams().set('month', month);
+
+    return this.http.post<ScheduleMonthDto>(`${API_ROOT}/driver-schedules/months`, null, {params});
+  }
+
+  getScheduleMonthShifts(scheduleMonthId: number): Observable<DriverShiftDto[]> {
+    return this.http.get<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/shifts`,
+    );
+  }
+
+  updateDriverShift(
+    shiftId: number,
+    request: DriverShiftUpdateRequest,
+  ): Observable<DriverShiftDto> {
+    return this.http.put<DriverShiftDto>(`${API_ROOT}/driver-schedules/shifts/${shiftId}`, request);
+  }
+
+  syncScheduleDrivers(scheduleMonthId: number): Observable<DriverShiftDto[]> {
+    return this.http.post<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/sync-drivers`,
+      null,
+    );
+  }
+
+  markDriverShiftLeave(shiftId: number, request: LeaveRequest): Observable<DriverShiftDto> {
+    return this.http.patch<DriverShiftDto>(
+      `${API_ROOT}/driver-schedules/shifts/${shiftId}/leave`,
+      request,
+    );
+  }
+
+  publishScheduleMonth(scheduleMonthId: number): Observable<ScheduleMonthDto> {
+    return this.http.post<ScheduleMonthDto>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/publish`,
+      null,
+    );
   }
 
   getDriver(id: number): Observable<DriverDto> {

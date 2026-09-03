@@ -1,13 +1,14 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { LucideMapPinned, LucideTriangleAlert, LucideUserRound } from '@lucide/angular';
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { LucideMapPinned, LucideRefreshCw, LucideTriangleAlert, LucideUserRound } from '@lucide/angular';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
-import { DriverDto } from '../../../../core/services/dispatch-api.models';
-import { LiveFleetMap } from '../../components/live-fleet-map/live-fleet-map';
+import { DriverDto, GpsPingDto } from '../../../../core/services/dispatch-api.models';
+import { LiveFleetMap, MapPoint } from '../../components/live-fleet-map/live-fleet-map';
 
 type FleetFilter = 'all' | 'active' | 'inactive';
 
 interface FleetDriver {
-  id: string;
+  id: number;
+  displayId: string;
   name: string;
   state: string;
   isActive: boolean;
@@ -15,17 +16,22 @@ interface FleetDriver {
 
 @Component({
   selector: 'app-fleet-monitor',
-  imports: [LiveFleetMap, LucideMapPinned, LucideTriangleAlert, LucideUserRound],
+  imports: [LiveFleetMap, LucideMapPinned, LucideRefreshCw, LucideTriangleAlert, LucideUserRound],
   templateUrl: './fleet-monitor.html',
   styleUrl: './fleet-monitor.scss',
 })
-export class FleetMonitor implements OnInit {
+export class FleetMonitor implements OnInit, OnDestroy {
   private readonly api = inject(DispatchApiService);
 
   readonly activeFilter = signal<FleetFilter>('all');
   readonly drivers = signal<FleetDriver[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
+  readonly livePings = signal<GpsPingDto[]>([]);
+  readonly gpsErrorMessage = signal('');
+  readonly gpsUpdatedAt = signal('');
+  readonly refreshing = signal(false);
+  private refreshTimer?: number;
 
   readonly visibleDrivers = computed(() => {
     const filter = this.activeFilter();
@@ -39,6 +45,26 @@ export class FleetMonitor implements OnInit {
   readonly inactiveCount = computed(
     () => this.drivers().filter((driver) => !driver.isActive).length,
   );
+  readonly mapDrivers = computed<MapPoint[]>(() => {
+    const driversById = new Map(this.drivers().map((driver) => [driver.id, driver]));
+
+    return this.livePings().map((ping) => ({
+      id: ping.driverId,
+      label: driversById.get(ping.driverId)?.name ?? `司機 #${ping.driverId}`,
+      detail: `${this.formatTimestamp(ping.timestamp)} 回報`,
+      lat: ping.lat,
+      lng: ping.lng,
+    }));
+  });
+  readonly gpsState = computed(() => {
+    if (this.gpsErrorMessage()) {
+      return this.gpsErrorMessage();
+    }
+
+    return this.livePings().length
+      ? `${this.livePings().length} 位司機正在回傳定位`
+      : '目前沒有有效定位回傳';
+  });
 
   readonly filters: { id: FleetFilter; label: string }[] = [
     { id: 'all', label: '全部司機' },
@@ -48,10 +74,24 @@ export class FleetMonitor implements OnInit {
 
   ngOnInit(): void {
     this.loadDrivers();
+    this.loadLiveFleet();
+    this.refreshTimer = window.setInterval(() => this.loadLiveFleet(), 30_000);
+  }
+
+  ngOnDestroy(): void {
+    if (this.refreshTimer !== undefined) {
+      window.clearInterval(this.refreshTimer);
+    }
   }
 
   setFilter(filter: FleetFilter): void {
     this.activeFilter.set(filter);
+  }
+
+  refresh(): void {
+    this.refreshing.set(true);
+    this.loadDrivers();
+    this.loadLiveFleet(() => this.refreshing.set(false));
   }
 
   private loadDrivers(): void {
@@ -60,7 +100,8 @@ export class FleetMonitor implements OnInit {
 
     this.api.getDrivers().subscribe({
       next: (drivers) => {
-        this.drivers.set(drivers.map((driver) => this.toFleetDriver(driver)));
+        const pingsByDriverId = new Map(this.livePings().map((ping) => [ping.driverId, ping]));
+        this.drivers.set(drivers.map((driver) => this.toFleetDriver(driver, pingsByDriverId.get(driver.id ?? 0))));
         this.loading.set(false);
       },
       error: () => {
@@ -70,13 +111,64 @@ export class FleetMonitor implements OnInit {
     });
   }
 
-  private toFleetDriver(driver: DriverDto): FleetDriver {
-    const id = driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account;
+  private loadLiveFleet(onComplete?: () => void): void {
+    this.gpsErrorMessage.set('');
+
+    this.api.getLiveFleet().subscribe({
+      next: (pings) => {
+        this.livePings.set(pings);
+        this.gpsUpdatedAt.set(this.currentTime());
+        this.updateDriverGpsStates(pings);
+        onComplete?.();
+      },
+      error: () => {
+        this.livePings.set([]);
+        this.gpsErrorMessage.set('無法取得即時定位，請確認後端服務與登入狀態。');
+        onComplete?.();
+      },
+    });
+  }
+
+  private updateDriverGpsStates(pings: GpsPingDto[]): void {
+    const pingsByDriverId = new Map(pings.map((ping) => [ping.driverId, ping]));
+    this.drivers.update((drivers) =>
+      drivers.map((driver) => this.withGpsState(driver, pingsByDriverId.get(driver.id))),
+    );
+  }
+
+  private toFleetDriver(driver: DriverDto, ping?: GpsPingDto): FleetDriver {
     return {
-      id,
+      id: driver.id ?? 0,
+      displayId: driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account,
       name: driver.name,
-      state: driver.isActive ? '可排班，等待 GPS API 回傳位置' : '帳號未啟用',
+      state: this.driverGpsState(driver.isActive, ping),
       isActive: driver.isActive,
     };
+  }
+
+  private withGpsState(driver: FleetDriver, ping?: GpsPingDto): FleetDriver {
+    return {...driver, state: this.driverGpsState(driver.isActive, ping)};
+  }
+
+  private driverGpsState(isActive: boolean, ping?: GpsPingDto): string {
+    if (!isActive) {
+      return '帳號未啟用';
+    }
+
+    return ping
+      ? `定位於 ${this.formatTimestamp(ping.timestamp)}`
+      : '尚未上班或定位已超過 10 分鐘';
+  }
+
+  private formatTimestamp(value: string): string {
+    return value.replace('T', ' ').slice(0, 16);
+  }
+
+  private currentTime(): string {
+    return new Intl.DateTimeFormat('zh-TW', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date());
   }
 }

@@ -639,6 +639,55 @@
   border: 0;
 }
 
+:host-context(.dispatch-layout.is-light-theme) {
+  .summary-card,
+  .incident-list-panel,
+  .incident-detail-panel,
+  .exception-modal {
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 92%),
+      0 12px 28px rgb(20 52 42 / 10%);
+    backdrop-filter: none;
+  }
+
+  .summary-card.tone-critical strong,
+  .severity-label.severity-critical,
+  .detail-status.severity-critical {
+    color: #a3483e;
+  }
+
+  .summary-card.tone-warning strong,
+  .severity-label.severity-attention,
+  .detail-status.severity-attention {
+    color: #89500a;
+  }
+
+  .filter-control,
+  .search-field,
+  .exception-form input,
+  .exception-form select,
+  .exception-form textarea,
+  .severity-label,
+  .detail-status,
+  .button-secondary {
+    background: var(--surface);
+    border-color: var(--border);
+  }
+
+  .incident-row,
+  .detail-block,
+  .owner-block {
+    border-color: var(--border);
+  }
+
+  .incident-row:hover,
+  .incident-row:focus-visible {
+    background: rgb(8 124 107 / 4%);
+  }
+}
+
 @media (max-width: 1050px) {
   .anomaly-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -1,0 +1,221 @@
+<main class="driver-schedule-page">
+  <header class="schedule-toolbar">
+    <div>
+      <p class="page-eyebrow">DRIVER SCHEDULE</p>
+      <h2>司機月班表</h2>
+      <p>建立、安排與發布司機每日班次；發布後才會在司機端顯示。</p>
+    </div>
+
+    <div class="month-controls" aria-label="選擇班表月份">
+      <button type="button" class="icon-button" (click)="moveMonth(-1)" title="上一個月" aria-label="上一個月">
+        <svg lucideChevronLeft aria-hidden="true"></svg>
+      </button>
+      <label>
+        <span>班表月份</span>
+        <input type="month" [value]="selectedMonth()" (change)="selectMonth($event)" />
+      </label>
+      <button type="button" class="icon-button" (click)="moveMonth(1)" title="下一個月" aria-label="下一個月">
+        <svg lucideChevronRight aria-hidden="true"></svg>
+      </button>
+      <button type="button" class="icon-button" (click)="refresh()" title="重新整理" aria-label="重新整理" [disabled]="saving()">
+        <svg lucideRefreshCw aria-hidden="true"></svg>
+      </button>
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+    <p class="feedback is-error"><svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}</p>
+  }
+  @if (actionMessage()) {
+    <p class="feedback is-success"><svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}</p>
+  }
+
+  @if (loading()) {
+    <section class="empty-state" aria-live="polite">
+      <svg lucideFileClock aria-hidden="true"></svg>
+      <p>正在讀取 {{ displayMonth() }} 班表...</p>
+    </section>
+  } @else if (scheduleMissing()) {
+    <section class="empty-state">
+      <svg lucideCalendarDays aria-hidden="true"></svg>
+      <div>
+        <h3>{{ displayMonth() }} 尚未建立班表</h3>
+        <p>建立後會依當下啟用的司機產生整月「未排定」班次。</p>
+      </div>
+      <button type="button" class="primary-action" (click)="generateMonth()" [disabled]="saving()">
+        <svg lucideCalendarDays aria-hidden="true"></svg>
+        建立草稿班表
+      </button>
+    </section>
+  } @else if (scheduleMonth(); as month) {
+    <section class="schedule-summary" aria-label="班表摘要">
+      <div class="schedule-status" [class.is-published]="isPublished()">
+        <svg lucideCalendarDays aria-hidden="true"></svg>
+        <div>
+          <span>發布狀態</span>
+          <strong>{{ scheduleStatusLabel() }}</strong>
+        </div>
+      </div>
+      <dl>
+        <div><dt>司機</dt><dd>{{ summary().drivers }} 位</dd></div>
+        <div><dt>上班</dt><dd>{{ summary().work }} 班</dd></div>
+        <div><dt>請假</dt><dd>{{ summary().leave }} 班</dd></div>
+        <div [class.has-warning]="summary().unassigned > 0"><dt>未排定</dt><dd>{{ summary().unassigned }} 班</dd></div>
+      </dl>
+      <div class="schedule-actions">
+        <button type="button" class="secondary-action" (click)="syncDrivers()" [disabled]="!isDraft() || saving()">
+          <svg lucideUserRound aria-hidden="true"></svg>
+          同步新司機
+        </button>
+        <button type="button" class="primary-action" (click)="publishMonth()" [disabled]="!isDraft() || saving()">
+          <svg lucideSend aria-hidden="true"></svg>
+          發布班表
+        </button>
+      </div>
+    </section>
+
+    @if (isPublished()) {
+      <p class="published-note">此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。</p>
+    }
+
+    <div class="schedule-workspace">
+      <section class="schedule-grid-panel" aria-label="整月司機班表">
+        <header>
+          <div>
+            <p class="page-eyebrow">MONTHLY ROSTER</p>
+            <h3>{{ displayMonth() }} 全部司機</h3>
+          </div>
+          <span>{{ rows().length }} 位司機</span>
+        </header>
+
+        <div class="schedule-grid-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col" class="driver-column">司機</th>
+                @for (day of days(); track day.iso) {
+                  <th scope="col" [class.is-weekend]="day.isWeekend">
+                    <strong>{{ day.day }}</strong>
+                    <span>{{ day.weekday }}</span>
+                  </th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.driverId) {
+                <tr>
+                  <th scope="row" class="driver-column">
+                    <strong>{{ row.driverName }}</strong>
+                    <span>{{ row.driverAccount }}</span>
+                  </th>
+                  @for (entry of row.entries; track entry.day.iso) {
+                    <td [class.is-weekend]="entry.day.isWeekend">
+                      @if (entry.shift; as shift) {
+                        <button
+                          type="button"
+                          class="shift-cell"
+                          [class.is-selected]="isSelected(shift)"
+                          [class.is-work]="shift.shiftType === 'WORK'"
+                          [class.is-day-off]="shift.shiftType === 'DAY_OFF'"
+                          [class.is-leave]="shift.shiftType === 'LEAVE'"
+                          [class.is-unassigned]="shift.shiftType === 'UNASSIGNED'"
+                          [title]="shiftLabel(shift.shiftType) + '：' + shift.changeReason"
+                          (click)="selectShift(shift)"
+                        >
+                          {{ shiftLabel(shift.shiftType) }}
+                        </button>
+                      } @else {
+                        <span class="missing-shift">--</span>
+                      }
+                    </td>
+                  }
+                </tr>
+              } @empty {
+                <tr><td class="no-shifts" [attr.colspan]="days().length + 1">此班表目前沒有可顯示的司機班次。</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="shift-editor" aria-label="班次設定">
+        @if (selectedShift(); as shift) {
+          @if (editorForm(); as form) {
+            <header>
+              <div>
+                <p class="page-eyebrow">SHIFT EDITOR</p>
+                <h3>{{ selectedDriver()?.name ?? ('司機 #' + shift.driverId) }}</h3>
+                <span>{{ shift.workDate }}</span>
+              </div>
+              <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
+            </header>
+
+            <div class="editor-form">
+              <label>
+                <span>班別</span>
+                <select [value]="form.shiftType" (change)="changeShiftType($event)" [disabled]="saving() || (isPublished() && form.shiftType === 'LEAVE')">
+                  @if (isDraft()) {
+                    <option value="UNASSIGNED">未排定</option>
+                    <option value="WORK">上班</option>
+                    <option value="DAY_OFF">休假</option>
+                    <option value="LEAVE">請假</option>
+                  } @else {
+                    <option [value]="form.shiftType">{{ shiftLabel(form.shiftType) }}</option>
+                    @if (form.shiftType !== 'LEAVE') {
+                      <option value="LEAVE">請假</option>
+                    }
+                  }
+                </select>
+              </label>
+
+              @if (form.shiftType === 'WORK') {
+                <div class="time-fields">
+                  <label>
+                    <span>上班時間</span>
+                    <input type="time" [value]="form.workStart" (input)="updateWorkStart($event)" [disabled]="!isDraft() || saving()" />
+                  </label>
+                  <label>
+                    <span>下班時間</span>
+                    <input type="time" [value]="form.workEnd" (input)="updateWorkEnd($event)" [disabled]="!isDraft() || saving()" />
+                  </label>
+                </div>
+                <label>
+                  <span>加班分鐘數（上限 {{ maxOvertime() }} 分）</span>
+                  <input type="number" min="0" step="1" [value]="form.overtimeMinutes" (input)="updateOvertime($event)" [disabled]="!isDraft() || saving()" />
+                </label>
+              }
+
+              <label>
+                <span>{{ form.shiftType === 'LEAVE' ? '請假原因' : '修改原因' }}</span>
+                <input type="text" maxlength="255" [value]="form.changeReason" (input)="updateReason($event)" [disabled]="saving() || (!isDraft() && form.shiftType !== 'LEAVE')" />
+              </label>
+
+              @if (form.shiftType === 'LEAVE') {
+                <button type="button" class="leave-action" (click)="markLeave()" [disabled]="!canMarkLeave() || saving()">
+                  <svg lucideFileClock aria-hidden="true"></svg>
+                  登記請假
+                </button>
+              } @else {
+                <button type="button" class="primary-action save-action" (click)="saveShift()" [disabled]="!isDraft() || saving()">
+                  <svg lucideSave aria-hidden="true"></svg>
+                  儲存班次
+                </button>
+              }
+            </div>
+
+            <dl class="shift-meta">
+              <div><dt>原始工時</dt><dd>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</dd></div>
+              <div><dt>目前原因</dt><dd>{{ shift.changeReason }}</dd></div>
+            </dl>
+          }
+        } @else {
+          <div class="editor-placeholder">
+            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <h3>選擇一個班次</h3>
+            <p>點選左側表格中的班次，即可安排上班、休假或請假。</p>
+          </div>
+        }
+      </aside>
+    </div>
+  }
+</main>

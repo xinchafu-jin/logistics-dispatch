@@ -1,4 +1,4 @@
-<section class="live-fleet-map" aria-labelledby="fleet-map-title">
+<section class="live-fleet-map" [class.is-light-theme]="isLightTheme()" aria-labelledby="fleet-map-title">
   <header class="fleet-map-header">
     <div>
       <p class="fleet-map-eyebrow">FLEET MONITOR</p>
@@ -11,13 +11,22 @@
 
   <aside class="fleet-tracking-panel" aria-label="司機定位狀態">
     <p class="fleet-map-eyebrow">GPS STATUS</p>
-    <strong>等待定位 API</strong>
+    <strong>{{ driverPoints().length ? '定位回傳中' : '尚未取得定位資料' }}</strong>
     @if (selectedDriver(); as driver) {
-      <p>{{ driver.name }} · {{ driver.id }}</p>
+      <p>{{ driver.name }} · {{ driver.displayId }}</p>
+      @if (selectedDriverPoint(); as point) {
+        <small>{{ point.detail }}</small>
+      } @else {
+        <small>尚未上班、定位超過 10 分鐘，或尚未回傳定位。</small>
+      }
     } @else {
       <p>尚未取得司機資料。</p>
     }
-    <small>目前後端尚未提供 GPS 回傳，因此不顯示假位置。</small>
+    @if (driverPoints().length) {
+      <small>僅顯示後端回傳且仍在有效時間內的工作中司機。</small>
+    } @else {
+      <small>後端只會回傳正在工作、且最新定位未超過 10 分鐘的司機。</small>
+    }
 
     <div class="tracking-driver-list">
       @for (driver of drivers(); track driver.id) {
@@ -30,7 +39,7 @@
           <i [class.is-active]="driver.isActive" aria-hidden="true"></i>
           <span>
             <strong>{{ driver.name }}</strong>
-            <small>{{ driver.id }} · {{ driver.isActive ? '可排班' : '未啟用' }}</small>
+            <small>{{ driver.displayId }} · {{ driver.isActive ? '可排班' : '未啟用' }}</small>
           </span>
         </button>
       } @empty {
@@ -45,6 +54,5 @@
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
       >OpenStreetMap</a
     >
-    &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
   </p>
 </section>

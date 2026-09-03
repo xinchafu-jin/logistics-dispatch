@@ -99,40 +99,20 @@
       </section>
     </aside>
   </div>
-  <div>
-    <ul>
-      <li>
-        <p>
-          <mat-slide-toggle
-            [checked]="showMapPoints()"
-            (change)="toggleMapPoints($event.checked)"
-          >商店 門市
-          </mat-slide-toggle
-          >
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle
-            [checked]="showDriverPoints()"
-            (change)="toggleDriverPoints($event.checked)"
-          >
-            司機位置
-          </mat-slide-toggle>
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle>Slide me!</mat-slide-toggle>
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle>Slide me!</mat-slide-toggle>
-        </p>
-      </li>
-    </ul>
-  </div>
+  <section class="map-layer-controls" aria-label="地圖圖層">
+    <mat-slide-toggle
+      [checked]="showMapPoints()"
+      (change)="toggleMapPoints($event.checked)"
+    >
+      配送門市
+    </mat-slide-toggle>
+    <mat-slide-toggle
+      [checked]="showDriverPoints()"
+      (change)="toggleDriverPoints($event.checked)"
+    >
+      司機位置
+    </mat-slide-toggle>
+  </section>
 
 
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->

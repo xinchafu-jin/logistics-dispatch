@@ -6,8 +6,25 @@
     </div>
 
     <div class="gps-state">
-      <svg lucideTriangleAlert aria-hidden="true"></svg>
-      <span>GPS Controller 尚未提供</span>
+      @if (gpsErrorMessage()) {
+        <svg lucideTriangleAlert aria-hidden="true"></svg>
+      } @else {
+        <svg lucideMapPinned aria-hidden="true"></svg>
+      }
+      <span>{{ gpsState() }}</span>
+      @if (gpsUpdatedAt()) {
+        <small>{{ gpsUpdatedAt() }}</small>
+      }
+      <button
+        type="button"
+        class="refresh-gps"
+        title="重新整理定位"
+        aria-label="重新整理定位"
+        [disabled]="refreshing()"
+        (click)="refresh()"
+      >
+        <svg lucideRefreshCw [class.is-spinning]="refreshing()" aria-hidden="true"></svg>
+      </button>
     </div>
   </section>
 
@@ -36,7 +53,7 @@
   </section>
 
   <section class="fleet-workspace" aria-label="車隊地圖與司機狀態">
-    <app-live-fleet-map />
+    <app-live-fleet-map [driverPoints]="mapDrivers()" [showDriverPoints]="true" />
 
     <aside class="fleet-list-panel">
       <header>
@@ -66,10 +83,10 @@
         <div class="fleet-driver-list">
           @for (driver of visibleDrivers(); track driver.id) {
             <article class="fleet-driver">
-              <i [class.is-active]="driver.isActive" aria-hidden="true"></i>
+              <i [class.is-active]="mapDrivers().some((point) => point.id === driver.id)" aria-hidden="true"></i>
               <div>
                 <strong>{{ driver.name }}</strong>
-                <span>{{ driver.id }}</span>
+                <span>{{ driver.displayId }}</span>
                 <small>{{ driver.state }}</small>
               </div>
             </article>

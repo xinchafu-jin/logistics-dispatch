@@ -17,10 +17,12 @@
   min-height: 100dvh;
   position: relative;
   isolation: isolate;
+  color-scheme: dark;
   background: var(--app-bg);
 }
 
 .dispatch-layout.is-light-theme {
+  color-scheme: light;
   --app-bg: #edf2f0;
   --panel: rgb(255 255 255 / 90%);
   --surface: rgb(255 255 255 / 82%);
@@ -351,6 +353,31 @@ app-brand-logo {
   min-width: 0;
   min-height: calc(100dvh - 88px);
   padding: 32px 36px 48px;
+}
+
+.dispatch-layout.is-light-theme {
+  .dispatch-sidebar {
+    box-shadow:
+      inset -1px 0 0 rgb(27 52 45 / 14%),
+      18px 0 38px rgb(20 52 42 / 8%);
+  }
+
+  .workspace-header {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 90%),
+      0 10px 24px rgb(20 52 42 / 10%);
+  }
+
+  .theme-toggle,
+  .logout-button {
+    background: rgb(8 124 107 / 4%);
+  }
+
+  .theme-toggle:hover,
+  .logout-button:hover {
+    background: rgb(8 124 107 / 9%);
+    border-color: rgb(8 124 107 / 28%);
+  }
 }
 
 @media (hover: none) and (min-width: 641px) {

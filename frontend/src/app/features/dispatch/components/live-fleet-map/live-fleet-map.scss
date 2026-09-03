@@ -31,6 +31,11 @@
   filter: saturate(78%) contrast(108%);
 }
 
+.live-fleet-map.is-light-theme .fleet-map-canvas .leaflet-pane,
+.live-fleet-map.is-light-theme .fleet-map-canvas .leaflet-control {
+  filter: saturate(92%) contrast(100%);
+}
+
 .fleet-map-canvas .leaflet-control-zoom {
   overflow: hidden;
   margin: 0 18px 18px 0;

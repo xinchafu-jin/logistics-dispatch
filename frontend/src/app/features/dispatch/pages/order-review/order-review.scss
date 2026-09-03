@@ -753,6 +753,62 @@
   border: 0;
 }
 
+:host-context(.dispatch-layout.is-light-theme) {
+  .order-list-panel,
+  .order-detail-panel,
+  .order-modal,
+  .confirm-modal {
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 92%),
+      0 12px 28px rgb(20 52 42 / 10%);
+    backdrop-filter: none;
+  }
+
+  .filter-control,
+  .search-field,
+  .order-form input,
+  .order-form select,
+  .order-form textarea,
+  .import-table th,
+  .icon-action,
+  .button-secondary {
+    background: var(--surface);
+    border-color: var(--border);
+  }
+
+  .development-note,
+  .order-row:hover,
+  .order-row:focus-visible {
+    background: rgb(8 124 107 / 4%);
+  }
+
+  .development-note,
+  .order-row,
+  .detail-block {
+    border-color: var(--border);
+  }
+
+  .icon-action--danger:hover,
+  .icon-action--danger:focus-visible,
+  .form-error,
+  .import-bad,
+  .import-row-error td {
+    color: #a3483e;
+  }
+
+  .import-row-error td {
+    background: #fff1ee;
+  }
+
+  .button-secondary:hover,
+  .button-secondary:focus-visible {
+    color: #89500a;
+    border-color: rgb(180 112 20 / 42%);
+  }
+}
+
 @media (max-width: 980px) {
   .review-workspace {
     grid-template-columns: 1fr;

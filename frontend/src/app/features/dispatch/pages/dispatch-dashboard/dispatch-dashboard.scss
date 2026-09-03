@@ -208,6 +208,16 @@
   min-width: 0;
 }
 
+.map-layer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: 14px 0 0;
+  padding: 0 2px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
 .operations-panel {
   min-width: 0;
   padding: 12px 20px 22px;
@@ -357,6 +367,60 @@
   line-height: 1.55;
 }
 
+// The dashboard was originally composed for the dark workspace, so its panels
+// use dark translucent surfaces instead of the shared surface tokens. Keep the
+// map dark, but give the data panels a complete, readable light counterpart.
+:host-context(.dispatch-layout.is-light-theme) {
+  .summary-card {
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 92%),
+      0 12px 28px rgb(20 52 42 / 10%);
+    backdrop-filter: none;
+  }
+
+  .summary-card::before {
+    background: rgb(8 124 107 / 18%);
+  }
+
+  .summary-card.tone-accent {
+    border-color: rgb(8 124 107 / 32%);
+  }
+
+  .summary-card.tone-warning {
+    border-color: rgb(180 112 20 / 34%);
+  }
+
+  .tone-warning .summary-value {
+    color: #9a5b08;
+  }
+
+  .operations-panel {
+    background: var(--panel);
+    border-color: var(--border);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 92%),
+      0 12px 28px rgb(20 52 42 / 10%);
+    backdrop-filter: none;
+  }
+
+  .pending-order-list,
+  .pending-order,
+  .alert-item {
+    border-color: var(--border);
+  }
+
+  .ticker-group .ticker-alert {
+    color: #89500a;
+  }
+
+  .template-error,
+  .template-delete {
+    color: #a3352a;
+  }
+}
+
 @keyframes dispatch-ticker {
   to {
     transform: translateX(-50%);
@@ -447,7 +511,7 @@
 .board-lane {
   flex: 1 1 260px;
   padding: 0.75rem;
-  border: 1px solid rgb(0 0 0 / 12%);
+  border: 1px solid var(--border);
   border-radius: 8px;
 
   h4 {
@@ -469,7 +533,7 @@
   width: 100%;
   margin-bottom: 0.5rem;
   padding: 0.3125rem 0.5rem;
-  border: 1px solid rgb(0 0 0 / 12%);
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
   color: inherit;
@@ -479,7 +543,7 @@
   // 未指派是待辦事項而不是錯誤，用虛線提示，不搶超載那條紅框的注意力
   &.is-unassigned {
     border-style: dashed;
-    color: rgb(0 0 0 / 55%);
+    color: var(--muted);
   }
 
   &:disabled {
@@ -499,9 +563,9 @@
 .board-card {
   margin: 0;
   padding: 0.5rem 0.625rem;
-  border: 1px solid rgb(0 0 0 / 8%);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgb(0 0 0 / 3%);
+  background: var(--surface);
   font-size: 0.8125rem;
   cursor: grab;
 
@@ -513,7 +577,7 @@
 .board-empty {
   margin: 0;
   padding: 0.5rem;
-  color: rgb(0 0 0 / 45%);
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
@@ -547,8 +611,9 @@
   gap: 1rem;
   margin-top: 1.5rem;
   padding: 0.875rem 1rem;
-  border: 1px solid rgb(0 0 0 / 10%);
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--surface);
 }
 
 .toolbar-field {
@@ -557,17 +622,17 @@
   gap: 0.25rem;
 
   span {
-    color: rgb(0 0 0 / 55%);
+    color: var(--muted);
     font-size: 0.75rem;
   }
 
   input,
   select {
     padding: 0.375rem 0.5rem;
-    border: 1px solid rgb(0 0 0 / 20%);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: transparent;
-    color: inherit;
+    background: var(--panel);
+    color: var(--text);
     font: inherit;
   }
 }
@@ -575,13 +640,13 @@
 .toolbar-hint {
   flex: 1;
   margin: 0;
-  color: rgb(0 0 0 / 55%);
+  color: var(--muted);
   font-size: 0.75rem;
 }
 
 .toolbar-action {
   padding: 0.5rem 1rem;
-  border: 1px solid rgb(0 0 0 / 20%);
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
   color: inherit;
@@ -597,7 +662,7 @@
 .board-status {
   width: 100%;
   margin: 0;
-  color: rgb(0 0 0 / 55%);
+  color: var(--muted);
   font-size: 0.8125rem;
 }
 
@@ -614,12 +679,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  border-bottom: 1px solid rgb(0 0 0 / 15%);
+  border-bottom: 1px solid var(--border);
 }
 
 .tab {
   padding: 0.4rem 0.9rem;
-  border: 1px solid rgb(0 0 0 / 15%);
+  border: 1px solid var(--border);
   border-bottom: none;
   border-radius: 6px 6px 0 0;
   background: transparent;
@@ -628,7 +693,7 @@
   cursor: pointer;
 
   &.is-active {
-    background: rgb(0 0 0 / 6%);
+    background: var(--surface-active);
     font-weight: 600;
   }
 }
@@ -640,7 +705,7 @@
 
 .template-error {
   margin: 0;
-  color: #a3352a;
+  color: #ef9a92;
   font-size: 0.8125rem;
 }
 
@@ -650,8 +715,9 @@
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid rgb(0 0 0 / 12%);
+  border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--surface);
 }
 
 .template-actions {
@@ -664,7 +730,7 @@
 .template-secondary,
 .template-delete {
   padding: 0.4rem 0.8rem;
-  border: 1px solid rgb(0 0 0 / 20%);
+  border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
   color: inherit;
@@ -678,7 +744,7 @@
 }
 
 .template-delete {
-  color: #a3352a;
+  color: #ef9a92;
 }
 
 .template-line {
@@ -691,7 +757,7 @@
 }
 
 .template-stop {
-  color: rgb(0 0 0 / 65%);
+  color: var(--muted);
 }
 
 .draft-route {
@@ -699,13 +765,13 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  border: 1px dashed rgb(0 0 0 / 20%);
+  border: 1px dashed var(--border);
   border-radius: 6px;
 }
 
 .draft-hint {
   margin: 0;
-  color: rgb(0 0 0 / 55%);
+  color: var(--muted);
   font-size: 0.8125rem;
 }
 
@@ -720,7 +786,7 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.3rem 0.6rem;
-  border: 1px solid rgb(0 0 0 / 20%);
+  border: 1px solid var(--border);
   border-radius: 999px;
   background: transparent;
   color: inherit;
@@ -729,7 +795,7 @@
   cursor: pointer;
 
   &.is-picked {
-    background: rgb(0 0 0 / 8%);
+    background: var(--surface-active);
     font-weight: 600;
   }
 }
@@ -741,8 +807,8 @@
   min-width: 1.25rem;
   height: 1.25rem;
   border-radius: 999px;
-  background: rgb(0 0 0 / 65%);
-  color: #fff;
+  background: var(--accent);
+  color: var(--button-text);
   font-size: 0.6875rem;
 }
 
@@ -751,23 +817,24 @@
   flex-direction: column;
   gap: 0.75rem;
   padding: 0.75rem;
-  border: 1px solid rgb(0 0 0 / 12%);
+  border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 6px 6px;
+  background: var(--surface);
 }
 
 .board-lane.is-unavailable {
   opacity: 0.45;
 
   .board-dropzone {
-    background: rgb(0 0 0 / 4%);
+    background: var(--panel);
   }
 }
 
 .lane-status {
   margin-left: 0.4rem;
   padding: 0.1rem 0.4rem;
-  border: 1px solid rgb(0 0 0 / 25%);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 400;
