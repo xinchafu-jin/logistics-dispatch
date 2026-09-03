@@ -57,4 +57,60 @@ describe('DriverOperationsService', () => {
     expect(request.request.method).toBe('GET');
     request.flush([]);
   });
+
+  it('requests the signed-in driver\'s published tasks for today', () => {
+    service.getTodayTasks().subscribe();
+
+    const request = httpTesting.expectOne('/api/driver/tasks/today');
+    expect(request.request.method).toBe('GET');
+    request.flush({ date: '2026-09-02', driverId: 1, driverName: '測試司機', routes: [] });
+  });
+
+  it('uses the delivery and mileage endpoints with the backend request shapes', () => {
+    service.arrive({ orderId: 41 }).subscribe();
+    service.deliver({
+      orderId: 41,
+      boxCount: 12,
+      photo: 'https://upload.example.test/proofs/41.jpg',
+      notes: '已交貨',
+    }).subscribe();
+    service.noSignature({
+      orderId: 42,
+      photo: 'https://upload.example.test/proofs/42.jpg',
+      notes: '現場無人',
+    }).subscribe();
+    service.startMileage({ odometer: 18_400 }).subscribe();
+    service.endMileage({ odometer: 18_438 }).subscribe();
+
+    const arrive = httpTesting.expectOne('/api/driver/arrive');
+    expect(arrive.request.body).toEqual({ orderId: 41 });
+    arrive.flush({});
+
+    const deliver = httpTesting.expectOne('/api/driver/deliver');
+    expect(deliver.request.body).toEqual({
+      orderId: 41,
+      boxCount: 12,
+      photo: 'https://upload.example.test/proofs/41.jpg',
+      notes: '已交貨',
+    });
+    deliver.flush({});
+
+    const noSignature = httpTesting.expectOne('/api/driver/no-signature');
+    expect(noSignature.request.body).toEqual({
+      orderId: 42,
+      photo: 'https://upload.example.test/proofs/42.jpg',
+      notes: '現場無人',
+    });
+    noSignature.flush({});
+
+    for (const [path, odometer] of [
+      ['/api/driver/mileage/start', 18_400],
+      ['/api/driver/mileage/end', 18_438],
+    ] as const) {
+      const request = httpTesting.expectOne(path);
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({ odometer });
+      request.flush({});
+    }
+  });
 });

@@ -6,6 +6,7 @@
   position: relative;
   min-height: 100dvh;
   overflow: hidden;
+  isolation: isolate;
   color: #eaf2ef;
   background: #0c1415;
 }
@@ -55,9 +56,14 @@
 
 .app-topbar {
   display: flex;
+  z-index: 1000;
+  width: 100%;
   min-height: 68px;
   align-items: center;
   justify-content: space-between;
+  padding: 0 14px;
+  border-bottom: 1px solid rgb(125 210 187 / 25%);
+  background: #0b1d1c;
 }
 
 .topbar-actions {
@@ -241,6 +247,36 @@ h2 {
   background: #70d5ba;
 }
 
+.destination-copy {
+  margin: 11px 0 0;
+  color: #b0c1bb;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.navigation-action {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 0 13px;
+  border-radius: 6px;
+  color: #08231f;
+  background: #70d5ba;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.navigation-action svg,
+.task-navigation-button svg,
+.month-selector svg {
+  width: 17px;
+  height: 17px;
+}
+
 .sheet-heading,
 .attendance-actions {
   display: flex;
@@ -354,6 +390,407 @@ h2 {
   margin-bottom: 24px;
 }
 
+.task-route-list {
+  display: grid;
+  gap: 12px;
+}
+
+.task-route-card,
+.month-selector {
+  border: 1px solid #2e4a45;
+  border-radius: 8px;
+  background: #142322;
+}
+
+.task-route-card {
+  overflow: hidden;
+}
+
+.task-route-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 16px 8px;
+}
+
+.task-route-heading p,
+.task-route-meta {
+  margin: 0;
+  color: #8ea69e;
+  font-size: 12px;
+}
+
+.task-route-heading h2 {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
+.task-route-heading > span,
+.shift-type {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border-radius: 4px;
+  color: #b9d5cc;
+  background: #183938;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-route-meta {
+  padding: 0 16px 13px;
+}
+
+.task-stop-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid #2e4a45;
+}
+
+.task-stop {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+}
+
+.task-stop + .task-stop {
+  border-top: 1px solid #2e4a45;
+}
+
+.task-stop.is-selected {
+  background: rgb(33 97 82 / 48%);
+}
+
+.stop-sequence {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid #5d9586;
+  border-radius: 50%;
+  color: #94dcc8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.task-stop-copy {
+  min-width: 0;
+}
+
+.task-stop-copy strong,
+.task-stop-copy small,
+.task-stop-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-stop-copy strong {
+  color: #edf6f1;
+  font-size: 13px;
+}
+
+.task-stop-copy small,
+.task-stop-copy span {
+  margin-top: 3px;
+  color: #8ea69e;
+  font-size: 11px;
+}
+
+.task-navigation-button {
+  display: grid;
+  min-width: 46px;
+  min-height: 42px;
+  padding: 4px;
+  place-items: center;
+  border: 1px solid #416b61;
+  border-radius: 6px;
+  color: #9de0ce;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.task-stop-actions {
+  display: grid;
+  gap: 6px;
+}
+
+.task-arrive-button,
+.task-delivery-button {
+  display: grid;
+  min-width: 46px;
+  min-height: 42px;
+  padding: 4px;
+  place-items: center;
+  border: 1px solid #416b61;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.task-arrive-button {
+  border-color: #4b8f80;
+  color: #d6f4e8;
+  background: #1a5b4f;
+}
+
+.task-delivery-button {
+  color: #a9e4d2;
+  background: #163b35;
+}
+
+.task-status {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 5px;
+  border-radius: 4px;
+  color: #b9d5cc;
+  background: #183938;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.task-status.is-in_delivery {
+  color: #f3d799;
+  background: #4b3920;
+}
+
+.task-status.is-completed {
+  color: #9de0ce;
+  background: #183938;
+}
+
+.task-status.is-failed,
+.task-status.is-cancelled {
+  color: #f3bcaf;
+  background: #4a2a2d;
+}
+
+.task-feedback,
+.mileage-feedback {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #3b6258;
+  border-radius: 6px;
+  color: #bdd8cf;
+  background: #142d29;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-feedback.is-success,
+.mileage-feedback.is-success {
+  border-color: #3a806e;
+  color: #a7ead6;
+}
+
+.task-feedback.is-error,
+.mileage-feedback.is-error {
+  border-color: #814f50;
+  color: #f4b9b4;
+  background: #352123;
+}
+
+.delivery-action-panel {
+  display: grid;
+  grid-column: 2 / -1;
+  gap: 10px;
+  margin-top: 2px;
+  padding: 12px;
+  border: 1px solid #38685d;
+  border-radius: 6px;
+  background: #102b27;
+}
+
+.delivery-action-panel p,
+.delivery-action-panel small {
+  margin: 0;
+  color: #9eb8af;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.delivery-action-panel label,
+.mileage-form-row label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.delivery-action-panel label > span,
+.mileage-form-row label > span {
+  color: #b9d5cc;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.delivery-action-panel input,
+.delivery-action-panel textarea,
+.mileage-form-row input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #3d655b;
+  border-radius: 5px;
+  outline: none;
+  color: #edf6f1;
+  background: #0b1d1c;
+  font: inherit;
+  font-size: 12px;
+}
+
+.delivery-action-panel textarea {
+  resize: vertical;
+}
+
+.delivery-action-panel input:focus,
+.delivery-action-panel textarea:focus,
+.mileage-form-row input:focus {
+  border-color: #78cfb9;
+}
+
+.delivery-action-buttons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.delivery-complete-button,
+.delivery-exception-button,
+.delivery-cancel-button,
+.mileage-start-button,
+.mileage-end-button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.delivery-complete-button,
+.mileage-start-button {
+  color: #08231f;
+  background: #70d5ba;
+}
+
+.delivery-exception-button,
+.mileage-end-button {
+  border-color: #976565;
+  color: #f2c1bb;
+  background: #3e282a;
+}
+
+.delivery-cancel-button {
+  border-color: #42645b;
+  color: #b9d5cc;
+  background: transparent;
+}
+
+.delivery-complete-button svg,
+.delivery-exception-button svg,
+.mileage-start-button svg,
+.mileage-end-button svg,
+.mileage-heading svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mileage-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid #2e4a45;
+  border-radius: 8px;
+  background: #142322;
+}
+
+.mileage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mileage-heading h2 {
+  font-size: 18px;
+}
+
+.mileage-heading svg {
+  color: #82dfc7;
+}
+
+.mileage-panel > p {
+  margin: -4px 0 0;
+  color: #9eb8af;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.mileage-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.mileage-start-button,
+.mileage-end-button {
+  min-width: 58px;
+}
+
+.mileage-note {
+  color: #9eb8af;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 5px;
+}
+
+.month-selector strong {
+  color: #edf6f1;
+  font-size: 14px;
+}
+
+.month-selector button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #bfe7dc;
+  background: transparent;
+  cursor: pointer;
+}
+
 .empty-state,
 .profile-list,
 .shift-list {
@@ -418,7 +855,8 @@ dd {
 
 .shift-row {
   display: grid;
-  grid-template-columns: 1.2fr 0.7fr 1fr;
+  grid-template-columns: 0.85fr auto minmax(0, 1.25fr);
+  align-items: start;
   gap: 8px;
   padding: 15px 16px;
   color: #a9bdb6;
@@ -431,6 +869,29 @@ dd {
 
 .shift-row strong {
   color: #edf6f1;
+}
+
+.shift-type.is-work {
+  color: #9de0ce;
+  background: #183938;
+}
+
+.shift-type.is-day_off,
+.shift-type.is-leave {
+  color: #d0d9d5;
+  background: #31403c;
+}
+
+.shift-details {
+  display: grid;
+  gap: 3px;
+  color: #a9bdb6;
+}
+
+.shift-details small {
+  color: #849e94;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .sign-out {
@@ -494,6 +955,11 @@ dd {
   --brand-text: #1f382f;
 }
 
+.driver-app:not(.is-dark-theme) .app-topbar {
+  border-color: #c8dad3;
+  background: #f9fdfb;
+}
+
 .driver-app:not(.is-dark-theme) .brand strong,
 .driver-app:not(.is-dark-theme) h1,
 .driver-app:not(.is-dark-theme) h2,
@@ -508,6 +974,9 @@ dd {
 .driver-app:not(.is-dark-theme) .empty-state,
 .driver-app:not(.is-dark-theme) .profile-list,
 .driver-app:not(.is-dark-theme) .shift-list,
+.driver-app:not(.is-dark-theme) .task-route-card,
+.driver-app:not(.is-dark-theme) .mileage-panel,
+.driver-app:not(.is-dark-theme) .month-selector,
 .driver-app:not(.is-dark-theme) .bottom-navigation {
   border-color: #c8dad3;
   background: rgb(249 253 251 / 94%);
@@ -520,9 +989,19 @@ dd {
 
 .driver-app:not(.is-dark-theme) .gps-status,
 .driver-app:not(.is-dark-theme) .sheet-copy,
+.driver-app:not(.is-dark-theme) .destination-copy,
 .driver-app:not(.is-dark-theme) .empty-state p,
 .driver-app:not(.is-dark-theme) dt,
-.driver-app:not(.is-dark-theme) .shift-row {
+.driver-app:not(.is-dark-theme) .shift-row,
+.driver-app:not(.is-dark-theme) .task-route-heading p,
+.driver-app:not(.is-dark-theme) .task-route-meta,
+.driver-app:not(.is-dark-theme) .task-stop-copy small,
+.driver-app:not(.is-dark-theme) .task-stop-copy span,
+.driver-app:not(.is-dark-theme) .shift-details,
+.driver-app:not(.is-dark-theme) .delivery-action-panel p,
+.driver-app:not(.is-dark-theme) .delivery-action-panel small,
+.driver-app:not(.is-dark-theme) .mileage-panel > p,
+.driver-app:not(.is-dark-theme) .mileage-note {
   color: #617b72;
 }
 
@@ -543,6 +1022,19 @@ dd {
   font: 900 13px/1 Inter, "Noto Sans TC", "Segoe UI", sans-serif;
 }
 
+:host ::ng-deep .driver-destination-marker {
+  display: grid;
+  width: 34px !important;
+  height: 34px !important;
+  margin: 0 !important;
+  place-items: center;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #317dcb;
+  font: 900 13px/1 Inter, "Noto Sans TC", "Segoe UI", sans-serif;
+}
+
 .driver-app:not(.is-dark-theme) .attendance-meta span {
   color: #286456;
   background: #e5f2ec;
@@ -552,8 +1044,16 @@ dd {
   color: #1d392f;
 }
 
+.driver-app:not(.is-dark-theme) .task-route-heading h2,
+.driver-app:not(.is-dark-theme) .task-stop-copy strong,
+.driver-app:not(.is-dark-theme) .month-selector strong {
+  color: #1d392f;
+}
+
 .driver-app:not(.is-dark-theme) .profile-list div + div,
-.driver-app:not(.is-dark-theme) .shift-row + .shift-row {
+.driver-app:not(.is-dark-theme) .shift-row + .shift-row,
+.driver-app:not(.is-dark-theme) .task-stop-list,
+.driver-app:not(.is-dark-theme) .task-stop + .task-stop {
   border-color: #deebe5;
 }
 
@@ -563,6 +1063,105 @@ dd {
 
 .driver-app:not(.is-dark-theme) .bottom-navigation button.is-active {
   background: #cceee2;
+}
+
+.driver-app:not(.is-dark-theme) .task-stop.is-selected {
+  background: #dff4eb;
+}
+
+.driver-app:not(.is-dark-theme) .task-route-heading > span,
+.driver-app:not(.is-dark-theme) .shift-type.is-work {
+  color: #246a59;
+  background: #e5f2ec;
+}
+
+.driver-app:not(.is-dark-theme) .shift-type.is-day_off,
+.driver-app:not(.is-dark-theme) .shift-type.is-leave {
+  color: #516860;
+  background: #e7ece9;
+}
+
+.driver-app:not(.is-dark-theme) .stop-sequence,
+.driver-app:not(.is-dark-theme) .task-navigation-button,
+.driver-app:not(.is-dark-theme) .task-delivery-button,
+.driver-app:not(.is-dark-theme) .month-selector button {
+  color: #226c5a;
+}
+
+.driver-app:not(.is-dark-theme) .task-arrive-button {
+  border-color: #70aa9c;
+  color: #174c40;
+  background: #cceee2;
+}
+
+.driver-app:not(.is-dark-theme) .task-status {
+  color: #46655b;
+  background: #e7f1ed;
+}
+
+.driver-app:not(.is-dark-theme) .task-status.is-in_delivery {
+  color: #795e22;
+  background: #f6edcf;
+}
+
+.driver-app:not(.is-dark-theme) .task-status.is-failed,
+.driver-app:not(.is-dark-theme) .task-status.is-cancelled {
+  color: #8a4a4a;
+  background: #f8e6e3;
+}
+
+.driver-app:not(.is-dark-theme) .delivery-action-panel {
+  border-color: #c4ddd4;
+  background: #edf8f3;
+}
+
+.driver-app:not(.is-dark-theme) .delivery-action-panel label > span,
+.driver-app:not(.is-dark-theme) .mileage-form-row label > span {
+  color: #42635a;
+}
+
+.driver-app:not(.is-dark-theme) .delivery-action-panel input,
+.driver-app:not(.is-dark-theme) .delivery-action-panel textarea,
+.driver-app:not(.is-dark-theme) .mileage-form-row input {
+  border-color: #c7dbd3;
+  color: #1b392f;
+  background: #ffffff;
+}
+
+.driver-app:not(.is-dark-theme) .delivery-cancel-button {
+  border-color: #bfd5cc;
+  color: #42635a;
+}
+
+.driver-app:not(.is-dark-theme) .delivery-exception-button,
+.driver-app:not(.is-dark-theme) .mileage-end-button {
+  border-color: #d6a4a0;
+  color: #854a49;
+  background: #f9e7e4;
+}
+
+.driver-app:not(.is-dark-theme) .task-feedback,
+.driver-app:not(.is-dark-theme) .mileage-feedback {
+  border-color: #c6ddd5;
+  color: #45665b;
+  background: #eff9f4;
+}
+
+.driver-app:not(.is-dark-theme) .task-feedback.is-error,
+.driver-app:not(.is-dark-theme) .mileage-feedback.is-error {
+  border-color: #e0b1ad;
+  color: #8a4a4a;
+  background: #fbedeb;
+}
+
+@media (max-width: 380px) {
+  .delivery-action-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .delivery-cancel-button {
+    grid-column: 1 / -1;
+  }
 }
 
 button:disabled {

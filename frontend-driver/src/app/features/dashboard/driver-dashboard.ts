@@ -5,12 +5,16 @@ import {
   ElementRef,
   OnDestroy,
   ViewChild,
+  computed,
   inject,
   signal,
 } from '@angular/core';
 import { Router } from '@angular/router';
 import {
   LucideCalendarDays,
+  LucideChevronLeft,
+  LucideChevronRight,
+  LucideCircleCheck,
   LucideCircleStop,
   LucideCloudFog,
   LucideCloudLightning,
@@ -18,13 +22,17 @@ import {
   LucideCloudSnow,
   LucideCloudSun,
   LucideCoffee,
+  LucideGauge,
   LucideListTodo,
   LucideLocateFixed,
   LucideMap,
   LucideMapPin,
   LucideMoon,
+  LucideNavigation,
+  LucidePackageCheck,
   LucidePlay,
   LucideSun,
+  LucideTriangleAlert,
   LucideUserRound,
 } from '@lucide/angular';
 import * as L from 'leaflet';
@@ -36,19 +44,37 @@ import {
   saveStoredMapLocation,
 } from '../../core/location/driver-map-location.storage';
 import { DriverGpsTrackingService } from '../../core/services/driver-gps-tracking.service';
-import { AttendanceRecordDto, DriverShiftDto } from '../../core/services/driver-operations.models';
+import {
+  AttendanceRecordDto,
+  DeliveryRecordResponse,
+  DriverRouteTask,
+  DriverShiftDto,
+  DriverTaskStop,
+  DriverTaskOrderStatus,
+  DriverTasksResponse,
+} from '../../core/services/driver-operations.models';
 import { DriverOperationsService } from '../../core/services/driver-operations.service';
 import { DriverWeather, DriverWeatherService } from '../../core/services/driver-weather.service';
 import { BrandLogo } from '../../shared/ui/brand-logo/brand-logo';
 
 type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
+type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
+type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
+
+interface DriverTaskSelection {
+  route: DriverRouteTask;
+  stop: DriverTaskStop;
+}
 
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
     BrandLogo,
     LucideCalendarDays,
+    LucideChevronLeft,
+    LucideChevronRight,
+    LucideCircleCheck,
     LucideCircleStop,
     LucideCloudFog,
     LucideCloudLightning,
@@ -56,13 +82,17 @@ type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
     LucideCloudSnow,
     LucideCloudSun,
     LucideCoffee,
+    LucideGauge,
     LucideListTodo,
     LucideLocateFixed,
     LucideMap,
     LucideMapPin,
     LucideMoon,
+    LucideNavigation,
+    LucidePackageCheck,
     LucidePlay,
     LucideSun,
+    LucideTriangleAlert,
     LucideUserRound,
   ],
   templateUrl: './driver-dashboard.html',
@@ -81,6 +111,29 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isSubmitting = signal(false);
   protected readonly remainingBreakSeconds = signal(0);
   protected readonly publishedShifts = signal<DriverShiftDto[]>([]);
+  protected readonly scheduleViewState = signal<ScheduleViewState>('loading');
+  protected readonly scheduleError = signal<string | null>(null);
+  protected readonly scheduleMonth = signal(this.monthStart(new Date()));
+  protected readonly scheduleMonthLabel = computed(() =>
+    new Intl.DateTimeFormat('zh-TW', { year: 'numeric', month: 'long' }).format(
+      this.scheduleMonth(),
+    ),
+  );
+  protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly taskViewState = signal<TaskViewState>('loading');
+  protected readonly taskError = signal<string | null>(null);
+  protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
+  protected readonly activeDeliveryOrderId = signal<number | null>(null);
+  protected readonly deliveryPhotoUrl = signal('');
+  protected readonly deliveryNotes = signal('');
+  protected readonly taskActionError = signal<string | null>(null);
+  protected readonly taskActionMessage = signal<string | null>(null);
+  protected readonly isTaskSubmitting = signal(false);
+  protected readonly startMileageReading = signal('');
+  protected readonly endMileageReading = signal('');
+  protected readonly mileageError = signal<string | null>(null);
+  protected readonly mileageMessage = signal<string | null>(null);
+  protected readonly isMileageSubmitting = signal(false);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
 
@@ -92,7 +145,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly router = inject(Router);
   private breakTimer: ReturnType<typeof setInterval> | null = null;
   private driverMap: L.Map | null = null;
+  private currentMapLocation: L.LatLng | null = null;
   private currentLocationMarker: L.Marker | null = null;
+  private destinationMarker: L.Marker | null = null;
+  private navigationLine: L.Polyline | null = null;
 
   constructor() {
     this.weatherService.getCurrentWeather().subscribe({
@@ -101,12 +157,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
     this.loadAttendance();
     this.loadPublishedShifts();
+    this.loadTodayTasks();
   }
 
   ngAfterViewInit(): void {
     this.initializeMap();
     this.restoreMapLocation();
     this.requestMapLocation(false);
+    this.renderNavigationMap(false);
   }
 
   ngOnDestroy(): void {
@@ -153,12 +211,250 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.activeTab.set(tab);
 
     if (tab === 'map') {
-      setTimeout(() => this.driverMap?.invalidateSize(), 0);
+      setTimeout(() => {
+        this.driverMap?.invalidateSize();
+        this.renderNavigationMap(false);
+      }, 0);
     }
   }
 
   protected locateOnMap(): void {
     this.requestMapLocation(true);
+  }
+
+  protected selectTaskForNavigation(route: DriverRouteTask, stop: DriverTaskStop): void {
+    if (!this.hasCoordinates(stop)) {
+      return;
+    }
+
+    this.selectedTask.set({ route, stop });
+    this.setActiveTab('map');
+  }
+
+  protected isSelectedTask(routeId: number, orderId: number): boolean {
+    const selected = this.selectedTask();
+    return selected?.route.routeId === routeId && selected.stop.orderId === orderId;
+  }
+
+  protected canNavigate(stop: DriverTaskStop): boolean {
+    return this.hasCoordinates(stop);
+  }
+
+  protected canMarkArrived(stop: DriverTaskStop): boolean {
+    return stop.orderStatus === 'CONFIRMED';
+  }
+
+  protected canCompleteDelivery(stop: DriverTaskStop): boolean {
+    return stop.orderStatus === 'IN_DELIVERY';
+  }
+
+  protected taskStatusLabel(status: DriverTaskOrderStatus): string {
+    const labels: Record<DriverTaskOrderStatus, string> = {
+      PENDING_CONFIRM: '待確認',
+      CONFIRMED: '待配送',
+      IN_DELIVERY: '配送中',
+      COMPLETED: '已交貨',
+      CANCELLED: '已取消',
+      FAILED: '配送失敗',
+    };
+
+    return labels[status];
+  }
+
+  protected isDeliveryActionOpen(stop: DriverTaskStop): boolean {
+    return this.activeDeliveryOrderId() === stop.orderId;
+  }
+
+  protected openDeliveryAction(stop: DriverTaskStop): void {
+    if (!this.canCompleteDelivery(stop)) {
+      return;
+    }
+
+    this.activeDeliveryOrderId.set(stop.orderId);
+    this.deliveryPhotoUrl.set('');
+    this.deliveryNotes.set('');
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+  }
+
+  protected closeDeliveryAction(): void {
+    this.activeDeliveryOrderId.set(null);
+    this.deliveryPhotoUrl.set('');
+    this.deliveryNotes.set('');
+    this.taskActionError.set(null);
+  }
+
+  protected updateDeliveryPhoto(event: Event): void {
+    this.deliveryPhotoUrl.set((event.target as HTMLInputElement).value);
+  }
+
+  protected updateDeliveryNotes(event: Event): void {
+    this.deliveryNotes.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected arriveAtStop(stop: DriverTaskStop): void {
+    if (!this.canMarkArrived(stop) || this.isTaskSubmitting()) {
+      return;
+    }
+
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+
+    this.operations.arrive({ orderId: stop.orderId }).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.activeDeliveryOrderId.set(stop.orderId);
+        this.taskActionMessage.set('已記錄抵達門市，請完成交貨或等待無人簽收時間。');
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.taskActionError.set(this.getErrorMessage(error, '無法記錄抵達狀態。'));
+        this.isTaskSubmitting.set(false);
+      },
+    });
+  }
+
+  protected completeDelivery(stop: DriverTaskStop): void {
+    if (!this.canCompleteDelivery(stop) || this.isTaskSubmitting()) {
+      return;
+    }
+
+    const photo = this.deliveryPhotoUrl().trim();
+    if (!photo) {
+      this.taskActionError.set('請貼上照片上傳服務回傳的憑證網址。');
+      return;
+    }
+
+    this.submitDeliveryResult(
+      () =>
+        this.operations.deliver({
+          orderId: stop.orderId,
+          boxCount: stop.expectedBoxCount,
+          photo,
+          notes: this.optionalDeliveryNotes(),
+        }),
+      '交貨已完成。',
+    );
+  }
+
+  protected reportNoSignature(stop: DriverTaskStop): void {
+    if (!this.canCompleteDelivery(stop) || this.isTaskSubmitting()) {
+      return;
+    }
+
+    const photo = this.deliveryPhotoUrl().trim();
+    if (!photo) {
+      this.taskActionError.set('請貼上現場照片上傳服務回傳的憑證網址。');
+      return;
+    }
+
+    this.submitDeliveryResult(
+      () =>
+        this.operations.noSignature({
+          orderId: stop.orderId,
+          photo,
+          notes: this.optionalDeliveryNotes(),
+        }),
+      '已登記無人簽收，後端已建立待處理異常。',
+    );
+  }
+
+  protected updateStartMileage(event: Event): void {
+    this.startMileageReading.set((event.target as HTMLInputElement).value);
+  }
+
+  protected updateEndMileage(event: Event): void {
+    this.endMileageReading.set((event.target as HTMLInputElement).value);
+  }
+
+  protected canRecordMileage(): boolean {
+    return this.attendance()?.status === 'WORKING';
+  }
+
+  protected submitStartMileage(): void {
+    const odometer = this.readOdometer(this.startMileageReading());
+    if (odometer === null || this.isMileageSubmitting()) {
+      return;
+    }
+
+    this.isMileageSubmitting.set(true);
+    this.mileageError.set(null);
+    this.mileageMessage.set(null);
+    this.operations.startMileage({ odometer }).subscribe({
+      next: (mileageLog) => {
+        this.startMileageReading.set('');
+        this.mileageMessage.set(`已記錄出車里程 ${mileageLog.startOdometer} km。`);
+        this.isMileageSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.mileageError.set(this.getErrorMessage(error, '無法記錄出車里程。'));
+        this.isMileageSubmitting.set(false);
+      },
+    });
+  }
+
+  protected submitEndMileage(): void {
+    const odometer = this.readOdometer(this.endMileageReading());
+    if (odometer === null || this.isMileageSubmitting()) {
+      return;
+    }
+
+    this.isMileageSubmitting.set(true);
+    this.mileageError.set(null);
+    this.mileageMessage.set(null);
+    this.operations.endMileage({ odometer }).subscribe({
+      next: (mileageLog) => {
+        this.endMileageReading.set('');
+        this.mileageMessage.set(
+          `已記錄收車里程 ${mileageLog.endOdometer} km，本日行駛 ${mileageLog.actualDistance ?? 0} km。`,
+        );
+        this.isMileageSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.mileageError.set(this.getErrorMessage(error, '無法記錄收車里程。'));
+        this.isMileageSubmitting.set(false);
+      },
+    });
+  }
+
+  protected navigationUrl(): string | null {
+    const destination = this.destinationLocation();
+    if (!destination) {
+      return null;
+    }
+
+    const params = new URLSearchParams({
+      api: '1',
+      destination: `${destination.lat},${destination.lng}`,
+      travelmode: 'driving',
+    });
+
+    if (this.currentMapLocation) {
+      params.set('origin', `${this.currentMapLocation.lat},${this.currentMapLocation.lng}`);
+    }
+
+    return `https://www.google.com/maps/dir/?${params.toString()}`;
+  }
+
+  protected destinationName(): string {
+    return this.selectedTask()?.stop.storeName ?? '尚無下一送達點';
+  }
+
+  protected destinationDetail(): string {
+    const selected = this.selectedTask();
+    if (!selected) {
+      return this.taskViewState() === 'loading' ? '正在取得今日任務' : '尚無已發布配送任務';
+    }
+
+    return selected.stop.address;
+  }
+
+  protected changeScheduleMonth(offset: number): void {
+    const current = this.scheduleMonth();
+    const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
+    this.scheduleMonth.set(next);
+    this.loadPublishedShifts();
   }
 
   private requestMapLocation(isManualRequest: boolean): void {
@@ -245,6 +541,24 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return '未排班';
   }
 
+  protected formatShiftDate(workDate: string): string {
+    const [year, month, day] = workDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return new Intl.DateTimeFormat('zh-TW', {
+      month: 'numeric',
+      day: 'numeric',
+      weekday: 'short',
+    }).format(date);
+  }
+
+  protected formatOvertime(minutes: number): string | null {
+    return minutes > 0 ? `加班 ${minutes} 分鐘` : null;
+  }
+
+  protected shiftTypeClass(shiftType: DriverShiftDto['shiftType']): string {
+    return `is-${shiftType.toLowerCase()}`;
+  }
+
   private loadAttendance(): void {
     this.attendanceViewState.set('loading');
     this.attendanceError.set(null);
@@ -267,16 +581,49 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private loadPublishedShifts(): void {
-    const today = new Date();
-    const from = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const to = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-      lastDay,
-    ).padStart(2, '0')}`;
+    const { from, to } = this.monthRange(this.scheduleMonth());
+    this.scheduleViewState.set('loading');
+    this.scheduleError.set(null);
 
     this.operations.getPublishedShifts(from, to).subscribe({
-      next: (shifts) => this.publishedShifts.set(shifts),
-      error: () => this.publishedShifts.set([]),
+      next: (shifts) => {
+        this.publishedShifts.set([...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)));
+        this.scheduleViewState.set(shifts.length ? 'ready' : 'empty');
+      },
+      error: (error: unknown) => {
+        this.publishedShifts.set([]);
+        this.scheduleViewState.set('error');
+        this.scheduleError.set(this.getErrorMessage(error, '無法取得已發布班表。'));
+      },
+    });
+  }
+
+  private loadTodayTasks(): void {
+    this.taskViewState.set('loading');
+    this.taskError.set(null);
+
+    this.operations.getTodayTasks().subscribe({
+      next: (tasks) => {
+        this.todayTasks.set(tasks);
+        this.taskViewState.set(tasks.routes.length ? 'ready' : 'empty');
+
+        const taskStops = tasks.routes.flatMap((route) => route.stops.map((stop) => ({ route, stop })));
+        const selectedOrderId = this.selectedTask()?.stop.orderId;
+        const nextSelection =
+          taskStops.find((task) => task.stop.orderId === selectedOrderId) ??
+          taskStops.find((task) => this.hasCoordinates(task.stop)) ??
+          null;
+
+        this.selectedTask.set(nextSelection);
+        if (nextSelection && this.hasCoordinates(nextSelection.stop)) {
+          this.renderNavigationMap(false);
+        }
+      },
+      error: (error: unknown) => {
+        this.todayTasks.set(null);
+        this.taskViewState.set('error');
+        this.taskError.set(this.getErrorMessage(error, '無法取得今日配送任務。'));
+      },
     });
   }
 
@@ -294,6 +641,67 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.attendanceError.set(this.getErrorMessage(error, '出勤操作未完成。'));
       },
     });
+  }
+
+  private submitDeliveryResult(
+    action: () => Observable<DeliveryRecordResponse>,
+    successMessage: string,
+  ): void {
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+
+    action().subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeDeliveryAction();
+        this.taskActionMessage.set(successMessage);
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.taskActionError.set(this.getErrorMessage(error, '配送結果未完成。'));
+        this.isTaskSubmitting.set(false);
+      },
+    });
+  }
+
+  private applyDeliveryResponse(response: DeliveryRecordResponse): void {
+    this.todayTasks.update((tasks) => {
+      if (!tasks) {
+        return null;
+      }
+
+      return {
+        ...tasks,
+        routes: tasks.routes.map((route) => ({
+          ...route,
+          stops: route.stops.map((stop) =>
+            stop.orderId === response.orderId ? { ...stop, orderStatus: response.orderStatus } : stop,
+          ),
+        })),
+      };
+    });
+  }
+
+  private optionalDeliveryNotes(): string | undefined {
+    const notes = this.deliveryNotes().trim();
+    return notes || undefined;
+  }
+
+  private readOdometer(value: string): number | null {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) {
+      this.mileageError.set('請輸入里程表讀數。');
+      return null;
+    }
+
+    const odometer = Number(normalizedValue);
+    if (!Number.isInteger(odometer) || odometer < 0) {
+      this.mileageError.set('請輸入 0 以上的整數里程。');
+      return null;
+    }
+
+    return odometer;
   }
 
   private applyAttendance(attendance: AttendanceRecordDto): void {
@@ -368,6 +776,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private showMapLocation(location: L.LatLng, animate: boolean): void {
+    this.currentMapLocation = location;
     this.currentLocationMarker?.remove();
     this.currentLocationMarker = L.marker(location, {
       icon: L.divIcon({
@@ -378,7 +787,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       }),
       interactive: false,
     }).addTo(this.driverMap!);
-    this.driverMap?.setView(location, 15, { animate });
+    this.renderNavigationMap(animate);
   }
 
   private hasStoredMapLocation(): boolean {
@@ -387,6 +796,77 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private saveMapLocation(location: L.LatLng): void {
     saveStoredMapLocation({ lat: location.lat, lng: location.lng });
+  }
+
+  private renderNavigationMap(animate: boolean): void {
+    if (!this.driverMap) {
+      return;
+    }
+
+    this.destinationMarker?.remove();
+    this.destinationMarker = null;
+    this.navigationLine?.remove();
+    this.navigationLine = null;
+
+    const destination = this.destinationLocation();
+    if (!destination) {
+      if (this.currentMapLocation) {
+        this.driverMap.setView(this.currentMapLocation, 15, { animate });
+      }
+      return;
+    }
+
+    this.destinationMarker = L.marker(destination, {
+      icon: L.divIcon({
+        className: 'driver-destination-marker',
+        html: '<span>B</span>',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+      }),
+      title: this.destinationName(),
+    }).addTo(this.driverMap);
+
+    if (!this.currentMapLocation) {
+      this.driverMap.setView(destination, 15, { animate });
+      return;
+    }
+
+    this.navigationLine = L.polyline([this.currentMapLocation, destination], {
+      color: '#54cfae',
+      weight: 4,
+      opacity: 0.82,
+      dashArray: '8 8',
+    }).addTo(this.driverMap);
+    this.driverMap.fitBounds(L.latLngBounds([this.currentMapLocation, destination]), {
+      padding: [48, 48],
+      animate,
+      maxZoom: 15,
+    });
+  }
+
+  private destinationLocation(): L.LatLng | null {
+    const stop = this.selectedTask()?.stop;
+    if (!stop || !this.hasCoordinates(stop)) {
+      return null;
+    }
+
+    return L.latLng(stop.lat, stop.lng);
+  }
+
+  private hasCoordinates(stop: DriverTaskStop): stop is DriverTaskStop & { lat: number; lng: number } {
+    return typeof stop.lat === 'number' && typeof stop.lng === 'number';
+  }
+
+  private monthStart(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  private monthRange(month: Date): { from: string; to: string } {
+    const year = month.getFullYear();
+    const monthNumber = month.getMonth() + 1;
+    const lastDay = new Date(year, monthNumber, 0).getDate();
+    const prefix = `${year}-${String(monthNumber).padStart(2, '0')}`;
+    return { from: `${prefix}-01`, to: `${prefix}-${String(lastDay).padStart(2, '0')}` };
   }
 
   private getLocationErrorMessage(error: GeolocationPositionError): string {
@@ -420,7 +900,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       }
     }
 
-    return fallback;
+    return this.getBackendMessage(error) || fallback;
   }
 
   private getBackendMessage(error: unknown): string {
