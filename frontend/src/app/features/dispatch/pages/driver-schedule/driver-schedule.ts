@@ -82,13 +82,15 @@ export class DriverSchedule implements OnInit {
   readonly isPublished = computed(() => this.scheduleMonth()?.status === 'PUBLISHED');
   readonly selectedShift = computed(() => {
     const selectedId = this.selectedShiftId();
-    return selectedId === null ? null : this.shifts().find((shift) => shift.id === selectedId) ?? null;
+    return selectedId === null
+      ? null
+      : (this.shifts().find((shift) => shift.id === selectedId) ?? null);
   });
   readonly selectedDriver = computed(() => {
     const driverId = this.selectedShift()?.driverId;
     return driverId === undefined
       ? null
-      : this.drivers().find((driver) => driver.id === driverId) ?? null;
+      : (this.drivers().find((driver) => driver.id === driverId) ?? null);
   });
   readonly rows = computed<DriverScheduleRow[]>(() => {
     const driversById = new Map<number, DriverDto>();
@@ -347,10 +349,6 @@ export class DriverSchedule implements OnInit {
     return !!shift && shift.workDate >= this.todayValue() && shift.shiftType !== 'LEAVE';
   }
 
-  protected maxOvertime(): number {
-    return this.selectedDriver()?.maxOvertimeMinutes ?? 0;
-  }
-
   protected formatTime(value: string | null): string {
     return value ? value.slice(0, 5) : '--:--';
   }
@@ -417,10 +415,6 @@ export class DriverSchedule implements OnInit {
       }
       if (!Number.isInteger(overtimeMinutes) || overtimeMinutes < 0) {
         this.errorMessage.set('加班分鐘數必須是 0 以上整數。');
-        return null;
-      }
-      if (overtimeMinutes > this.maxOvertime()) {
-        this.errorMessage.set(`加班分鐘數不可超過司機上限 ${this.maxOvertime()} 分鐘。`);
         return null;
       }
       return {
