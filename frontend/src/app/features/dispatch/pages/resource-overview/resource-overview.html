@@ -8,6 +8,10 @@
     <div class="page-actions">
       <p class="updated-at">資料更新於 {{ updatedAt() }}</p>
       <div class="action-buttons">
+        <button type="button" class="secondary-action" (click)="openCreateAdmin()">
+          <svg lucidePlus aria-hidden="true"></svg>
+          新增管理員
+        </button>
         <button type="button" class="secondary-action" (click)="openCreateDriver()">
           <svg lucidePlus aria-hidden="true"></svg>
           新增司機
@@ -323,13 +327,15 @@
         role="dialog"
         aria-modal="true"
         [attr.aria-labelledby]="
-          formType === 'driver'
-            ? 'driver-form-title'
-            : formType === 'vehicle' || formType === 'edit-vehicle'
-              ? 'vehicle-form-title'
-              : formType === 'store' || formType === 'edit-store'
-                ? 'store-form-title'
-                : 'warehouse-form-title'
+          formType === 'admin'
+            ? 'admin-form-title'
+            : formType === 'driver'
+              ? 'driver-form-title'
+              : formType === 'vehicle' || formType === 'edit-vehicle'
+                ? 'vehicle-form-title'
+                : formType === 'store' || formType === 'edit-store'
+                  ? 'store-form-title'
+                  : 'warehouse-form-title'
         "
         (click)="stopEvent($event)"
       >
@@ -340,27 +346,31 @@
               [id]="
                 formType === 'driver'
                   ? 'driver-form-title'
-                  : formType === 'vehicle' || formType === 'edit-vehicle'
-                    ? 'vehicle-form-title'
-                    : formType === 'store' || formType === 'edit-store'
-                      ? 'store-form-title'
-                      : 'warehouse-form-title'
+                  : formType === 'admin'
+                    ? 'admin-form-title'
+                    : formType === 'vehicle' || formType === 'edit-vehicle'
+                      ? 'vehicle-form-title'
+                      : formType === 'store' || formType === 'edit-store'
+                        ? 'store-form-title'
+                        : 'warehouse-form-title'
               "
             >
               {{
-                formType === 'driver'
-                  ? '新增司機'
-                  : formType === 'vehicle'
-                    ? '新增車輛'
-                    : formType === 'edit-vehicle'
-                      ? '編輯車輛'
-                      : formType === 'store'
-                        ? '新增店家'
-                        : formType === 'edit-store'
-                          ? '編輯店家'
-                          : formType === 'warehouse'
-                            ? '新增倉庫'
-                            : '編輯倉庫'
+                formType === 'admin'
+                  ? '新增管理員'
+                  : formType === 'driver'
+                    ? '新增司機'
+                    : formType === 'vehicle'
+                      ? '新增車輛'
+                      : formType === 'edit-vehicle'
+                        ? '編輯車輛'
+                        : formType === 'store'
+                          ? '新增店家'
+                          : formType === 'edit-store'
+                            ? '編輯店家'
+                            : formType === 'warehouse'
+                              ? '新增倉庫'
+                              : '編輯倉庫'
               }}
             </h3>
           </div>
@@ -375,7 +385,64 @@
           </button>
         </header>
 
-        @if (formType === 'driver') {
+        @if (formType === 'admin') {
+          <form class="resource-form" (submit)="$event.preventDefault(); submitAdmin()">
+            <div class="form-grid">
+              <label class="form-field">
+                <span>主管姓名</span>
+                <input
+                  type="text"
+                  required
+                  [value]="adminForm().name"
+                  (input)="updateAdminText('name', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>手機號碼</span>
+                <input
+                  type="tel"
+                  required
+                  maxlength="10"
+                  [value]="adminForm().phone"
+                  (input)="updateAdminText('phone', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>登入帳號</span>
+                <input
+                  type="text"
+                  required
+                  autocomplete="username"
+                  [value]="adminForm().account"
+                  (input)="updateAdminText('account', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>初始密碼</span>
+                <input
+                  type="password"
+                  required
+                  minlength="8"
+                  maxlength="12"
+                  autocomplete="new-password"
+                  [value]="adminForm().password"
+                  (input)="updateAdminText('password', $event)"
+                />
+              </label>
+            </div>
+
+            @if (formError()) {
+              <p class="form-error">{{ formError() }}</p>
+            }
+
+            <div class="modal-actions">
+              <button type="button" class="plain-button" (click)="closeForm()">取消</button>
+              <button type="submit" class="primary-action" [disabled]="isSaving()">
+                {{ isSaving() ? '建立中...' : '建立管理員帳號' }}
+              </button>
+            </div>
+          </form>
+        } @else if (formType === 'driver') {
           <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
             <div class="form-grid">
               <label class="form-field">

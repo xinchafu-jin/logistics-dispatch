@@ -11,6 +11,8 @@ import {
 } from '@lucide/angular';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
+  AdminUserCreateRequest,
+  AdminUserDto,
   DriverDto,
   StoreDto,
   StoreStatus,
@@ -23,6 +25,7 @@ type VehicleResourceStatus = '待派車' | '保養排程' | '已退役';
 type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
+  | 'admin'
   | 'driver'
   | 'vehicle'
   | 'edit-vehicle'
@@ -80,6 +83,15 @@ function emptyDriver(): DriverDto {
     restDuration: 60,
     maxOvertimeMinutes: 0,
     isActive: true,
+  };
+}
+
+function emptyAdminUser(): AdminUserCreateRequest {
+  return {
+    account: '',
+    password: '',
+    name: '',
+    phone: '',
   };
 }
 
@@ -160,6 +172,7 @@ export class ResourceOverview implements OnInit {
   readonly errorMessage = signal('');
   readonly updatedAt = signal('--:--');
   readonly activeForm = signal<ResourceForm>(null);
+  readonly adminForm = signal<AdminUserCreateRequest>(emptyAdminUser());
   readonly driverForm = signal<DriverDto>(emptyDriver());
   readonly storeForm = signal<StoreDto>(emptyStore());
   readonly warehouseForm = signal<WarehouseDto>(emptyWarehouse());
@@ -262,6 +275,12 @@ export class ResourceOverview implements OnInit {
     this.activeForm.set('driver');
   }
 
+  openCreateAdmin(): void {
+    this.adminForm.set(emptyAdminUser());
+    this.formError.set('');
+    this.activeForm.set('admin');
+  }
+
   openCreateStore(): void {
     this.activeView.set('stores');
     this.storeForm.set(emptyStore());
@@ -362,6 +381,11 @@ export class ResourceOverview implements OnInit {
     this.driverForm.update((form) => ({ ...form, [field]: value }));
   }
 
+  updateAdminText(field: keyof AdminUserCreateRequest, event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.adminForm.update((form) => ({ ...form, [field]: value }));
+  }
+
   updateVehicleText(field: 'plateNumber' | 'vehicleType', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.vehicleForm.update((form) => ({ ...form, [field]: value }));
@@ -449,6 +473,30 @@ export class ResourceOverview implements OnInit {
         password,
       }),
       (createdDriver) => {
+        this.updatedAt.set(this.formatCurrentTime());
+      },
+    );
+  }
+
+  submitAdmin(): void {
+    const admin = this.adminForm();
+    const account = admin.account.trim();
+    const name = admin.name.trim();
+    const phone = admin.phone.trim();
+
+    if (!account || !name || !phone || !admin.password) {
+      this.formError.set('請填寫主管姓名、手機號碼、登入帳號與密碼。');
+      return;
+    }
+
+    if (admin.password.length < 8 || admin.password.length > 12) {
+      this.formError.set('主管密碼長度必須介於 8 到 12 個字元。');
+      return;
+    }
+
+    this.saveResource(
+      this.api.createAdminUser({ account, name, phone, password: admin.password }),
+      () => {
         this.updatedAt.set(this.formatCurrentTime());
       },
     );
@@ -768,7 +816,7 @@ export class ResourceOverview implements OnInit {
     }).format(new Date());
   }
 
-  private saveResource<T extends DriverDto | VehicleDto | StoreDto | WarehouseDto>(
+  private saveResource<T extends AdminUserDto | DriverDto | VehicleDto | StoreDto | WarehouseDto>(
     request: Observable<T>,
     onSuccess: (value: T) => void,
   ): void {

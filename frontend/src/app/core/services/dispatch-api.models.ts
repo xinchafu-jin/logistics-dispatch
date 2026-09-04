@@ -26,6 +26,22 @@ export interface DriverDto {
   isActive: boolean;
 }
 
+/** 建立後台管理員時送往 POST /api/admin-users 的資料。 */
+export interface AdminUserCreateRequest {
+  account: string;
+  password: string;
+  name: string;
+  phone: string;
+}
+
+/** 後端回傳的管理員資料不包含密碼。 */
+export interface AdminUserDto {
+  id: number;
+  account: string;
+  name: string;
+  phone: string;
+}
+
 /** 每月司機班表主檔。 */
 export interface ScheduleMonthDto {
   id: number;
@@ -326,12 +342,4 @@ export interface TemplateRouteRequest {
   warehouseId: number;
   vehicleId: number;
   storeIds: number[];
-}
-
-export interface GpsPingDTO {
-  id: number;
-  driverIda: number;
-  lat: number;
-  lng: number;
-  timestamp: number;
 }

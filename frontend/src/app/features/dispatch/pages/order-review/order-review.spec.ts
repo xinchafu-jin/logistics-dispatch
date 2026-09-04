@@ -98,7 +98,7 @@ describe('OrderReview Excel 匯入', () => {
     expect(host.textContent).toContain('找不到門市：不存在的店');
   });
 
-  it('逐筆送出，中間一筆失敗不影響其他筆', async () => {
+  it('以單一批次請求建立全部通過驗證的訂單', async () => {
     await component.onImportFileSelected(
       fileEvent([
         HEADER,
@@ -110,24 +110,45 @@ describe('OrderReview Excel 匯入', () => {
 
     component.confirmImport();
 
-    // concatMap：一筆結束才會送下一筆，所以每次只會有一個 pending 請求。
-    httpTesting.expectOne('/api/orders').flush(savedOrder(1, 'SO-001'));
+    const request = httpTesting.expectOne('/api/orders/batch');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body.orders.map((order: OrderDto) => order.orderNumber)).toEqual([
+      'SO-001',
+      'SO-002',
+      'SO-003',
+    ]);
+    request.flush([savedOrder(1, 'SO-001'), savedOrder(2, 'SO-002'), savedOrder(3, 'SO-003')]);
+
+    const state = component.importState();
+    expect(state).toMatchObject({ stage: 'done', succeeded: 3, failures: [] });
+    expect(component.orders().map((order) => order.id)).toEqual(['SO-001', 'SO-002', 'SO-003']);
+  });
+
+  it('批次建立失敗時不將任何訂單加入清單', async () => {
+    await component.onImportFileSelected(
+      fileEvent([
+        HEADER,
+        ['SO-001', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-002', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
+      ]),
+    );
+
+    component.confirmImport();
+
     httpTesting
-      .expectOne('/api/orders')
+      .expectOne('/api/orders/batch')
       .flush(
         { success: false, message: '訂單編號已存在：SO-002' },
         { status: 400, statusText: 'Bad Request' },
       );
-    httpTesting.expectOne('/api/orders').flush(savedOrder(3, 'SO-003'));
 
     const state = component.importState();
-    expect(state).toMatchObject({ stage: 'done', succeeded: 2 });
+    expect(state).toMatchObject({ stage: 'done', succeeded: 0 });
     expect(state.stage === 'done' && state.failures).toEqual([
+      { row: 2, orderNumber: 'SO-001', message: '訂單編號已存在：SO-002' },
       { row: 3, orderNumber: 'SO-002', message: '訂單編號已存在：SO-002' },
     ]);
-
-    // 成功的兩筆進了清單，失敗的沒有。
-    expect(component.orders().map((order) => order.id)).toEqual(['SO-001', 'SO-003']);
+    expect(component.orders()).toEqual([]);
   });
 
   it('匯入流程不會動到新增/編輯表單的狀態', async () => {

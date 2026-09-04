@@ -19,53 +19,147 @@
     >
       <div class="login-heading">
         <p class="section-label">系統登入</p>
-        <h2 id="login-title">歡迎回來</h2>
-        <p>登入物流後台，管理配送訂單、人車資源與營運狀況。</p>
+        <h2 id="login-title">
+          {{
+            resetStage() === 'identity'
+              ? '驗證帳號'
+              : resetStage() === 'password'
+                ? '設定新密碼'
+                : '歡迎回來'
+          }}
+        </h2>
+        <p>
+          {{
+            resetStage() === 'identity'
+              ? '輸入主管帳號與手機號碼以驗證身分。'
+              : resetStage() === 'password'
+                ? '設定 8 到 12 個字元的新密碼。'
+                : '登入物流後台，管理配送訂單、人車資源與營運狀況。'
+          }}
+        </p>
       </div>
 
-      <p class="portal-description">物流後台帳號登入。</p>
+      @if (resetStage() === 'identity') {
+        <form class="login-form" (submit)="verifyPasswordReset($event)" novalidate>
+          <div class="form-field">
+            <label for="reset-account">帳號</label>
+            <input
+              #resetAccountInput
+              id="reset-account"
+              type="text"
+              autocomplete="username"
+              [value]="resetAccount()"
+              [disabled]="isSubmitting()"
+              (input)="resetAccount.set(resetAccountInput.value)"
+            />
+          </div>
+          <div class="form-field">
+            <label for="reset-phone">手機號碼</label>
+            <input
+              #resetPhoneInput
+              id="reset-phone"
+              type="tel"
+              inputmode="numeric"
+              maxlength="10"
+              autocomplete="tel"
+              [value]="resetPhone()"
+              [disabled]="isSubmitting()"
+              (input)="resetPhone.set(resetPhoneInput.value)"
+            />
+          </div>
+          <button type="submit" [disabled]="isSubmitting()">
+            {{ isSubmitting() ? '驗證中...' : '驗證身分' }}
+          </button>
+          @if (resetError()) {
+            <p class="login-error" role="alert" aria-live="polite">{{ resetError() }}</p>
+          }
+        </form>
+        <button type="button" class="text-action" (click)="cancelPasswordReset()">返回登入</button>
+      } @else if (resetStage() === 'password') {
+        <form class="login-form" (submit)="submitPasswordReset($event)" novalidate>
+          <div class="form-field">
+            <label for="new-password">新密碼</label>
+            <input
+              #newPasswordInput
+              id="new-password"
+              type="password"
+              minlength="8"
+              maxlength="12"
+              autocomplete="new-password"
+              [value]="resetPassword()"
+              [disabled]="isSubmitting()"
+              (input)="resetPassword.set(newPasswordInput.value)"
+            />
+          </div>
+          <div class="form-field">
+            <label for="confirm-password">確認新密碼</label>
+            <input
+              #confirmPasswordInput
+              id="confirm-password"
+              type="password"
+              minlength="8"
+              maxlength="12"
+              autocomplete="new-password"
+              [value]="resetPasswordConfirmation()"
+              [disabled]="isSubmitting()"
+              (input)="resetPasswordConfirmation.set(confirmPasswordInput.value)"
+            />
+          </div>
+          <button type="submit" [disabled]="isSubmitting()">
+            {{ isSubmitting() ? '重設中...' : '重設密碼' }}
+          </button>
+          @if (resetError()) {
+            <p class="login-error" role="alert" aria-live="polite">{{ resetError() }}</p>
+          }
+        </form>
+        <button type="button" class="text-action" (click)="cancelPasswordReset()">返回登入</button>
+      } @else {
+        <p class="portal-description">物流後台帳號登入。</p>
 
-      <form class="login-form" (submit)="signIn($event)" novalidate>
-        <div class="form-field">
-          <label for="account">帳號</label>
-          <input
-            #accountInput
-            id="account"
-            type="text"
-            autocomplete="username"
-            placeholder="公司帳號或員工編號"
-            [value]="account()"
-            [disabled]="isSubmitting()"
-            (input)="account.set(accountInput.value)"
-          />
-        </div>
+        <form class="login-form" (submit)="signIn($event)" novalidate>
+          <div class="form-field">
+            <label for="account">帳號</label>
+            <input
+              #accountInput
+              id="account"
+              type="text"
+              autocomplete="username"
+              placeholder="公司帳號或員工編號"
+              [value]="account()"
+              [disabled]="isSubmitting()"
+              (input)="account.set(accountInput.value)"
+            />
+          </div>
 
-        <div class="form-field">
-          <label for="password">密碼</label>
-          <input
-            #passwordInput
-            id="password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="輸入密碼"
-            [value]="password()"
-            [disabled]="isSubmitting()"
-            (input)="password.set(passwordInput.value)"
-          />
-        </div>
+          <div class="form-field">
+            <label for="password">密碼</label>
+            <input
+              #passwordInput
+              id="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="輸入密碼"
+              [value]="password()"
+              [disabled]="isSubmitting()"
+              (input)="password.set(passwordInput.value)"
+            />
+          </div>
 
-        <button type="submit" [disabled]="isSubmitting()">
-          {{ isSubmitting() ? '登入中...' : '登入系統' }}
-        </button>
+          <button type="submit" [disabled]="isSubmitting()">
+            {{ isSubmitting() ? '登入中...' : '登入系統' }}
+          </button>
 
-        @if (loginError()) {
-          <p class="login-error" role="alert" aria-live="polite">
-            {{ loginError() }}
-          </p>
-        }
-      </form>
+          @if (loginError()) {
+            <p class="login-error" role="alert" aria-live="polite">{{ loginError() }}</p>
+          }
+          @if (loginNotice()) {
+            <p class="login-notice" role="status" aria-live="polite">{{ loginNotice() }}</p>
+          }
+        </form>
 
-      <p class="support-text">帳號問題請聯絡系統管理員。</p>
+        <button type="button" class="text-action" (click)="openPasswordReset()">忘記密碼</button>
+        <p class="support-text">帳號問題請聯絡系統管理員。</p>
+      }
     </div>
 
     <div

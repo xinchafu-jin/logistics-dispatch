@@ -1,7 +1,12 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { catchError, map, Observable, of } from 'rxjs';
-import { AuthUser, LoginCredentials } from './auth.models';
+import {
+  AdminPasswordResetRequest,
+  AdminPasswordResetVerification,
+  AuthUser,
+  LoginCredentials,
+} from './auth.models';
 
 const AUTH_API = '/api/auth';
 const ACCESS_TOKEN_STORAGE_KEY = 'logistics-dispatch.access-token';
@@ -51,6 +56,21 @@ export class AuthService {
           return user;
         }),
       );
+  }
+
+  verifyForgottenPassword(request: AdminPasswordResetVerification): Observable<void> {
+    return this.http.post<void>(`${AUTH_API}/admin/forgot-password/verify`, {
+      account: request.account.trim(),
+      phone: request.phone.trim(),
+    });
+  }
+
+  resetForgottenPassword(request: AdminPasswordResetRequest): Observable<void> {
+    return this.http.post<void>(`${AUTH_API}/admin/forgot-password/reset`, {
+      account: request.account.trim(),
+      phone: request.phone.trim(),
+      newPassword: request.newPassword,
+    });
   }
 
   dashboardPath(): string {
