@@ -320,9 +320,11 @@
                 <option
                   [value]="option.id"
                   [selected]="option.id === route.driverId"
-                  [disabled]="option.takenNote !== null"
+                  [disabled]="option.takenNote !== null || option.scheduleNote !== null"
                 >
-                  {{ option.name }}@if (option.takenNote) {
+                  {{ option.name }}@if (option.scheduleNote) {
+                  · {{ option.scheduleNote }}
+                } @else if (option.takenNote) {
                   · {{ option.takenNote }}
                 }
                 </option>

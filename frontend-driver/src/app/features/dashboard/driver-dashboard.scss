@@ -317,12 +317,14 @@ h2 {
 
 .attendance-meta span {
   display: grid;
+  justify-items: center;
   min-width: 0;
   gap: 2px;
   padding: 7px 9px;
   border-radius: 4px;
   color: #b9d5cc;
   background: #183938;
+  text-align: center;
 }
 
 .attendance-meta small {
