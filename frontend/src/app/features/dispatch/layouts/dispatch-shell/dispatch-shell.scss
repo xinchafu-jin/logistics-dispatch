@@ -307,6 +307,7 @@ app-brand-logo {
   gap: 12px;
 }
 
+.application-notification,
 .theme-toggle,
 .logout-button {
   display: grid;
@@ -332,10 +333,15 @@ app-brand-logo {
   opacity: 0.62;
 }
 
+.application-notification svg,
 .theme-toggle svg,
 .logout-button svg {
   width: 16px;
   height: 16px;
+}
+
+.application-notification {
+  cursor: default;
 }
 
 .workspace-status::before {
@@ -368,6 +374,7 @@ app-brand-logo {
       0 10px 24px rgb(20 52 42 / 10%);
   }
 
+  .application-notification,
   .theme-toggle,
   .logout-button {
     background: rgb(8 124 107 / 4%);

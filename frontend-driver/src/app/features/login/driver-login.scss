@@ -165,6 +165,133 @@ input:disabled {
   line-height: 1.55;
 }
 
+.account-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.account-help .help-text {
+  margin: 0 2px;
+}
+
+.account-application-button {
+  display: inline-flex;
+  min-height: 38px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 0 11px;
+  border: 1px solid #b7cac2;
+  border-radius: 6px;
+  color: #276254;
+  background: transparent;
+  font-size: 12px;
+}
+
+.account-application-button:hover {
+  border-color: #0f7665;
+  color: #0b6859;
+  background: #e7f3ef;
+}
+
+.account-application-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.account-application {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #b9d1c7;
+  border-radius: 8px;
+  background: #edf6f2;
+}
+
+.account-application header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-application .eyebrow {
+  margin-bottom: 5px;
+}
+
+.account-application h2 {
+  margin: 0;
+  color: #17342c;
+  font-size: 18px;
+}
+
+.application-close {
+  display: grid;
+  width: 32px;
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #b7cac2;
+  border-radius: 6px;
+  color: #3c6056;
+  background: #ffffff;
+}
+
+.application-close:hover {
+  border-color: #0f7665;
+  background: #ffffff;
+}
+
+.application-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.account-application > p {
+  margin: 12px 0 0;
+  color: #48675d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.account-application dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 0;
+}
+
+.account-application dl div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #c7dbd3;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.account-application dt {
+  color: #58766b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.account-application dd {
+  margin: 5px 0 0;
+  color: #1d443a;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.account-application .application-notice {
+  color: #87642d;
+}
+
 .login-page.is-dark-theme {
   color: #d9e8e2;
   background: #0d1415;
@@ -192,8 +319,46 @@ input:disabled {
 
 .login-page.is-dark-theme label,
 .login-page.is-dark-theme .login-copy > p:last-child,
-.login-page.is-dark-theme .help-text {
+.login-page.is-dark-theme .help-text,
+.login-page.is-dark-theme .account-application > p {
   color: #a9bdb6;
+}
+
+.login-page.is-dark-theme .account-application-button {
+  border-color: #3d5950;
+  color: #8ddbcf;
+  background: transparent;
+}
+
+.login-page.is-dark-theme .account-application-button:hover {
+  border-color: #63d1c6;
+  color: #c6f2ea;
+  background: #18322f;
+}
+
+.login-page.is-dark-theme .account-application {
+  border-color: #31544d;
+  background: #132827;
+}
+
+.login-page.is-dark-theme .account-application h2,
+.login-page.is-dark-theme .account-application dd {
+  color: #e1f2ec;
+}
+
+.login-page.is-dark-theme .application-close,
+.login-page.is-dark-theme .account-application dl div {
+  border-color: #36544d;
+  color: #b8d9d0;
+  background: #192f2d;
+}
+
+.login-page.is-dark-theme .account-application dt {
+  color: #91ada4;
+}
+
+.login-page.is-dark-theme .account-application .application-notice {
+  color: #e8c789;
 }
 
 .login-page.is-dark-theme input::placeholder {
@@ -204,5 +369,16 @@ input:disabled {
   .topbar,
   .login-shell {
     width: min(100% - 64px, 460px);
+  }
+}
+
+@media (max-width: 420px) {
+  .account-help {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .account-application-button {
+    width: 100%;
   }
 }

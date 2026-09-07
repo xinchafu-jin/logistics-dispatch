@@ -9,8 +9,12 @@
       <strong>司機工作台</strong>
     </div>
     <div class="topbar-actions">
-      <span class="icon-button weather-indicator" role="img" [title]="weatherLabel()"
-            [attr.aria-label]="weatherLabel()">
+      <span
+        class="icon-button weather-indicator"
+        role="img"
+        [title]="weatherLabel()"
+        [attr.aria-label]="weatherLabel()"
+      >
         @switch (weather()?.icon) {
           @case ('晴') {
             <svg lucideSun aria-hidden="true"></svg>
@@ -53,7 +57,6 @@
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
-
       <button
         type="button"
         class="locate-control"
@@ -98,16 +101,11 @@
           </div>
         </div>
 
-        @if (navigationUrl(); as navigationUrl) {
-          <a
-            class="navigation-action"
-            [href]="navigationUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+        @if (hasNavigationDestination()) {
+          <button type="button" class="navigation-action" (click)="startInAppNavigation()">
             <svg lucideNavigation aria-hidden="true"></svg>
             開始導航
-          </a>
+          </button>
         } @else {
           <p class="destination-copy">{{ destinationDetail() }}</p>
         }
@@ -141,9 +139,18 @@
           </button>
         } @else if (attendance(); as todayAttendance) {
           <div class="attendance-meta">
-            <span>上班 {{ formatTime(todayAttendance.clockInAt) }}</span>
-            <span>下班 {{ formatTime(todayAttendance.clockOutAt) }}</span>
-            <span>{{ gpsTracking.lastUploadedAt() ? '定位已回報' : '等待定位' }}</span>
+            <span>
+              <small>上班</small>
+              <strong>{{ formatTime(todayAttendance.clockInAt) }}</strong>
+            </span>
+            <span>
+              <small>下班</small>
+              <strong>{{ formatTime(todayAttendance.clockOutAt) }}</strong>
+            </span>
+            <span class="attendance-meta-status">
+              <small>定位</small>
+              <strong>{{ gpsTracking.lastUploadedAt() ? '已回報' : '等待定位' }}</strong>
+            </span>
           </div>
 
           @if (todayAttendance.status === 'WORKING') {
@@ -224,7 +231,10 @@
                 </p>
                 <ol class="task-stop-list">
                   @for (stop of route.stops; track stop.orderId) {
-                    <li class="task-stop" [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)">
+                    <li
+                      class="task-stop"
+                      [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)"
+                    >
                       <span class="stop-sequence">{{ stop.sequence }}</span>
                       <div class="task-stop-copy">
                         <strong>{{ stop.storeName }}</strong>
@@ -233,6 +243,11 @@
                           {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
                           · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
                         }
+                          {{ stop.expectedBoxCount }} 箱
+                          @if (stop.receivingStart && stop.receivingEnd) {
+                            · {{ formatTime(stop.receivingStart) }} -
+                            {{ formatTime(stop.receivingEnd) }}
+                          }
                         </span>
                         <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
                           {{ taskStatusLabel(stop.orderStatus) }}
@@ -244,7 +259,11 @@
                           class="task-navigation-button"
                           (click)="selectTaskForNavigation(route, stop)"
                           [disabled]="!canNavigate(stop)"
-                          [title]="canNavigate(stop) ? '在地圖顯示並開始導航' : '後端尚未提供這個站點的座標'"
+                          [title]="
+                            canNavigate(stop)
+                              ? '在地圖顯示並開始導航'
+                              : '後端尚未提供這個站點的座標'
+                          "
                         >
                           <svg lucideNavigation aria-hidden="true"></svg>
                           <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
@@ -273,7 +292,11 @@
                       </div>
                       @if (isDeliveryActionOpen(stop)) {
                         <section class="delivery-action-panel" aria-label="交貨處理">
-                          <p>預計 {{ stop.expectedBoxCount }} 箱。交貨與無人簽收皆須使用已上傳完成的照片憑證。</p>
+                          <p>
+                            預計
+                            {{ stop.expectedBoxCount }}
+                            箱。交貨與無人簽收皆須使用已上傳完成的照片憑證。
+                          </p>
                           <label>
                             <span>照片憑證網址</span>
                             <input
@@ -313,7 +336,11 @@
                               <svg lucideTriangleAlert aria-hidden="true"></svg>
                               無人簽收
                             </button>
-                            <button type="button" class="delivery-cancel-button" (click)="closeDeliveryAction()">
+                            <button
+                              type="button"
+                              class="delivery-cancel-button"
+                              (click)="closeDeliveryAction()"
+                            >
                               取消
                             </button>
                           </div>
@@ -333,7 +360,12 @@
           <h1>本月班表</h1>
         </div>
         <div class="month-selector" aria-label="選擇班表月份">
-          <button type="button" (click)="changeScheduleMonth(-1)" title="上個月" aria-label="上個月">
+          <button
+            type="button"
+            (click)="changeScheduleMonth(-1)"
+            title="上個月"
+            aria-label="上個月"
+          >
             <svg lucideChevronLeft aria-hidden="true"></svg>
           </button>
           <strong>{{ scheduleMonthLabel() }}</strong>
@@ -358,7 +390,9 @@
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
                 <span class="shift-type"
-                      [class]="shiftTypeClass(shift.shiftType)">{{ formatShiftType(shift.shiftType) }}</span>
+                      [class]="shiftTypeClass(shift.shiftType)">{{
+                  formatShiftType(shift.shiftType)
+                }}</span>
                 <div class="shift-details">
                   @if (shift.shiftType === 'WORK') {
                     <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>

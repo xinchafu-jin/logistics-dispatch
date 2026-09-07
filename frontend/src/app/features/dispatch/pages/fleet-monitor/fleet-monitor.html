@@ -82,18 +82,109 @@
       } @else {
         <div class="fleet-driver-list">
           @for (driver of visibleDrivers(); track driver.id) {
-            <article class="fleet-driver">
-              <i [class.is-active]="mapDrivers().some((point) => point.id === driver.id)" aria-hidden="true"></i>
+            <button
+              type="button"
+              class="fleet-driver"
+              [class.is-selected]="selectedDriverId() === driver.id"
+              (click)="selectDriver(driver)"
+            >
+              <i
+                [class.is-active]="mapDrivers().some((point) => point.id === driver.id)"
+                aria-hidden="true"
+              ></i>
               <div>
                 <strong>{{ driver.name }}</strong>
                 <span>{{ driver.displayId }}</span>
                 <small>{{ driver.state }}</small>
               </div>
-            </article>
+            </button>
           } @empty {
             <p class="panel-message">此篩選條件下沒有司機資料。</p>
           }
         </div>
+      }
+
+      @if (selectedDriver(); as driver) {
+        <section class="fleet-detail" aria-label="司機定位詳情">
+          <header class="fleet-detail-header">
+            <div>
+              <p class="page-eyebrow">GPS DETAIL</p>
+              <h4>{{ driver.name }}定位紀錄</h4>
+            </div>
+            <button
+              type="button"
+              class="refresh-gps"
+              title="重新取得此司機定位"
+              aria-label="重新取得此司機定位"
+              [disabled]="detailLoading()"
+              (click)="refreshSelectedDriver()"
+            >
+              <svg lucideRefreshCw [class.is-spinning]="detailLoading()" aria-hidden="true"></svg>
+            </button>
+          </header>
+
+          <dl class="gps-details">
+            <div>
+              <dt>最後回傳</dt>
+              <dd>
+                {{ selectedLatestPing() ? formatTimestamp(selectedLatestPing()!.timestamp) : '--' }}
+              </dd>
+              <small>{{ formatCoordinate(selectedLatestPing()) }}</small>
+            </div>
+            <div>
+              <dt>目前有效定位</dt>
+              <dd>
+                {{
+                  selectedCurrentPing() ? formatTimestamp(selectedCurrentPing()!.timestamp) : '--'
+                }}
+              </dd>
+              <small>{{ formatCoordinate(selectedCurrentPing()) }}</small>
+            </div>
+          </dl>
+
+          @if (detailMessage()) {
+            <p class="panel-message">{{ detailMessage() }}</p>
+          }
+
+          <form class="history-form" (submit)="$event.preventDefault(); searchHistory()">
+            <label>
+              <span>開始時間</span>
+              <input
+                type="datetime-local"
+                [value]="historyFrom()"
+                (input)="updateHistoryRange('from', $event)"
+              />
+            </label>
+            <label>
+              <span>結束時間</span>
+              <input
+                type="datetime-local"
+                [value]="historyTo()"
+                (input)="updateHistoryRange('to', $event)"
+              />
+            </label>
+            <button type="submit" class="history-submit" [disabled]="historyLoading()">
+              {{ historyLoading() ? '查詢中...' : '查詢軌跡' }}
+            </button>
+          </form>
+
+          @if (historyError()) {
+            <p class="panel-message is-error">{{ historyError() }}</p>
+          } @else if (selectedHistory().length) {
+            <ol class="history-list">
+              @for (ping of selectedHistory(); track ping.id) {
+                <li>
+                  <strong>{{ formatTimestamp(ping.timestamp) }}</strong>
+                  <span>{{ formatCoordinate(ping) }}</span>
+                </li>
+              }
+            </ol>
+          } @else if (hasSearchedHistory()) {
+            <p class="panel-message">指定時間區間內沒有定位軌跡。</p>
+          } @else if (!historyLoading()) {
+            <p class="panel-message">設定時間區間後，可查詢此司機的定位軌跡。</p>
+          }
+        </section>
       }
     </aside>
   </section>

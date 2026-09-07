@@ -263,8 +263,11 @@ h2 {
   margin-top: 12px;
   padding: 0 13px;
   border-radius: 6px;
+  border: 0;
   color: #08231f;
   background: #70d5ba;
+  cursor: pointer;
+  font: inherit;
   font-size: 13px;
   font-weight: 800;
   text-decoration: none;
@@ -306,18 +309,39 @@ h2 {
 }
 
 .attendance-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin-top: 15px;
 }
 
 .attendance-meta span {
-  padding: 5px 7px;
+  display: grid;
+  justify-items: center;
+  min-width: 0;
+  gap: 2px;
+  padding: 7px 9px;
   border-radius: 4px;
   color: #b9d5cc;
   background: #183938;
+  text-align: center;
+}
+
+.attendance-meta small {
+  color: #8eb7ab;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.attendance-meta strong {
+  overflow-wrap: anywhere;
+  color: inherit;
   font-size: 12px;
+  line-height: 1.35;
+}
+
+.attendance-meta-status {
+  grid-column: 1 / -1;
 }
 
 .primary-action,
@@ -1019,7 +1043,11 @@ dd {
   border-radius: 50%;
   color: #08231f;
   background: #70d5ba;
-  font: 900 13px/1 Inter, "Noto Sans TC", "Segoe UI", sans-serif;
+  font:
+    900 13px/1 Inter,
+    'Noto Sans TC',
+    'Segoe UI',
+    sans-serif;
 }
 
 :host ::ng-deep .driver-destination-marker {
@@ -1032,12 +1060,38 @@ dd {
   border-radius: 50%;
   color: #ffffff;
   background: #317dcb;
-  font: 900 13px/1 Inter, "Noto Sans TC", "Segoe UI", sans-serif;
+  font:
+    900 13px/1 Inter,
+    'Noto Sans TC',
+    'Segoe UI',
+    sans-serif;
+}
+
+:host ::ng-deep .driver-destination-tooltip {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 4px;
+  color: #ffffff;
+  background: #1d67ad;
+  box-shadow: 0 2px 8px rgb(8 35 60 / 26%);
+  font:
+    800 11px/1.2 Inter,
+    'Noto Sans TC',
+    'Segoe UI',
+    sans-serif;
+}
+
+:host ::ng-deep .driver-destination-tooltip.leaflet-tooltip-top::before {
+  border-top-color: #1d67ad;
 }
 
 .driver-app:not(.is-dark-theme) .attendance-meta span {
   color: #286456;
   background: #e5f2ec;
+}
+
+.driver-app:not(.is-dark-theme) .attendance-meta small {
+  color: #5a8b7f;
 }
 
 .driver-app:not(.is-dark-theme) .shift-row strong {

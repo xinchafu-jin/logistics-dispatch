@@ -212,10 +212,26 @@
 
 .fleet-driver {
   display: flex;
+  width: 100%;
   gap: 10px;
   align-items: flex-start;
   padding: 10px 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
   border-top: 1px solid var(--border);
+}
+
+.fleet-driver:hover,
+.fleet-driver.is-selected {
+  background: rgb(99 209 198 / 7%);
+}
+
+.fleet-driver.is-selected {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .fleet-driver i {
@@ -263,6 +279,126 @@
   color: #ef9d9d;
 }
 
+.fleet-detail {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.fleet-detail-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fleet-detail h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.gps-details {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.gps-details div {
+  padding: 10px;
+  background: rgb(99 209 198 / 6%);
+  border: 1px solid rgb(99 209 198 / 16%);
+  border-radius: 5px;
+}
+
+.gps-details dt,
+.history-form span {
+  color: var(--subtle);
+  font-size: 0.6875rem;
+}
+
+.gps-details dd {
+  margin: 4px 0 2px;
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.gps-details small {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
+.history-form {
+  display: grid;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.history-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.history-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.history-submit {
+  justify-self: start;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  background: rgb(99 209 198 / 12%);
+  border: 1px solid rgb(99 209 198 / 28%);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.history-submit:hover:not(:disabled) {
+  background: rgb(99 209 198 / 20%);
+}
+
+.history-submit:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.history-list {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  margin: 16px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.history-list li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.history-list strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.history-list span {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
 :host-context(.dispatch-layout.is-light-theme) {
   .fleet-summary article,
   .fleet-list-panel {
@@ -280,6 +416,16 @@
 
   .panel-message.is-error {
     color: #a3483e;
+  }
+
+  .fleet-driver:hover,
+  .fleet-driver.is-selected {
+    background: rgb(13 112 97 / 7%);
+  }
+
+  .gps-details div {
+    background: rgb(13 112 97 / 6%);
+    border-color: rgb(13 112 97 / 18%);
   }
 }
 

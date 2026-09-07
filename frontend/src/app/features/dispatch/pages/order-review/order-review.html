@@ -376,11 +376,11 @@
 
             @case ('saving') {
               <p class="import-hint">
-                匯入中... {{ state.done }} / {{ state.result.validRows.length }}
+                正在以批次建立 {{ state.result.validRows.length }} 筆訂單...
               </p>
               <progress
                 class="import-progress"
-                [value]="state.done"
+                [value]="1"
                 [max]="state.result.validRows.length"
               ></progress>
             }

@@ -57,6 +57,74 @@ describe('DispatchApiService', () => {
     request.flush([]);
   });
 
+  it('uses batch order, administrator, and per-driver GPS contracts', () => {
+    const order = {
+      orderNumber: 'DO-BATCH-001',
+      storeId: 3,
+      warehouseId: 1,
+      boxCount: 4,
+      notes: '',
+      deliveryDate: '2026-09-04',
+      status: 'PENDING_CONFIRM' as const,
+    };
+
+    service.createOrdersBatch([order]).subscribe();
+    service
+      .createAdminUser({
+        account: 'dispatch-admin',
+        password: 'Password1',
+        name: '調度主管',
+        phone: '0912345678',
+      })
+      .subscribe();
+    service.getFleetDriverLatest(8).subscribe();
+    service.getFleetDriverCurrent(8).subscribe();
+    service.getFleetDriverHistory(8, '2026-09-04T08:00', '2026-09-04T18:00').subscribe();
+
+    const batchRequest = httpTesting.expectOne('/api/orders/batch');
+    expect(batchRequest.request.method).toBe('POST');
+    expect(batchRequest.request.body).toEqual({ orders: [order] });
+    batchRequest.flush([{ id: 21, ...order }]);
+
+    const adminRequest = httpTesting.expectOne('/api/admin-users');
+    expect(adminRequest.request.method).toBe('POST');
+    expect(adminRequest.request.body).toEqual({
+      account: 'dispatch-admin',
+      password: 'Password1',
+      name: '調度主管',
+      phone: '0912345678',
+    });
+    adminRequest.flush({ id: 3, account: 'dispatch-admin', name: '調度主管', phone: '0912345678' });
+
+    const latestRequest = httpTesting.expectOne('/api/fleet/drivers/8/gps/latest');
+    expect(latestRequest.request.method).toBe('GET');
+    latestRequest.flush({
+      id: 1,
+      driverId: 8,
+      lat: 22.99,
+      lng: 120.2,
+      timestamp: '2026-09-04T09:00',
+    });
+
+    const currentRequest = httpTesting.expectOne('/api/fleet/drivers/8/gps/current');
+    expect(currentRequest.request.method).toBe('GET');
+    currentRequest.flush({
+      id: 1,
+      driverId: 8,
+      lat: 22.99,
+      lng: 120.2,
+      timestamp: '2026-09-04T09:00',
+    });
+
+    const historyRequest = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams ===
+          '/api/fleet/drivers/8/gps/history?from=2026-09-04T08:00&to=2026-09-04T18:00' &&
+        request.method === 'GET',
+    );
+    historyRequest.flush([]);
+  });
+
   it('writes order status using the backend PUT contract', () => {
     service
       .updateOrder(12, {

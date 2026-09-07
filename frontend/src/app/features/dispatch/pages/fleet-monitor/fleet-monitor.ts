@@ -1,5 +1,6 @@
 import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { LucideMapPinned, LucideRefreshCw, LucideTriangleAlert, LucideUserRound } from '@lucide/angular';
+import { catchError, forkJoin, of } from 'rxjs';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import { DriverDto, GpsPingDto } from '../../../../core/services/dispatch-api.models';
 import { LiveFleetMap, MapPoint } from '../../components/live-fleet-map/live-fleet-map';
@@ -12,6 +13,14 @@ interface FleetDriver {
   name: string;
   state: string;
   isActive: boolean;
+}
+
+function toDateTimeInputValue(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
 }
 
 @Component({
@@ -31,6 +40,17 @@ export class FleetMonitor implements OnInit, OnDestroy {
   readonly gpsErrorMessage = signal('');
   readonly gpsUpdatedAt = signal('');
   readonly refreshing = signal(false);
+  readonly selectedDriverId = signal<number | null>(null);
+  readonly selectedLatestPing = signal<GpsPingDto | null>(null);
+  readonly selectedCurrentPing = signal<GpsPingDto | null>(null);
+  readonly selectedHistory = signal<GpsPingDto[]>([]);
+  readonly detailLoading = signal(false);
+  readonly historyLoading = signal(false);
+  readonly detailMessage = signal('');
+  readonly historyError = signal('');
+  readonly hasSearchedHistory = signal(false);
+  readonly historyFrom = signal(toDateTimeInputValue(new Date(Date.now() - 24 * 60 * 60 * 1000)));
+  readonly historyTo = signal(toDateTimeInputValue(new Date()));
   private refreshTimer?: number;
 
   readonly visibleDrivers = computed(() => {
@@ -65,6 +85,9 @@ export class FleetMonitor implements OnInit, OnDestroy {
       ? `${this.livePings().length} 位司機正在回傳定位`
       : '目前沒有有效定位回傳';
   });
+  readonly selectedDriver = computed(
+    () => this.drivers().find((driver) => driver.id === this.selectedDriverId()) ?? null,
+  );
 
   readonly filters: { id: FleetFilter; label: string }[] = [
     { id: 'all', label: '全部司機' },
@@ -92,6 +115,69 @@ export class FleetMonitor implements OnInit, OnDestroy {
     this.refreshing.set(true);
     this.loadDrivers();
     this.loadLiveFleet(() => this.refreshing.set(false));
+    this.loadSelectedDriverPositions();
+  }
+
+  selectDriver(driver: FleetDriver): void {
+    this.selectedDriverId.set(driver.id);
+    this.selectedLatestPing.set(null);
+    this.selectedCurrentPing.set(null);
+    this.selectedHistory.set([]);
+    this.detailMessage.set('');
+    this.historyError.set('');
+    this.hasSearchedHistory.set(false);
+    this.loadSelectedDriverPositions();
+  }
+
+  refreshSelectedDriver(): void {
+    this.loadSelectedDriverPositions();
+  }
+
+  updateHistoryRange(bound: 'from' | 'to', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+
+    if (bound === 'from') {
+      this.historyFrom.set(value);
+    } else {
+      this.historyTo.set(value);
+    }
+  }
+
+  searchHistory(): void {
+    const driverId = this.selectedDriverId();
+    const from = this.historyFrom();
+    const to = this.historyTo();
+
+    if (driverId === null || !from || !to) {
+      this.historyError.set('請先選擇司機並設定完整的查詢區間。');
+      return;
+    }
+
+    if (from > to) {
+      this.historyError.set('開始時間不可晚於結束時間。');
+      return;
+    }
+
+    this.historyLoading.set(true);
+    this.historyError.set('');
+    this.hasSearchedHistory.set(false);
+
+    this.api.getFleetDriverHistory(driverId, from, to).subscribe({
+      next: (pings) => {
+        if (this.selectedDriverId() === driverId) {
+          this.selectedHistory.set(pings);
+          this.hasSearchedHistory.set(true);
+          this.historyLoading.set(false);
+        }
+      },
+      error: () => {
+        if (this.selectedDriverId() === driverId) {
+          this.selectedHistory.set([]);
+          this.historyError.set('查詢軌跡失敗，請確認查詢區間與登入狀態。');
+          this.historyLoading.set(false);
+        }
+      },
+    });
   }
 
   private loadDrivers(): void {
@@ -129,6 +215,38 @@ export class FleetMonitor implements OnInit, OnDestroy {
     });
   }
 
+  private loadSelectedDriverPositions(): void {
+    const driverId = this.selectedDriverId();
+
+    if (driverId === null) {
+      return;
+    }
+
+    this.detailLoading.set(true);
+    this.detailMessage.set('');
+
+    forkJoin({
+      latest: this.api.getFleetDriverLatest(driverId).pipe(catchError(() => of(null))),
+      current: this.api.getFleetDriverCurrent(driverId).pipe(catchError(() => of(null))),
+    }).subscribe({
+      next: ({ latest, current }) => {
+        if (this.selectedDriverId() !== driverId) {
+          return;
+        }
+
+        this.selectedLatestPing.set(latest);
+        this.selectedCurrentPing.set(current);
+        this.detailLoading.set(false);
+
+        if (!latest && !current) {
+          this.detailMessage.set('目前沒有這位司機的定位回傳資料。');
+        } else if (!current) {
+          this.detailMessage.set('已有最後回傳位置，但目前不符合有效定位條件。');
+        }
+      },
+    });
+  }
+
   private updateDriverGpsStates(pings: GpsPingDto[]): void {
     const pingsByDriverId = new Map(pings.map((ping) => [ping.driverId, ping]));
     this.drivers.update((drivers) =>
@@ -160,8 +278,12 @@ export class FleetMonitor implements OnInit, OnDestroy {
       : '尚未上班或定位已超過 10 分鐘';
   }
 
-  private formatTimestamp(value: string): string {
+  formatTimestamp(value: string): string {
     return value.replace('T', ' ').slice(0, 16);
+  }
+
+  formatCoordinate(ping: GpsPingDto | null): string {
+    return ping ? `${ping.lat.toFixed(5)}, ${ping.lng.toFixed(5)}` : '--';
   }
 
   private currentTime(): string {

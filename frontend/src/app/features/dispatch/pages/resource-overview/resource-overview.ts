@@ -11,21 +11,20 @@ import {
 } from '@lucide/angular';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
-  DriverDto,
+  AdminUserCreateRequest,
+  AdminUserDto,
   StoreDto,
   StoreStatus,
   VehicleDto,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 
-type ResourceView = 'drivers' | 'vehicles' | 'stores' | 'warehouses';
-type DriverResourceStatus = '可排班' | '停職';
+type ResourceView = 'vehicles' | 'stores' | 'warehouses';
 type VehicleResourceStatus = '待派車' | '保養排程' | '已退役';
 type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
-  | 'driver'
-  | 'edit-driver'
+  | 'admin'
   | 'vehicle'
   | 'edit-vehicle'
   | 'store'
@@ -34,7 +33,7 @@ type ResourceForm =
   | 'edit-warehouse'
   | null;
 
-type DeleteTargetKind = 'driver' | 'vehicle' | 'store' | 'warehouse';
+type DeleteTargetKind = 'vehicle' | 'store' | 'warehouse';
 
 interface DeleteTarget {
   kind: DeleteTargetKind;
@@ -43,23 +42,10 @@ interface DeleteTarget {
 }
 
 const deleteTargetLabels: Record<DeleteTargetKind, string> = {
-  driver: '司機',
   vehicle: '車輛',
   store: '店家',
   warehouse: '倉庫',
 };
-
-interface DriverResource {
-  backendId?: number;
-  isActive: boolean;
-  id: string;
-  name: string;
-  license: string;
-  status: DriverResourceStatus;
-  vehicle: string;
-  assignment: string;
-  hours: string;
-}
 
 interface StoreResource {
   backendId?: number;
@@ -84,17 +70,12 @@ interface WarehouseResource {
   phone: string;
 }
 
-function emptyDriver(): DriverDto {
+function emptyAdminUser(): AdminUserCreateRequest {
   return {
     account: '',
     password: '',
     name: '',
     phone: '',
-    workStart: '08:00',
-    workEnd: '17:00',
-    restDuration: 60,
-    maxOvertimeMinutes: 0,
-    isActive: true,
   };
 }
 
@@ -165,10 +146,9 @@ interface VehicleResource {
 export class ResourceOverview implements OnInit {
   private readonly api = inject(DispatchApiService);
 
-  readonly activeView = signal<ResourceView>('drivers');
+  readonly activeView = signal<ResourceView>('vehicles');
   readonly activeFilter = signal('all');
   readonly searchTerm = signal('');
-  readonly drivers = signal<DriverDto[]>([]);
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
@@ -176,39 +156,22 @@ export class ResourceOverview implements OnInit {
   readonly errorMessage = signal('');
   readonly updatedAt = signal('--:--');
   readonly activeForm = signal<ResourceForm>(null);
-  readonly driverForm = signal<DriverDto>(emptyDriver());
+  readonly adminForm = signal<AdminUserCreateRequest>(emptyAdminUser());
   readonly storeForm = signal<StoreDto>(emptyStore());
   readonly warehouseForm = signal<WarehouseDto>(emptyWarehouse());
   readonly vehicleForm = signal<VehicleDto>(emptyVehicle());
-  readonly editingDriverId = signal<number | null>(null);
   readonly editingVehicleId = signal<number | null>(null);
   readonly editingStoreId = signal<number | null>(null);
   readonly editingWarehouseId = signal<number | null>(null);
   readonly formError = signal('');
   readonly isSaving = signal(false);
-  readonly changingDriverStatusId = signal<number | null>(null);
   readonly changingStoreStatusId = signal<number | null>(null);
   readonly deleteTarget = signal<DeleteTarget | null>(null);
   readonly isDeleting = signal(false);
 
-  readonly driverFilters = ['all', '可排班', '停職'];
   readonly vehicleFilters = ['all', '待派車', '保養排程', '已退役'];
   readonly storeFilters = ['all', '營業中', '暫停營業'];
   readonly warehouseFilters = ['all', '啟用', '停用'];
-
-  readonly visibleDrivers = computed<DriverResource[]>(() => {
-    const filter = this.activeFilter();
-    const term = this.searchTerm().trim().toLowerCase();
-
-    return this.drivers()
-      .map((driver) => this.toDriverResource(driver))
-      .filter((driver) => {
-        const matchesFilter = filter === 'all' || driver.status === filter;
-        const source =
-          `${driver.id} ${driver.name} ${driver.vehicle} ${driver.assignment}`.toLowerCase();
-        return matchesFilter && (!term || source.includes(term));
-      });
-  });
 
   readonly visibleVehicles = computed<VehicleResource[]>(() => {
     const filter = this.activeFilter();
@@ -252,10 +215,6 @@ export class ResourceOverview implements OnInit {
   });
 
   readonly currentFilters = computed(() => {
-    if (this.activeView() === 'drivers') {
-      return this.driverFilters;
-    }
-
     if (this.activeView() === 'stores') {
       return this.storeFilters;
     }
@@ -267,15 +226,11 @@ export class ResourceOverview implements OnInit {
     return this.vehicleFilters;
   });
 
-  readonly activeDriverCount = computed(
-    () => this.drivers().filter((driver) => driver.isActive).length,
-  );
   readonly availableVehicleCount = computed(
     () => this.vehicles().filter((vehicle) => vehicle.status === 'AVAILABLE').length,
   );
   readonly attentionResourceCount = computed(
     () =>
-      this.drivers().filter((driver) => !driver.isActive).length +
       this.vehicles().filter((vehicle) => vehicle.status === 'MAINTENANCE').length +
       this.stores().filter((store) => store.status === 'SUSPENDED').length +
       this.warehouses().filter((warehouse) => !warehouse.isActive).length,
@@ -297,33 +252,10 @@ export class ResourceOverview implements OnInit {
     this.searchTerm.set('');
   }
 
-  openCreateDriver(): void {
-    this.activeView.set('drivers');
-    this.driverForm.set(emptyDriver());
-    this.editingDriverId.set(null);
-    this.editingVehicleId.set(null);
-    this.editingStoreId.set(null);
-    this.editingWarehouseId.set(null);
+  openCreateAdmin(): void {
+    this.adminForm.set(emptyAdminUser());
     this.formError.set('');
-    this.activeForm.set('driver');
-  }
-
-  openEditDriver(driver: DriverResource): void {
-    if (driver.backendId === undefined) {
-      this.errorMessage.set('找不到司機編號，無法編輯。');
-      return;
-    }
-
-    const source = this.drivers().find((item) => item.id === driver.backendId);
-    if (!source) {
-      this.errorMessage.set('找不到司機資料，請重新載入後再試。');
-      return;
-    }
-
-    this.driverForm.set({ ...source, password: '' });
-    this.editingDriverId.set(driver.backendId);
-    this.formError.set('');
-    this.activeForm.set('edit-driver');
+    this.activeForm.set('admin');
   }
 
   openCreateStore(): void {
@@ -414,7 +346,6 @@ export class ResourceOverview implements OnInit {
   closeForm(): void {
     if (!this.isSaving()) {
       this.activeForm.set(null);
-      this.editingDriverId.set(null);
       this.editingVehicleId.set(null);
       this.editingStoreId.set(null);
       this.editingWarehouseId.set(null);
@@ -422,25 +353,9 @@ export class ResourceOverview implements OnInit {
     }
   }
 
-  updateDriverText(
-    field: 'account' | 'password' | 'name' | 'phone' | 'workStart' | 'workEnd',
-    event: Event,
-  ): void {
+  updateAdminText(field: keyof AdminUserCreateRequest, event: Event): void {
     const value = (event.target as HTMLInputElement).value;
-    this.driverForm.update((form) => ({ ...form, [field]: value }));
-  }
-
-  updateDriverNumber(field: 'restDuration' | 'maxOvertimeMinutes', event: Event): void {
-    const value = (event.target as HTMLInputElement).value.trim();
-    this.driverForm.update((form) => ({
-      ...form,
-      [field]: value === '' ? undefined : Number(value),
-    }));
-  }
-
-  updateDriverActive(event: Event): void {
-    const isActive = (event.target as HTMLInputElement).checked;
-    this.driverForm.update((form) => ({ ...form, isActive }));
+    this.adminForm.update((form) => ({ ...form, [field]: value }));
   }
 
   updateVehicleText(field: 'plateNumber' | 'vehicleType', event: Event): void {
@@ -507,89 +422,28 @@ export class ResourceOverview implements OnInit {
     this.warehouseForm.update((form) => ({ ...form, isActive }));
   }
 
-  submitDriver(): void {
-    const driver = this.driverForm();
-    const password = driver.password?.trim() ?? '';
-    const editingId = this.editingDriverId();
-    const isEditing = this.activeForm() === 'edit-driver';
+  submitAdmin(): void {
+    const admin = this.adminForm();
+    const account = admin.account.trim();
+    const name = admin.name.trim();
+    const phone = admin.phone.trim();
 
-    if (!driver.account.trim() || !driver.name.trim()) {
-      this.formError.set('請填寫司機帳號與姓名。');
+    if (!account || !name || !phone || !admin.password) {
+      this.formError.set('請填寫主管姓名、手機號碼、登入帳號與密碼。');
       return;
     }
 
-    if (!isEditing && !password) {
-      this.formError.set('新增司機時必須設定初始密碼。');
+    if (admin.password.length < 8 || admin.password.length > 12) {
+      this.formError.set('主管密碼長度必須介於 8 到 12 個字元。');
       return;
     }
 
-    if (password && password.length < 8) {
-      this.formError.set('司機密碼至少需要 8 個字元。');
-      return;
-    }
-
-    if (password.length > 12) {
-      this.formError.set('司機密碼最多只能有 12 個字元。');
-      return;
-    }
-
-    if (isEditing) {
-      if (editingId === null) {
-        this.formError.set('找不到要修改的司機。');
-        return;
-      }
-
-      this.saveResource(
-        this.api.updateDriver(editingId, { ...driver, password: password || undefined }),
-        (updatedDriver) => {
-          this.drivers.update((items) =>
-            items.map((item) => (item.id === updatedDriver.id ? updatedDriver : item)),
-          );
-          this.updatedAt.set(this.formatCurrentTime());
-        },
-      );
-      return;
-    }
-
-    this.saveResource(this.api.createDriver({ ...driver, password }), (createdDriver) => {
-      this.drivers.update((items) => [...items, createdDriver]);
-      this.updatedAt.set(this.formatCurrentTime());
-    });
-  }
-
-  updateDriverStatus(driver: DriverResource, event: Event): void {
-    if (driver.backendId === undefined) {
-      this.errorMessage.set('找不到司機編號，無法更新狀態。');
-      return;
-    }
-
-    const input = event.target as HTMLInputElement;
-    const isActive = input.checked;
-    this.changingDriverStatusId.set(driver.backendId);
-
-    this.api.updateDriverStatus(driver.backendId, { isActive }).subscribe({
-      next: (updatedDriver) => {
-        this.drivers.update((items) =>
-          items.map((item) => (item.id === updatedDriver.id ? updatedDriver : item)),
-        );
+    this.saveResource(
+      this.api.createAdminUser({ account, name, phone, password: admin.password }),
+      () => {
         this.updatedAt.set(this.formatCurrentTime());
-        this.changingDriverStatusId.set(null);
       },
-      error: () => {
-        input.checked = driver.isActive;
-        this.errorMessage.set('司機狀態更新失敗，請確認後端服務。');
-        this.changingDriverStatusId.set(null);
-      },
-    });
-  }
-
-  requestDeleteDriver(driver: DriverResource): void {
-    if (driver.backendId === undefined) {
-      this.errorMessage.set('找不到司機編號，無法刪除。');
-      return;
-    }
-
-    this.deleteTarget.set({ kind: 'driver', id: driver.backendId, name: driver.name });
+    );
   }
 
   submitVehicle(): void {
@@ -797,13 +651,11 @@ export class ResourceOverview implements OnInit {
     this.errorMessage.set('');
 
     forkJoin({
-      drivers: this.api.getDrivers(),
       vehicles: this.api.getVehicles(),
       stores: this.api.getStores(),
       warehouses: this.api.getWarehouses(),
     }).subscribe({
-      next: ({ drivers, vehicles, stores, warehouses }) => {
-        this.drivers.set(drivers);
+      next: ({ vehicles, stores, warehouses }) => {
         this.vehicles.set(vehicles);
         this.stores.set(stores);
         this.warehouses.set(warehouses);
@@ -819,8 +671,6 @@ export class ResourceOverview implements OnInit {
 
   private deleteRequest(target: DeleteTarget): Observable<void> {
     switch (target.kind) {
-      case 'driver':
-        return this.api.deleteDriver(target.id);
       case 'vehicle':
         return this.api.deleteVehicle(target.id);
       case 'store':
@@ -832,9 +682,6 @@ export class ResourceOverview implements OnInit {
 
   private removeDeletedResource(target: DeleteTarget): void {
     switch (target.kind) {
-      case 'driver':
-        this.drivers.update((items) => items.filter((driver) => driver.id !== target.id));
-        return;
       case 'vehicle':
         this.vehicles.update((items) => items.filter((vehicle) => vehicle.id !== target.id));
         return;
@@ -844,22 +691,6 @@ export class ResourceOverview implements OnInit {
       case 'warehouse':
         this.warehouses.update((items) => items.filter((warehouse) => warehouse.id !== target.id));
     }
-  }
-
-  private toDriverResource(driver: DriverDto): DriverResource {
-    const id =
-      driver.id === undefined ? driver.account : `DR-${String(driver.id).padStart(3, '0')}`;
-    return {
-      backendId: driver.id,
-      isActive: driver.isActive,
-      id,
-      name: driver.name,
-      license: `帳號 ${driver.account}`,
-      status: driver.isActive ? '可排班' : '停職',
-      vehicle: '未提供',
-      assignment: '尚未提供配送任務',
-      hours: `${this.formatTime(driver.workStart)} - ${this.formatTime(driver.workEnd)}`,
-    };
   }
 
   private toStoreResource(store: StoreDto): StoreResource {
@@ -929,7 +760,7 @@ export class ResourceOverview implements OnInit {
     }).format(new Date());
   }
 
-  private saveResource<T extends DriverDto | VehicleDto | StoreDto | WarehouseDto>(
+  private saveResource<T extends AdminUserDto | VehicleDto | StoreDto | WarehouseDto>(
     request: Observable<T>,
     onSuccess: (value: T) => void,
   ): void {
@@ -941,7 +772,6 @@ export class ResourceOverview implements OnInit {
         onSuccess(value as T);
         this.isSaving.set(false);
         this.activeForm.set(null);
-        this.editingDriverId.set(null);
         this.editingVehicleId.set(null);
         this.editingStoreId.set(null);
         this.editingWarehouseId.set(null);

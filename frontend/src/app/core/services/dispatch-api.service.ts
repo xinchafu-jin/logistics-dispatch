@@ -2,6 +2,8 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {Observable} from 'rxjs';
 import {
+  AdminUserCreateRequest,
+  AdminUserDto,
   DispatchResultDto,
   DriverDto,
   DriverShiftDto,
@@ -87,6 +89,10 @@ export class DispatchApiService {
 
   createDriver(driver: DriverDto): Observable<DriverDto> {
     return this.http.post<DriverDto>(`${API_ROOT}/drivers`, driver);
+  }
+
+  createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
+    return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
   }
 
   updateDriver(id: number, driver: DriverDto): Observable<DriverDto> {
@@ -183,6 +189,10 @@ export class DispatchApiService {
 
   deleteOrder(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/orders/${id}`);
+  }
+
+  createOrdersBatch(orders: OrderDto[]): Observable<OrderDto[]> {
+    return this.http.post<OrderDto[]>(`${API_ROOT}/orders/batch`, { orders });
   }
 
   /**
@@ -296,5 +306,20 @@ export class DispatchApiService {
    */
   getLiveFleet(): Observable<GpsPingDto[]> {
     return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/live`);
+  }
+
+  getFleetDriverLatest(driverId: number): Observable<GpsPingDto> {
+    return this.http.get<GpsPingDto>(`${API_ROOT}/fleet/drivers/${driverId}/gps/latest`);
+  }
+
+  getFleetDriverCurrent(driverId: number): Observable<GpsPingDto> {
+    return this.http.get<GpsPingDto>(`${API_ROOT}/fleet/drivers/${driverId}/gps/current`);
+  }
+
+  getFleetDriverHistory(driverId: number, from: string, to: string): Observable<GpsPingDto[]> {
+    const params = new HttpParams().set('from', from).set('to', to);
+    return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/drivers/${driverId}/gps/history`, {
+      params,
+    });
   }
 }

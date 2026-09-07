@@ -7,27 +7,50 @@
     </div>
 
     <div class="month-controls" aria-label="選擇班表月份">
-      <button type="button" class="icon-button" (click)="moveMonth(-1)" title="上一個月" aria-label="上一個月">
+      <button
+        type="button"
+        class="icon-button"
+        (click)="moveMonth(-1)"
+        title="上一個月"
+        aria-label="上一個月"
+      >
         <svg lucideChevronLeft aria-hidden="true"></svg>
       </button>
       <label>
         <span>班表月份</span>
         <input type="month" [value]="selectedMonth()" (change)="selectMonth($event)" />
       </label>
-      <button type="button" class="icon-button" (click)="moveMonth(1)" title="下一個月" aria-label="下一個月">
+      <button
+        type="button"
+        class="icon-button"
+        (click)="moveMonth(1)"
+        title="下一個月"
+        aria-label="下一個月"
+      >
         <svg lucideChevronRight aria-hidden="true"></svg>
       </button>
-      <button type="button" class="icon-button" (click)="refresh()" title="重新整理" aria-label="重新整理" [disabled]="saving()">
+      <button
+        type="button"
+        class="icon-button"
+        (click)="refresh()"
+        title="重新整理"
+        aria-label="重新整理"
+        [disabled]="saving()"
+      >
         <svg lucideRefreshCw aria-hidden="true"></svg>
       </button>
     </div>
   </header>
 
   @if (errorMessage()) {
-    <p class="feedback is-error"><svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}</p>
+    <p class="feedback is-error">
+      <svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}
+    </p>
   }
   @if (actionMessage()) {
-    <p class="feedback is-success"><svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}</p>
+    <p class="feedback is-success">
+      <svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}
+    </p>
   }
 
   @if (loading()) {
@@ -57,25 +80,120 @@
         </div>
       </div>
       <dl>
-        <div><dt>司機</dt><dd>{{ summary().drivers }} 位</dd></div>
-        <div><dt>上班</dt><dd>{{ summary().work }} 班</dd></div>
-        <div><dt>請假</dt><dd>{{ summary().leave }} 班</dd></div>
-        <div [class.has-warning]="summary().unassigned > 0"><dt>未排定</dt><dd>{{ summary().unassigned }} 班</dd></div>
+        <div>
+          <dt>司機</dt>
+          <dd>{{ summary().drivers }} 位</dd>
+        </div>
+        <div>
+          <dt>上班</dt>
+          <dd>{{ summary().work }} 班</dd>
+        </div>
+        <div>
+          <dt>請假</dt>
+          <dd>{{ summary().leave }} 班</dd>
+        </div>
+        <div [class.has-warning]="summary().unassigned > 0">
+          <dt>未排定</dt>
+          <dd>{{ summary().unassigned }} 班</dd>
+        </div>
       </dl>
       <div class="schedule-actions">
-        <button type="button" class="secondary-action" (click)="syncDrivers()" [disabled]="!isDraft() || saving()">
+        <button
+          type="button"
+          class="secondary-action"
+          (click)="syncDrivers()"
+          [disabled]="!isDraft() || saving()"
+        >
           <svg lucideUserRound aria-hidden="true"></svg>
           同步新司機
         </button>
-        <button type="button" class="primary-action" (click)="publishMonth()" [disabled]="!isDraft() || saving()">
+        <button
+          type="button"
+          class="primary-action"
+          (click)="publishMonth()"
+          [disabled]="!isDraft() || saving()"
+        >
           <svg lucideSend aria-hidden="true"></svg>
           發布班表
         </button>
       </div>
     </section>
 
+    @if (isDraft()) {
+      <section class="batch-schedule" aria-labelledby="batch-schedule-title">
+        <div class="batch-schedule-heading">
+          <p class="page-eyebrow">WEEKLY RULE</p>
+          <h3 id="batch-schedule-title">每週快速套用</h3>
+          <p>套用至所有啟用司機；請假班次會保留，並使用各司機既有的上下班時間。</p>
+        </div>
+
+        <div class="batch-controls">
+          <div class="weekday-selector" role="group" aria-label="選擇要批次套用的星期">
+            @for (weekday of weekdayOptions; track weekday.index) {
+              <button
+                type="button"
+                class="weekday-button"
+                [class.is-selected]="isWeekdaySelected(weekday.index)"
+                [attr.aria-pressed]="isWeekdaySelected(weekday.index)"
+                (click)="toggleWeekday(weekday.index)"
+                [disabled]="saving()"
+              >
+                週{{ weekday.label }}
+              </button>
+            }
+            <button
+              type="button"
+              class="weekday-preset"
+              (click)="selectWeekdayGroup([1, 2, 3, 4, 5])"
+              [disabled]="saving()"
+            >
+              週一至五
+            </button>
+            <button
+              type="button"
+              class="weekday-preset"
+              (click)="selectWeekdayGroup([0, 6])"
+              [disabled]="saving()"
+            >
+              週六、日
+            </button>
+          </div>
+
+          <div class="batch-actions">
+            <span>已選 {{ selectedWeekdayDescription() || '尚未選擇' }}</span>
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="applySelectedWeekdays('WORK')"
+              [disabled]="saving() || selectedWeekdayIndexes().length === 0"
+            >
+              設為上班
+            </button>
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="applySelectedWeekdays('DAY_OFF')"
+              [disabled]="saving() || selectedWeekdayIndexes().length === 0"
+            >
+              設為休假
+            </button>
+            <button
+              type="button"
+              class="primary-action"
+              (click)="applyStandardWeek()"
+              [disabled]="saving()"
+            >
+              週一至五上班、週六日休假
+            </button>
+          </div>
+        </div>
+      </section>
+    }
+
     @if (isPublished()) {
-      <p class="published-note">此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。</p>
+      <p class="published-note">
+        此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。
+      </p>
     }
 
     <div class="schedule-workspace">
@@ -131,7 +249,11 @@
                   }
                 </tr>
               } @empty {
-                <tr><td class="no-shifts" [attr.colspan]="days().length + 1">此班表目前沒有可顯示的司機班次。</td></tr>
+                <tr>
+                  <td class="no-shifts" [attr.colspan]="days().length + 1">
+                    此班表目前沒有可顯示的司機班次。
+                  </td>
+                </tr>
               }
             </tbody>
           </table>
@@ -144,7 +266,7 @@
             <header>
               <div>
                 <p class="page-eyebrow">SHIFT EDITOR</p>
-                <h3>{{ selectedDriver()?.name ?? ('司機 #' + shift.driverId) }}</h3>
+                <h3>{{ selectedDriver()?.name ?? '司機 #' + shift.driverId }}</h3>
                 <span>{{ shift.workDate }}</span>
               </div>
               <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
@@ -153,7 +275,11 @@
             <div class="editor-form">
               <label>
                 <span>班別</span>
-                <select [value]="form.shiftType" (change)="changeShiftType($event)" [disabled]="saving() || (isPublished() && form.shiftType === 'LEAVE')">
+                <select
+                  [value]="form.shiftType"
+                  (change)="changeShiftType($event)"
+                  [disabled]="saving() || (isPublished() && form.shiftType === 'LEAVE')"
+                >
                   @if (isDraft()) {
                     <option value="UNASSIGNED">未排定</option>
                     <option value="WORK">上班</option>
@@ -172,31 +298,64 @@
                 <div class="time-fields">
                   <label>
                     <span>上班時間</span>
-                    <input type="time" [value]="form.workStart" (input)="updateWorkStart($event)" [disabled]="!isDraft() || saving()" />
+                    <input
+                      type="time"
+                      [value]="form.workStart"
+                      (input)="updateWorkStart($event)"
+                      [disabled]="!isDraft() || saving()"
+                    />
                   </label>
                   <label>
                     <span>下班時間</span>
-                    <input type="time" [value]="form.workEnd" (input)="updateWorkEnd($event)" [disabled]="!isDraft() || saving()" />
+                    <input
+                      type="time"
+                      [value]="form.workEnd"
+                      (input)="updateWorkEnd($event)"
+                      [disabled]="!isDraft() || saving()"
+                    />
                   </label>
                 </div>
                 <label>
-                  <span>加班分鐘數（上限 {{ maxOvertime() }} 分）</span>
-                  <input type="number" min="0" step="1" [value]="form.overtimeMinutes" (input)="updateOvertime($event)" [disabled]="!isDraft() || saving()" />
+                  <span>加班分鐘數</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    [value]="form.overtimeMinutes"
+                    (input)="updateOvertime($event)"
+                    [disabled]="!isDraft() || saving()"
+                  />
                 </label>
               }
 
               <label>
                 <span>{{ form.shiftType === 'LEAVE' ? '請假原因' : '修改原因' }}</span>
-                <input type="text" maxlength="255" [value]="form.changeReason" (input)="updateReason($event)" [disabled]="saving() || (!isDraft() && form.shiftType !== 'LEAVE')" />
+                <input
+                  type="text"
+                  maxlength="255"
+                  [value]="form.changeReason"
+                  (input)="updateReason($event)"
+                  [disabled]="saving() || (!isDraft() && form.shiftType !== 'LEAVE')"
+                />
               </label>
 
               @if (form.shiftType === 'LEAVE') {
-                <button type="button" class="leave-action" (click)="markLeave()" [disabled]="!canMarkLeave() || saving()">
+                <button
+                  type="button"
+                  class="leave-action"
+                  (click)="markLeave()"
+                  [disabled]="!canMarkLeave() || saving()"
+                >
                   <svg lucideFileClock aria-hidden="true"></svg>
                   登記請假
                 </button>
               } @else {
-                <button type="button" class="primary-action save-action" (click)="saveShift()" [disabled]="!isDraft() || saving()">
+                <button
+                  type="button"
+                  class="primary-action save-action"
+                  (click)="saveShift()"
+                  [disabled]="!isDraft() || saving()"
+                >
                   <svg lucideSave aria-hidden="true"></svg>
                   儲存班次
                 </button>
@@ -204,8 +363,14 @@
             </div>
 
             <dl class="shift-meta">
-              <div><dt>原始工時</dt><dd>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</dd></div>
-              <div><dt>目前原因</dt><dd>{{ shift.changeReason }}</dd></div>
+              <div>
+                <dt>原始工時</dt>
+                <dd>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</dd>
+              </div>
+              <div>
+                <dt>目前原因</dt>
+                <dd>{{ shift.changeReason }}</dd>
+              </div>
             </dl>
           }
         } @else {

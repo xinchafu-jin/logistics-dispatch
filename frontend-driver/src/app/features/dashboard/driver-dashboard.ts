@@ -451,23 +451,20 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  protected navigationUrl(): string | null {
-    const destination = this.destinationLocation();
-    if (!destination) {
-      return null;
+  protected startInAppNavigation(): void {
+    if (!this.destinationLocation()) {
+      return;
     }
 
-    const params = new URLSearchParams({
-      api: '1',
-      destination: `${destination.lat},${destination.lng}`,
-      travelmode: 'driving',
-    });
+    this.activeTab.set('map');
+    setTimeout(() => {
+      this.driverMap?.invalidateSize();
+      this.renderNavigationMap(true);
+    }, 0);
+  }
 
-    if (this.currentMapLocation) {
-      params.set('origin', `${this.currentMapLocation.lat},${this.currentMapLocation.lng}`);
-    }
-
-    return `https://www.google.com/maps/dir/?${params.toString()}`;
+  protected hasNavigationDestination(): boolean {
+    return this.destinationLocation() !== null;
   }
 
   protected destinationName(): string {
@@ -555,7 +552,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected formatTime(value: string | null): string {
-    return value ? value.slice(0, 5) : '--:--';
+    if (!value) {
+      return '--:--';
+    }
+
+    const dateTimeMatch = value.match(/(?:T|\s)(\d{2}:\d{2})/);
+    const timeMatch = value.match(/^(\d{2}:\d{2})/);
+    return dateTimeMatch?.[1] ?? timeMatch?.[1] ?? '--:--';
   }
 
   protected formatShiftType(shiftType: DriverShiftDto['shiftType']): string {
@@ -620,7 +623,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     this.operations.getPublishedShifts(from, to).subscribe({
       next: (shifts) => {
-        this.publishedShifts.set([...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)));
+        this.publishedShifts.set(
+          [...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)),
+        );
         this.scheduleViewState.set(shifts.length ? 'ready' : 'empty');
       },
       error: (error: unknown) => {
@@ -640,7 +645,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.todayTasks.set(tasks);
         this.taskViewState.set(tasks.routes.length ? 'ready' : 'empty');
 
-        const taskStops = tasks.routes.flatMap((route) => route.stops.map((stop) => ({route, stop})));
+        const taskStops = tasks.routes.flatMap((route) =>
+          route.stops.map((stop) => ({ route, stop })),
+        );
         const selectedOrderId = this.selectedTask()?.stop.orderId;
         const nextSelection =
           taskStops.find((task) => task.stop.orderId === selectedOrderId) ??
@@ -709,7 +716,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         routes: tasks.routes.map((route) => ({
           ...route,
           stops: route.stops.map((stop) =>
-            stop.orderId === response.orderId ? {...stop, orderStatus: response.orderStatus} : stop,
+            stop.orderId === response.orderId
+              ? {...stop, orderStatus: response.orderStatus}
+              : stop,
           ),
         })),
       };
@@ -857,7 +866,15 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         iconAnchor: [17, 17],
       }),
       title: this.destinationName(),
-    }).addTo(this.driverMap);
+      zIndexOffset: 1000,
+    })
+      .addTo(this.driverMap)
+      .bindTooltip(this.destinationName(), {
+        className: 'driver-destination-tooltip',
+        direction: 'top',
+        offset: [0, -18],
+        permanent: true,
+      });
 
     if (!this.currentMapLocation) {
       this.driverMap.setView(destination, 15, {animate});
@@ -866,7 +883,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     if (this.routeLatLng.length === 0) {
       this.driverMap.fitBounds(L.latLngBounds([this.currentMapLocation, destination]), {
-        padding: [48, 48],
+        paddingTopLeft: [24, 94],
+        paddingBottomRight: [24, 310],
         animate,
         maxZoom: 15,
       });
@@ -887,8 +905,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.driverMap.panTo(this.currentMapLocation, {animate: false});
     } else {
       // 預覽中：框住整條路線給司機看全貌
-      this.driverMap.fitBounds(this.navigationLine.getBounds(), {
-        padding: [48, 48],
+      this.driverMap.fitBounds(L.latLngBounds([this.currentMapLocation, destination]), {
+        paddingTopLeft: [24, 94],
+        paddingBottomRight: [24, 310],
         animate,
         maxZoom: 15,
       });
@@ -904,7 +923,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return L.latLng(stop.lat, stop.lng);
   }
 
-  private hasCoordinates(stop: DriverTaskStop): stop is DriverTaskStop & { lat: number; lng: number } {
+  private hasCoordinates(
+    stop: DriverTaskStop,
+  ): stop is DriverTaskStop & { lat: number; lng: number } {
     return typeof stop.lat === 'number' && typeof stop.lng === 'number';
   }
 
