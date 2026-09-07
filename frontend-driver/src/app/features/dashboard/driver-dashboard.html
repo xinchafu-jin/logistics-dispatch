@@ -9,7 +9,8 @@
       <strong>司機工作台</strong>
     </div>
     <div class="topbar-actions">
-      <span class="icon-button weather-indicator" role="img" [title]="weatherLabel()" [attr.aria-label]="weatherLabel()">
+      <span class="icon-button weather-indicator" role="img" [title]="weatherLabel()"
+            [attr.aria-label]="weatherLabel()">
         @switch (weather()?.icon) {
           @case ('晴') {
             <svg lucideSun aria-hidden="true"></svg>
@@ -63,6 +64,7 @@
         <svg lucideLocateFixed aria-hidden="true"></svg>
       </button>
 
+
       <section class="attendance-sheet" aria-labelledby="attendance-title">
         <div class="sheet-heading">
           <div>
@@ -71,7 +73,7 @@
           </div>
           @if (attendance()?.gpsAllowed) {
             <span class="gps-status is-active"
-              ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
+            ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
             >
           } @else {
             <span class="gps-status">GPS 已停止</span>
@@ -109,6 +111,15 @@
         } @else {
           <p class="destination-copy">{{ destinationDetail() }}</p>
         }
+
+        <button
+          type="button"
+          [class]="isNavigating() ? 'danger-action' : 'primary-action'"
+          (click)="isNavigating() ? stopNavigation() : startNavigation()"
+          [disabled]="!selectedTask()"
+        >
+          {{ isNavigating() ? '結束導航' : '開始導航' }}
+        </button>
 
         @if (attendanceViewState() === 'loading') {
           <p class="sheet-copy">正在取得今日出勤狀態...</p>
@@ -220,8 +231,8 @@
                         <small>{{ stop.address }}</small>
                         <span>
                           {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
-                            · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
-                          }
+                          · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
+                        }
                         </span>
                         <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
                           {{ taskStatusLabel(stop.orderStatus) }}
@@ -346,7 +357,8 @@
             @for (shift of publishedShifts(); track shift.id) {
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
-                <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{ formatShiftType(shift.shiftType) }}</span>
+                <span class="shift-type"
+                      [class]="shiftTypeClass(shift.shiftType)">{{ formatShiftType(shift.shiftType) }}</span>
                 <div class="shift-details">
                   @if (shift.shiftType === 'WORK') {
                     <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>

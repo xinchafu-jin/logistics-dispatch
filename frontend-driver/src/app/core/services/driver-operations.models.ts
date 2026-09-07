@@ -147,3 +147,17 @@ export type DriverTaskOrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
+
+// 路線座標，每個點是 [緯度, 經度]，即 Leaflet 順序（非 GeoJSON）
+export interface GpsRouteRequest {
+  fromLat: number;
+  fromLng: number;
+  toLat: number;
+  toLng: number;
+}
+
+export interface GpsRouteResponse {
+  path: number[][];
+  distance: number;
+  duration: number;
+}

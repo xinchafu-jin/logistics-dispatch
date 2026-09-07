@@ -1,6 +1,6 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import {HttpClient, HttpParams} from '@angular/common/http';
+import {Injectable, inject} from '@angular/core';
+import {Observable} from 'rxjs';
 import {
   ArriveRequest,
   AttendanceRecordDto,
@@ -11,10 +11,10 @@ import {
   GpsPingRequest,
   MileageLogResponse,
   MileageRequest,
-  NoSignatureRequest,
+  NoSignatureRequest, GpsRouteRequest, GpsRouteResponse,
 } from './driver-operations.models';
 
-@Injectable({ providedIn: 'root' })
+@Injectable({providedIn: 'root'})
 export class DriverOperationsService {
   private readonly http = inject(HttpClient);
 
@@ -40,7 +40,7 @@ export class DriverOperationsService {
 
   getPublishedShifts(from: string, to: string): Observable<DriverShiftDto[]> {
     const params = new HttpParams().set('from', from).set('to', to);
-    return this.http.get<DriverShiftDto[]>('/api/driver/shifts', { params });
+    return this.http.get<DriverShiftDto[]>('/api/driver/shifts', {params});
   }
 
   getTodayTasks(): Observable<DriverTasksResponse> {
@@ -66,4 +66,9 @@ export class DriverOperationsService {
   endMileage(request: MileageRequest): Observable<MileageLogResponse> {
     return this.http.post<MileageLogResponse>('/api/driver/mileage/end', request);
   }
+
+  gpsRoute(request: GpsRouteRequest): Observable<GpsRouteResponse> {
+    return this.http.post<GpsRouteResponse>('/api/driver/route', request);
+  }
+
 }
