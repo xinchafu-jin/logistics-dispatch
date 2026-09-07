@@ -119,6 +119,77 @@
       </div>
     </section>
 
+    @if (isDraft()) {
+      <section class="batch-schedule" aria-labelledby="batch-schedule-title">
+        <div class="batch-schedule-heading">
+          <p class="page-eyebrow">WEEKLY RULE</p>
+          <h3 id="batch-schedule-title">每週快速套用</h3>
+          <p>套用至所有啟用司機；請假班次會保留，並使用各司機既有的上下班時間。</p>
+        </div>
+
+        <div class="batch-controls">
+          <div class="weekday-selector" role="group" aria-label="選擇要批次套用的星期">
+            @for (weekday of weekdayOptions; track weekday.index) {
+              <button
+                type="button"
+                class="weekday-button"
+                [class.is-selected]="isWeekdaySelected(weekday.index)"
+                [attr.aria-pressed]="isWeekdaySelected(weekday.index)"
+                (click)="toggleWeekday(weekday.index)"
+                [disabled]="saving()"
+              >
+                週{{ weekday.label }}
+              </button>
+            }
+            <button
+              type="button"
+              class="weekday-preset"
+              (click)="selectWeekdayGroup([1, 2, 3, 4, 5])"
+              [disabled]="saving()"
+            >
+              週一至五
+            </button>
+            <button
+              type="button"
+              class="weekday-preset"
+              (click)="selectWeekdayGroup([0, 6])"
+              [disabled]="saving()"
+            >
+              週六、日
+            </button>
+          </div>
+
+          <div class="batch-actions">
+            <span>已選 {{ selectedWeekdayDescription() || '尚未選擇' }}</span>
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="applySelectedWeekdays('WORK')"
+              [disabled]="saving() || selectedWeekdayIndexes().length === 0"
+            >
+              設為上班
+            </button>
+            <button
+              type="button"
+              class="secondary-action"
+              (click)="applySelectedWeekdays('DAY_OFF')"
+              [disabled]="saving() || selectedWeekdayIndexes().length === 0"
+            >
+              設為休假
+            </button>
+            <button
+              type="button"
+              class="primary-action"
+              (click)="applyStandardWeek()"
+              [disabled]="saving()"
+            >
+              週一至五上班、週六日休假
+            </button>
+          </div>
+        </div>
+      </section>
+    }
+
     @if (isPublished()) {
       <p class="published-note">
         此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。

@@ -13,7 +13,6 @@ import { DispatchApiService } from '../../../../core/services/dispatch-api.servi
 import {
   AdminUserCreateRequest,
   AdminUserDto,
-  DriverDto,
   StoreDto,
   StoreStatus,
   VehicleDto,
@@ -26,7 +25,6 @@ type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
   | 'admin'
-  | 'driver'
   | 'vehicle'
   | 'edit-vehicle'
   | 'store'
@@ -70,20 +68,6 @@ interface WarehouseResource {
   address: string;
   location: string;
   phone: string;
-}
-
-function emptyDriver(): DriverDto {
-  return {
-    account: '',
-    password: '',
-    name: '',
-    phone: '',
-    workStart: '08:00',
-    workEnd: '17:00',
-    restDuration: 60,
-    maxOvertimeMinutes: 0,
-    isActive: true,
-  };
 }
 
 function emptyAdminUser(): AdminUserCreateRequest {
@@ -173,7 +157,6 @@ export class ResourceOverview implements OnInit {
   readonly updatedAt = signal('--:--');
   readonly activeForm = signal<ResourceForm>(null);
   readonly adminForm = signal<AdminUserCreateRequest>(emptyAdminUser());
-  readonly driverForm = signal<DriverDto>(emptyDriver());
   readonly storeForm = signal<StoreDto>(emptyStore());
   readonly warehouseForm = signal<WarehouseDto>(emptyWarehouse());
   readonly vehicleForm = signal<VehicleDto>(emptyVehicle());
@@ -267,12 +250,6 @@ export class ResourceOverview implements OnInit {
     this.activeView.set(view);
     this.activeFilter.set('all');
     this.searchTerm.set('');
-  }
-
-  openCreateDriver(): void {
-    this.driverForm.set(emptyDriver());
-    this.formError.set('');
-    this.activeForm.set('driver');
   }
 
   openCreateAdmin(): void {
@@ -376,11 +353,6 @@ export class ResourceOverview implements OnInit {
     }
   }
 
-  updateDriverText(field: 'account' | 'password' | 'name' | 'phone', event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.driverForm.update((form) => ({ ...form, [field]: value }));
-  }
-
   updateAdminText(field: keyof AdminUserCreateRequest, event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.adminForm.update((form) => ({ ...form, [field]: value }));
@@ -448,34 +420,6 @@ export class ResourceOverview implements OnInit {
   updateWarehouseActive(event: Event): void {
     const isActive = (event.target as HTMLInputElement).checked;
     this.warehouseForm.update((form) => ({ ...form, isActive }));
-  }
-
-  submitDriver(): void {
-    const driver = this.driverForm();
-    const password = driver.password?.trim().toUpperCase() ?? '';
-
-    if (!driver.account.trim() || !driver.name.trim() || !driver.phone?.trim()) {
-      this.formError.set('請填寫司機姓名、手機號碼與登入帳號。');
-      return;
-    }
-
-    if (!/^[A-Z][12]\d{8}$/.test(password)) {
-      this.formError.set('初始密碼請填寫有效的身分證字號。');
-      return;
-    }
-
-    this.saveResource(
-      this.api.createDriver({
-        ...driver,
-        account: driver.account.trim(),
-        name: driver.name.trim(),
-        phone: driver.phone?.trim(),
-        password,
-      }),
-      (createdDriver) => {
-        this.updatedAt.set(this.formatCurrentTime());
-      },
-    );
   }
 
   submitAdmin(): void {
@@ -816,7 +760,7 @@ export class ResourceOverview implements OnInit {
     }).format(new Date());
   }
 
-  private saveResource<T extends AdminUserDto | DriverDto | VehicleDto | StoreDto | WarehouseDto>(
+  private saveResource<T extends AdminUserDto | VehicleDto | StoreDto | WarehouseDto>(
     request: Observable<T>,
     onSuccess: (value: T) => void,
   ): void {

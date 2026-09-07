@@ -10,6 +10,7 @@ import {
 } from '@angular/router';
 import { filter, map } from 'rxjs';
 import {
+  LucideBell,
   LucideCalendarDays,
   LucideChartNoAxesCombined,
   LucideClipboardCheck,
@@ -31,6 +32,7 @@ import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
+    LucideBell,
     LucideCalendarDays,
     LucideWorkflow,
     LucideClipboardCheck,

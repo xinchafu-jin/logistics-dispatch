@@ -2,7 +2,7 @@
   <section class="page-intro" aria-label="人車資源">
     <div>
       <p class="page-eyebrow">RESOURCE CONTROL</p>
-      <p>由主管建立司機帳號，並管理車輛、店家與倉庫資源資料。</p>
+      <p>管理車輛、店家與倉庫資源；司機帳號改由本人申請，主管簽核後啟用。</p>
     </div>
 
     <div class="page-actions">
@@ -11,10 +11,6 @@
         <button type="button" class="secondary-action" (click)="openCreateAdmin()">
           <svg lucidePlus aria-hidden="true"></svg>
           新增管理員
-        </button>
-        <button type="button" class="secondary-action" (click)="openCreateDriver()">
-          <svg lucidePlus aria-hidden="true"></svg>
-          新增司機
         </button>
         <button type="button" class="secondary-action" (click)="openCreateVehicle()">
           <svg lucidePlus aria-hidden="true"></svg>
@@ -305,10 +301,12 @@
           <p class="section-eyebrow">RESOURCE SYNC</p>
           <h3 id="assignment-title">後端資源狀態</h3>
         </div>
-        <span>帳號建立</span>
+        <span>帳號簽核</span>
       </header>
 
-      <p class="empty-state">司機帳號由主管建立；帳號啟用後，司機登入才會取得對應權限。</p>
+      <p class="empty-state">
+        司機帳號改由司機端提交申請，主管核准後才會建立對應的登入權限。待後端提供申請與簽核 API 後，這裡會顯示待辦清單。
+      </p>
 
       <section class="resource-alert" aria-label="資源提醒">
         <svg lucideTriangleAlert aria-hidden="true"></svg>
@@ -329,13 +327,11 @@
         [attr.aria-labelledby]="
           formType === 'admin'
             ? 'admin-form-title'
-            : formType === 'driver'
-              ? 'driver-form-title'
-              : formType === 'vehicle' || formType === 'edit-vehicle'
-                ? 'vehicle-form-title'
-                : formType === 'store' || formType === 'edit-store'
-                  ? 'store-form-title'
-                  : 'warehouse-form-title'
+            : formType === 'vehicle' || formType === 'edit-vehicle'
+              ? 'vehicle-form-title'
+              : formType === 'store' || formType === 'edit-store'
+                ? 'store-form-title'
+                : 'warehouse-form-title'
         "
         (click)="stopEvent($event)"
       >
@@ -344,33 +340,29 @@
             <p class="section-eyebrow">BACKEND RESOURCE</p>
             <h3
               [id]="
-                formType === 'driver'
-                  ? 'driver-form-title'
-                  : formType === 'admin'
-                    ? 'admin-form-title'
-                    : formType === 'vehicle' || formType === 'edit-vehicle'
-                      ? 'vehicle-form-title'
-                      : formType === 'store' || formType === 'edit-store'
-                        ? 'store-form-title'
-                        : 'warehouse-form-title'
+                formType === 'admin'
+                  ? 'admin-form-title'
+                  : formType === 'vehicle' || formType === 'edit-vehicle'
+                    ? 'vehicle-form-title'
+                    : formType === 'store' || formType === 'edit-store'
+                      ? 'store-form-title'
+                      : 'warehouse-form-title'
               "
             >
               {{
                 formType === 'admin'
                   ? '新增管理員'
-                  : formType === 'driver'
-                    ? '新增司機'
-                    : formType === 'vehicle'
-                      ? '新增車輛'
-                      : formType === 'edit-vehicle'
-                        ? '編輯車輛'
-                        : formType === 'store'
-                          ? '新增店家'
-                          : formType === 'edit-store'
-                            ? '編輯店家'
-                            : formType === 'warehouse'
-                              ? '新增倉庫'
-                              : '編輯倉庫'
+                  : formType === 'vehicle'
+                    ? '新增車輛'
+                    : formType === 'edit-vehicle'
+                      ? '編輯車輛'
+                      : formType === 'store'
+                        ? '新增店家'
+                        : formType === 'edit-store'
+                          ? '編輯店家'
+                          : formType === 'warehouse'
+                            ? '新增倉庫'
+                            : '編輯倉庫'
               }}
             </h3>
           </div>
@@ -439,62 +431,6 @@
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
                 {{ isSaving() ? '建立中...' : '建立管理員帳號' }}
-              </button>
-            </div>
-          </form>
-        } @else if (formType === 'driver') {
-          <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
-            <div class="form-grid">
-              <label class="form-field">
-                <span>司機姓名</span>
-                <input
-                  type="text"
-                  required
-                  [value]="driverForm().name"
-                  (input)="updateDriverText('name', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>手機號碼</span>
-                <input
-                  type="tel"
-                  required
-                  [value]="driverForm().phone"
-                  (input)="updateDriverText('phone', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>登入帳號</span>
-                <input
-                  type="text"
-                  required
-                  autocomplete="username"
-                  [value]="driverForm().account"
-                  (input)="updateDriverText('account', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>身分證字號（初始密碼）</span>
-                <input
-                  type="password"
-                  required
-                  minlength="10"
-                  maxlength="10"
-                  autocomplete="new-password"
-                  [value]="driverForm().password"
-                  (input)="updateDriverText('password', $event)"
-                />
-              </label>
-            </div>
-
-            @if (formError()) {
-              <p class="form-error">{{ formError() }}</p>
-            }
-
-            <div class="modal-actions">
-              <button type="button" class="plain-button" (click)="closeForm()">取消</button>
-              <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '建立中...' : '建立司機帳號' }}
               </button>
             </div>
           </form>

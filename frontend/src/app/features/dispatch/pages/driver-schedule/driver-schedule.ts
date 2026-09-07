@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { from, mergeMap, toArray } from 'rxjs';
 import {
   LucideCalendarDays,
   LucideChevronLeft,
@@ -25,6 +26,7 @@ interface MonthDay {
   iso: string;
   day: number;
   weekday: string;
+  weekdayIndex: number;
   isWeekend: boolean;
 }
 
@@ -44,6 +46,23 @@ interface ShiftEditorForm {
 }
 
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+const weekdayOptions = [
+  { index: 1, label: '一' },
+  { index: 2, label: '二' },
+  { index: 3, label: '三' },
+  { index: 4, label: '四' },
+  { index: 5, label: '五' },
+  { index: 6, label: '六' },
+  { index: 0, label: '日' },
+];
+const workdayIndexes = [1, 2, 3, 4, 5];
+const weekendIndexes = [0, 6];
+type BatchShiftType = 'WORK' | 'DAY_OFF';
+
+interface BatchRule {
+  weekdayIndexes: readonly number[];
+  shiftType: BatchShiftType;
+}
 
 @Component({
   selector: 'app-driver-schedule',
@@ -76,6 +95,9 @@ export class DriverSchedule implements OnInit {
   readonly scheduleMissing = signal(false);
   readonly errorMessage = signal('');
   readonly actionMessage = signal('');
+  /** 預設先選週一至週五，主管最常用的週班規則只需要按一次即可套用。 */
+  readonly selectedWeekdayIndexes = signal<number[]>([...workdayIndexes]);
+  readonly weekdayOptions = weekdayOptions;
 
   readonly days = computed(() => this.buildMonthDays(this.selectedMonth()));
   readonly isDraft = computed(() => this.scheduleMonth()?.status === 'DRAFT');
@@ -181,6 +203,61 @@ export class DriverSchedule implements OnInit {
     }
     this.loadDrivers();
     this.loadMonth();
+  }
+
+  protected isWeekdaySelected(weekdayIndex: number): boolean {
+    return this.selectedWeekdayIndexes().includes(weekdayIndex);
+  }
+
+  protected toggleWeekday(weekdayIndex: number): void {
+    if (this.saving()) {
+      return;
+    }
+
+    this.selectedWeekdayIndexes.update((selected) =>
+      selected.includes(weekdayIndex)
+        ? selected.filter((item) => item !== weekdayIndex)
+        : [...selected, weekdayIndex].sort((left, right) => left - right),
+    );
+  }
+
+  protected selectWeekdayGroup(weekdayIndexes: readonly number[]): void {
+    if (this.saving()) {
+      return;
+    }
+
+    this.selectedWeekdayIndexes.set([...weekdayIndexes]);
+  }
+
+  protected applyStandardWeek(): void {
+    this.applyBatchRules(
+      [
+        { weekdayIndexes: workdayIndexes, shiftType: 'WORK' },
+        { weekdayIndexes: weekendIndexes, shiftType: 'DAY_OFF' },
+      ],
+      '已套用週一至週五上班、週六日休假的標準週班。',
+    );
+  }
+
+  protected applySelectedWeekdays(shiftType: BatchShiftType): void {
+    const weekdayIndexes = this.selectedWeekdayIndexes();
+    if (weekdayIndexes.length === 0) {
+      this.errorMessage.set('請至少選擇一個星期。');
+      return;
+    }
+
+    this.applyBatchRules(
+      [{ weekdayIndexes, shiftType }],
+      `已將所選星期批次設為${this.shiftLabel(shiftType)}。`,
+    );
+  }
+
+  protected selectedWeekdayDescription(): string {
+    const selected = new Set(this.selectedWeekdayIndexes());
+    return weekdayOptions
+      .filter((weekday) => selected.has(weekday.index))
+      .map((weekday) => `週${weekday.label}`)
+      .join('、');
   }
 
   protected selectShift(shift: DriverShiftDto): void {
@@ -353,6 +430,117 @@ export class DriverSchedule implements OnInit {
     return value ? value.slice(0, 5) : '--:--';
   }
 
+  private applyBatchRules(rules: readonly BatchRule[], successMessage: string): void {
+    const month = this.scheduleMonth();
+    if (!month || !this.isDraft() || this.saving()) {
+      return;
+    }
+
+    const weekdayByDate = new Map(this.days().map((day) => [day.iso, day.weekdayIndex]));
+    const activeDriverIds = new Set(
+      this.drivers()
+        .filter((driver) => driver.id !== undefined && driver.isActive)
+        .map((driver) => driver.id!),
+    );
+    const targetTypeByWeekday = new Map<number, BatchShiftType>();
+    for (const rule of rules) {
+      for (const weekdayIndex of rule.weekdayIndexes) {
+        targetTypeByWeekday.set(weekdayIndex, rule.shiftType);
+      }
+    }
+
+    const targets: { shiftId: number; request: DriverShiftUpdateRequest }[] = [];
+    for (const shift of this.shifts()) {
+      const shiftType = weekdayByDate.get(shift.workDate);
+      const targetType = shiftType === undefined ? undefined : targetTypeByWeekday.get(shiftType);
+      if (
+        !activeDriverIds.has(shift.driverId) ||
+        !targetType ||
+        shift.shiftType === 'LEAVE' ||
+        shift.shiftType === targetType
+      ) {
+        continue;
+      }
+
+      const request = this.toBatchUpdateRequest(shift, targetType);
+      // 任一司機的預設工時無效時，整批不送出，避免只改到部分司機的班表。
+      if (!request) {
+        return;
+      }
+      targets.push({ shiftId: shift.id, request });
+    }
+
+    if (targets.length === 0) {
+      this.actionMessage.set('所選星期沒有需要變更的啟用司機班次；既有請假不會被覆蓋。');
+      this.errorMessage.set('');
+      return;
+    }
+
+    this.saving.set(true);
+    this.errorMessage.set('');
+    this.actionMessage.set('');
+
+    // 後端目前只有單筆更新 API；限制為同時最多 6 筆，避免大量司機時塞爆資料庫連線池。
+    from(targets)
+      .pipe(
+        mergeMap(
+          ({ shiftId, request }) => this.api.updateDriverShift(shiftId, request),
+          6,
+        ),
+        toArray(),
+      )
+      .subscribe({
+        next: (updatedShifts) => {
+          const updatedById = new Map(updatedShifts.map((shift) => [shift.id, shift]));
+          this.shifts.update((shifts) =>
+            shifts.map((shift) => updatedById.get(shift.id) ?? shift),
+          );
+          this.resetSelection();
+          this.actionMessage.set(`${successMessage} 共更新 ${updatedShifts.length} 個班次。`);
+          this.saving.set(false);
+        },
+        error: (error: unknown) => {
+          this.errorMessage.set(this.readError(error, '批次更新班次失敗，已重新讀取班表。'));
+          this.resetSelection();
+          // 單筆 API 可能已成功部分資料；重讀後端資料，避免畫面保留半套舊狀態。
+          this.loadShifts(month.id);
+        },
+      });
+  }
+
+  private toBatchUpdateRequest(
+    shift: DriverShiftDto,
+    shiftType: BatchShiftType,
+  ): DriverShiftUpdateRequest | null {
+    if (shiftType === 'DAY_OFF') {
+      return {
+        shiftType,
+        workStart: null,
+        workEnd: null,
+        overtimeMinutes: 0,
+        changeReason: '主管批次排定休假',
+      };
+    }
+
+    const driver = this.drivers().find((item) => item.id === shift.driverId);
+    const workStart = shift.workStart ?? driver?.workStart ?? '';
+    const workEnd = shift.workEnd ?? driver?.workEnd ?? '';
+    if (!workStart || !workEnd || workEnd <= workStart) {
+      this.errorMessage.set(
+        `${driver?.name ?? `司機 #${shift.driverId}`} 的預設上下班時間無效，未執行批次更新。`,
+      );
+      return null;
+    }
+
+    return {
+      shiftType,
+      workStart,
+      workEnd,
+      overtimeMinutes: 0,
+      changeReason: '主管批次排定上班',
+    };
+  }
+
   private loadDrivers(): void {
     this.api.getDrivers().subscribe({
       next: (drivers) => this.drivers.set(drivers),
@@ -469,6 +657,7 @@ export class DriverSchedule implements OnInit {
         iso: `${monthValue}-${String(day).padStart(2, '0')}`,
         day,
         weekday: weekdays[weekdayIndex],
+        weekdayIndex,
         isWeekend: weekdayIndex === 0 || weekdayIndex === 6,
       };
     });

@@ -19,6 +19,13 @@
 
     <div class="workspace-actions">
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
+      <span
+        class="application-notification"
+        aria-label="司機帳號申請待後端 API 提供"
+        title="司機帳號申請待後端 API 提供"
+      >
+        <svg lucideBell aria-hidden="true"></svg>
+      </span>
       <button
         type="button"
         class="theme-toggle"

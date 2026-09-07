@@ -317,6 +317,88 @@ select:disabled {
   line-height: 1.5;
 }
 
+.batch-schedule {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.2fr);
+  gap: 22px;
+  margin-top: 20px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.batch-schedule-heading h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-weight: 600;
+}
+
+.batch-schedule-heading > p:last-child {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.batch-controls {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.weekday-selector,
+.batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.weekday-button,
+.weekday-preset {
+  min-height: 32px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.weekday-button:hover:not(:disabled),
+.weekday-button.is-selected,
+.weekday-preset:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgb(99 209 198 / 48%);
+  background: rgb(99 209 198 / 9%);
+}
+
+.weekday-button.is-selected {
+  color: var(--button-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.batch-actions {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.batch-actions > span {
+  flex: 1 1 150px;
+  color: var(--subtle);
+  font-size: 0.6875rem;
+}
+
+.batch-actions .primary-action,
+.batch-actions .secondary-action {
+  min-height: 34px;
+}
+
 .schedule-workspace {
   align-items: start;
   gap: 20px;
@@ -603,6 +685,7 @@ thead th.is-weekend {
 @media (max-width: 1180px) {
   .schedule-summary { flex-wrap: wrap; }
   .schedule-summary dl { order: 3; width: 100%; max-width: none; }
+  .batch-schedule { grid-template-columns: 1fr; gap: 14px; }
   .schedule-workspace { align-items: stretch; flex-direction: column; }
   .shift-editor { width: 100%; flex-basis: auto; position: static; }
 }
@@ -618,5 +701,8 @@ thead th.is-weekend {
   .schedule-summary dl div { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .schedule-actions { width: 100%; }
   .schedule-actions button { flex: 1 1 0; }
+  .batch-actions { align-items: stretch; }
+  .batch-actions > span { flex-basis: 100%; }
+  .batch-actions button { flex: 1 1 auto; }
   .schedule-grid-panel header { align-items: flex-start; }
 }

@@ -1,14 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { LucideMoon, LucideSun } from '@lucide/angular';
+import { LucideMoon, LucideSun, LucideUserRoundPlus, LucideX } from '@lucide/angular';
 import { DriverAuthService } from '../../core/auth/driver-auth.service';
 import { saveStoredMapLocation } from '../../core/location/driver-map-location.storage';
 import { BrandLogo } from '../../shared/ui/brand-logo/brand-logo';
 
 @Component({
   selector: 'app-driver-login',
-  imports: [BrandLogo, LucideMoon, LucideSun],
+  imports: [BrandLogo, LucideMoon, LucideSun, LucideUserRoundPlus, LucideX],
   templateUrl: './driver-login.html',
   styleUrl: './driver-login.scss',
 })
@@ -18,6 +18,7 @@ export class DriverLogin {
   protected readonly errorMessage = signal('');
   protected readonly isSubmitting = signal(false);
   protected readonly isLocating = signal(false);
+  protected readonly isAccountApplicationOpen = signal(false);
   protected readonly isDarkTheme = signal(this.readSavedTheme() === 'dark');
 
   private readonly authService = inject(DriverAuthService);
@@ -78,6 +79,14 @@ export class DriverLogin {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('logistics-dispatch.driver-theme', nextTheme);
     }
+  }
+
+  protected openAccountApplication(): void {
+    this.isAccountApplicationOpen.set(true);
+  }
+
+  protected closeAccountApplication(): void {
+    this.isAccountApplicationOpen.set(false);
   }
 
   private getErrorMessage(error: unknown): string {

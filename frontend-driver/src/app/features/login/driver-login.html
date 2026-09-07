@@ -60,6 +60,46 @@
       }
     </form>
 
-    <p class="help-text">帳號無法登入時，請聯絡物流後台管理員確認帳號狀態。</p>
+    <div class="account-help">
+      <p class="help-text">帳號無法登入時，請聯絡物流後台管理員確認帳號狀態。</p>
+      <button type="button" class="account-application-button" (click)="openAccountApplication()">
+        <svg lucideUserRoundPlus aria-hidden="true"></svg>
+        申請司機帳號
+      </button>
+    </div>
+
+    @if (isAccountApplicationOpen()) {
+      <section class="account-application" aria-labelledby="account-application-title">
+        <header>
+          <div>
+            <p class="eyebrow">ACCOUNT APPLICATION</p>
+            <h2 id="account-application-title">申請司機帳號</h2>
+          </div>
+          <button
+            type="button"
+            class="application-close"
+            title="關閉申請說明"
+            aria-label="關閉申請說明"
+            (click)="closeAccountApplication()"
+          >
+            <svg lucideX aria-hidden="true"></svg>
+          </button>
+        </header>
+        <p>帳號申請須由主管簽核後才會建立登入權限。</p>
+        <dl>
+          <div>
+            <dt>申請資料</dt>
+            <dd>姓名、手機號碼與登入帳號</dd>
+          </div>
+          <div>
+            <dt>初始密碼</dt>
+            <dd>身分證字號</dd>
+          </div>
+        </dl>
+        <p class="application-notice">
+          申請與簽核 API 尚未提供；目前不會送出或保存任何個人資料。
+        </p>
+      </section>
+    }
   </section>
 </main>
