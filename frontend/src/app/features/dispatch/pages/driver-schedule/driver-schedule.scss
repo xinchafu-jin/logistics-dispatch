@@ -347,6 +347,99 @@ select:disabled {
   min-width: 0;
 }
 
+.batch-driver-selection {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.batch-selection-heading,
+.batch-driver-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.batch-selection-heading strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.batch-selection-heading > span {
+  margin-right: auto;
+  color: var(--subtle);
+  font-size: 0.6875rem;
+}
+
+.batch-selection-action {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.batch-selection-action:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgb(99 209 198 / 48%);
+}
+
+.batch-selection-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.batch-driver-option {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.batch-driver-option.is-selected {
+  border-color: rgb(99 209 198 / 58%);
+  color: var(--text);
+  background: rgb(99 209 198 / 9%);
+}
+
+.batch-driver-option input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.batch-driver-option > span {
+  display: grid;
+  gap: 1px;
+}
+
+.batch-driver-option strong,
+.batch-driver-option small,
+.batch-driver-options > p {
+  margin: 0;
+  font-size: 0.6875rem;
+}
+
+.batch-driver-option small,
+.batch-driver-options > p {
+  color: var(--subtle);
+}
+
 .weekday-selector,
 .batch-actions {
   display: flex;
@@ -704,5 +797,6 @@ thead th.is-weekend {
   .batch-actions { align-items: stretch; }
   .batch-actions > span { flex-basis: 100%; }
   .batch-actions button { flex: 1 1 auto; }
+  .batch-selection-heading > span { flex-basis: 100%; }
   .schedule-grid-panel header { align-items: flex-start; }
 }

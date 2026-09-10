@@ -1,7 +1,7 @@
 <section class="live-fleet-map" aria-labelledby="fleet-map-title">
   <header class="fleet-map-header">
     <div>
-      <p class="fleet-map-eyebrow">FLEET MONITOR</p>
+      <p class="fleet-map-eyebrow">車隊監控</p>
       <h3 id="fleet-map-title">台南配送區域地圖</h3>
     </div>
     <span class="fleet-map-count">{{ activeDriverCount() }} 位可排班司機</span>
@@ -10,14 +10,14 @@
   <div #mapCanvas class="fleet-map-canvas" aria-label="台南配送區域地圖"></div>
 
   <aside class="fleet-tracking-panel" aria-label="司機定位狀態">
-    <p class="fleet-map-eyebrow">GPS STATUS</p>
+    <p class="fleet-map-eyebrow">定位狀態</p>
     <strong>{{ driverPoints().length ? '定位回傳中' : '尚未取得定位資料' }}</strong>
     @if (selectedDriver(); as driver) {
       <p>{{ driver.name }} · {{ driver.displayId }}</p>
       @if (selectedDriverPoint(); as point) {
         <small>{{ point.detail }}</small>
       } @else {
-        <small>尚未上班、定位超過 10 分鐘，或尚未回傳定位。</small>
+        <small>尚未上班或尚未回傳有效定位。</small>
       }
     } @else {
       <p>尚未取得司機資料。</p>
@@ -25,7 +25,7 @@
     @if (driverPoints().length) {
       <small>僅顯示後端回傳且仍在有效時間內的工作中司機。</small>
     } @else {
-      <small>後端只會回傳正在工作、且最新定位未超過 10 分鐘的司機。</small>
+      <small>後端目前沒有回傳有效定位。</small>
     }
 
     <div class="tracking-driver-list">
@@ -48,7 +48,7 @@
     </div>
   </aside>
 
-  <p class="fleet-map-notice">僅顯示正在上班、且最新定位未超過 10 分鐘的司機。</p>
+  <p class="fleet-map-notice">僅顯示正在上班且後端回傳有效定位的司機。</p>
   <p class="fleet-map-attribution">
     &copy;
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"

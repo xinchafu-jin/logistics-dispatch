@@ -64,6 +64,12 @@ interface BatchRule {
   shiftType: BatchShiftType;
 }
 
+interface BatchDriverOption {
+  id: number;
+  name: string;
+  account: string;
+}
+
 @Component({
   selector: 'app-driver-schedule',
   imports: [
@@ -97,6 +103,7 @@ export class DriverSchedule implements OnInit {
   readonly actionMessage = signal('');
   /** 預設先選週一至週五，主管最常用的週班規則只需要按一次即可套用。 */
   readonly selectedWeekdayIndexes = signal<number[]>([...workdayIndexes]);
+  readonly selectedBatchDriverIds = signal<number[]>([]);
   readonly weekdayOptions = weekdayOptions;
 
   readonly days = computed(() => this.buildMonthDays(this.selectedMonth()));
@@ -147,6 +154,23 @@ export class DriverSchedule implements OnInit {
       leave: shifts.filter((shift) => shift.shiftType === 'LEAVE').length,
       unassigned: shifts.filter((shift) => shift.shiftType === 'UNASSIGNED').length,
     };
+  });
+  readonly batchDriverOptions = computed<BatchDriverOption[]>(() => {
+    const scheduledDriverIds = new Set(this.shifts().map((shift) => shift.driverId));
+
+    return this.drivers().flatMap((driver) =>
+      driver.id !== undefined && driver.isActive && scheduledDriverIds.has(driver.id)
+        ? [{ id: driver.id, name: driver.name, account: driver.account }]
+        : [],
+    );
+  });
+  readonly selectedBatchDriverCount = computed(() => {
+    const availableIds = new Set(this.batchDriverOptions().map((driver) => driver.id));
+    return this.selectedBatchDriverIds().filter((id) => availableIds.has(id)).length;
+  });
+  readonly areAllBatchDriversSelected = computed(() => {
+    const drivers = this.batchDriverOptions();
+    return drivers.length > 0 && this.selectedBatchDriverCount() === drivers.length;
   });
 
   ngOnInit(): void {
@@ -227,6 +251,34 @@ export class DriverSchedule implements OnInit {
     }
 
     this.selectedWeekdayIndexes.set([...weekdayIndexes]);
+  }
+
+  protected isBatchDriverSelected(driverId: number): boolean {
+    return this.selectedBatchDriverIds().includes(driverId);
+  }
+
+  protected toggleBatchDriver(driverId: number): void {
+    if (this.saving()) {
+      return;
+    }
+
+    this.selectedBatchDriverIds.update((selected) =>
+      selected.includes(driverId)
+        ? selected.filter((id) => id !== driverId)
+        : [...selected, driverId].sort((left, right) => left - right),
+    );
+  }
+
+  protected selectAllBatchDrivers(): void {
+    if (!this.saving()) {
+      this.selectedBatchDriverIds.set(this.batchDriverOptions().map((driver) => driver.id));
+    }
+  }
+
+  protected clearBatchDrivers(): void {
+    if (!this.saving()) {
+      this.selectedBatchDriverIds.set([]);
+    }
   }
 
   protected applyStandardWeek(): void {
@@ -367,6 +419,7 @@ export class DriverSchedule implements OnInit {
       next: (shifts) => {
         this.shifts.set(shifts);
         this.resetSelection();
+        this.loadDrivers();
         this.actionMessage.set('已同步目前啟用的司機至整月班表。');
         this.saving.set(false);
       },
@@ -437,11 +490,14 @@ export class DriverSchedule implements OnInit {
     }
 
     const weekdayByDate = new Map(this.days().map((day) => [day.iso, day.weekdayIndex]));
-    const activeDriverIds = new Set(
-      this.drivers()
-        .filter((driver) => driver.id !== undefined && driver.isActive)
-        .map((driver) => driver.id!),
+    const availableDriverIds = new Set(this.batchDriverOptions().map((driver) => driver.id));
+    const selectedDriverIds = new Set(
+      this.selectedBatchDriverIds().filter((driverId) => availableDriverIds.has(driverId)),
     );
+    if (selectedDriverIds.size === 0) {
+      this.errorMessage.set('請至少選擇一位司機。');
+      return;
+    }
     const targetTypeByWeekday = new Map<number, BatchShiftType>();
     for (const rule of rules) {
       for (const weekdayIndex of rule.weekdayIndexes) {
@@ -454,7 +510,7 @@ export class DriverSchedule implements OnInit {
       const shiftType = weekdayByDate.get(shift.workDate);
       const targetType = shiftType === undefined ? undefined : targetTypeByWeekday.get(shiftType);
       if (
-        !activeDriverIds.has(shift.driverId) ||
+        !selectedDriverIds.has(shift.driverId) ||
         !targetType ||
         shift.shiftType === 'LEAVE' ||
         shift.shiftType === targetType
@@ -471,7 +527,7 @@ export class DriverSchedule implements OnInit {
     }
 
     if (targets.length === 0) {
-      this.actionMessage.set('所選星期沒有需要變更的啟用司機班次；既有請假不會被覆蓋。');
+      this.actionMessage.set('所選司機與星期沒有需要變更的班次；既有請假不會被覆蓋。');
       this.errorMessage.set('');
       return;
     }
@@ -543,7 +599,14 @@ export class DriverSchedule implements OnInit {
 
   private loadDrivers(): void {
     this.api.getDrivers().subscribe({
-      next: (drivers) => this.drivers.set(drivers),
+      next: (drivers) => {
+        this.drivers.set(drivers);
+        this.selectedBatchDriverIds.set(
+          drivers
+            .filter((driver) => driver.id !== undefined && driver.isActive)
+            .map((driver) => driver.id!),
+        );
+      },
       error: (error: unknown) => {
         this.errorMessage.set(this.readError(error, '無法取得司機資料。'));
       },

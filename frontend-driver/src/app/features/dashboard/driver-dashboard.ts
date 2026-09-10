@@ -149,6 +149,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private currentLocationMarker: L.Marker | null = null;
   private destinationMarker: L.Marker | null = null;
   private navigationLine: L.Polyline | null = null;
+  private mapLocationWatchId: number | null = null;
+  private hasFocusedCurrentMapLocation = false;
 
   constructor() {
     this.weatherService.getCurrentWeather().subscribe({
@@ -163,13 +165,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.initializeMap();
     this.restoreMapLocation();
-    this.requestMapLocation(false);
-    this.renderNavigationMap(false);
+    this.startMapLocationWatch();
   }
 
   ngOnDestroy(): void {
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    this.stopMapLocationWatch();
     this.driverMap?.remove();
     this.driverMap = null;
   }
@@ -193,6 +195,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected signOut(): void {
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    this.stopMapLocationWatch();
     clearStoredMapLocation();
     this.authService.logout();
     void this.router.navigateByUrl('/login');
@@ -459,7 +462,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       this.mapLocationStatus.set('此裝置不支援定位功能');
       return;
     }
@@ -470,18 +473,59 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const location = L.latLng(position.coords.latitude, position.coords.longitude);
-        this.showMapLocation(location, true);
-        this.saveMapLocation(location);
-        this.mapLocationStatus.set('已定位至目前位置');
+        this.applyMapPosition(position, true);
       },
       (error) => {
         if (isManualRequest || !this.hasStoredMapLocation()) {
           this.mapLocationStatus.set(this.getLocationErrorMessage(error));
         }
       },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     );
+  }
+
+  private startMapLocationWatch(): void {
+    if (
+      this.mapLocationWatchId !== null ||
+      typeof navigator === 'undefined' ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    if (!this.currentMapLocation) {
+      this.mapLocationStatus.set('正在取得目前位置...');
+    }
+
+    this.mapLocationWatchId = navigator.geolocation.watchPosition(
+      (position) => this.applyMapPosition(position, true),
+      (error) => {
+        if (!this.currentMapLocation) {
+          this.mapLocationStatus.set(this.getLocationErrorMessage(error));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    );
+  }
+
+  private stopMapLocationWatch(): void {
+    if (
+      this.mapLocationWatchId === null ||
+      typeof navigator === 'undefined' ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    navigator.geolocation.clearWatch(this.mapLocationWatchId);
+    this.mapLocationWatchId = null;
+  }
+
+  private applyMapPosition(position: GeolocationPosition, animate: boolean): void {
+    const location = L.latLng(position.coords.latitude, position.coords.longitude);
+    this.showMapLocation(location, animate);
+    this.saveMapLocation(location);
+    this.mapLocationStatus.set('已定位至目前位置');
   }
 
   protected statusLabel(): string {
@@ -786,16 +830,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private showMapLocation(location: L.LatLng, animate: boolean): void {
     this.currentMapLocation = location;
-    this.currentLocationMarker?.remove();
-    this.currentLocationMarker = L.marker(location, {
-      icon: L.divIcon({
-        className: 'driver-location-marker',
-        html: '<span>A</span>',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
-      }),
-      interactive: false,
-    }).addTo(this.driverMap!);
+
+    if (this.currentLocationMarker) {
+      this.currentLocationMarker.setLatLng(location);
+    } else {
+      this.currentLocationMarker = L.marker(location, {
+        icon: L.divIcon({
+          className: 'driver-location-marker',
+          html: '<span>A</span>',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+        interactive: false,
+      }).addTo(this.driverMap!);
+    }
+
     this.renderNavigationMap(animate);
   }
 
@@ -820,7 +869,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const destination = this.destinationLocation();
     if (!destination) {
       if (this.currentMapLocation) {
-        this.driverMap.setView(this.currentMapLocation, 15, { animate });
+        this.focusCurrentMapLocation(animate);
       }
       return;
     }
@@ -854,12 +903,20 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       opacity: 0.82,
       dashArray: '8 8',
     }).addTo(this.driverMap);
-    this.driverMap.fitBounds(L.latLngBounds([this.currentMapLocation, destination]), {
-      paddingTopLeft: [24, 94],
-      paddingBottomRight: [24, 310],
-      animate,
-      maxZoom: 15,
-    });
+    this.focusCurrentMapLocation(animate);
+  }
+
+  private focusCurrentMapLocation(animate: boolean): void {
+    if (!this.driverMap || !this.currentMapLocation) {
+      return;
+    }
+
+    const zoom = this.hasFocusedCurrentMapLocation
+      ? this.driverMap.getZoom()
+      : Math.max(this.driverMap.getZoom(), 15);
+
+    this.driverMap.setView(this.currentMapLocation, zoom, { animate });
+    this.hasFocusedCurrentMapLocation = true;
   }
 
   private destinationLocation(): L.LatLng | null {
