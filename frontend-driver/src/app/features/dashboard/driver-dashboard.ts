@@ -14,6 +14,8 @@ import {
   LucideCalendarDays,
   LucideChevronLeft,
   LucideChevronRight,
+  LucideChevronDown,
+  LucideChevronUp,
   LucideCircleCheck,
   LucideCircleStop,
   LucideCloudFog,
@@ -74,6 +76,8 @@ interface DriverTaskSelection {
     LucideCalendarDays,
     LucideChevronLeft,
     LucideChevronRight,
+    LucideChevronDown,
+    LucideChevronUp,
     LucideCircleCheck,
     LucideCircleStop,
     LucideCloudFog,
@@ -136,6 +140,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isMileageSubmitting = signal(false);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
+  protected readonly isAttendanceSheetExpanded = signal(false);
+  protected readonly isAttendanceSheetDragging = signal(false);
+  protected readonly attendanceSheetDragOffset = signal(0);
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -151,6 +158,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private navigationLine: L.Polyline | null = null;
   private mapLocationWatchId: number | null = null;
   private hasFocusedCurrentMapLocation = false;
+  private attendanceSheetPointerId: number | null = null;
+  private attendanceSheetPointerStartY: number | null = null;
+  private ignoreAttendanceSheetClick = false;
 
   constructor() {
     this.weatherService.getCurrentWeather().subscribe({
@@ -207,6 +217,68 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('logistics-dispatch.driver-theme', nextTheme);
+    }
+  }
+
+  protected toggleAttendanceSheet(): void {
+    if (this.ignoreAttendanceSheetClick) {
+      this.ignoreAttendanceSheetClick = false;
+      return;
+    }
+
+    this.isAttendanceSheetExpanded.update((expanded) => !expanded);
+    this.attendanceSheetDragOffset.set(0);
+  }
+
+  protected startAttendanceSheetDrag(event: PointerEvent): void {
+    if (event.button !== 0) {
+      return;
+    }
+
+    this.attendanceSheetPointerId = event.pointerId;
+    this.attendanceSheetPointerStartY = event.clientY;
+    this.isAttendanceSheetDragging.set(false);
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  protected moveAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId !== event.pointerId || this.attendanceSheetPointerStartY === null) {
+      return;
+    }
+
+    const deltaY = event.clientY - this.attendanceSheetPointerStartY;
+    if (Math.abs(deltaY) < 6) {
+      return;
+    }
+
+    this.isAttendanceSheetDragging.set(true);
+    const offset = this.isAttendanceSheetExpanded()
+      ? Math.max(0, Math.min(deltaY, 140))
+      : Math.min(0, Math.max(deltaY, -140));
+    this.attendanceSheetDragOffset.set(offset);
+  }
+
+  protected endAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId !== event.pointerId || this.attendanceSheetPointerStartY === null) {
+      return;
+    }
+
+    const deltaY = event.clientY - this.attendanceSheetPointerStartY;
+    if (Math.abs(deltaY) >= 12) {
+      this.ignoreAttendanceSheetClick = true;
+      if (this.isAttendanceSheetExpanded() && deltaY > 44) {
+        this.isAttendanceSheetExpanded.set(false);
+      } else if (!this.isAttendanceSheetExpanded() && deltaY < -44) {
+        this.isAttendanceSheetExpanded.set(true);
+      }
+    }
+
+    this.resetAttendanceSheetDrag(event);
+  }
+
+  protected cancelAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId === event.pointerId) {
+      this.resetAttendanceSheetDrag(event);
     }
   }
 
@@ -802,6 +874,18 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       clearInterval(this.breakTimer);
       this.breakTimer = null;
     }
+  }
+
+  private resetAttendanceSheetDrag(event: PointerEvent): void {
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+
+    this.attendanceSheetPointerId = null;
+    this.attendanceSheetPointerStartY = null;
+    this.attendanceSheetDragOffset.set(0);
+    this.isAttendanceSheetDragging.set(false);
   }
 
   private initializeMap(): void {

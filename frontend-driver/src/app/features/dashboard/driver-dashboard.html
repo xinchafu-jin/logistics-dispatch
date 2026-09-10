@@ -67,7 +67,43 @@
         <svg lucideLocateFixed aria-hidden="true"></svg>
       </button>
 
-      <section class="attendance-sheet" aria-labelledby="attendance-title">
+      <section
+        class="attendance-sheet"
+        [class.is-expanded]="isAttendanceSheetExpanded()"
+        [class.is-dragging]="isAttendanceSheetDragging()"
+        [style.--attendance-sheet-drag.px]="attendanceSheetDragOffset()"
+        aria-labelledby="attendance-title"
+      >
+        <button
+          type="button"
+          class="attendance-drawer-handle"
+          [attr.aria-expanded]="isAttendanceSheetExpanded()"
+          aria-controls="attendance-drawer-content"
+          (click)="toggleAttendanceSheet()"
+          (pointerdown)="startAttendanceSheetDrag($event)"
+          (pointermove)="moveAttendanceSheetDrag($event)"
+          (pointerup)="endAttendanceSheetDrag($event)"
+          (pointercancel)="cancelAttendanceSheetDrag($event)"
+        >
+          <span class="attendance-drawer-grip" aria-hidden="true"></span>
+          <span class="attendance-drawer-summary">
+            <small>出勤狀態</small>
+            <strong>{{ statusLabel() }}</strong>
+          </span>
+          @if (attendance()?.gpsAllowed) {
+            <span class="gps-status is-active"
+              ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
+            >
+          } @else {
+            <span class="gps-status">GPS 已停止</span>
+          }
+          @if (isAttendanceSheetExpanded()) {
+            <svg lucideChevronDown aria-hidden="true"></svg>
+          } @else {
+            <svg lucideChevronUp aria-hidden="true"></svg>
+          }
+        </button>
+        <div id="attendance-drawer-content" class="attendance-drawer-content">
         <div class="sheet-heading">
           <div>
             <p class="eyebrow">出勤狀態</p>
@@ -173,6 +209,7 @@
             <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
           }
         }
+        </div>
       </section>
     </section>
   } @else {
