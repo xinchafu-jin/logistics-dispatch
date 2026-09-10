@@ -12,8 +12,8 @@ const HEADER = ['訂單編號', '門市', '出貨倉', '品項', '箱數', '配�
 const STORE: StoreDto = {
   id: 11,
   storeCode: 'ST-001',
-  name: '台南永康店',
-  address: '台南市永康區中華路 1 號',
+  name: '高雄左營店',
+  address: '高雄市左營區博愛三路 1 號',
   lat: 23,
   lng: 120,
   receivingStart: '09:00',
@@ -24,7 +24,7 @@ const STORE: StoreDto = {
 const WAREHOUSE: WarehouseDto = {
   id: 21,
   warehouseCode: 'WH-001',
-  name: '台南倉',
+  name: '高雄倉',
   lat: 23,
   lng: 120,
   isActive: true,
@@ -83,8 +83,8 @@ describe('OrderReview Excel 匯入', () => {
     await component.onImportFileSelected(
       fileEvent([
         HEADER,
-        ['SO-001', '台南永康店', '台南倉', '常溫', 2, '2026-01-05', ''],
-        ['SO-002', '不存在的店', '台南倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-001', '高雄左營店', '高雄倉', '常溫', 2, '2026-01-05', ''],
+        ['SO-002', '不存在的店', '高雄倉', '常溫', 1, '2026-01-05', ''],
       ]),
     );
     fixture.detectChanges();
@@ -102,9 +102,9 @@ describe('OrderReview Excel 匯入', () => {
     await component.onImportFileSelected(
       fileEvent([
         HEADER,
-        ['SO-001', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
-        ['SO-002', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
-        ['SO-003', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-001', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-002', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-003', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', ''],
       ]),
     );
 
@@ -128,8 +128,8 @@ describe('OrderReview Excel 匯入', () => {
     await component.onImportFileSelected(
       fileEvent([
         HEADER,
-        ['SO-001', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
-        ['SO-002', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-001', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', ''],
+        ['SO-002', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', ''],
       ]),
     );
 
@@ -156,7 +156,7 @@ describe('OrderReview Excel 匯入', () => {
     expect(component.activeForm()).toBe('create');
 
     await component.onImportFileSelected(
-      fileEvent([HEADER, ['SO-004', '台南永康店', '台南倉', '常溫', 1, '2026-01-05', '']]),
+      fileEvent([HEADER, ['SO-004', '高雄左營店', '高雄倉', '常溫', 1, '2026-01-05', '']]),
     );
     fixture.detectChanges();
 

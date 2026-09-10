@@ -252,6 +252,6 @@ export class OperationReport implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '未提供區域';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '未提供區域';
   }
 }

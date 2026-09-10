@@ -322,14 +322,14 @@ describe('DispatchApiService', () => {
   it('writes warehouses through the backend CRUD contract', () => {
     const warehouse = {
       warehouseCode: 'WH-001',
-      name: '台南倉庫',
+      name: '高雄倉庫',
       lat: 23,
       lng: 120,
       isActive: true,
     };
 
     service.createWarehouse(warehouse).subscribe();
-    service.updateWarehouse(5, { ...warehouse, name: '台南中央倉庫' }).subscribe();
+    service.updateWarehouse(5, { ...warehouse, name: '高雄中央倉庫' }).subscribe();
     service.deleteWarehouse(5).subscribe();
 
     const createRequest = httpTesting.expectOne('/api/warehouses');
@@ -341,8 +341,8 @@ describe('DispatchApiService', () => {
       (request) => request.url === '/api/warehouses/5' && request.method === 'PUT',
     );
     expect(updateRequest.request.method).toBe('PUT');
-    expect(updateRequest.request.body.name).toBe('台南中央倉庫');
-    updateRequest.flush({ id: 5, ...warehouse, name: '台南中央倉庫' });
+    expect(updateRequest.request.body.name).toBe('高雄中央倉庫');
+    updateRequest.flush({ id: 5, ...warehouse, name: '高雄中央倉庫' });
 
     const deleteRequest = httpTesting.expectOne(
       (request) => request.url === '/api/warehouses/5' && request.method === 'DELETE',

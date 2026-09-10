@@ -197,7 +197,7 @@ export class OrderImportService {
     const xlsx = await loadXlsx();
     const sheet = xlsx.utils.aoa_to_sheet([
       [...TEMPLATE_HEADERS],
-      ['SO-20260101-001', '台南永康店', '台南倉', '好食品', '常溫飲料', 12, '2026-01-01', ''],
+      ['SO-20260101-001', '高雄左營店', '高雄倉', '好食品', '常溫飲料', 12, '2026-01-01', ''],
     ]);
     sheet['!cols'] = TEMPLATE_HEADERS.map(() => ({ wch: 16 }));
 
@@ -449,7 +449,7 @@ function normalizeText(value: unknown): string {
     .trim();
 }
 
-/** 比對用的鍵：去掉所有空白再轉小寫，這樣「台南 倉」和「台南倉」算同一個。 */
+/** 比對用的鍵：去掉所有空白再轉小寫，這樣「高雄 倉」和「高雄倉」算同一個。 */
 function normalizeKey(value: unknown): string {
   return normalizeText(value).replace(/\s+/g, '').toLowerCase();
 }

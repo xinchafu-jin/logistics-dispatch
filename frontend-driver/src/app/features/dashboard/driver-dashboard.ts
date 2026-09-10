@@ -624,7 +624,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return `${weather.city}${weather.condition}，${weather.temperature}°C`;
     }
 
-    return this.weatherUnavailable() ? '天氣暫時無法取得' : '正在取得台南天氣';
+    return this.weatherUnavailable() ? '天氣暫時無法取得' : '正在取得高雄天氣';
   }
 
   protected formatBreakCountdown(): string {
@@ -894,7 +894,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.driverMap = L.map(mapElement, { zoomControl: false }).setView([23.7, 120.96], 8);
+    this.driverMap = L.map(mapElement, { zoomControl: false }).setView([22.6273, 120.3014], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,

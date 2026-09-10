@@ -23,7 +23,7 @@ describe('DriverOperationsService', () => {
     service.clockIn().subscribe();
     service.startBreak().subscribe();
     service.clockOut().subscribe();
-    service.uploadGps({ lat: 22.9971, lng: 120.2125 }).subscribe();
+    service.uploadGps({ lat: 22.6273, lng: 120.3014 }).subscribe();
 
     const today = httpTesting.expectOne('/api/driver/attendance/today');
     expect(today.request.method).toBe('GET');
@@ -41,7 +41,7 @@ describe('DriverOperationsService', () => {
 
     const gps = httpTesting.expectOne('/api/driver/gps');
     expect(gps.request.method).toBe('POST');
-    expect(gps.request.body).toEqual({ lat: 22.9971, lng: 120.2125 });
+    expect(gps.request.body).toEqual({ lat: 22.6273, lng: 120.3014 });
     gps.flush(null);
   });
 

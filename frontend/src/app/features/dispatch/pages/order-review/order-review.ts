@@ -539,7 +539,7 @@ export class OrderReview implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '台南配送區';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '高雄配送區';
   }
 
   private formatTime(value: string): string {
