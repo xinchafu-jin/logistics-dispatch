@@ -1214,11 +1214,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const zoom = this.hasFocusedCurrentMapLocation
-      ? this.driverMap.getZoom()
-      : Math.max(this.driverMap.getZoom(), 15);
+    if (this.hasFocusedCurrentMapLocation) {
+      this.driverMap.panTo(this.currentMapLocation, { animate });
+      return;
+    }
 
-    this.driverMap.setView(this.currentMapLocation, zoom, { animate });
+    this.driverMap.setView(this.currentMapLocation, Math.max(this.driverMap.getZoom(), 15), { animate });
     this.hasFocusedCurrentMapLocation = true;
   }
 
