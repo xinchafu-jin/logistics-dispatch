@@ -66,6 +66,55 @@ describe('DriverOperationsService', () => {
     request.flush({ date: '2026-09-02', driverId: 1, driverName: '測試司機', routes: [] });
   });
 
+  it('uses the driver application, road route, and emergency leave contracts', () => {
+    const application = {
+      account: 'driver-apply',
+      name: '王小明',
+      phone: '0912345678',
+      nationalId: 'A123456789',
+    };
+    const route = {
+      fromLat: 22.6273,
+      fromLng: 120.3014,
+      toLat: 22.6401,
+      toLng: 120.3022,
+    };
+
+    service.submitAccountApplication(application).subscribe();
+    service.getNavigationRoute(route).subscribe();
+    service.submitEmergencyLeave({ reason: '身體不適，需要返回休息。' }).subscribe();
+    service.getEmergencyLeaves().subscribe();
+
+    const applicationRequest = httpTesting.expectOne('/api/driver-account-applications');
+    expect(applicationRequest.request.method).toBe('POST');
+    expect(applicationRequest.request.body).toEqual(application);
+    applicationRequest.flush({ id: 8, status: 'PENDING' });
+
+    const routeRequest = httpTesting.expectOne('/api/driver/route');
+    expect(routeRequest.request.method).toBe('POST');
+    expect(routeRequest.request.body).toEqual(route);
+    routeRequest.flush({
+      path: [[22.6273, 120.3014], [22.6401, 120.3022]],
+      distance: 1500,
+      duration: 240,
+    });
+
+    const leaveRequest = httpTesting.expectOne(
+      (request) =>
+        request.url === '/api/driver/emergency-leave-requests' && request.method === 'POST',
+    );
+    expect(leaveRequest.request.method).toBe('POST');
+    expect(leaveRequest.request.body).toEqual({ reason: '身體不適，需要返回休息。' });
+    leaveRequest.flush({ id: 4, status: 'PENDING' });
+
+    const leavesRequest = httpTesting.expectOne(
+      (request) =>
+        request.url === '/api/driver/emergency-leave-requests' && request.method === 'GET',
+    );
+    expect(leavesRequest.request.method).toBe('GET');
+    leavesRequest.flush([]);
+  });
+
   it('uses the delivery and mileage endpoints with the backend request shapes', () => {
     service.arrive({ orderId: 41 }).subscribe();
     service.deliver({

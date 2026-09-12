@@ -173,6 +173,20 @@ describe('OrderReview Excel 匯入', () => {
     );
   });
 
+  it('新增訂單時自動產生唯讀訂單編號', () => {
+    component.openCreateOrder();
+    fixture.detectChanges();
+
+    expect(component.orderForm().orderNumber).toMatch(/^DO-\d{8}-[A-F0-9]{8}$/);
+
+    const orderNumberInput = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
+      '.order-form input[readonly]',
+    );
+    expect(orderNumberInput?.value).toBe(component.orderForm().orderNumber);
+    expect(orderNumberInput?.readOnly).toBe(true);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('系統自動產生');
+  });
+
   it('檔案格式不對時停在 failed，不會送出任何請求', async () => {
     await component.onImportFileSelected(
       fileEvent([

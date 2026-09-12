@@ -259,37 +259,50 @@ input:disabled {
   line-height: 1.5;
 }
 
-.account-application dl {
+.account-application-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-.account-application dl div {
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid #c7dbd3;
-  border-radius: 6px;
-  background: #ffffff;
-}
-
-.account-application dt {
-  color: #58766b;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.account-application dd {
-  margin: 5px 0 0;
-  color: #1d443a;
+.account-application-form label {
+  margin-top: 2px;
   font-size: 12px;
-  font-weight: 800;
+}
+
+.account-application-form input {
+  min-height: 42px;
+}
+
+.account-application-form button {
+  min-height: 42px;
+  margin-top: 6px;
+}
+
+.application-feedback {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #b9d1c7;
+  border-radius: 6px;
+  color: #48675d;
+  background: #ffffff;
+  font-size: 12px;
   line-height: 1.45;
 }
 
-.account-application .application-notice {
-  color: #87642d;
+.application-feedback.is-error {
+  border-color: #dcaeae;
+  color: #9d3737;
+  background: #fff2f1;
+}
+
+.application-feedback.is-success {
+  border-color: #96cfbb;
+  color: #1f715b;
+  background: #effaf5;
 }
 
 .login-page.is-dark-theme {
@@ -346,19 +359,32 @@ input:disabled {
   color: #e1f2ec;
 }
 
-.login-page.is-dark-theme .application-close,
-.login-page.is-dark-theme .account-application dl div {
+.login-page.is-dark-theme .application-close {
   border-color: #36544d;
   color: #b8d9d0;
   background: #192f2d;
 }
 
-.login-page.is-dark-theme .account-application dt {
-  color: #91ada4;
+.login-page.is-dark-theme .account-application-form {
+  background: transparent;
 }
 
-.login-page.is-dark-theme .account-application .application-notice {
-  color: #e8c789;
+.login-page.is-dark-theme .application-feedback {
+  border-color: #36544d;
+  color: #b8d9d0;
+  background: #192f2d;
+}
+
+.login-page.is-dark-theme .application-feedback.is-error {
+  border-color: #75474b;
+  color: #f1b9b6;
+  background: #3b2527;
+}
+
+.login-page.is-dark-theme .application-feedback.is-success {
+  border-color: #397460;
+  color: #aae2d0;
+  background: #15362f;
 }
 
 .login-page.is-dark-theme input::placeholder {

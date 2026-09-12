@@ -209,8 +209,8 @@
 
         <form class="order-form" (submit)="$event.preventDefault(); submitOrder()">
           <label>
-            <span>訂單編號</span>
-            <input type="text" required [value]="orderForm().orderNumber" (input)="updateOrderText('orderNumber', $event)" />
+            <span>{{ formMode === 'create' ? '訂單編號（系統自動產生）' : '訂單編號' }}</span>
+            <input type="text" readonly [value]="orderForm().orderNumber" />
           </label>
           <label>
             <span>店家</span>

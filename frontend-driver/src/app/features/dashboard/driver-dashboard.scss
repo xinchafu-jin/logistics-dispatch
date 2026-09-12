@@ -359,6 +359,17 @@ h2 {
   height: 17px;
 }
 
+.navigation-route-detail {
+  margin: 8px 0 0;
+  color: #a7d8ca;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.navigation-route-detail.is-error {
+  color: #efb8b3;
+}
+
 .sheet-heading,
 .attendance-actions {
   display: flex;
@@ -682,8 +693,7 @@ h2 {
   background: #4a2a2d;
 }
 
-.task-feedback,
-.mileage-feedback {
+.task-feedback {
   margin: 0 0 12px;
   padding: 10px 12px;
   border: 1px solid #3b6258;
@@ -694,14 +704,12 @@ h2 {
   line-height: 1.45;
 }
 
-.task-feedback.is-success,
-.mileage-feedback.is-success {
+.task-feedback.is-success {
   border-color: #3a806e;
   color: #a7ead6;
 }
 
-.task-feedback.is-error,
-.mileage-feedback.is-error {
+.task-feedback.is-error {
   border-color: #814f50;
   color: #f4b9b4;
   background: #352123;
@@ -709,13 +717,16 @@ h2 {
 
 .delivery-action-panel {
   display: grid;
-  grid-column: 2 / -1;
   gap: 10px;
   margin-top: 2px;
   padding: 12px;
   border: 1px solid #38685d;
   border-radius: 6px;
   background: #102b27;
+}
+
+.task-stop .delivery-action-panel {
+  grid-column: 2 / -1;
 }
 
 .delivery-action-panel p,
@@ -734,6 +745,7 @@ h2 {
 }
 
 .delivery-action-panel label > span,
+.delivery-action-panel > span,
 .mileage-form-row label > span {
   color: #b9d5cc;
   font-size: 11px;
@@ -847,6 +859,35 @@ h2 {
   margin: -4px 0 0;
   color: #9eb8af;
   font-size: 12px;
+  line-height: 1.45;
+}
+
+.emergency-leave-history {
+  display: grid;
+  gap: 8px;
+}
+
+.emergency-leave-history article {
+  padding-top: 8px;
+  border-top: 1px solid #30443d;
+}
+
+.emergency-leave-history strong,
+.emergency-leave-history small,
+.emergency-leave-history span {
+  display: block;
+  line-height: 1.45;
+}
+
+.emergency-leave-history strong {
+  color: #d9eee7;
+  font-size: 12px;
+}
+
+.emergency-leave-history small,
+.emergency-leave-history span {
+  color: #a9bdb5;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1122,64 +1163,14 @@ dd {
 .driver-app:not(.is-dark-theme) .delivery-action-panel p,
 .driver-app:not(.is-dark-theme) .delivery-action-panel small,
 .driver-app:not(.is-dark-theme) .mileage-panel > p,
+.driver-app:not(.is-dark-theme) .emergency-leave-history small,
+.driver-app:not(.is-dark-theme) .emergency-leave-history span,
 .driver-app:not(.is-dark-theme) .mileage-note {
   color: #617b72;
 }
 
 .driver-app:not(.is-dark-theme) .bottom-navigation button.is-active svg {
   color: #087663;
-}
-
-:host ::ng-deep .driver-location-marker {
-  display: grid;
-  width: 28px !important;
-  height: 28px !important;
-  margin: 0 !important;
-  place-items: center;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  color: #08231f;
-  background: #70d5ba;
-  font:
-    900 12px/1 Inter,
-    'Noto Sans TC',
-    'Segoe UI',
-    sans-serif;
-}
-
-:host ::ng-deep .driver-destination-marker {
-  display: grid;
-  width: 34px !important;
-  height: 34px !important;
-  margin: 0 !important;
-  place-items: center;
-  border: 3px solid #ffffff;
-  border-radius: 50%;
-  color: #ffffff;
-  background: #317dcb;
-  font:
-    900 13px/1 Inter,
-    'Noto Sans TC',
-    'Segoe UI',
-    sans-serif;
-}
-
-:host ::ng-deep .driver-destination-tooltip {
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 4px;
-  color: #ffffff;
-  background: #1d67ad;
-  box-shadow: 0 2px 8px rgb(8 35 60 / 26%);
-  font:
-    800 11px/1.2 Inter,
-    'Noto Sans TC',
-    'Segoe UI',
-    sans-serif;
-}
-
-:host ::ng-deep .driver-destination-tooltip.leaflet-tooltip-top::before {
-  border-top-color: #1d67ad;
 }
 
 .driver-app:not(.is-dark-theme) .attendance-meta span {
@@ -1291,15 +1282,25 @@ dd {
   background: #f9e7e4;
 }
 
-.driver-app:not(.is-dark-theme) .task-feedback,
-.driver-app:not(.is-dark-theme) .mileage-feedback {
+.driver-app:not(.is-dark-theme) .navigation-route-detail {
+  color: #477065;
+}
+
+.driver-app:not(.is-dark-theme) .navigation-route-detail.is-error {
+  color: #984a4a;
+}
+
+.driver-app:not(.is-dark-theme) .emergency-leave-history article {
+  border-color: #e1e8df;
+}
+
+.driver-app:not(.is-dark-theme) .task-feedback {
   border-color: #c6ddd5;
   color: #45665b;
   background: #eff9f4;
 }
 
-.driver-app:not(.is-dark-theme) .task-feedback.is-error,
-.driver-app:not(.is-dark-theme) .mileage-feedback.is-error {
+.driver-app:not(.is-dark-theme) .task-feedback.is-error {
   border-color: #e0b1ad;
   color: #8a4a4a;
   background: #fbedeb;

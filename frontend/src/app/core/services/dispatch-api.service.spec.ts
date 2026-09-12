@@ -57,6 +57,69 @@ describe('DispatchApiService', () => {
     request.flush([]);
   });
 
+  it('reads due delivery exceptions and confirms one through the administrator contract', () => {
+    service.getPendingExceptionConfirmations().subscribe((incidents) => expect(incidents).toEqual([]));
+    service.confirmExceptionCase(47).subscribe();
+
+    const pending = httpTesting.expectOne('/api/exceptions/pending-confirmation');
+    expect(pending.request.method).toBe('GET');
+    pending.flush([]);
+
+    const confirm = httpTesting.expectOne('/api/exceptions/47/confirm');
+    expect(confirm.request.method).toBe('PATCH');
+    expect(confirm.request.body).toBeNull();
+    confirm.flush({ id: 47, status: 'CLOSED' });
+  });
+
+  it('uses driver application and emergency leave review contracts', () => {
+    service.getPendingDriverAccountApplicationCount().subscribe();
+    service.getPendingDriverAccountApplications().subscribe();
+    service.approveDriverAccountApplication(17).subscribe();
+    service.rejectDriverAccountApplication(18, '資料不完整').subscribe();
+    service.getPendingEmergencyLeaveRequests().subscribe();
+    service.getEmergencyLeaveReplacementCandidates(31).subscribe();
+    service.approveEmergencyLeaveRequest(31, 9).subscribe();
+    service.rejectEmergencyLeaveRequest(32, '請補充請假原因').subscribe();
+
+    const count = httpTesting.expectOne('/api/driver-account-applications/pending/count');
+    expect(count.request.method).toBe('GET');
+    count.flush({ count: 2 });
+
+    const applications = httpTesting.expectOne('/api/driver-account-applications/pending');
+    expect(applications.request.method).toBe('GET');
+    applications.flush([]);
+
+    const approveApplication = httpTesting.expectOne('/api/driver-account-applications/17/approve');
+    expect(approveApplication.request.method).toBe('PATCH');
+    expect(approveApplication.request.body).toBeNull();
+    approveApplication.flush({ id: 17, status: 'APPROVED' });
+
+    const rejectApplication = httpTesting.expectOne('/api/driver-account-applications/18/reject');
+    expect(rejectApplication.request.method).toBe('PATCH');
+    expect(rejectApplication.request.body).toEqual({ reason: '資料不完整' });
+    rejectApplication.flush({ id: 18, status: 'REJECTED' });
+
+    const pendingLeaves = httpTesting.expectOne('/api/emergency-leave-requests/pending');
+    expect(pendingLeaves.request.method).toBe('GET');
+    pendingLeaves.flush([]);
+
+    const candidates = httpTesting.expectOne(
+      '/api/emergency-leave-requests/31/replacement-candidates',
+    );
+    expect(candidates.request.method).toBe('GET');
+    candidates.flush([]);
+
+    const approveLeave = httpTesting.expectOne('/api/emergency-leave-requests/31/approve');
+    expect(approveLeave.request.method).toBe('PATCH');
+    expect(approveLeave.request.body).toEqual({ replacementDriverId: 9 });
+    approveLeave.flush({ id: 31, status: 'APPROVED' });
+
+    const rejectLeave = httpTesting.expectOne('/api/emergency-leave-requests/32/reject');
+    expect(rejectLeave.request.method).toBe('PATCH');
+    expect(rejectLeave.request.body).toEqual({ reason: '請補充請假原因' });
+    rejectLeave.flush({ id: 32, status: 'REJECTED' });
+  });
+
   it('uses batch order, administrator, and per-driver GPS contracts', () => {
     const order = {
       orderNumber: 'DO-BATCH-001',

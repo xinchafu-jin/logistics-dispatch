@@ -2,53 +2,210 @@
   <section class="page-intro" aria-label="異常中心">
     <div>
       <p class="page-eyebrow">異常管理</p>
-      <p>統一查看配送異常；目前畫面不使用示範案件或假資料。</p>
+      <h2>配送異常待確認</h2>
+      <p>異常發生當天只留存紀錄；隔日 06:00 後才會列入主管待確認清單。</p>
     </div>
-    <p class="updated-at">資料狀態：API Controller 已建立，尚未接上 Service</p>
+    <div class="intro-actions">
+      <p class="updated-at">上次讀取：{{ formatRefreshTime(lastLoadedAt()) }}</p>
+      <button
+        type="button"
+        class="icon-button"
+        title="重新整理提醒"
+        aria-label="重新整理提醒"
+        (click)="refresh()"
+        [disabled]="loading() || confirming()"
+      >
+        <svg lucideRefreshCw aria-hidden="true"></svg>
+      </button>
+    </div>
   </section>
 
-  <section class="anomaly-workspace" aria-label="異常案件串接狀態">
+  @if (errorMessage()) {
+    <p class="feedback is-error"><svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}</p>
+  }
+  @if (actionMessage()) {
+    <p class="feedback is-success"><svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}</p>
+  }
+
+  <section class="anomaly-summary" aria-label="到期異常摘要">
+    <article class="summary-card tone-critical">
+      <p>待主管確認</p>
+      <strong>{{ summary().total }}<span>筆</span></strong>
+      <span>已到隔日確認時間</span>
+    </article>
+    <article class="summary-card tone-warning">
+      <p>無人簽收</p>
+      <strong>{{ summary().noSignature }}<span>筆</span></strong>
+      <span>等待主管重新確認配送</span>
+    </article>
+    <article class="summary-card tone-critical">
+      <p>貨況異常</p>
+      <strong>{{ summary().goodsIssue }}<span>筆</span></strong>
+      <span>短少或毀損待確認</span>
+    </article>
+    <article class="summary-card tone-accent">
+      <p>待補送數量</p>
+      <strong>{{ summary().replacementBoxes }}<span>箱</span></strong>
+      <span>依後端異常紀錄加總</span>
+    </article>
+  </section>
+
+  <section class="anomaly-workspace" aria-label="到期異常提醒">
     <section class="incident-list-panel" aria-labelledby="incident-list-title">
       <header class="list-header">
         <div>
-          <p class="section-eyebrow">異常資料</p>
-          <h3 id="incident-list-title">異常案件 API 尚未完成</h3>
+          <p class="section-eyebrow">待確認清單</p>
+          <h3 id="incident-list-title">到期配送異常</h3>
         </div>
-        <svg lucideTriangleAlert aria-hidden="true"></svg>
+        <span>{{ filteredIncidents().length }} 筆顯示中</span>
       </header>
-      <p class="empty-state">
-        <code>GET /api/exceptions</code> 與 <code>PATCH /api/exceptions/:id</code> 已有 Controller，
-        但目前固定回傳 501 Not Implemented。此頁不會把 501 偽裝成空案件清單。
-      </p>
+
+      <div class="list-tools">
+        <div class="filter-control" role="group" aria-label="異常類型篩選">
+          @for (filter of filters; track filter.key) {
+            <button
+              type="button"
+              [class.is-active]="activeFilter() === filter.key"
+              [attr.aria-pressed]="activeFilter() === filter.key"
+              (click)="setFilter(filter.key)"
+              [disabled]="loading() || confirming()"
+            >
+              {{ filter.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (loading()) {
+        <p class="empty-state">正在讀取到期異常提醒...</p>
+      } @else if (errorMessage()) {
+        <p class="empty-state">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
+      } @else if (filteredIncidents().length === 0) {
+        <p class="empty-state">
+          目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
+        </p>
+      } @else {
+        <div class="incident-list">
+          @for (incident of filteredIncidents(); track incident.id) {
+            <button
+              type="button"
+              class="incident-row"
+              [class.is-selected]="selectedIncident()?.id === incident.id"
+              (click)="selectIncident(incident.id)"
+            >
+              <span class="severity-mark" [class]="'severity-' + severityClass(incident.type)"></span>
+              <span class="incident-main">
+                <span class="incident-line">
+                  <strong>{{ exceptionTypeLabel(incident.type) }}</strong>
+                  <span class="severity-label" [class]="'severity-' + severityClass(incident.type)">
+                    待確認
+                  </span>
+                </span>
+                <span>來源訂單：{{ incident.sourceOrderNumber ?? '--' }}</span>
+                <span>後續訂單：{{ incident.followUpOrderNumber ?? '--' }}</span>
+              </span>
+              <span class="incident-meta">
+                <small>異常 #{{ incident.id }}</small>
+                <small>送審 {{ formatDateTime(incident.queuedAt) }}</small>
+              </span>
+            </button>
+          }
+        </div>
+      }
     </section>
 
     <aside class="incident-detail-panel" aria-labelledby="incident-detail-title">
-      <header class="detail-header">
-        <div>
-          <p class="section-eyebrow">後續處理</p>
-          <h3 id="incident-detail-title">需要的後端功能</h3>
-        </div>
-        <svg lucideMapPinned aria-hidden="true"></svg>
-      </header>
+      @if (selectedIncident(); as incident) {
+        <header class="detail-header">
+          <div>
+            <p class="section-eyebrow">案件詳情</p>
+            <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }}</h3>
+            <span>異常 #{{ incident.id }}</span>
+          </div>
+          <span class="detail-status" [class]="'severity-' + severityClass(incident.type)">待確認</span>
+        </header>
 
-      <dl class="incident-facts">
-        <div>
-          <dt>查詢清單</dt>
-          <dd>GET /api/exceptions</dd>
-        </div>
-        <div>
-          <dt>取得清單</dt>
-          <dd>GET /api/exceptions?status=OPEN</dd>
-        </div>
-        <div>
-          <dt>處理案件</dt>
-          <dd>PATCH /api/exceptions/:id</dd>
-        </div>
-      </dl>
+        <dl class="incident-facts">
+          <div>
+            <dt>來源訂單</dt>
+            <dd>{{ incident.sourceOrderNumber ?? '--' }}</dd>
+          </div>
+          <div>
+            <dt>後續訂單</dt>
+            <dd>{{ incident.followUpOrderNumber ?? '--' }}</dd>
+          </div>
+          <div>
+            <dt>應到數量</dt>
+            <dd>{{ quantity(incident.expectedBoxCount) }}</dd>
+          </div>
+          <div>
+            <dt>實到數量</dt>
+            <dd>{{ quantity(incident.deliveredBoxCount) }}</dd>
+          </div>
+          <div>
+            <dt>待補送數量</dt>
+            <dd>{{ quantity(incident.replacementRequiredBoxCount) }}</dd>
+          </div>
+          <div>
+            <dt>送審時間</dt>
+            <dd>{{ formatDateTime(incident.queuedAt) }}</dd>
+          </div>
+        </dl>
 
-      <p class="empty-state">
-        等後端將 Controller 接上 Service 並確定 DTO 後，再依實際欄位加入案件列表與處理互動。
-      </p>
+        <section class="detail-block">
+          <p>異常說明</p>
+          <span>{{ incident.description || '後端未提供額外異常說明。' }}</span>
+        </section>
+
+        <section class="detail-block recommendation-block">
+          <p>確認後處理</p>
+          <span>後續訂單會轉為待排車；若今日路線已發布，後端會安排到下一個可配送日。</span>
+        </section>
+
+        <p class="action-message">確認前請核對來源訂單與待補送數量。</p>
+        <div class="detail-actions">
+          <button type="button" class="button-secondary" (click)="refresh()" [disabled]="confirming()">
+            重新整理
+          </button>
+          <button type="button" class="button-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
+            確認並待排車
+          </button>
+        </div>
+      } @else {
+        <p class="empty-state">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
+      }
     </aside>
   </section>
+
+  @if (confirmDialogOpen()) {
+    @if (selectedIncident(); as incident) {
+      <div class="modal-backdrop" (click)="closeConfirmDialog()">
+        <section
+          class="exception-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-exception-title"
+          (click)="$event.stopPropagation()"
+        >
+          <form class="exception-form" (submit)="$event.preventDefault(); confirmSelected()">
+            <div>
+              <p class="section-eyebrow">確認配送異常</p>
+              <h3 id="confirm-exception-title">{{ exceptionTypeLabel(incident.type) }}</h3>
+            </div>
+            <p class="confirmation-copy">
+              確認後，後續訂單會送入待排車，異常案件會結案。來源訂單：{{ incident.sourceOrderNumber ?? '--' }}。
+            </p>
+            <div class="detail-actions">
+              <button type="button" class="button-secondary" (click)="closeConfirmDialog()" [disabled]="confirming()">
+                取消
+              </button>
+              <button type="submit" class="button-primary" [disabled]="confirming()">
+                {{ confirming() ? '確認中...' : '確認送入待排車' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    }
+  }
 </main>

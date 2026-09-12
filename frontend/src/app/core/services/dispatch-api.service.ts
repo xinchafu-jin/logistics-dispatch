@@ -5,10 +5,14 @@ import {
   AdminUserCreateRequest,
   AdminUserDto,
   DispatchResultDto,
+  DriverAccountApplicationDto,
   DriverDto,
   DriverShiftDto,
   DriverShiftUpdateRequest,
   DriverStatusPayload,
+  ExceptionCaseDto,
+  EmergencyLeaveDto,
+  EmergencyLeaveReplacementCandidateDto,
   GpsPingDto,
   LeaveRequest,
   OrderDto,
@@ -83,6 +87,19 @@ export class DispatchApiService {
     );
   }
 
+  /** 讀取隔日 06:00 後已進入主管待確認區的配送異常。 */
+  getPendingExceptionConfirmations(): Observable<ExceptionCaseDto[]> {
+    return this.http.get<ExceptionCaseDto[]>(`${API_ROOT}/exceptions/pending-confirmation`);
+  }
+
+  /** 確認異常後，後端會將後續訂單送入待排車。 */
+  confirmExceptionCase(exceptionCaseId: number): Observable<ExceptionCaseDto> {
+    return this.http.patch<ExceptionCaseDto>(
+      `${API_ROOT}/exceptions/${exceptionCaseId}/confirm`,
+      null,
+    );
+  }
+
   getDriver(id: number): Observable<DriverDto> {
     return this.http.get<DriverDto>(`${API_ROOT}/drivers/${id}`);
   }
@@ -93,6 +110,60 @@ export class DispatchApiService {
 
   createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
+  }
+
+  getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {
+    return this.http.get<{ count: number }>(`${API_ROOT}/driver-account-applications/pending/count`);
+  }
+
+  getPendingDriverAccountApplications(): Observable<DriverAccountApplicationDto[]> {
+    return this.http.get<DriverAccountApplicationDto[]>(`${API_ROOT}/driver-account-applications/pending`);
+  }
+
+  approveDriverAccountApplication(applicationId: number): Observable<DriverAccountApplicationDto> {
+    return this.http.patch<DriverAccountApplicationDto>(
+      `${API_ROOT}/driver-account-applications/${applicationId}/approve`,
+      null,
+    );
+  }
+
+  rejectDriverAccountApplication(
+    applicationId: number,
+    reason: string,
+  ): Observable<DriverAccountApplicationDto> {
+    return this.http.patch<DriverAccountApplicationDto>(
+      `${API_ROOT}/driver-account-applications/${applicationId}/reject`,
+      { reason },
+    );
+  }
+
+  getPendingEmergencyLeaveRequests(): Observable<EmergencyLeaveDto[]> {
+    return this.http.get<EmergencyLeaveDto[]>(`${API_ROOT}/emergency-leave-requests/pending`);
+  }
+
+  getEmergencyLeaveReplacementCandidates(
+    requestId: number,
+  ): Observable<EmergencyLeaveReplacementCandidateDto[]> {
+    return this.http.get<EmergencyLeaveReplacementCandidateDto[]>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/replacement-candidates`,
+    );
+  }
+
+  approveEmergencyLeaveRequest(
+    requestId: number,
+    replacementDriverId: number,
+  ): Observable<EmergencyLeaveDto> {
+    return this.http.patch<EmergencyLeaveDto>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/approve`,
+      { replacementDriverId },
+    );
+  }
+
+  rejectEmergencyLeaveRequest(requestId: number, reason: string): Observable<EmergencyLeaveDto> {
+    return this.http.patch<EmergencyLeaveDto>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/reject`,
+      { reason },
+    );
   }
 
   updateDriver(id: number, driver: DriverDto): Observable<DriverDto> {

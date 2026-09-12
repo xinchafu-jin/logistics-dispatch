@@ -82,9 +82,21 @@ function todayLocalDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * 目前一般訂單 API 仍要求前端送出 orderNumber，尚未提供自動編號端點。
+ * 因此在建立表單時以日期與隨機碼產生低碰撞編號；後端建立後仍會以唯一鍵做最後檢查。
+ */
+function generateOrderNumber(): string {
+  const date = todayLocalDate().replaceAll('-', '');
+  const random = globalThis.crypto?.randomUUID?.().replaceAll('-', '').slice(0, 8).toUpperCase()
+    ?? Math.random().toString(36).slice(2, 10).toUpperCase();
+
+  return `DO-${date}-${random}`;
+}
+
 function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
   return {
-    orderNumber: '',
+    orderNumber: generateOrderNumber(),
     storeId,
     warehouseId,
     sourceVendor: '',
@@ -232,7 +244,7 @@ export class OrderReview implements OnInit {
   }
 
   updateOrderText(
-    field: 'orderNumber' | 'sourceVendor' | 'itemDescription' | 'notes' | 'deliveryDate',
+    field: 'sourceVendor' | 'itemDescription' | 'notes' | 'deliveryDate',
     event: Event,
   ): void {
     const value = (event.target as HTMLInputElement).value;

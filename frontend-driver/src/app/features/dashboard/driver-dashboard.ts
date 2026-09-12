@@ -49,11 +49,13 @@ import { DriverGpsTrackingService } from '../../core/services/driver-gps-trackin
 import {
   AttendanceRecordDto,
   DeliveryRecordResponse,
+  EmergencyLeaveResponse,
   DriverRouteTask,
   DriverShiftDto,
   DriverTaskStop,
   DriverTaskOrderStatus,
   DriverTasksResponse,
+  GpsRouteResponse,
 } from '../../core/services/driver-operations.models';
 import { DriverOperationsService } from '../../core/services/driver-operations.service';
 import { DriverWeather, DriverWeatherService } from '../../core/services/driver-weather.service';
@@ -63,6 +65,7 @@ type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
 type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
 type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
+type NavigationRouteState = 'idle' | 'loading' | 'ready' | 'error';
 
 interface DriverTaskSelection {
   route: DriverRouteTask;
@@ -138,6 +141,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly mileageError = signal<string | null>(null);
   protected readonly mileageMessage = signal<string | null>(null);
   protected readonly isMileageSubmitting = signal(false);
+  protected readonly emergencyLeaves = signal<EmergencyLeaveResponse[]>([]);
+  protected readonly emergencyLeaveReason = signal('');
+  protected readonly emergencyLeaveError = signal<string | null>(null);
+  protected readonly emergencyLeaveMessage = signal<string | null>(null);
+  protected readonly isEmergencyLeaveFormOpen = signal(false);
+  protected readonly isEmergencyLeaveSubmitting = signal(false);
+  protected readonly isEmergencyLeaveHistoryLoading = signal(false);
+  protected readonly navigationRouteState = signal<NavigationRouteState>('idle');
+  protected readonly navigationDistanceMeters = signal<number | null>(null);
+  protected readonly navigationDurationSeconds = signal<number | null>(null);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
   protected readonly isAttendanceSheetExpanded = signal(false);
@@ -156,6 +169,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private currentLocationMarker: L.Marker | null = null;
   private destinationMarker: L.Marker | null = null;
   private navigationLine: L.Polyline | null = null;
+  private navigationRoutePath: L.LatLng[] | null = null;
+  private navigationRouteOrigin: L.LatLng | null = null;
+  private navigationRouteDestination: L.LatLng | null = null;
+  private navigationRouteRequestId = 0;
+  private isNavigationRouteLoading = false;
   private mapLocationWatchId: number | null = null;
   private hasFocusedCurrentMapLocation = false;
   private attendanceSheetPointerId: number | null = null;
@@ -290,6 +308,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.driverMap?.invalidateSize();
         this.renderNavigationMap(false);
       }, 0);
+    }
+
+    if (tab === 'profile') {
+      this.loadEmergencyLeaves();
     }
   }
 
@@ -502,7 +524,93 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     setTimeout(() => {
       this.driverMap?.invalidateSize();
       this.renderNavigationMap(true);
+      this.requestNavigationRoute(true);
     }, 0);
+  }
+
+  protected navigationRouteDetail(): string | null {
+    const distance = this.navigationDistanceMeters();
+    const duration = this.navigationDurationSeconds();
+    if (distance === null || duration === null) {
+      return null;
+    }
+
+    const distanceLabel = distance >= 1_000 ? `${(distance / 1_000).toFixed(1)} km` : `${Math.round(distance)} m`;
+    return `${distanceLabel} · 約 ${Math.max(1, Math.round(duration / 60))} 分鐘`;
+  }
+
+  protected openEmergencyLeaveForm(): void {
+    this.emergencyLeaveError.set(null);
+    this.emergencyLeaveMessage.set(null);
+    this.isEmergencyLeaveFormOpen.set(true);
+  }
+
+  protected closeEmergencyLeaveForm(): void {
+    if (!this.isEmergencyLeaveSubmitting()) {
+      this.isEmergencyLeaveFormOpen.set(false);
+      this.emergencyLeaveReason.set('');
+      this.emergencyLeaveError.set(null);
+    }
+  }
+
+  protected updateEmergencyLeaveReason(event: Event): void {
+    this.emergencyLeaveReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected canRequestEmergencyLeave(): boolean {
+    return (
+      this.attendance()?.status === 'WORKING' &&
+      !this.emergencyLeaves().some((leave) => leave.status === 'PENDING')
+    );
+  }
+
+  protected submitEmergencyLeave(): void {
+    const reason = this.emergencyLeaveReason().trim();
+    if (!reason) {
+      this.emergencyLeaveError.set('請填寫臨時請假原因。');
+      return;
+    }
+
+    this.isEmergencyLeaveSubmitting.set(true);
+    this.emergencyLeaveError.set(null);
+    this.operations.submitEmergencyLeave({ reason }).subscribe({
+      next: (leave) => {
+        this.emergencyLeaves.update((items) => [leave, ...items.filter((item) => item.id !== leave.id)]);
+        this.emergencyLeaveReason.set('');
+        this.emergencyLeaveMessage.set('申請已送出，等待主管安排接手司機。');
+        this.isEmergencyLeaveFormOpen.set(false);
+        this.isEmergencyLeaveSubmitting.set(false);
+        this.loadAttendance();
+      },
+      error: (error: unknown) => {
+        this.emergencyLeaveError.set(this.getErrorMessage(error, '臨時請假申請未完成。'));
+        this.isEmergencyLeaveSubmitting.set(false);
+      },
+    });
+  }
+
+  protected emergencyLeaveStatusLabel(status: EmergencyLeaveResponse['status']): string {
+    return status === 'PENDING' ? '待主管核准' : status === 'APPROVED' ? '已核准' : '已拒絕';
+  }
+
+  protected formatDateTime(value: string | null): string {
+    if (!value) {
+      return '--';
+    }
+
+    const normalized = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}+08:00`;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat('zh-TW', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
   }
 
   protected hasNavigationDestination(): boolean {
@@ -750,6 +858,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
+  private loadEmergencyLeaves(): void {
+    if (this.isEmergencyLeaveHistoryLoading()) {
+      return;
+    }
+
+    this.isEmergencyLeaveHistoryLoading.set(true);
+    this.operations.getEmergencyLeaves().subscribe({
+      next: (leaves) => {
+        this.emergencyLeaves.set(
+          [...leaves].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
+        );
+        this.isEmergencyLeaveHistoryLoading.set(false);
+      },
+      error: (error: unknown) => {
+        this.emergencyLeaveError.set(this.getErrorMessage(error, '無法取得臨時請假紀錄。'));
+        this.isEmergencyLeaveHistoryLoading.set(false);
+      },
+    });
+  }
+
   private runAttendanceAction(action: () => Observable<AttendanceRecordDto>): void {
     this.isSubmitting.set(true);
     this.attendanceError.set(null);
@@ -952,6 +1080,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     const destination = this.destinationLocation();
     if (!destination) {
+      this.clearNavigationRoute();
       if (this.currentMapLocation) {
         this.focusCurrentMapLocation(animate);
       }
@@ -981,13 +1110,103 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.navigationLine = L.polyline([this.currentMapLocation, destination], {
+    const routePath = this.navigationRouteDestination?.equals(destination)
+      ? this.navigationRoutePath
+      : null;
+    this.navigationLine = L.polyline(routePath ?? [this.currentMapLocation, destination], {
       color: '#54cfae',
       weight: 4,
       opacity: 0.82,
-      dashArray: '8 8',
+      dashArray: routePath ? undefined : '8 8',
     }).addTo(this.driverMap);
     this.focusCurrentMapLocation(animate);
+    this.requestNavigationRoute();
+  }
+
+  private requestNavigationRoute(force = false): void {
+    const origin = this.currentMapLocation;
+    const destination = this.destinationLocation();
+    if (!origin || !destination || this.isNavigationRouteLoading) {
+      return;
+    }
+
+    const routeDestinationChanged = !this.navigationRouteDestination?.equals(destination);
+    const routeOriginMoved = !this.navigationRouteOrigin || this.navigationRouteOrigin.distanceTo(origin) >= 80;
+    if (!force && this.navigationRoutePath && !routeDestinationChanged && !routeOriginMoved) {
+      return;
+    }
+    if (!force && this.navigationRouteState() === 'error' && !routeDestinationChanged && !routeOriginMoved) {
+      return;
+    }
+
+    this.isNavigationRouteLoading = true;
+    this.navigationRouteState.set('loading');
+    const requestId = ++this.navigationRouteRequestId;
+    this.operations
+      .getNavigationRoute({
+        fromLat: origin.lat,
+        fromLng: origin.lng,
+        toLat: destination.lat,
+        toLng: destination.lng,
+      })
+      .subscribe({
+        next: (route) => this.applyNavigationRoute(requestId, origin, destination, route),
+        error: () => {
+          if (requestId !== this.navigationRouteRequestId) {
+            return;
+          }
+
+          this.isNavigationRouteLoading = false;
+          this.navigationRoutePath = null;
+          this.navigationRouteOrigin = origin;
+          this.navigationRouteDestination = destination;
+          this.navigationRouteState.set('error');
+          this.navigationDistanceMeters.set(null);
+          this.navigationDurationSeconds.set(null);
+          this.renderNavigationMap(false);
+        },
+      });
+  }
+
+  private applyNavigationRoute(
+    requestId: number,
+    origin: L.LatLng,
+    destination: L.LatLng,
+    route: GpsRouteResponse,
+  ): void {
+    if (requestId !== this.navigationRouteRequestId) {
+      return;
+    }
+
+    this.isNavigationRouteLoading = false;
+    const path = route.path
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+      .map(([lat, lng]) => L.latLng(lat, lng));
+    if (path.length < 2) {
+      this.navigationRoutePath = null;
+      this.navigationRouteState.set('error');
+      this.renderNavigationMap(false);
+      return;
+    }
+
+    this.navigationRoutePath = path;
+    this.navigationRouteOrigin = origin;
+    this.navigationRouteDestination = destination;
+    this.navigationDistanceMeters.set(route.distance);
+    this.navigationDurationSeconds.set(route.duration);
+    this.navigationRouteState.set('ready');
+    this.renderNavigationMap(false);
+  }
+
+  private clearNavigationRoute(): void {
+    this.navigationRouteRequestId++;
+    this.isNavigationRouteLoading = false;
+    this.navigationRoutePath = null;
+    this.navigationRouteOrigin = null;
+    this.navigationRouteDestination = null;
+    this.navigationRouteState.set('idle');
+    this.navigationDistanceMeters.set(null);
+    this.navigationDurationSeconds.set(null);
   }
 
   private focusCurrentMapLocation(animate: boolean): void {

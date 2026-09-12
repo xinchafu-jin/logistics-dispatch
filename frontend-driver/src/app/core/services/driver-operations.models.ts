@@ -13,6 +13,9 @@ export interface AttendanceRecordDto {
   remainingBreakSeconds: number;
   status: AttendanceStatus;
   gpsAllowed: boolean;
+  emergencyLeaveRequestId?: number | null;
+  emergencyLeaveStatus?: EmergencyLeaveStatus | null;
+  earlyClockOutAllowed?: boolean;
 }
 
 export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
@@ -34,6 +37,73 @@ export interface DriverShiftDto {
 export interface GpsPingRequest {
   lat: number;
   lng: number;
+}
+
+export interface DriverAccountApplicationRequest {
+  account: string;
+  name: string;
+  phone: string;
+  nationalId: string;
+}
+
+export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface DriverAccountApplicationResponse {
+  id: number;
+  account: string;
+  name: string;
+  phone: string;
+  nationalIdMasked: string;
+  status: DriverApplicationStatus;
+  appliedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  approvedDriverId: number | null;
+}
+
+export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface EmergencyLeaveRequest {
+  reason: string;
+}
+
+export interface EmergencyLeaveResponse {
+  id: number;
+  driverId: number;
+  driverName: string | null;
+  workDate: string;
+  attendanceRecordId: number | null;
+  routeId: number | null;
+  routeStatus: string | null;
+  vehicleId: number | null;
+  plateNumber: string | null;
+  reason: string;
+  status: EmergencyLeaveStatus;
+  replacementDriverId: number | null;
+  replacementDriverName: string | null;
+  transferredOrderCount: number;
+  gpsOverrideGranted: boolean;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  routeReassignedAt: string | null;
+  clockedOutAt: string | null;
+}
+
+export interface GpsRouteRequest {
+  fromLat: number;
+  fromLng: number;
+  toLat: number;
+  toLng: number;
+}
+
+export interface GpsRouteResponse {
+  /** 每個點依 Leaflet 順序提供：[緯度, 經度]。 */
+  path: [number, number][];
+  distance: number;
+  duration: number;
 }
 
 export interface ArriveRequest {
