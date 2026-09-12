@@ -312,7 +312,11 @@ select:disabled {
 
 .published-note {
   margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgb(217 141 87 / 32%);
+  border-radius: 6px;
   color: #f0c07a;
+  background: rgb(217 141 87 / 7%);
   font-size: 0.75rem;
   line-height: 1.5;
 }
@@ -673,6 +677,14 @@ thead th.is-weekend {
   display: grid;
   gap: 13px;
   padding: 18px;
+}
+
+.published-editor-note {
+  margin: 0;
+  padding: 11px 18px 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
 }
 
 .editor-form label {

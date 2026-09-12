@@ -233,7 +233,7 @@
 
     @if (isPublished()) {
       <p class="published-note">
-        此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。
+        已發布班表可處理臨時請假：選取今天或未來、尚未打卡的原定上班班次，改選「請假」並填寫原因即可登記。其他班別與工時調整仍需後端開放發布後修改 API。
       </p>
     }
 
@@ -313,13 +313,19 @@
               <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
             </header>
 
+            @if (isPublished()) {
+              <p class="published-editor-note">
+                此處可登記臨時請假；已打卡、過去日期或非上班日的班次不能修改。
+              </p>
+            }
+
             <div class="editor-form">
               <label>
                 <span>班別</span>
                 <select
                   [value]="form.shiftType"
                   (change)="changeShiftType($event)"
-                  [disabled]="saving() || (isPublished() && form.shiftType === 'LEAVE')"
+                  [disabled]="saving() || (isPublished() && !canMarkLeave())"
                 >
                   @if (isDraft()) {
                     <option value="UNASSIGNED">未排定</option>
@@ -328,7 +334,7 @@
                     <option value="LEAVE">請假</option>
                   } @else {
                     <option [value]="form.shiftType">{{ shiftLabel(form.shiftType) }}</option>
-                    @if (form.shiftType !== 'LEAVE') {
+                    @if (canMarkLeave() && form.shiftType !== 'LEAVE') {
                       <option value="LEAVE">請假</option>
                     }
                   }
@@ -376,7 +382,7 @@
                   maxlength="255"
                   [value]="form.changeReason"
                   (input)="updateReason($event)"
-                  [disabled]="saving() || (!isDraft() && form.shiftType !== 'LEAVE')"
+                  [disabled]="saving() || (isPublished() && !canMarkLeave()) || (!isDraft() && form.shiftType !== 'LEAVE')"
                 />
               </label>
 

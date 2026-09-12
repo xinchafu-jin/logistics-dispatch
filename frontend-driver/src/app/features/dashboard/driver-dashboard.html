@@ -87,16 +87,9 @@
         >
           <span class="attendance-drawer-grip" aria-hidden="true"></span>
           <span class="attendance-drawer-summary">
-            <small>出勤狀態</small>
+            <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
             <strong>{{ statusLabel() }}</strong>
           </span>
-          @if (attendance()?.gpsAllowed) {
-            <span class="gps-status is-active"
-              ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
-            >
-          } @else {
-            <span class="gps-status">GPS 已停止</span>
-          }
           @if (isAttendanceSheetExpanded()) {
             <svg lucideChevronDown aria-hidden="true"></svg>
           } @else {

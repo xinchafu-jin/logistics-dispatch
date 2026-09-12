@@ -476,7 +476,12 @@ export class DriverSchedule implements OnInit {
 
   protected canMarkLeave(): boolean {
     const shift = this.selectedShift();
-    return !!shift && shift.workDate >= this.todayValue() && shift.shiftType !== 'LEAVE';
+    return (
+      !!shift &&
+      shift.workDate >= this.todayValue() &&
+      shift.shiftType !== 'LEAVE' &&
+      (this.isDraft() || shift.shiftType === 'WORK')
+    );
   }
 
   protected formatTime(value: string | null): string {

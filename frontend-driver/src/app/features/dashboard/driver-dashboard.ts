@@ -922,8 +922,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         icon: L.divIcon({
           className: 'driver-location-marker',
           html: '<span>A</span>',
-          iconSize: [34, 34],
-          iconAnchor: [17, 17],
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
         }),
         interactive: false,
       }).addTo(this.driverMap!);
