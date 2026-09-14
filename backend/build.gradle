@@ -17,6 +17,12 @@ java {
 repositories {
     mavenCentral()
 }
+// 日後spring ai 無需添加版本號 由此功能自動標齊
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.ai:spring-ai-bom:2.0.0'
+    }
+}
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
@@ -38,7 +44,10 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // OR-Tools 依賴
     implementation 'com.google.ortools:ortools-java:9.12.4544'
+    // spring ai 依賴
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 }
+
 
 tasks.named('test') {
     useJUnitPlatform()
