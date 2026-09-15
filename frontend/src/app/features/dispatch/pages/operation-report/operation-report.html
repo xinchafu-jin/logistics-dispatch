@@ -1,7 +1,7 @@
 <main class="operation-report-page">
   <section class="page-intro" aria-label="營運報表">
     <div>
-      <p class="page-eyebrow">OPERATIONS REPORT</p>
+      <p class="page-eyebrow">營運報表</p>
       <p>依後端訂單與店家資料檢視配送量和完成率；時效與異常仍待 API 提供。</p>
     </div>
 
@@ -41,7 +41,7 @@
       </div>
 
       <div class="health-copy">
-        <p class="section-eyebrow">SERVICE HEALTH</p>
+        <p class="section-eyebrow">服務狀態</p>
         <h3>{{ report().healthLabel }}</h3>
         <p>{{ report().healthNote }}</p>
         <span class="health-status"><i aria-hidden="true"></i>資料來自後端訂單與門市 API</span>
@@ -66,7 +66,7 @@
     <section class="signal-register" aria-labelledby="signal-register-title">
       <header>
         <div>
-          <p class="section-eyebrow">KEY SIGNALS</p>
+          <p class="section-eyebrow">重點指標</p>
           <h3 id="signal-register-title">核心營運訊號</h3>
         </div>
         <span>本期</span>
@@ -113,7 +113,7 @@
     <section class="delivery-chart-panel" aria-labelledby="delivery-chart-title">
       <header class="panel-header">
         <div>
-          <p class="section-eyebrow">DELIVERY VOLUME</p>
+          <p class="section-eyebrow">配送量</p>
           <h3 id="delivery-chart-title">完成配送趨勢</h3>
         </div>
         <span>{{ activePeriod() === 'week' ? '每日完成筆數' : '每週完成筆數' }}</span>
@@ -149,7 +149,7 @@
     <section class="area-performance-panel" aria-labelledby="area-performance-title">
       <header class="panel-header">
         <div>
-          <p class="section-eyebrow">AREA PERFORMANCE</p>
+          <p class="section-eyebrow">區域表現</p>
           <h3 id="area-performance-title">配送區表現</h3>
         </div>
         <span>完成率</span>
@@ -184,7 +184,7 @@
     <section class="detail-panel" aria-labelledby="delivery-status-title">
       <header class="panel-header">
         <div>
-          <p class="section-eyebrow">DELIVERY STATUS</p>
+          <p class="section-eyebrow">配送狀態</p>
           <h3 id="delivery-status-title">配送狀態組成</h3>
         </div>
       </header>
@@ -206,7 +206,7 @@
     <section class="detail-panel" aria-labelledby="exception-source-title">
       <header class="panel-header">
         <div>
-          <p class="section-eyebrow">EXCEPTION SOURCE</p>
+          <p class="section-eyebrow">異常來源</p>
           <h3 id="exception-source-title">異常案件資料</h3>
         </div>
       </header>

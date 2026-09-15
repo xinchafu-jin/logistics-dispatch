@@ -67,8 +67,36 @@
         <svg lucideLocateFixed aria-hidden="true"></svg>
       </button>
 
-
-      <section class="attendance-sheet" aria-labelledby="attendance-title">
+      <section
+        class="attendance-sheet"
+        [class.is-expanded]="isAttendanceSheetExpanded()"
+        [class.is-dragging]="isAttendanceSheetDragging()"
+        [style.--attendance-sheet-drag.px]="attendanceSheetDragOffset()"
+        aria-labelledby="attendance-title"
+      >
+        <button
+          type="button"
+          class="attendance-drawer-handle"
+          [attr.aria-expanded]="isAttendanceSheetExpanded()"
+          aria-controls="attendance-drawer-content"
+          (click)="toggleAttendanceSheet()"
+          (pointerdown)="startAttendanceSheetDrag($event)"
+          (pointermove)="moveAttendanceSheetDrag($event)"
+          (pointerup)="endAttendanceSheetDrag($event)"
+          (pointercancel)="cancelAttendanceSheetDrag($event)"
+        >
+          <span class="attendance-drawer-grip" aria-hidden="true"></span>
+          <span class="attendance-drawer-summary">
+            <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
+            <strong>{{ statusLabel() }}</strong>
+          </span>
+          @if (isAttendanceSheetExpanded()) {
+            <svg lucideChevronDown aria-hidden="true"></svg>
+          } @else {
+            <svg lucideChevronUp aria-hidden="true"></svg>
+          }
+        </button>
+        <div id="attendance-drawer-content" class="attendance-drawer-content">
         <div class="sheet-heading">
           <div>
             <p class="eyebrow">出勤狀態</p>
@@ -102,10 +130,13 @@
         </div>
 
         @if (hasNavigationDestination()) {
-          <button type="button" class="navigation-action" (click)="startInAppNavigation()">
-            <svg lucideNavigation aria-hidden="true"></svg>
-            開始導航
-          </button>
+          @if (navigationRouteState() === 'loading') {
+            <p class="navigation-route-detail">正在規劃道路路線...</p>
+          } @else if (navigationRouteState() === 'ready' && navigationRouteDetail(); as detail) {
+            <p class="navigation-route-detail">{{ detail }}</p>
+          } @else if (navigationRouteState() === 'error') {
+            <p class="navigation-route-detail is-error">道路路線暫時無法取得。</p>
+          }
         } @else {
           <p class="destination-copy">{{ destinationDetail() }}</p>
         }
@@ -183,6 +214,7 @@
             <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
           }
         }
+        </div>
       </section>
     </section>
   } @else {
@@ -344,7 +376,6 @@
                               取消
                             </button>
                           </div>
-                          <small>後端會在抵達滿 10 分鐘後才接受無人簽收。</small>
                         </section>
                       }
                     </li>
@@ -503,6 +534,79 @@
           @if (mileageError()) {
             <p class="mileage-feedback is-error">{{ mileageError() }}</p>
           }
+        </section>
+        <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
+          <div class="mileage-heading">
+            <div>
+              <p class="eyebrow">出勤異動</p>
+              <h2 id="emergency-leave-title">臨時請假</h2>
+            </div>
+            <svg lucideTriangleAlert aria-hidden="true"></svg>
+          </div>
+          <p>上班途中無法繼續配送時，可送出申請，由主管指定接手司機。</p>
+
+          @if (emergencyLeaveMessage()) {
+            <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
+          }
+          @if (emergencyLeaveError()) {
+            <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
+          }
+
+          @if (isEmergencyLeaveFormOpen()) {
+            <label class="delivery-action-panel emergency-leave-reason">
+              <span>請假原因</span>
+              <textarea
+                rows="3"
+                maxlength="500"
+                placeholder="請簡述需要臨時請假的原因"
+                [value]="emergencyLeaveReason()"
+                [disabled]="isEmergencyLeaveSubmitting()"
+                (input)="updateEmergencyLeaveReason($event)"
+              ></textarea>
+            </label>
+            <div class="attendance-actions emergency-leave-actions">
+              <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
+                取消
+              </button>
+              <button
+                type="button"
+                class="danger-action"
+                (click)="submitEmergencyLeave()"
+                [disabled]="isEmergencyLeaveSubmitting()"
+              >
+                {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
+              </button>
+            </div>
+          } @else {
+            <button
+              type="button"
+              class="outline-action"
+              (click)="openEmergencyLeaveForm()"
+              [disabled]="!canRequestEmergencyLeave()"
+            >
+              申請臨時請假
+            </button>
+          }
+
+          <div class="emergency-leave-history" aria-label="臨時請假紀錄">
+            @for (leave of emergencyLeaves(); track leave.id) {
+              <article>
+                <div>
+                  <strong>{{ emergencyLeaveStatusLabel(leave.status) }}</strong>
+                  <small>{{ formatDateTime(leave.requestedAt) }} · {{ leave.reason }}</small>
+                </div>
+                @if (leave.replacementDriverName) {
+                  <span>接手：{{ leave.replacementDriverName }}</span>
+                } @else if (leave.rejectionReason) {
+                  <span>原因：{{ leave.rejectionReason }}</span>
+                }
+              </article>
+            } @empty {
+              @if (!isEmergencyLeaveHistoryLoading()) {
+                <small>尚無臨時請假紀錄。</small>
+              }
+            }
+          </div>
         </section>
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }

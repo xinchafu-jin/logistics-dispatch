@@ -99,7 +99,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       attributionControl: false,
       zoomControl: false,
       preferCanvas: true,
-    }).setView([23.006, 120.219], 13);
+    }).setView([22.6273, 120.3014], 13);
 
     L.tileLayer(OSM_TILE_URL, {
       attribution: '&copy; OpenStreetMap contributors',
@@ -191,7 +191,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     // 自動框選不把司機算進去：司機位置每 30 秒變動，框選只在換倉庫時算一次，
-    // 兩者週期對不上；而且司機一旦跑到台南以外，範圍會被拉到失去意義。
+    // 兩者週期對不上；而且司機一旦跑到高雄以外，範圍會被拉到失去意義。
     if (visible) {
       this.fitOnce(map, warehouse, stores);
     }

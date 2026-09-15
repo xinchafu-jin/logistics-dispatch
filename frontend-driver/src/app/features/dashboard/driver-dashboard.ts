@@ -14,6 +14,8 @@ import {
   LucideCalendarDays,
   LucideChevronLeft,
   LucideChevronRight,
+  LucideChevronDown,
+  LucideChevronUp,
   LucideCircleCheck,
   LucideCircleStop,
   LucideCloudFog,
@@ -47,6 +49,7 @@ import {DriverGpsTrackingService} from '../../core/services/driver-gps-tracking.
 import {
   AttendanceRecordDto,
   DeliveryRecordResponse,
+  EmergencyLeaveResponse,
   DriverRouteTask,
   DriverShiftDto,
   DriverTaskStop,
@@ -61,6 +64,7 @@ type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
 type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
 type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
+type NavigationRouteState = 'idle' | 'loading' | 'ready' | 'error';
 
 interface DriverTaskSelection {
   route: DriverRouteTask;
@@ -99,6 +103,8 @@ const RECALC_COOLDOWN_MS = 15_000;
     LucideCalendarDays,
     LucideChevronLeft,
     LucideChevronRight,
+    LucideChevronDown,
+    LucideChevronUp,
     LucideCircleCheck,
     LucideCircleStop,
     LucideCloudFog,
@@ -159,8 +165,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly mileageError = signal<string | null>(null);
   protected readonly mileageMessage = signal<string | null>(null);
   protected readonly isMileageSubmitting = signal(false);
+  protected readonly emergencyLeaves = signal<EmergencyLeaveResponse[]>([]);
+  protected readonly emergencyLeaveReason = signal('');
+  protected readonly emergencyLeaveError = signal<string | null>(null);
+  protected readonly emergencyLeaveMessage = signal<string | null>(null);
+  protected readonly isEmergencyLeaveFormOpen = signal(false);
+  protected readonly isEmergencyLeaveSubmitting = signal(false);
+  protected readonly isEmergencyLeaveHistoryLoading = signal(false);
+  protected readonly navigationRouteState = signal<NavigationRouteState>('idle');
+  protected readonly navigationDistanceMeters = signal<number | null>(null);
+  protected readonly navigationDurationSeconds = signal<number | null>(null);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
+  protected readonly isAttendanceSheetExpanded = signal(false);
+  protected readonly isAttendanceSheetDragging = signal(false);
+  protected readonly attendanceSheetDragOffset = signal(0);
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -180,6 +199,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isNavigating = signal(false);
   private offRouteStreak = 0;
   private lastRecalcAt = 0;
+  private mapLocationWatchId: number | null = null;
+  private attendanceSheetPointerId: number | null = null;
+  private attendanceSheetPointerStartY: number | null = null;
+  private ignoreAttendanceSheetClick = false;
 
   constructor() {
     this.weatherService.getCurrentWeather().subscribe({
@@ -194,14 +217,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.initializeMap();
     this.restoreMapLocation();
-    this.requestMapLocation(false);
-    this.renderNavigationMap(false);
+    this.startMapLocationWatch();
   }
 
   ngOnDestroy(): void {
     this.stopNavigation();
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    this.stopMapLocationWatch();
     this.driverMap?.remove();
     this.driverMap = null;
   }
@@ -225,6 +248,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected signOut(): void {
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    this.stopMapLocationWatch();
     clearStoredMapLocation();
     this.authService.logout();
     void this.router.navigateByUrl('/login');
@@ -239,6 +263,68 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  protected toggleAttendanceSheet(): void {
+    if (this.ignoreAttendanceSheetClick) {
+      this.ignoreAttendanceSheetClick = false;
+      return;
+    }
+
+    this.isAttendanceSheetExpanded.update((expanded) => !expanded);
+    this.attendanceSheetDragOffset.set(0);
+  }
+
+  protected startAttendanceSheetDrag(event: PointerEvent): void {
+    if (event.button !== 0) {
+      return;
+    }
+
+    this.attendanceSheetPointerId = event.pointerId;
+    this.attendanceSheetPointerStartY = event.clientY;
+    this.isAttendanceSheetDragging.set(false);
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  protected moveAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId !== event.pointerId || this.attendanceSheetPointerStartY === null) {
+      return;
+    }
+
+    const deltaY = event.clientY - this.attendanceSheetPointerStartY;
+    if (Math.abs(deltaY) < 6) {
+      return;
+    }
+
+    this.isAttendanceSheetDragging.set(true);
+    const offset = this.isAttendanceSheetExpanded()
+      ? Math.max(0, Math.min(deltaY, 140))
+      : Math.min(0, Math.max(deltaY, -140));
+    this.attendanceSheetDragOffset.set(offset);
+  }
+
+  protected endAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId !== event.pointerId || this.attendanceSheetPointerStartY === null) {
+      return;
+    }
+
+    const deltaY = event.clientY - this.attendanceSheetPointerStartY;
+    if (Math.abs(deltaY) >= 12) {
+      this.ignoreAttendanceSheetClick = true;
+      if (this.isAttendanceSheetExpanded() && deltaY > 44) {
+        this.isAttendanceSheetExpanded.set(false);
+      } else if (!this.isAttendanceSheetExpanded() && deltaY < -44) {
+        this.isAttendanceSheetExpanded.set(true);
+      }
+    }
+
+    this.resetAttendanceSheetDrag(event);
+  }
+
+  protected cancelAttendanceSheetDrag(event: PointerEvent): void {
+    if (this.attendanceSheetPointerId === event.pointerId) {
+      this.resetAttendanceSheetDrag(event);
+    }
+  }
+
   protected setActiveTab(tab: DriverTab): void {
     this.activeTab.set(tab);
 
@@ -247,6 +333,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.driverMap?.invalidateSize();
         this.renderNavigationMap(false);
       }, 0);
+    }
+
+    if (tab === 'profile') {
+      this.loadEmergencyLeaves();
     }
   }
 
@@ -451,16 +541,89 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  protected startInAppNavigation(): void {
-    if (!this.destinationLocation()) {
+  protected navigationRouteDetail(): string | null {
+    const distance = this.navigationDistanceMeters();
+    const duration = this.navigationDurationSeconds();
+    if (distance === null || duration === null) {
+      return null;
+    }
+
+    const distanceLabel = distance >= 1_000 ? `${(distance / 1_000).toFixed(1)} km` : `${Math.round(distance)} m`;
+    return `${distanceLabel} · 約 ${Math.max(1, Math.round(duration / 60))} 分鐘`;
+  }
+
+  protected openEmergencyLeaveForm(): void {
+    this.emergencyLeaveError.set(null);
+    this.emergencyLeaveMessage.set(null);
+    this.isEmergencyLeaveFormOpen.set(true);
+  }
+
+  protected closeEmergencyLeaveForm(): void {
+    if (!this.isEmergencyLeaveSubmitting()) {
+      this.isEmergencyLeaveFormOpen.set(false);
+      this.emergencyLeaveReason.set('');
+      this.emergencyLeaveError.set(null);
+    }
+  }
+
+  protected updateEmergencyLeaveReason(event: Event): void {
+    this.emergencyLeaveReason.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected canRequestEmergencyLeave(): boolean {
+    return (
+      this.attendance()?.status === 'WORKING' &&
+      !this.emergencyLeaves().some((leave) => leave.status === 'PENDING')
+    );
+  }
+
+  protected submitEmergencyLeave(): void {
+    const reason = this.emergencyLeaveReason().trim();
+    if (!reason) {
+      this.emergencyLeaveError.set('請填寫臨時請假原因。');
       return;
     }
 
-    this.activeTab.set('map');
-    setTimeout(() => {
-      this.driverMap?.invalidateSize();
-      this.renderNavigationMap(true);
-    }, 0);
+    this.isEmergencyLeaveSubmitting.set(true);
+    this.emergencyLeaveError.set(null);
+    this.operations.submitEmergencyLeave({ reason }).subscribe({
+      next: (leave) => {
+        this.emergencyLeaves.update((items) => [leave, ...items.filter((item) => item.id !== leave.id)]);
+        this.emergencyLeaveReason.set('');
+        this.emergencyLeaveMessage.set('申請已送出，等待主管安排接手司機。');
+        this.isEmergencyLeaveFormOpen.set(false);
+        this.isEmergencyLeaveSubmitting.set(false);
+        this.loadAttendance();
+      },
+      error: (error: unknown) => {
+        this.emergencyLeaveError.set(this.getErrorMessage(error, '臨時請假申請未完成。'));
+        this.isEmergencyLeaveSubmitting.set(false);
+      },
+    });
+  }
+
+  protected emergencyLeaveStatusLabel(status: EmergencyLeaveResponse['status']): string {
+    return status === 'PENDING' ? '待主管核准' : status === 'APPROVED' ? '已核准' : '已拒絕';
+  }
+
+  protected formatDateTime(value: string | null): string {
+    if (!value) {
+      return '--';
+    }
+
+    const normalized = /(?:Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}+08:00`;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) {
+      return value;
+    }
+
+    return new Intl.DateTimeFormat('zh-TW', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
   }
 
   protected hasNavigationDestination(): boolean {
@@ -492,7 +655,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    if (!navigator.geolocation) {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
       this.mapLocationStatus.set('此裝置不支援定位功能');
       return;
     }
@@ -503,18 +666,59 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const location = L.latLng(position.coords.latitude, position.coords.longitude);
-        this.showMapLocation(location, true);
-        this.saveMapLocation(location);
-        this.mapLocationStatus.set('已定位至目前位置');
+        this.applyMapPosition(position, true);
       },
       (error) => {
         if (isManualRequest || !this.hasStoredMapLocation()) {
           this.mapLocationStatus.set(this.getLocationErrorMessage(error));
         }
       },
-      {enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000},
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
     );
+  }
+
+  private startMapLocationWatch(): void {
+    if (
+      this.mapLocationWatchId !== null ||
+      typeof navigator === 'undefined' ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    if (!this.currentMapLocation) {
+      this.mapLocationStatus.set('正在取得目前位置...');
+    }
+
+    this.mapLocationWatchId = navigator.geolocation.watchPosition(
+      (position) => this.applyMapPosition(position, true),
+      (error) => {
+        if (!this.currentMapLocation) {
+          this.mapLocationStatus.set(this.getLocationErrorMessage(error));
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15_000, maximumAge: 0 },
+    );
+  }
+
+  private stopMapLocationWatch(): void {
+    if (
+      this.mapLocationWatchId === null ||
+      typeof navigator === 'undefined' ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    navigator.geolocation.clearWatch(this.mapLocationWatchId);
+    this.mapLocationWatchId = null;
+  }
+
+  private applyMapPosition(position: GeolocationPosition, animate: boolean): void {
+    const location = L.latLng(position.coords.latitude, position.coords.longitude);
+    this.showMapLocation(location, animate);
+    this.saveMapLocation(location);
+    this.mapLocationStatus.set('已定位至目前位置');
   }
 
   protected statusLabel(): string {
@@ -541,7 +745,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return `${weather.city}${weather.condition}，${weather.temperature}°C`;
     }
 
-    return this.weatherUnavailable() ? '天氣暫時無法取得' : '正在取得台南天氣';
+    return this.weatherUnavailable() ? '天氣暫時無法取得' : '正在取得高雄天氣';
   }
 
   protected formatBreakCountdown(): string {
@@ -663,6 +867,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.todayTasks.set(null);
         this.taskViewState.set('error');
         this.taskError.set(this.getErrorMessage(error, '無法取得今日配送任務。'));
+      },
+    });
+  }
+
+  private loadEmergencyLeaves(): void {
+    if (this.isEmergencyLeaveHistoryLoading()) {
+      return;
+    }
+
+    this.isEmergencyLeaveHistoryLoading.set(true);
+    this.operations.getEmergencyLeaves().subscribe({
+      next: (leaves) => {
+        this.emergencyLeaves.set(
+          [...leaves].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
+        );
+        this.isEmergencyLeaveHistoryLoading.set(false);
+      },
+      error: (error: unknown) => {
+        this.emergencyLeaveError.set(this.getErrorMessage(error, '無法取得臨時請假紀錄。'));
+        this.isEmergencyLeaveHistoryLoading.set(false);
       },
     });
   }
@@ -793,13 +1017,25 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  private resetAttendanceSheetDrag(event: PointerEvent): void {
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) {
+      target.releasePointerCapture(event.pointerId);
+    }
+
+    this.attendanceSheetPointerId = null;
+    this.attendanceSheetPointerStartY = null;
+    this.attendanceSheetDragOffset.set(0);
+    this.isAttendanceSheetDragging.set(false);
+  }
+
   private initializeMap(): void {
     const mapElement = this.driverMapElement?.nativeElement;
     if (!mapElement) {
       return;
     }
 
-    this.driverMap = L.map(mapElement, {zoomControl: false}).setView([23.7, 120.96], 8);
+    this.driverMap = L.map(mapElement, { zoomControl: false }).setView([22.6273, 120.3014], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
@@ -819,16 +1055,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private showMapLocation(location: L.LatLng, animate: boolean): void {
     this.currentMapLocation = location;
-    this.currentLocationMarker?.remove();
-    this.currentLocationMarker = L.marker(location, {
-      icon: L.divIcon({
-        className: 'driver-location-marker',
-        html: '<span>A</span>',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
-      }),
-      interactive: false,
-    }).addTo(this.driverMap!);
+
+    if (this.currentLocationMarker) {
+      this.currentLocationMarker.setLatLng(location);
+    } else {
+      this.currentLocationMarker = L.marker(location, {
+        icon: L.divIcon({
+          className: 'driver-location-marker',
+          html: '<span>A</span>',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        }),
+        interactive: false,
+      }).addTo(this.driverMap!);
+    }
+
     this.renderNavigationMap(animate);
   }
 
@@ -852,6 +1093,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     const destination = this.destinationLocation();
     if (!destination) {
+      this.routeLatLng = [];
+      this.navigationRouteState.set('idle');
+      this.navigationDistanceMeters.set(null);
+      this.navigationDurationSeconds.set(null);
       if (this.currentMapLocation) {
         this.driverMap.setView(this.currentMapLocation, 15, {animate});
       }
@@ -1008,6 +1253,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (!from || !to) {
       return;
     }
+    this.navigationRouteState.set('loading');
     this.operations.gpsRoute({
       fromLat: from.lat,
       fromLng: from.lng,
@@ -1016,10 +1262,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }).subscribe({
       next: (res): void => {
         this.routeLatLng = res.path.map(([lat, lng]) => L.latLng(lat, lng));
+        this.navigationDistanceMeters.set(res.distance);
+        this.navigationDurationSeconds.set(res.duration);
+        this.navigationRouteState.set('ready');
         this.renderNavigationMap(animate)
       },
       error: (res) => {
         this.routeLatLng = [];
+        this.navigationDistanceMeters.set(null);
+        this.navigationDurationSeconds.set(null);
+        this.navigationRouteState.set('error');
         this.renderNavigationMap(animate);
         this.mapLocationStatus.set(
           res.status === 0 ? '網路連線中斷，無法取得路線' : '無法取得路線，請稍後再試'

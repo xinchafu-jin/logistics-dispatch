@@ -1,7 +1,7 @@
 <main class="driver-schedule-page">
   <header class="schedule-toolbar">
     <div>
-      <p class="page-eyebrow">DRIVER SCHEDULE</p>
+      <p class="page-eyebrow">司機班表</p>
       <h2>司機月班表</h2>
       <p>建立、安排與發布司機每日班次；發布後才會在司機端顯示。</p>
     </div>
@@ -122,12 +122,53 @@
     @if (isDraft()) {
       <section class="batch-schedule" aria-labelledby="batch-schedule-title">
         <div class="batch-schedule-heading">
-          <p class="page-eyebrow">WEEKLY RULE</p>
+          <p class="page-eyebrow">每週規則</p>
           <h3 id="batch-schedule-title">每週快速套用</h3>
-          <p>套用至所有啟用司機；請假班次會保留，並使用各司機既有的上下班時間。</p>
+          <p>先複選司機與星期，再批量套用；請假班次會保留，並使用各司機既有的上下班時間。</p>
         </div>
 
         <div class="batch-controls">
+          <section class="batch-driver-selection" aria-label="選擇要批量套用的司機">
+            <div class="batch-selection-heading">
+              <strong>套用司機</strong>
+              <span>已選 {{ selectedBatchDriverCount() }} / {{ batchDriverOptions().length }} 位</span>
+              <button
+                type="button"
+                class="batch-selection-action"
+                (click)="selectAllBatchDrivers()"
+                [disabled]="saving() || areAllBatchDriversSelected()"
+              >
+                全選
+              </button>
+              <button
+                type="button"
+                class="batch-selection-action"
+                (click)="clearBatchDrivers()"
+                [disabled]="saving() || selectedBatchDriverCount() === 0"
+              >
+                清除
+              </button>
+            </div>
+            <div class="batch-driver-options">
+              @for (driver of batchDriverOptions(); track driver.id) {
+                <label class="batch-driver-option" [class.is-selected]="isBatchDriverSelected(driver.id)">
+                  <input
+                    type="checkbox"
+                    [checked]="isBatchDriverSelected(driver.id)"
+                    (change)="toggleBatchDriver(driver.id)"
+                    [disabled]="saving()"
+                  />
+                  <span>
+                    <strong>{{ driver.name }}</strong>
+                    <small>{{ driver.account }}</small>
+                  </span>
+                </label>
+              } @empty {
+                <p>目前沒有可批量套用的啟用司機。</p>
+              }
+            </div>
+          </section>
+
           <div class="weekday-selector" role="group" aria-label="選擇要批次套用的星期">
             @for (weekday of weekdayOptions; track weekday.index) {
               <button
@@ -192,7 +233,7 @@
 
     @if (isPublished()) {
       <p class="published-note">
-        此班表已發布。一般班次已鎖定；只有今天與未來、尚未打卡的班次可以改登記請假。
+        已發布班表可處理臨時請假：選取今天或未來、尚未打卡的原定上班班次，改選「請假」並填寫原因即可登記。其他班別與工時調整仍需後端開放發布後修改 API。
       </p>
     }
 
@@ -200,7 +241,7 @@
       <section class="schedule-grid-panel" aria-label="整月司機班表">
         <header>
           <div>
-            <p class="page-eyebrow">MONTHLY ROSTER</p>
+            <p class="page-eyebrow">月班表</p>
             <h3>{{ displayMonth() }} 全部司機</h3>
           </div>
           <span>{{ rows().length }} 位司機</span>
@@ -265,12 +306,18 @@
           @if (editorForm(); as form) {
             <header>
               <div>
-                <p class="page-eyebrow">SHIFT EDITOR</p>
+                <p class="page-eyebrow">班次設定</p>
                 <h3>{{ selectedDriver()?.name ?? '司機 #' + shift.driverId }}</h3>
                 <span>{{ shift.workDate }}</span>
               </div>
               <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
             </header>
+
+            @if (isPublished()) {
+              <p class="published-editor-note">
+                此處可登記臨時請假；已打卡、過去日期或非上班日的班次不能修改。
+              </p>
+            }
 
             <div class="editor-form">
               <label>
@@ -278,7 +325,7 @@
                 <select
                   [value]="form.shiftType"
                   (change)="changeShiftType($event)"
-                  [disabled]="saving() || (isPublished() && form.shiftType === 'LEAVE')"
+                  [disabled]="saving() || (isPublished() && !canMarkLeave())"
                 >
                   @if (isDraft()) {
                     <option value="UNASSIGNED">未排定</option>
@@ -287,7 +334,7 @@
                     <option value="LEAVE">請假</option>
                   } @else {
                     <option [value]="form.shiftType">{{ shiftLabel(form.shiftType) }}</option>
-                    @if (form.shiftType !== 'LEAVE') {
+                    @if (canMarkLeave() && form.shiftType !== 'LEAVE') {
                       <option value="LEAVE">請假</option>
                     }
                   }
@@ -335,7 +382,7 @@
                   maxlength="255"
                   [value]="form.changeReason"
                   (input)="updateReason($event)"
-                  [disabled]="saving() || (!isDraft() && form.shiftType !== 'LEAVE')"
+                  [disabled]="saving() || (isPublished() && !canMarkLeave()) || (!isDraft() && form.shiftType !== 'LEAVE')"
                 />
               </label>
 

@@ -225,7 +225,7 @@ export class DispatchDashboard implements OnInit {
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
   );
-  readonly warehouseName = signal('台南配送區');
+  readonly warehouseName = signal('高雄配送區');
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
@@ -453,7 +453,7 @@ export class DispatchDashboard implements OnInit {
         this.pendingOrders.set(this.toPendingOrders(orders, stores));
         this.alerts.set(this.toAlerts(drivers, vehicles));
         this.warehouseName.set(
-          warehouses.find((warehouse) => warehouse.isActive)?.name ?? '台南配送區',
+          warehouses.find((warehouse) => warehouse.isActive)?.name ?? '高雄配送區',
         );
         this.updatedAt.set(this.formatCurrentTime());
         this.loading.set(false);
@@ -538,7 +538,7 @@ export class DispatchDashboard implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '台南配送區';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '高雄配送區';
   }
 
   private formatTime(value: string): string {

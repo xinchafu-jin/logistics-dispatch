@@ -275,7 +275,7 @@ export class FleetMonitor implements OnInit, OnDestroy {
 
     return ping
       ? `定位於 ${this.formatTimestamp(ping.timestamp)}`
-      : '尚未上班或定位已超過 10 分鐘';
+      : '尚未上班或尚未取得有效定位';
   }
 
   formatTimestamp(value: string): string {

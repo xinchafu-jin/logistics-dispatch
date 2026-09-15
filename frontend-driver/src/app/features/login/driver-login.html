@@ -72,7 +72,7 @@
       <section class="account-application" aria-labelledby="account-application-title">
         <header>
           <div>
-            <p class="eyebrow">ACCOUNT APPLICATION</p>
+            <p class="eyebrow">帳號申請</p>
             <h2 id="account-application-title">申請司機帳號</h2>
           </div>
           <button
@@ -85,20 +85,69 @@
             <svg lucideX aria-hidden="true"></svg>
           </button>
         </header>
-        <p>帳號申請須由主管簽核後才會建立登入權限。</p>
-        <dl>
-          <div>
-            <dt>申請資料</dt>
-            <dd>姓名、手機號碼與登入帳號</dd>
-          </div>
-          <div>
-            <dt>初始密碼</dt>
-            <dd>身分證字號</dd>
-          </div>
-        </dl>
-        <p class="application-notice">
-          申請與簽核 API 尚未提供；目前不會送出或保存任何個人資料。
-        </p>
+        <p>送出後由主管簽核；身分證字號只作為初始密碼，不會在申請紀錄中顯示。</p>
+        <form class="account-application-form" (submit)="submitAccountApplication($event)" novalidate>
+          <label for="application-account">登入帳號</label>
+          <input
+            #applicationAccountInput
+            id="application-account"
+            type="text"
+            autocomplete="username"
+            maxlength="50"
+            [value]="applicationAccount()"
+            [disabled]="isApplicationSubmitting()"
+            (input)="applicationAccount.set(applicationAccountInput.value)"
+          />
+
+          <label for="application-name">姓名</label>
+          <input
+            #applicationNameInput
+            id="application-name"
+            type="text"
+            autocomplete="name"
+            maxlength="30"
+            [value]="applicationName()"
+            [disabled]="isApplicationSubmitting()"
+            (input)="applicationName.set(applicationNameInput.value)"
+          />
+
+          <label for="application-phone">手機號碼</label>
+          <input
+            #applicationPhoneInput
+            id="application-phone"
+            type="tel"
+            autocomplete="tel"
+            inputmode="numeric"
+            maxlength="10"
+            placeholder="0912345678"
+            [value]="applicationPhone()"
+            [disabled]="isApplicationSubmitting()"
+            (input)="applicationPhone.set(applicationPhoneInput.value)"
+          />
+
+          <label for="application-national-id">身分證字號（初始密碼）</label>
+          <input
+            #applicationNationalIdInput
+            id="application-national-id"
+            type="password"
+            autocomplete="off"
+            maxlength="10"
+            [value]="applicationNationalId()"
+            [disabled]="isApplicationSubmitting()"
+            (input)="applicationNationalId.set(applicationNationalIdInput.value)"
+          />
+
+          @if (applicationError()) {
+            <p class="application-feedback is-error" role="alert">{{ applicationError() }}</p>
+          }
+          @if (applicationMessage()) {
+            <p class="application-feedback is-success">{{ applicationMessage() }}</p>
+          }
+
+          <button type="submit" [disabled]="isApplicationSubmitting()">
+            {{ isApplicationSubmitting() ? '送出中...' : '送出申請' }}
+          </button>
+        </form>
       </section>
     }
   </section>

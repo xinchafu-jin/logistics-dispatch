@@ -16,11 +16,11 @@ interface OpenMeteoResponse {
   };
 }
 
-const TAINAN_WEATHER_URL =
-  'https://api.open-meteo.com/v1/forecast?latitude=22.9999&longitude=120.227&current=temperature_2m,weather_code&timezone=Asia%2FTaipei';
+const KAOHSIUNG_WEATHER_URL =
+  'https://api.open-meteo.com/v1/forecast?latitude=22.6273&longitude=120.3014&current=temperature_2m,weather_code&timezone=Asia%2FTaipei';
 
 const FALLBACK_WEATHER: CurrentWeather = {
-  city: '台南',
+  city: '高雄',
   condition: '今日配送天氣',
   icon: String.fromCodePoint(0x2601, 0xfe0e),
   temperature: 24,
@@ -31,10 +31,10 @@ export class WeatherService {
   private readonly http = inject(HttpClient);
 
   getCurrentWeather() {
-    return this.http.get<OpenMeteoResponse>(TAINAN_WEATHER_URL).pipe(
+    return this.http.get<OpenMeteoResponse>(KAOHSIUNG_WEATHER_URL).pipe(
       timeout(5000),
       map(({ current }) => ({
-        city: '台南',
+        city: '高雄',
         temperature: Math.round(current.temperature_2m),
         ...this.describeWeather(current.weather_code),
       })),

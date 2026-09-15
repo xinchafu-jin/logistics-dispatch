@@ -1,7 +1,7 @@
 <main class="resource-page">
   <section class="page-intro" aria-label="人車資源">
     <div>
-      <p class="page-eyebrow">RESOURCE CONTROL</p>
+      <p class="page-eyebrow">人車資源</p>
       <p>管理車輛、店家與倉庫資源；司機帳號改由本人申請，主管簽核後啟用。</p>
     </div>
 
@@ -50,7 +50,7 @@
     <section class="resource-list-panel" aria-labelledby="resource-list-title">
       <header class="list-header">
         <div>
-          <p class="section-eyebrow">FLEET DIRECTORY</p>
+          <p class="section-eyebrow">資源清單</p>
           <h3 id="resource-list-title">資源清單</h3>
         </div>
 
@@ -140,7 +140,7 @@
               </div>
               <div class="table-value">
                 <strong>{{ vehicle.assignment }}</strong>
-                <span>台南配送區</span>
+                <span>高雄配送區</span>
               </div>
               <div class="row-actions">
                 <button
@@ -298,21 +298,21 @@
     <aside class="assignment-panel" aria-labelledby="assignment-title">
       <header class="assignment-header">
         <div>
-          <p class="section-eyebrow">RESOURCE SYNC</p>
+          <p class="section-eyebrow">資源同步</p>
           <h3 id="assignment-title">後端資源狀態</h3>
         </div>
         <span>帳號簽核</span>
       </header>
 
       <p class="empty-state">
-        司機帳號改由司機端提交申請，主管核准後才會建立對應的登入權限。待後端提供申請與簽核 API 後，這裡會顯示待辦清單。
+        司機帳號改由司機端提交申請；主管待辦、核准與拒絕操作位於右上角通知鈴鐺。
       </p>
 
       <section class="resource-alert" aria-label="資源提醒">
         <svg lucideTriangleAlert aria-hidden="true"></svg>
         <div>
           <strong>後端資源資料已同步</strong>
-          <span>配送路線與即時定位尚未由目前的後端 Controller 提供。</span>
+          <span>配送路線與即時定位會依已登入司機與後端 GPS 資料顯示。</span>
         </div>
       </section>
     </aside>
@@ -337,7 +337,7 @@
       >
         <header class="modal-header">
           <div>
-            <p class="section-eyebrow">BACKEND RESOURCE</p>
+            <p class="section-eyebrow">資源資料</p>
             <h3
               [id]="
                 formType === 'admin'
@@ -713,7 +713,7 @@
         aria-modal="true"
         (click)="stopEvent($event)"
       >
-        <p class="section-eyebrow">CONFIRM ACTION</p>
+        <p class="section-eyebrow">確認操作</p>
         <h3>確定刪除{{ deleteTargetLabel(target) }}？</h3>
         <p>即將刪除「{{ target.name }}」，資料會透過後端 API 移除。</p>
         <div class="modal-actions">

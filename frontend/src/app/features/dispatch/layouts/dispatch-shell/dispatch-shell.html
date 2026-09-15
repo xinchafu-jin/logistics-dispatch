@@ -12,20 +12,27 @@
       <span class="workspace-divider" aria-hidden="true"></span>
 
       <div>
-        <p class="workspace-eyebrow">JFLOW DISPATCH</p>
+        <p class="workspace-eyebrow">物流調度</p>
         <h1>{{ pageTitle() }}</h1>
       </div>
     </div>
 
     <div class="workspace-actions">
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
-      <span
+      <button
+        type="button"
         class="application-notification"
-        aria-label="司機帳號申請待後端 API 提供"
-        title="司機帳號申請待後端 API 提供"
+        [class.has-pending]="notificationCount() > 0"
+        [attr.aria-expanded]="isNotificationsOpen()"
+        [attr.aria-label]="notificationCount() ? '主管待辦 ' + notificationCount() + ' 項' : '主管待辦'"
+        [title]="notificationCount() ? '主管待辦 ' + notificationCount() + ' 項' : '主管待辦'"
+        (click)="toggleNotifications()"
       >
         <svg lucideBell aria-hidden="true"></svg>
-      </span>
+        @if (notificationCount() > 0) {
+          <span class="notification-badge">{{ notificationCount() > 99 ? '99+' : notificationCount() }}</span>
+        }
+      </button>
       <button
         type="button"
         class="theme-toggle"
@@ -51,6 +58,143 @@
       </button>
     </div>
   </header>
+
+  @if (isNotificationsOpen()) {
+    <section class="notification-panel" aria-label="主管待辦">
+      <header class="notification-panel__header">
+        <div>
+          <p>主管待辦</p>
+          <h2>{{ notificationCount() ? notificationCount() + ' 項待處理' : '目前沒有待辦' }}</h2>
+        </div>
+        <div class="notification-panel__header-actions">
+          <button type="button" class="notification-refresh" (click)="toggleNotifications()" title="關閉" aria-label="關閉">
+            關閉
+          </button>
+        </div>
+      </header>
+
+      @if (notificationError()) {
+        <p class="notification-feedback is-error">{{ notificationError() }}</p>
+      }
+      @if (isLoadingNotifications()) {
+        <p class="notification-empty">正在取得待辦資料...</p>
+      } @else {
+        @if (pendingApplications().length) {
+          <section class="notification-section" aria-labelledby="account-application-heading">
+            <h3 id="account-application-heading">司機帳號申請</h3>
+            @for (application of pendingApplications(); track application.id) {
+              <article class="notification-item">
+                <div>
+                  <strong>{{ application.name }}</strong>
+                  <span>{{ application.account }} · {{ application.phone }}</span>
+                  <small>{{ application.nationalIdMasked }} · {{ formatNotificationTime(application.appliedAt) }}</small>
+                </div>
+                <div class="notification-item__actions">
+                  <button
+                    type="button"
+                    class="notification-approve"
+                    (click)="approveApplication(application)"
+                    [disabled]="notificationAction() !== null"
+                  >
+                    {{ isNotificationAction('approve-application-' + application.id) ? '核准中...' : '核准' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="notification-reject"
+                    (click)="beginApplicationRejection(application)"
+                    [disabled]="notificationAction() !== null"
+                  >
+                    拒絕
+                  </button>
+                </div>
+              </article>
+            }
+          </section>
+        }
+
+        @if (pendingEmergencyLeaves().length) {
+          <section class="notification-section" aria-labelledby="emergency-leave-heading">
+            <h3 id="emergency-leave-heading">臨時請假</h3>
+            @for (leave of pendingEmergencyLeaves(); track leave.id) {
+              <article class="notification-item">
+                <div>
+                  <strong>{{ leave.driverName ?? ('司機 #' + leave.driverId) }}</strong>
+                  <span>{{ leave.plateNumber ?? '未提供車牌' }} · {{ leave.reason }}</span>
+                  <small>{{ formatNotificationTime(leave.requestedAt) }}</small>
+                </div>
+                <div class="notification-item__actions">
+                  <button
+                    type="button"
+                    class="notification-approve"
+                    (click)="reviewEmergencyLeave(leave)"
+                    [disabled]="notificationAction() !== null"
+                  >
+                    {{ isNotificationAction('load-replacements-' + leave.id) ? '讀取中...' : '安排接手' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="notification-reject"
+                    (click)="beginEmergencyLeaveRejection(leave)"
+                    [disabled]="notificationAction() !== null"
+                  >
+                    拒絕
+                  </button>
+                </div>
+              </article>
+            }
+          </section>
+        }
+
+        @if (!pendingApplications().length && !pendingEmergencyLeaves().length) {
+          <p class="notification-empty">目前沒有需要主管處理的申請。</p>
+        }
+      }
+
+      @if (selectedEmergencyLeave(); as leave) {
+        <section class="notification-review" aria-labelledby="replacement-driver-heading">
+          <h3 id="replacement-driver-heading">安排 {{ leave.driverName ?? ('司機 #' + leave.driverId) }} 的接手司機</h3>
+          @if (replacementCandidates().length) {
+            <label>
+              <span>接手司機</span>
+              <select (change)="selectReplacementDriver($event)">
+                @for (candidate of replacementCandidates(); track candidate.driverId) {
+                  <option [value]="candidate.driverId">
+                    {{ candidate.name }} · {{ candidate.account }}{{ candidate.clockedIn ? ' · 已上班' : '' }}
+                  </option>
+                }
+              </select>
+            </label>
+            <button
+              type="button"
+              class="notification-approve"
+              (click)="approveEmergencyLeave()"
+              [disabled]="notificationAction() !== null"
+            >
+              {{ isNotificationAction('approve-leave-' + leave.id) ? '核准中...' : '核准並交接路線' }}
+            </button>
+          } @else if (!isNotificationAction('load-replacements-' + leave.id)) {
+            <p class="notification-feedback is-error">目前沒有符合條件的接手司機，請改為拒絕或先調整班表。</p>
+          }
+        </section>
+      }
+
+      @if (rejectionTarget(); as target) {
+        <form class="notification-review" (submit)="$event.preventDefault(); submitRejection()">
+          <h3>拒絕 {{ target.name }}</h3>
+          <label>
+            <span>拒絕原因</span>
+            <textarea rows="3" maxlength="500" [value]="rejectionReason()" (input)="updateRejectionReason($event)"></textarea>
+          </label>
+          <div class="notification-review__actions">
+            <button type="button" class="notification-reject" (click)="cancelRejection()">取消</button>
+            <button type="submit" class="notification-approve" [disabled]="notificationAction() !== null">
+              {{ isNotificationAction('reject-' + target.kind + '-' + target.id) ? '處理中...' : '確認拒絕' }}
+            </button>
+          </div>
+        </form>
+      }
+    </section>
+  }
 
   <aside class="dispatch-sidebar">
     <nav class="sidebar-nav" aria-label="物流後台主選單">

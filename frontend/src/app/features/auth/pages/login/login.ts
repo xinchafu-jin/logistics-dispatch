@@ -26,7 +26,7 @@ export class Login {
   protected readonly isSubmitting = signal(false);
 
   protected readonly weather = signal<CurrentWeather>({
-    city: '台南',
+    city: '高雄',
     condition: '今日配送天氣',
     icon: String.fromCodePoint(0x2601, 0xfe0e),
     temperature: 24,

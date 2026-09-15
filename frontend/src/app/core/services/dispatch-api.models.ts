@@ -12,6 +12,46 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
+export type OrderType = 'NORMAL' | 'REPLENISHMENT';
+export type ExceptionStatus = 'OPEN' | 'CLOSED';
+export type ExceptionType =
+  | 'NO_SIGNATURE'
+  | 'SHORTAGE'
+  | 'DAMAGE'
+  | 'SHORTAGE_AND_DAMAGE'
+  | 'DRIVER_REPORT'
+  | 'PHONE_HANDLED';
+export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+
+/** 後端隔日送審的配送異常案件。 */
+export interface ExceptionCaseDto {
+  id: number;
+  type: ExceptionType;
+  status: ExceptionStatus;
+  description: string;
+  sourceOrderId: number | null;
+  sourceOrderNumber: string | null;
+  sourceOrderType: OrderType | null;
+  deliveryRecordId: number | null;
+  expectedBoxCount: number | null;
+  deliveredBoxCount: number | null;
+  shortageBoxCount: number | null;
+  damagedBoxCount: number | null;
+  replacementRequiredBoxCount: number | null;
+  followUpOrderId: number | null;
+  followUpOrderNumber: string | null;
+  followUpOrderType: OrderType | null;
+  followUpOrderStatus: OrderStatus | null;
+  followUpDeliveryDate: string | null;
+  reviewAvailableAt: string | null;
+  queuedAt: string | null;
+  createdAt: string | null;
+  handledBy: string | null;
+  handledAt: string | null;
+  resolution: string | null;
+}
 
 export interface DriverDto {
   id?: number;
@@ -40,6 +80,60 @@ export interface AdminUserDto {
   account: string;
   name: string;
   phone: string;
+}
+
+/** 司機登入前提交的帳號申請。nationalId 只會被後端當成初始密碼雜湊。 */
+export interface DriverAccountApplicationRequest {
+  account: string;
+  name: string;
+  phone: string;
+  nationalId: string;
+}
+
+export interface DriverAccountApplicationDto {
+  id: number;
+  account: string;
+  name: string;
+  phone: string;
+  nationalIdMasked: string;
+  status: DriverApplicationStatus;
+  appliedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  approvedDriverId: number | null;
+}
+
+export interface EmergencyLeaveDto {
+  id: number;
+  driverId: number;
+  driverName: string | null;
+  workDate: string;
+  attendanceRecordId: number | null;
+  routeId: number | null;
+  routeStatus: RouteStatus | null;
+  vehicleId: number | null;
+  plateNumber: string | null;
+  reason: string;
+  status: EmergencyLeaveStatus;
+  replacementDriverId: number | null;
+  replacementDriverName: string | null;
+  transferredOrderCount: number;
+  gpsOverrideGranted: boolean;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  routeReassignedAt: string | null;
+  clockedOutAt: string | null;
+}
+
+export interface EmergencyLeaveReplacementCandidateDto {
+  driverId: number;
+  account: string;
+  name: string;
+  attendanceStatus: AttendanceStatus | null;
+  clockedIn: boolean;
 }
 
 /** 每月司機班表主檔。 */
