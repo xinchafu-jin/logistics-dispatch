@@ -1,5 +1,6 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import {Component, OnInit, computed, inject, signal, output} from '@angular/core';
+import {toSignal} from '@angular/core/rxjs-interop';
+import {MatListModule} from '@angular/material/list';
 import {
   ActivatedRouteSnapshot,
   NavigationEnd,
@@ -8,33 +9,57 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import { Observable, filter, forkJoin, map } from 'rxjs';
+import {Observable, filter, forkJoin, map} from 'rxjs';
+import {MatSelectModule} from '@angular/material/select';
+import {MatInputModule} from '@angular/material/input';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatButtonModule} from '@angular/material/button';
+import {MatTooltipModule} from '@angular/material/tooltip';
+import {TextFieldModule} from '@angular/cdk/text-field';
 import {
+  LucideArrowLeftToLine,
+  LucideArrowRightToLine,
   LucideBell,
   LucideCalendarDays,
   LucideChartNoAxesCombined,
+  LucideChevronDown,
   LucideClipboardCheck,
   LucideLogOut,
   LucideMapPinned,
   LucideMoon,
+  LucideSendHorizontal,
   LucideSun,
   LucideTriangleAlert,
   LucideTruck,
   LucideWorkflow,
 } from '@lucide/angular';
-import { BrandLogo } from '../../../../shared/ui/brand-logo/brand-logo';
-import { AuthService } from '../../../../core/auth/auth.service';
+import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
+import {AuthService} from '../../../../core/auth/auth.service';
 import {
-  DriverAccountApplicationDto,
+  DriverAccountApplicationDto, DriverDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
 } from '../../../../core/services/dispatch-api.models';
-import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
-import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
+import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
+import {FormsModule} from '@angular/forms';
+
+type ChatContact =
+  | { kind: 'ai' }
+  | { kind: 'driver'; driverId: number; name: string };
 
 type RejectionTarget =
   | { kind: 'application'; id: number; name: string }
   | { kind: 'leave'; id: number; name: string };
+
+// 聊天室狀態
+type ChatView = 'closed' | 'narrow' | 'wide';
+type ChatMessageRole = 'user' | 'assistant';
+
+interface ChatMessage {
+  role: ChatMessageRole;
+  text: string;
+}
 
 @Component({
   selector: 'app-dispatch-shell',
@@ -53,7 +78,19 @@ type RejectionTarget =
     LucideLogOut,
     LucideTriangleAlert,
     LucideChartNoAxesCombined,
+    LucideArrowLeftToLine,
+    LucideArrowRightToLine,
+    LucideChevronDown,
+    MatButtonModule,
+    MatTooltipModule,
     BrandLogo,
+    MatListModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    TextFieldModule,
+    LucideSendHorizontal,
+    FormsModule,
   ],
   templateUrl: './dispatch-shell.html',
   styleUrl: './dispatch-shell.scss',
@@ -75,9 +112,24 @@ export class DispatchShell implements OnInit {
   protected readonly notificationError = signal('');
   protected readonly isLoadingNotifications = signal(false);
   protected readonly notificationAction = signal<string | null>(null);
+  //司機名單
+  protected readonly chatDrivers = signal<DriverDto[]>([]);
+  //司機名單載入失敗的訊息，空字串代表沒有錯誤
+  protected readonly chatDriversError = signal('');
+  //聊天室人員選取 預設ai
+  protected readonly selectedChatContact = signal<ChatContact>({kind: 'ai'});
+  // 用一個狀態而非 isOpen + isNarrow 兩個布林，才不會出現「沒打開卻是窄版」的組合
+  protected readonly chatView = signal<ChatView>('closed');
+  //聊天室輸出內容
+  protected readonly chatOutput = signal<ChatMessage[]>([]);
+  //聊天室輸入內容
+  protected readonly chatInput = signal("");
+  //等待回復開關
+  protected readonly chatWaiting = false;
   protected readonly notificationCount = computed(
     () => this.pendingApplicationCount() + this.pendingEmergencyLeaves().length,
   );
+
 
   private readonly authService = inject(AuthService);
   private readonly api = inject(DispatchApiService);
@@ -96,7 +148,7 @@ export class DispatchShell implements OnInit {
     ),
     // shell 是在導覽過程中才建立的，第一次 NavigationEnd 會晚於這裡；
     // 但 routerState 在啟用子路由前就已更新，所以初始值直接讀得到，標題不會閃一下空白
-    { initialValue: this.readRouteTitle() },
+    {initialValue: this.readRouteTitle()},
   );
 
   ngOnInit(): void {
@@ -151,7 +203,7 @@ export class DispatchShell implements OnInit {
   }
 
   protected beginApplicationRejection(application: DriverAccountApplicationDto): void {
-    this.rejectionTarget.set({ kind: 'application', id: application.id, name: application.name });
+    this.rejectionTarget.set({kind: 'application', id: application.id, name: application.name});
     this.rejectionReason.set('');
     this.notificationError.set('');
   }
@@ -199,7 +251,7 @@ export class DispatchShell implements OnInit {
   }
 
   protected beginEmergencyLeaveRejection(leave: EmergencyLeaveDto): void {
-    this.rejectionTarget.set({ kind: 'leave', id: leave.id, name: leave.driverName ?? `司機 #${leave.driverId}` });
+    this.rejectionTarget.set({kind: 'leave', id: leave.id, name: leave.driverName ?? `司機 #${leave.driverId}`});
     this.rejectionReason.set('');
     this.notificationError.set('');
   }
@@ -280,7 +332,7 @@ export class DispatchShell implements OnInit {
       applications: this.api.getPendingDriverAccountApplications(),
       leaves: this.api.getPendingEmergencyLeaveRequests(),
     }).subscribe({
-      next: ({ count, applications, leaves }) => {
+      next: ({count, applications, leaves}) => {
         this.pendingApplicationCount.set(count.count);
         this.pendingApplications.set(applications);
         this.pendingEmergencyLeaves.set(leaves);
@@ -333,4 +385,79 @@ export class DispatchShell implements OnInit {
 
     return title;
   }
+
+//-------------------------------- 聊天室方法---------------------------------------------------------------
+  protected openChat(): void {
+    this.chatView.set('wide');
+    this.loadChatDrivers();
+  }
+
+  protected closeChat(): void {
+    this.chatView.set('closed');
+  }
+
+  protected toggleChatWidth(): void {
+    this.chatView.update((view) => (view === 'wide' ? 'narrow' : 'wide'));
+  }
+
+  /**
+   * 窄版時點任何聯絡人都要展開。
+   *
+   * 不能只靠 selectionChange：單選清單點「已選中」的項目不會發出事件（Material list.mjs 的 _toggleOnInteraction），
+   * 所以要綁在清單的 click / keydown 上，不管點的人有沒有選中都會執行。
+   */
+  protected expandChatIfNarrow(): void {
+    if (this.chatView() === 'narrow') {
+      this.chatView.set('wide');
+    }
+  }
+
+  private loadChatDrivers(): void {
+    // 司機名單很少變動，載過一次就不再請求，避免每次打開聊天室都打一次 API
+    if (this.chatDrivers().length > 0) {
+      return;
+    }
+
+    this.chatDriversError.set('');
+    this.api.getDrivers().subscribe({
+      next: (drivers) => {
+        // 後端 findAll 會連停用司機一起回傳，停用帳號登入不了司機端，放進清單也聯絡不到
+        const activeDrivers = drivers.filter((driver) => driver.isActive);
+        this.chatDrivers.set(activeDrivers);
+      },
+      error: () => {
+        this.chatDriversError.set('無法取得司機名單，請稍後再試。');
+      },
+    });
+  }
+
+  // 只負責換選中的人；窄版展開改由 expandChatIfNarrow 處理，因為點已選中的人不會進到這裡
+  protected selectChatContact(contact: ChatContact): void {
+    this.selectedChatContact.set(contact);
+  }
+
+  protected isSelectedChatContact(contact: ChatContact): boolean {
+    const selected = this.selectedChatContact();
+
+    if (contact.kind === 'ai') {
+      return selected.kind === 'ai';
+    }
+    // 模板每次重畫都會建立新物件，=== 比的是不是同一個物件，所以要比內容
+    return selected.kind === 'driver' && selected.driverId === contact.driverId;
+  }
+
+  protected chatSend(): void {
+    const message = this.chatInput();
+
+    this.chatOutput.update((messages) => [...messages, {role: 'user', text: message}]);
+    this.chatInput.set('');
+
+    this.api.chatWithAi(message).subscribe({
+      next: (chat) => {
+        this.chatOutput.update((messages) => [...messages, {role: 'assistant', text: chat.reply}]);
+      }
+    });
+  }
+
+  protected readonly output = output;
 }

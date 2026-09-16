@@ -4,6 +4,9 @@ import {Observable} from 'rxjs';
 import {
   AdminUserCreateRequest,
   AdminUserDto,
+  AiChatReply,
+  AiChatRequest,
+  AiPendingActionDto,
   DispatchResultDto,
   DriverAccountApplicationDto,
   DriverDto,
@@ -392,5 +395,32 @@ export class DispatchApiService {
     return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/drivers/${driverId}/gps/history`, {
       params,
     });
+  }
+
+  /**
+   * 送一句話給 AI 助理。後端同步等模型跑完所有工具才回應，十幾秒是常態，
+   * 等待期間畫面要鎖住輸入，兩句同時送會打亂同一段對話記憶的順序。
+   */
+  chatWithAi(message: string): Observable<AiChatReply> {
+    const request: AiChatRequest = {message};
+    return this.http.post<AiChatReply>(`${API_ROOT}/ai/chat`, request);
+  }
+
+  /** 讀取待執行清單；開啟聊天室或重新整理後用來還原清單 */
+  getAiPlan(): Observable<AiPendingActionDto[]> {
+    return this.http.get<AiPendingActionDto[]>(`${API_ROOT}/ai/plan`);
+  }
+
+  /**
+   * 整批執行待執行清單。後端按日期與倉庫分組各呼叫一次 reassign，全有或全無；
+   * 回傳每組各一包看板。失敗回 400，清單保留在後端，可以修正後再按一次。
+   */
+  confirmAiPlan(): Observable<DispatchResultDto[]> {
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/ai/plan/confirm`, null);
+  }
+
+  /** 整批放棄待執行清單，不執行任何動作 */
+  clearAiPlan(): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/ai/plan`);
   }
 }

@@ -6,7 +6,7 @@
         routerLink="/dispatch/dashboard"
         aria-label="捷流智慧物流，前往今日調度"
       >
-        <app-brand-logo />
+        <app-brand-logo/>
       </a>
 
       <span class="workspace-divider" aria-hidden="true"></span>
@@ -67,7 +67,8 @@
           <h2>{{ notificationCount() ? notificationCount() + ' 項待處理' : '目前沒有待辦' }}</h2>
         </div>
         <div class="notification-panel__header-actions">
-          <button type="button" class="notification-refresh" (click)="toggleNotifications()" title="關閉" aria-label="關閉">
+          <button type="button" class="notification-refresh" (click)="toggleNotifications()" title="關閉"
+                  aria-label="關閉">
             關閉
           </button>
         </div>
@@ -87,7 +88,8 @@
                 <div>
                   <strong>{{ application.name }}</strong>
                   <span>{{ application.account }} · {{ application.phone }}</span>
-                  <small>{{ application.nationalIdMasked }} · {{ formatNotificationTime(application.appliedAt) }}</small>
+                  <small>{{ application.nationalIdMasked }}
+                    · {{ formatNotificationTime(application.appliedAt) }}</small>
                 </div>
                 <div class="notification-item__actions">
                   <button
@@ -183,7 +185,13 @@
           <h3>拒絕 {{ target.name }}</h3>
           <label>
             <span>拒絕原因</span>
-            <textarea rows="3" maxlength="500" [value]="rejectionReason()" (input)="updateRejectionReason($event)"></textarea>
+            <textarea rows="3"
+                      maxlength="500"
+                      [value]="rejectionReason()"
+                      (input)="updateRejectionReason($event)"
+            >
+
+            </textarea>
           </label>
           <div class="notification-review__actions">
             <button type="button" class="notification-reject" (click)="cancelRejection()">取消</button>
@@ -252,7 +260,119 @@
 
   <main class="dispatch-workspace">
     <section class="workspace-content">
-      <router-outlet />
+      <router-outlet/>
     </section>
   </main>
+  @if (chatView() !== 'closed') {
+    <section class="chat-panel" [class.is-narrow]="chatView() === 'narrow'" aria-label="聊天室">
+      <header class="chat-panel__header">
+        <h2>聊天室</h2>
+        <div class="chat-panel__actions">
+          <button
+            type="button"
+            matIconButton
+            class="chat-panel__icon-button"
+            [attr.aria-label]="chatView() === 'wide' ? '縮成窄版' : '展開'"
+            [matTooltip]="chatView() === 'wide' ? '縮成窄版' : '展開'"
+            (click)="toggleChatWidth()"
+          >
+            @if (chatView() === 'wide') {
+              <svg lucideArrowRightToLine aria-hidden="true"></svg>
+            } @else {
+              <svg lucideArrowLeftToLine aria-hidden="true"></svg>
+            }
+          </button>
+          <button
+            type="button"
+            matIconButton
+            class="chat-panel__icon-button"
+            aria-label="收合"
+            matTooltip="收合"
+            (click)="closeChat()"
+          >
+            <svg lucideChevronDown aria-hidden="true"></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="chat-panel__body">
+        <aside class="chat-panel__contacts" aria-label="聊天對象">
+          <!-- 單選清單：選中狀態、aria-selected、上下鍵移動都由 Material 處理；再點已選中的項目不會取消 -->
+          <!-- click / Enter / 空白鍵綁在清單上：點已選中的人不會觸發 selectionChange，窄版展開要另外處理 -->
+          <mat-selection-list
+            [multiple]="false"
+            hideSingleSelectionIndicator
+            (selectionChange)="selectChatContact($event.options[0].value)"
+            (click)="expandChatIfNarrow()"
+            (keydown.enter)="expandChatIfNarrow()"
+            (keydown.space)="expandChatIfNarrow()"
+          >
+            <!-- [selected] 仍要綁：面板收合時清單會被銷毀，重新打開要照 signal 還原選中狀態 -->
+            <mat-list-option [value]="{ kind: 'ai' }" [selected]="isSelectedChatContact({ kind: 'ai' })">
+              <span matListItemAvatar>AI</span>
+              <span matListItemTitle>AI 調度助理</span>
+            </mat-list-option>
+
+            <div matSubheader>司機</div>
+            @for (driver of chatDrivers(); track driver.account) {
+              <mat-list-option
+                [value]="{ kind: 'driver', driverId: driver.id!, name: driver.name }"
+                [selected]="isSelectedChatContact({ kind: 'driver', driverId: driver.id!, name: driver.name })"
+              >
+                <span matListItemAvatar>{{ driver.name.charAt(0) }}</span>
+                <span matListItemTitle>{{ driver.name }}</span>
+              </mat-list-option>
+            }
+          </mat-selection-list>
+
+          @if (chatDriversError()) {
+            <p class="chat-panel__contacts-error" role="alert">{{ chatDriversError() }}</p>
+          }
+        </aside>
+        @if (chatView() === 'wide') {
+          <!-- 內容要包在這個 div 裡：chat-panel__body 是兩欄 grid，散在外面的元素會各自佔一格而換列 -->
+          <div class="chat-panel__conversation">
+            @if (selectedChatContact(); as contact) {
+              @if (contact.kind === 'ai') {
+                <h3>AI 調度助理</h3>
+                @for (message of chatOutput(); track $index) {
+                  <p>{{message.text}}</p>
+                }
+
+                <!-- 送出邏輯還沒接，先 preventDefault 避免瀏覽器送出表單重新整理頁面 -->
+                <form class="chat-composer" (ngSubmit)="chatSend()">
+                  <!-- outline：面板背景半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
+                  <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                    <!-- 自動長高 1～5 行，超過就在框內捲動，不會把訊息列表擠光 -->
+                    <textarea
+                      matInput
+                      cdkTextareaAutosize
+                      cdkAutosizeMinRows="1"
+                      cdkAutosizeMaxRows="5"
+                      placeholder="輸入訊息"
+                      name="chatInput"
+                      aria-label="輸入給 AI 調度助理的訊息"
+                      [(ngModel)]="chatInput"
+                    ></textarea>
+                  </mat-form-field>
+                  <!-- 送出方法還沒寫，先停用；只有圖示所以要 aria-label -->
+                  <button type="submit"
+                          matIconButton aria-label="送出"
+                  >
+                    <svg lucideSendHorizontal aria-hidden="true"></svg>
+                  </button>
+                </form>
+              } @else {
+                <!-- 司機：後端還沒有司機聊天 API，先顯示提示 -->
+                <h3>{{ contact.name }}</h3>
+                <p>尚未開放與 {{ contact.name }} 的聊天</p>
+              }
+            }
+          </div>
+        }
+      </div>
+    </section>
+  } @else {
+    <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">聊天室</button>
+  }
 </div>

@@ -437,3 +437,40 @@ export interface TemplateRouteRequest {
   vehicleId: number;
   storeIds: number[];
 }
+
+/* ── AI 調度助理 ───────────────────────────────────────────────
+ * 對話只會把動作加入待執行清單，調度員按確認才真正寫入。
+ * 對話與清單都以登入者 JWT 區分，後端存在記憶體，重啟即消失。
+ */
+
+/** 對應後端 AiActionType */
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER';
+
+/** POST /api/ai/chat 的請求本體 */
+export interface AiChatRequest {
+  message: string;
+}
+
+/** POST /api/ai/chat 的回應：助理回覆外加最新的待執行清單 */
+export interface AiChatReply {
+  /** 模型產生的文字，可能含 Markdown */
+  reply: string;
+  /** 整份清單而非本次新增的部分，前端直接整包取代 */
+  pendingActions: AiPendingActionDto[];
+}
+
+/** 待執行清單中的一項動作。對應後端 PendingActionResponse。 */
+export interface AiPendingActionDto {
+  type: AiActionType;
+  /** 給人看的說明，姓名、車牌取自資料庫，確認視窗直接顯示這段 */
+  summary: string;
+  /** 配送日期，yyyy-MM-dd */
+  date: string;
+  warehouseId: number;
+  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車 */
+  vehicleId: number;
+  /** 只有 ASSIGN_DRIVER 有值 */
+  driverId: number | null;
+  /** 只有 MOVE_ORDER 有值 */
+  orderId: number | null;
+}
