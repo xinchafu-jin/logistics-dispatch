@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -72,20 +73,33 @@ public class ReportService {
         this.storesDAO = storesDAO;
     }
 
-    public record Range(LocalDate from, LocalDate to) {
-        public Range {
+    public static class Range {
+        private final LocalDate from;
+        private final LocalDate to;
+
+        public Range(LocalDate from, LocalDate to) {
             if (from == null || to == null || from.isAfter(to)) {
                 throw new IllegalArgumentException("報表起訖日期不可空白，且開始日期不能晚於結束日期");
             }
             if (ChronoUnit.DAYS.between(from, to) > 366) {
                 throw new IllegalArgumentException("單次報表查詢不得超過一年，較長期間請分段查詢");
             }
+            this.from = from;
+            this.to = to;
+        }
+
+        public LocalDate getFrom() {
+            return from;
+        }
+
+        public LocalDate getTo() {
+            return to;
         }
     }
 
     public ReportResponses.Summary summary(Range range, Long warehouseId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), warehouseId);
-        List<RoutesEntity> routes = reportReadDAO.routes(range.from(), range.to(), warehouseId);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
         List<RoutesEntity> published = routes.stream()
                 .filter(route -> route.getStatus() == RouteStatus.PUBLISHED).toList();
         List<OrdersEntity> unassigned = orders.stream()
@@ -97,7 +111,7 @@ public class ReportService {
         Map<LocalDate, List<OrdersEntity>> byDate = orders.stream()
                 .collect(Collectors.groupingBy(OrdersEntity::getDeliveryDate));
         List<ReportResponses.DailySummary> trend = new ArrayList<>();
-        for (LocalDate day = range.from(); !day.isAfter(range.to()); day = day.plusDays(1)) {
+        for (LocalDate day = range.getFrom(); !day.isAfter(range.getTo()); day = day.plusDays(1)) {
             List<OrdersEntity> daily = byDate.getOrDefault(day, List.of());
             int dailyEligible = (int) daily.stream().filter(order -> completionEligible(order.getStatus())).count();
             int dailyCompleted = countStatus(daily, OrderStatus.COMPLETED);
@@ -106,7 +120,7 @@ public class ReportService {
                     rate(dailyCompleted, dailyEligible)));
         }
         return new ReportResponses.Summary(
-                range.from(), range.to(), COMPLETION_DEFINITION,
+                range.getFrom(), range.getTo(), COMPLETION_DEFINITION,
                 orders.size(), boxes(orders), distinctStores(orders),
                 countStatus(orders, OrderStatus.PENDING_CONFIRM), unassigned.size(),
                 (int) orders.stream().filter(order -> order.getStatus() == OrderStatus.CONFIRMED
@@ -120,9 +134,9 @@ public class ReportService {
     }
 
     public ReportResponses.Attendance attendance(Range range, Long driverId) {
-        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.from(), range.to())
+        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo())
                 .stream().filter(shift -> driverId == null || driverId.equals(shift.getDriverId())).toList();
-        Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.from(), range.to())
+        Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId, Function.identity(),
                         (first, ignored) -> first));
         Map<Long, DriversEntity> drivers = index(driversDAO.findAll(), DriversEntity::getId);
@@ -203,18 +217,18 @@ public class ReportService {
                             : start == null || end == null ? "MISSING_SHIFT_TIME" : "OK"));
         }
         return new ReportResponses.Attendance(
-                range.from(), range.to(), work, workDriverIds.size(),
+                range.getFrom(), range.getTo(), work, workDriverIds.size(),
                 dayOff, dayOffDriverIds.size(), leave, leaveDriverIds.size(),
                 dueIn, doneIn, rate(doneIn, dueIn), dueOut, doneOut, rate(doneOut, dueOut),
                 complete, rate(complete, dueOut), clockedIn, missingIn, missingOut, rows);
     }
 
     public ReportResponses.Routes routes(Range range, Long warehouseId, Long routeId) {
-        List<RoutesEntity> allRoutes = reportReadDAO.routes(range.from(), range.to(), null);
+        List<RoutesEntity> allRoutes = reportReadDAO.routes(range.getFrom(), range.getTo(), null);
         List<RoutesEntity> selectedRoutes = allRoutes.stream()
                 .filter(route -> warehouseId == null || warehouseId.equals(route.getWarehouseId()))
                 .filter(route -> routeId == null || routeId.equals(route.getId())).toList();
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), warehouseId);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
         Map<Long, List<OrdersEntity>> ordersByRoute = orders.stream()
                 .filter(order -> order.getRouteId() != null)
                 .collect(Collectors.groupingBy(OrdersEntity::getRouteId));
@@ -222,7 +236,7 @@ public class ReportService {
         Map<DriverDate, List<RoutesEntity>> routesByDriverDay = allRoutes.stream()
                 .filter(route -> route.getDriverId() != null)
                 .collect(Collectors.groupingBy(route -> new DriverDate(route.getDriverId(), route.getDate())));
-        Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay = reportReadDAO.mileage(range.from(), range.to())
+        Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay = reportReadDAO.mileage(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.groupingBy(log -> new DriverDate(log.getDriverId(), log.getDate())));
         Map<Long, DriversEntity> drivers = index(driversDAO.findAll(), DriversEntity::getId);
         Map<Long, VehiclesEntity> vehicles = index(vehiclesDAO.findAll(), VehiclesEntity::getId);
@@ -239,11 +253,11 @@ public class ReportService {
             WarehousesEntity warehouse = warehouses.get(route.getWarehouseId());
             MileageMatch match = matchMileage(route, routesByDriverDay, mileageByDriverDay);
             Double plannedKm = km(route.getTotalDistance());
-            Double difference = match.actualKm() == null || plannedKm == null
-                    ? null : match.actualKm() - plannedKm;
+            Double difference = match.getActualKm() == null || plannedKm == null
+                    ? null : match.getActualKm() - plannedKm;
             Double differencePercent = difference == null || plannedKm <= 0
                     ? null : difference / plannedKm * 100;
-            String comparisonStatus = match.status();
+            String comparisonStatus = match.getStatus();
             if ("READY_INFERRED_DRIVER_DATE".equals(comparisonStatus)
                     && (plannedKm == null || plannedKm <= 0)) {
                 comparisonStatus = "NO_VALID_PLANNED_DISTANCE";
@@ -262,23 +276,23 @@ public class ReportService {
                     percent(route.getLoadRate()), distinctStores(assigned), assigned.size(), boxes(assigned),
                     countStatus(assigned, OrderStatus.COMPLETED), countStatus(assigned, OrderStatus.FAILED),
                     (int) assigned.stream().filter(order -> hasNoSignature(deliveriesByOrder, order.getId())).count(),
-                    plannedKm, match.actualKm(), difference, differencePercent, comparisonStatus,
-                    match.startAt(), match.endAt(), match.durationMinutes(), deliveryOrder));
+                    plannedKm, match.getActualKm(), difference, differencePercent, comparisonStatus,
+                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder));
         }
-        return new ReportResponses.Routes(range.from(), range.to(),
+        return new ReportResponses.Routes(range.getFrom(), range.getTo(),
                 "CURRENT_ROUTE_RECORD_NOT_PUBLISH_SNAPSHOT", rows);
     }
 
     public ReportResponses.Drivers drivers(Range range, Long driverId) {
         List<DriversEntity> allDrivers = driversDAO.findAll();
-        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.from(), range.to());
-        Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.from(), range.to())
+        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo());
+        Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId,
                         Function.identity(), (first, ignored) -> first));
-        List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.from(), range.to());
-        List<RoutesEntity> routes = reportReadDAO.routes(range.from(), range.to(), null);
+        List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.getFrom(), range.getTo());
+        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), null);
         Map<Long, RoutesEntity> routeById = index(routes, RoutesEntity::getId);
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), null);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), null);
         Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder = deliveryByOrder(orders);
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         List<ReportResponses.DriverRow> rows = new ArrayList<>();
@@ -356,8 +370,8 @@ public class ReportService {
                     workShifts.stream().mapToLong(shift -> shift.getOvertimeMinutes() == null
                             ? 0 : shift.getOvertimeMinutes()).sum(), afterScheduledEnd));
         }
-        rows.sort(Comparator.comparing(ReportResponses.DriverRow::driverId));
-        return new ReportResponses.Drivers(range.from(), range.to(), rows);
+        rows.sort(Comparator.comparing(ReportResponses.DriverRow::getDriverId));
+        return new ReportResponses.Drivers(range.getFrom(), range.getTo(), rows);
     }
 
     public ReportResponses.Vehicles vehicles(
@@ -367,8 +381,8 @@ public class ReportService {
                 || lowLoadThresholdPercent > 100) {
             throw new IllegalArgumentException("低裝載率門檻必須介於 0 到 100% 之間");
         }
-        List<RoutesEntity> routes = reportReadDAO.routes(range.from(), range.to(), warehouseId);
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), warehouseId);
+        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
         Map<Long, List<OrdersEntity>> ordersByRoute = orders.stream()
                 .filter(order -> order.getRouteId() != null)
                 .collect(Collectors.groupingBy(OrdersEntity::getRouteId));
@@ -409,13 +423,13 @@ public class ReportService {
                             .average().orElseThrow() * 100,
                     sumPlannedKm(publishedVehicleRoutes), null, "MILEAGE_LOG_HAS_NO_VEHICLE_ID", loads));
         }
-        rows.sort(Comparator.comparing(ReportResponses.VehicleRow::vehicleId));
-        return new ReportResponses.Vehicles(range.from(), range.to(), lowLoadThresholdPercent, rows);
+        rows.sort(Comparator.comparing(ReportResponses.VehicleRow::getVehicleId));
+        return new ReportResponses.Vehicles(range.getFrom(), range.getTo(), lowLoadThresholdPercent, rows);
     }
 
     public ReportResponses.Warehouses warehouses(Range range, Long warehouseId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), warehouseId);
-        List<RoutesEntity> routes = reportReadDAO.routes(range.from(), range.to(), warehouseId);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
         List<ReportResponses.WarehouseRow> rows = new ArrayList<>();
         for (WarehousesEntity warehouse : warehousesDAO.findAll()) {
             if (warehouseId != null && !warehouseId.equals(warehouse.getId())) {
@@ -457,12 +471,12 @@ public class ReportService {
                             ? null : loads.stream().mapToDouble(Double::doubleValue)
                             .average().orElseThrow() * 100, daily));
         }
-        rows.sort(Comparator.comparing(ReportResponses.WarehouseRow::warehouseId));
-        return new ReportResponses.Warehouses(range.from(), range.to(), rows);
+        rows.sort(Comparator.comparing(ReportResponses.WarehouseRow::getWarehouseId));
+        return new ReportResponses.Warehouses(range.getFrom(), range.getTo(), rows);
     }
 
     public ReportResponses.Stores stores(Range range, Long warehouseId, Long storeId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.from(), range.to(), warehouseId);
+        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
         Map<Long, List<OrdersEntity>> ordersByStore = orders.stream()
                 .collect(Collectors.groupingBy(OrdersEntity::getStoreId));
         Map<Long, List<DeliveryRecordsEntity>> deliveriesByOrder = deliveryByOrder(orders);
@@ -502,15 +516,15 @@ public class ReportService {
                     (int) deliveries.stream().filter(delivery ->
                             Boolean.TRUE.equals(delivery.getNoSignature())).count(), daily, events));
         }
-        rows.sort(Comparator.comparing(ReportResponses.StoreRow::storeId));
-        return new ReportResponses.Stores(range.from(), range.to(), rows);
+        rows.sort(Comparator.comparing(ReportResponses.StoreRow::getStoreId));
+        return new ReportResponses.Stores(range.getFrom(), range.getTo(), rows);
     }
 
     public ReportResponses.Exceptions exceptions(
             Range range, ExceptionType type, ExceptionStatus status,
             Long warehouseId, Long storeId, Long driverId, Long routeId
     ) {
-        List<ExceptionCasesEntity> cases = reportReadDAO.exceptions(range.from(), range.to());
+        List<ExceptionCasesEntity> cases = reportReadDAO.exceptions(range.getFrom(), range.getTo());
         List<Long> orderIds = cases.stream().map(ExceptionCasesEntity::getOrderId)
                 .filter(id -> id != null).distinct().toList();
         Map<Long, OrdersEntity> ordersById = index(ordersDAO.findAllById(orderIds), OrdersEntity::getId);
@@ -567,22 +581,76 @@ public class ReportService {
                     order == null ? null : order.getRouteId(), photoUrl, photoStatus));
         }
         return new ReportResponses.Exceptions(
-                range.from(), range.to(), rows.size(),
-                (int) rows.stream().filter(row -> row.status() == ExceptionStatus.OPEN).count(),
-                (int) rows.stream().filter(row -> row.status() == ExceptionStatus.CLOSED).count(),
-                (int) rows.stream().filter(row -> row.type() == ExceptionType.NO_SIGNATURE).count(),
+                range.getFrom(), range.getTo(), rows.size(),
+                (int) rows.stream().filter(row -> row.getStatus() == ExceptionStatus.OPEN).count(),
+                (int) rows.stream().filter(row -> row.getStatus() == ExceptionStatus.CLOSED).count(),
+                (int) rows.stream().filter(row -> row.getType() == ExceptionType.NO_SIGNATURE).count(),
                 "僅統計資料庫已有的異常；一般司機異常回報與結案流程尚未完整實作",
-                repeated(rows, ReportResponses.ExceptionRow::storeId),
-                repeated(rows, ReportResponses.ExceptionRow::routeId), rows);
+                repeated(rows, ReportResponses.ExceptionRow::getStoreId),
+                repeated(rows, ReportResponses.ExceptionRow::getRouteId), rows);
     }
 
-    private record DriverDate(Long driverId, LocalDate date) {
+    private static class DriverDate {
+        private final Long driverId;
+        private final LocalDate date;
+
+        private DriverDate(Long driverId, LocalDate date) {
+            this.driverId = driverId;
+            this.date = date;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof DriverDate that)) {
+                return false;
+            }
+            return Objects.equals(driverId, that.driverId) && Objects.equals(date, that.date);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(driverId, date);
+        }
     }
 
-    private record MileageMatch(
-            Double actualKm, LocalDateTime startAt, LocalDateTime endAt,
-            Long durationMinutes, String status
-    ) {
+    private static class MileageMatch {
+        private final Double actualKm;
+        private final LocalDateTime startAt;
+        private final LocalDateTime endAt;
+        private final Long durationMinutes;
+        private final String status;
+
+        private MileageMatch(Double actualKm, LocalDateTime startAt, LocalDateTime endAt,
+                             Long durationMinutes, String status) {
+            this.actualKm = actualKm;
+            this.startAt = startAt;
+            this.endAt = endAt;
+            this.durationMinutes = durationMinutes;
+            this.status = status;
+        }
+
+        private Double getActualKm() {
+            return actualKm;
+        }
+
+        private LocalDateTime getStartAt() {
+            return startAt;
+        }
+
+        private LocalDateTime getEndAt() {
+            return endAt;
+        }
+
+        private Long getDurationMinutes() {
+            return durationMinutes;
+        }
+
+        private String getStatus() {
+            return status;
+        }
     }
 
     private static MileageMatch matchMileage(
