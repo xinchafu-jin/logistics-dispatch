@@ -80,12 +80,24 @@ public class AiAssistantService {
 
     @Transactional
     public List<DispatchResponse> confirmPlan(String conversationId) {
+        //取該conversationId 清單
         List<PendingActionResponse> actions = pendingAction.get(conversationId);
         if (actions == null || actions.isEmpty()) {
             throw new IllegalArgumentException("目前沒有待執行的動作");
         }
+        //依 日期+ 倉庫分組
+        List<PendingActionResponse> reassignActions = new ArrayList<>();
         Map<String, List<PendingActionResponse>> groups = new LinkedHashMap<>();
+        Set<LocalDate> publishDates = new LinkedHashSet<>();
         for (PendingActionResponse action : actions) {
+            if (action.getType() == AiActionType.PUBLISH_DAY) {
+                publishDates.add(action.getDate());
+            } else {
+                reassignActions.add(action);
+            }
+        }
+
+        for (PendingActionResponse action : reassignActions) {
             String key = action.getDate() + "#" + action.getWarehouseId();
             List<PendingActionResponse> group = groups.get(key);
             if (group == null) {
@@ -94,7 +106,9 @@ public class AiAssistantService {
             }
             group.add(action);
         }
+
         List<DispatchResponse> results = new ArrayList<>();
+        //每組撈看板 → 疊動作 → 一次 reassign
         for (List<PendingActionResponse> group : groups.values()) {
             LocalDate date = group.getFirst().getDate();
             Long warehouseId = group.getFirst().getWarehouseId();
@@ -105,6 +119,9 @@ public class AiAssistantService {
                 apply(dto, action);
             }
             results.add(dispatchService.reassign(dto));
+        }
+        for (LocalDate date : publishDates) {
+            results.addAll(dispatchService.publish(date));
         }
         pendingAction.remove(conversationId);
         return results;
@@ -196,6 +213,7 @@ public class AiAssistantService {
         throw new IllegalArgumentException(action.getSummary()
                 + "：該車輛當天已無排線，可能在你確認前被重新排過，請重新確認");
     }
+
     private void applyMoveOrder(ReassignDTO dto, PendingActionResponse action) {
         ReassignDTO.RouteAssignment target = null;
         for (ReassignDTO.RouteAssignment assignment : dto.getRoutes()) {
@@ -289,9 +307,32 @@ public class AiAssistantService {
             @ToolParam(description = "訂單編號，例如 DO-TEST-203，從 findOrders 或 getDispatchBoard 取得") String orderNumber,
             @ToolParam(description = "要移過去的目標車牌號碼") String targetPlateNumber,
             ToolContext toolContext
-            ){
+    ) {
         String conversationId = (String) toolContext.getContext().get("conversationId");
         return addMoveOrderAction(conversationId, date, orderNumber, targetPlateNumber, warehouseName);
+    }
+
+    @Tool(description = "發布某一天的排班，讓司機在手機上看得到任務。發布範圍是當天全部倉庫，"
+            + "不能只發布單一倉庫。此動作不會立即執行，只會加入待執行清單")
+    String proposePublish(
+            @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
+            ToolContext toolContext
+    ) {
+        String conversationId = (String) toolContext.getContext().get("conversationId");
+        return addPublishAction(conversationId, date);
+    }
+
+    private String addPublishAction(String conversationId, String date) {
+
+        LocalDate deliveryDate = LocalDate.parse(date);
+        PendingActionResponse pendingActionResponse = new PendingActionResponse();
+        pendingActionResponse.setType(AiActionType.PUBLISH_DAY);
+        pendingActionResponse.setDate(deliveryDate);
+        pendingActionResponse.setSummary("發布 " + date + " 全部倉庫的排班");
+
+        List<PendingActionResponse> plan = addToPlan(conversationId, pendingActionResponse);
+        return "已加入待執行清單：" + pendingActionResponse.getSummary()
+                + "。目前清單共 " + plan.size() + " 項，尚未執行，在畫面上確認後才會生效。";
     }
 
     private String addAssignDriverAction(String conversationId, String date, String warehouseName, String plateNumber, String driverAccount) {
