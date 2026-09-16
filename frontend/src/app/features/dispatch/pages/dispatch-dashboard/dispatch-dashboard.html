@@ -45,6 +45,8 @@
         [showPoints]="showMapPoints()"
         [driverPoints]="mapDrivers()"
         [showDriverPoints]="showDriverPoints()"
+        [routeLines]="routeLines()"
+        [showRouteLines]="showRouteLines()"
       />
     </section>
 
@@ -111,6 +113,12 @@
       (change)="toggleDriverPoints($event.checked)"
     >
       司機位置
+    </mat-slide-toggle>
+    <mat-slide-toggle
+      [checked]="showRouteLines()"
+      (change)="toggleRouteLines($event.checked)"
+    >
+      司機路線
     </mat-slide-toggle>
   </section>
 

@@ -14,7 +14,7 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
-import {LiveFleetMap, MapPoint} from '../../components/live-fleet-map/live-fleet-map';
+import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {
   DispatchResultDto,
@@ -361,6 +361,65 @@ export class DispatchDashboard implements OnInit {
     }
 
     return points;
+  });
+
+  /** 司機路線圖層開關。預設關閉，一次全開線會疊在一起看不出誰是誰 */
+  readonly showRouteLines = signal(false);
+
+  toggleRouteLines(checked: boolean): void {
+    this.showRouteLines.set(checked);
+  }
+
+  /**
+   * 各司機的配送路線：倉庫出發，依派車順序直線連到各門市。
+   *
+   * 順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
+   * （moveItemInArray / transferArrayItem），sequence 要等 reassign 回來才更新，
+   * 照 sequence 畫會跟看板上看到的順序對不上。
+   *
+   * 只畫已指派司機的車道：這層就是「司機的路線」，沒司機就沒有主體可畫。
+   */
+  readonly routeLines = computed<RouteLine[]>(() => {
+    const warehouse = this.mapWarehouse();
+    if (!warehouse) {
+      return [];
+    }
+
+    const storeById = new Map(
+      this.stores()
+        .filter((store) => store.id != null)
+        .map((store) => [store.id!, store]),
+    );
+    const nameById = new Map(
+      this.drivers()
+        .filter((driver) => driver.id != null)
+        .map((driver) => [driver.id!, driver.name]),
+    );
+
+    const lines: RouteLine[] = [];
+    for (const route of this.routes()) {
+      if (route.driverId === null || route.cards.length === 0) {
+        continue;
+      }
+
+      const points: [number, number][] = [[warehouse.lat, warehouse.lng]];
+      for (const card of route.cards) {
+        const store = storeById.get(card.storeId);
+        // 沒座標的門市跳過，理由同 mapStores：0 或 undefined 會把線拉到幾內亞灣
+        if (!store?.lat || !store?.lng) {
+          continue;
+        }
+        points.push([store.lat, store.lng]);
+      }
+
+      lines.push({
+        id: route.routeId,
+        label: `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`,
+        points,
+      });
+    }
+
+    return lines;
   });
 
   /**
