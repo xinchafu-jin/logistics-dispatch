@@ -4,9 +4,11 @@ import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dto.request.OrdersDTO;
 import com.example.backend.entity.OrdersEntity;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.criteria.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,6 +40,12 @@ public class OrdersService {
         OrdersEntity entity = new OrdersEntity();
         apply(dto, entity);
         return toDTO(ordersDAO.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrdersDTO> findByDeliveryDateAndWarehouseId(LocalDate date, Long warehouseId) {
+        return ordersDAO.findByDeliveryDateAndWarehouseId(date, warehouseId).
+                stream().map(item -> toDTO(item)).toList();
     }
 
     public List<OrdersDTO> createAll(List<OrdersDTO> dtos) {

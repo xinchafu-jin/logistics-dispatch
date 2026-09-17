@@ -62,7 +62,7 @@ public class ReassignDTO {
     /**
      * 一台車要載哪些訂單。
      *
-     * <p>不帶既有的 routeId：後端會把當天的草稿整批清掉重建，舊的 routeId 不再存在，
+     * 不帶既有的 routeId：後端會把當天的草稿整批清掉重建，舊的 routeId 不再存在，
      * 帶了也用不到。日後若要做並行衝突偵測（樂觀鎖）再加回來。</p>
      */
     public static class RouteAssignment {

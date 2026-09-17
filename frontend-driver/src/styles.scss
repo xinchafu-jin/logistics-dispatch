@@ -18,3 +18,46 @@ button,
 input {
   font: inherit;
 }
+
+.driver-location-marker,
+.driver-destination-marker {
+  display: grid;
+  margin: 0 !important;
+  place-items: center;
+  border-radius: 50%;
+  font-family: Inter, 'Noto Sans TC', 'Segoe UI', sans-serif;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.driver-location-marker {
+  width: 28px !important;
+  height: 28px !important;
+  border: 2px solid #ffffff;
+  color: #08231f;
+  background: #70d5ba;
+  font-size: 12px;
+}
+
+.driver-destination-marker {
+  width: 34px !important;
+  height: 34px !important;
+  border: 3px solid #ffffff;
+  color: #ffffff;
+  background: #317dcb;
+  font-size: 13px;
+}
+
+.driver-destination-tooltip {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 4px;
+  color: #ffffff;
+  background: #1d67ad;
+  box-shadow: 0 2px 8px rgb(8 35 60 / 26%);
+  font: 800 11px/1.2 Inter, 'Noto Sans TC', 'Segoe UI', sans-serif;
+}
+
+.driver-destination-tooltip.leaflet-tooltip-top::before {
+  border-top-color: #1d67ad;
+}

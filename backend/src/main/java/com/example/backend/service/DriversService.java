@@ -10,7 +10,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Driver;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional
@@ -70,6 +72,13 @@ public class DriversService {
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
         return toDTO(driversDAO.save(entity));
+    }
+
+    @Transactional(readOnly = true)
+    public DriversDTO findByAccount(String account) {
+        DriversEntity entity = driversDAO.findByAccount(account.trim())
+                .orElseThrow(() -> new IllegalArgumentException("帳號或手機號碼不正確"));
+        return toDTO(entity);
     }
 
     @Transactional(readOnly = true)

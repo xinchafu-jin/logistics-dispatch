@@ -398,6 +398,7 @@ public class DispatchResponse {
         public void setLoadRate(Double loadRate) {
             this.loadRate = loadRate;
         }
+
     }
 
     /**

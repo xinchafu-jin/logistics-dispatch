@@ -422,6 +422,29 @@
   line-height: 1.5;
 }
 
+.login-notice {
+  margin: 14px 0 0;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.text-action {
+  margin-top: 14px;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.text-action:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
 @keyframes weather-entry-in {
   from {
     opacity: 0;

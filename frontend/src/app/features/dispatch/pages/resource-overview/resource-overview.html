@@ -1,16 +1,16 @@
 <main class="resource-page">
   <section class="page-intro" aria-label="人車資源">
     <div>
-      <p class="page-eyebrow">RESOURCE CONTROL</p>
-      <p>掌握台南配送司機、車輛、店家與倉庫的後端資源資料。</p>
+      <p class="page-eyebrow">人車資源</p>
+      <p>管理車輛、店家與倉庫資源；司機帳號改由本人申請，主管簽核後啟用。</p>
     </div>
 
     <div class="page-actions">
       <p class="updated-at">資料更新於 {{ updatedAt() }}</p>
       <div class="action-buttons">
-        <button type="button" class="secondary-action" (click)="openCreateDriver()">
+        <button type="button" class="secondary-action" (click)="openCreateAdmin()">
           <svg lucidePlus aria-hidden="true"></svg>
-          新增司機
+          新增管理員
         </button>
         <button type="button" class="secondary-action" (click)="openCreateVehicle()">
           <svg lucidePlus aria-hidden="true"></svg>
@@ -30,11 +30,6 @@
 
   <section class="resource-summary" aria-label="今日人車資源概況">
     <article class="summary-card">
-      <p>可派遣司機</p>
-      <strong>{{ activeDriverCount() }}</strong>
-      <span>以後端司機在職狀態計算</span>
-    </article>
-    <article class="summary-card">
       <p>可用車輛</p>
       <strong>{{ availableVehicleCount() }}</strong>
       <span>以後端車輛 AVAILABLE 計算</span>
@@ -47,27 +42,19 @@
     <article class="summary-card tone-warning">
       <p>需確認資源</p>
       <strong>{{ attentionResourceCount() }}</strong>
-      <span>停職、保養、暫停營業與停用倉庫</span>
+      <span>保養、暫停營業與停用倉庫</span>
     </article>
   </section>
 
-  <section class="resource-workspace" aria-label="司機、車輛、店家與倉庫資源工作區">
+  <section class="resource-workspace" aria-label="車輛、店家與倉庫資源工作區">
     <section class="resource-list-panel" aria-labelledby="resource-list-title">
       <header class="list-header">
         <div>
-          <p class="section-eyebrow">FLEET DIRECTORY</p>
+          <p class="section-eyebrow">資源清單</p>
           <h3 id="resource-list-title">資源清單</h3>
         </div>
 
         <div class="view-switch" role="group" aria-label="資源類型">
-          <button
-            type="button"
-            [class.is-active]="activeView() === 'drivers'"
-            [attr.aria-pressed]="activeView() === 'drivers'"
-            (click)="setView('drivers')"
-          >
-            司機
-          </button>
           <button
             type="button"
             [class.is-active]="activeView() === 'vehicles'"
@@ -125,73 +112,6 @@
         <p class="empty-state">正在從後端載入資源資料...</p>
       } @else if (errorMessage()) {
         <p class="empty-state">{{ errorMessage() }}</p>
-      } @else if (activeView() === 'drivers') {
-        <div class="resource-table driver-table">
-          <div class="table-head" aria-hidden="true">
-            <span>司機</span>
-            <span>狀態</span>
-            <span>指派車輛</span>
-            <span>目前任務</span>
-            <span>操作</span>
-          </div>
-
-          @for (driver of visibleDrivers(); track driver.id) {
-            <article class="resource-row">
-              <div class="resource-person">
-                <span class="initial-badge">{{ driver.name.slice(0, 1) }}</span>
-                <div>
-                  <strong>{{ driver.name }}</strong>
-                  <span>{{ driver.id }} · {{ driver.license }}</span>
-                </div>
-              </div>
-              <div class="driver-status-cell">
-                <span class="status-badge" [class]="'status-' + driver.status">{{
-                  driver.status
-                }}</span>
-                <label class="status-toggle" [title]="driver.isActive ? '設為停職' : '設為可排班'">
-                  <span class="sr-only">{{ driver.isActive ? '設為停職' : '設為可排班' }}</span>
-                  <input
-                    type="checkbox"
-                    [checked]="driver.isActive"
-                    [disabled]="changingDriverStatusId() === driver.backendId"
-                    (change)="updateDriverStatus(driver, $event)"
-                  />
-                  <span class="status-toggle__track" aria-hidden="true"></span>
-                </label>
-              </div>
-              <div class="table-value">
-                <strong>{{ driver.vehicle }}</strong>
-                <span>今日工時 {{ driver.hours }}</span>
-              </div>
-              <div class="table-value">
-                <strong>{{ driver.assignment }}</strong>
-                <span>台南配送區</span>
-              </div>
-              <div class="row-actions">
-                <button
-                  type="button"
-                  class="row-action"
-                  title="編輯司機"
-                  [attr.aria-label]="'編輯司機 ' + driver.name"
-                  (click)="openEditDriver(driver)"
-                >
-                  <svg lucidePencil aria-hidden="true"></svg>
-                </button>
-                <button
-                  type="button"
-                  class="row-action row-action--danger"
-                  title="刪除司機"
-                  [attr.aria-label]="'刪除司機 ' + driver.name"
-                  (click)="requestDeleteDriver(driver)"
-                >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
-                </button>
-              </div>
-            </article>
-          } @empty {
-            <p class="empty-state">沒有符合目前篩選條件的司機。</p>
-          }
-        </div>
       } @else if (activeView() === 'vehicles') {
         <div class="resource-table vehicle-table">
           <div class="table-head" aria-hidden="true">
@@ -220,7 +140,7 @@
               </div>
               <div class="table-value">
                 <strong>{{ vehicle.assignment }}</strong>
-                <span>台南配送區</span>
+                <span>高雄配送區</span>
               </div>
               <div class="row-actions">
                 <button
@@ -378,38 +298,21 @@
     <aside class="assignment-panel" aria-labelledby="assignment-title">
       <header class="assignment-header">
         <div>
-          <p class="section-eyebrow">RESOURCE SYNC</p>
+          <p class="section-eyebrow">資源同步</p>
           <h3 id="assignment-title">後端資源狀態</h3>
         </div>
-        <span>{{ drivers().length }} 司機</span>
+        <span>帳號簽核</span>
       </header>
 
-      <div class="assignment-list">
-        @for (driver of drivers().slice(0, 3); track driver.id ?? driver.account) {
-          <article class="assignment-item">
-            <div class="assignment-route">
-              <strong>{{ driver.name }}</strong>
-              <span>{{ driver.account }} · {{ driver.phone || '未提供電話' }}</span>
-            </div>
-            <div class="assignment-pair">
-              <span
-                >工作時段 {{ driver.workStart.slice(0, 5) }} -
-                {{ driver.workEnd.slice(0, 5) }}</span
-              >
-              <span>休息 {{ driver.restDuration }} 分鐘</span>
-            </div>
-            <p class="assignment-status">{{ driver.isActive ? '可排班' : '停職' }}</p>
-          </article>
-        } @empty {
-          <p class="empty-state">後端目前沒有司機資料。</p>
-        }
-      </div>
+      <p class="empty-state">
+        司機帳號改由司機端提交申請；主管待辦、核准與拒絕操作位於右上角通知鈴鐺。
+      </p>
 
       <section class="resource-alert" aria-label="資源提醒">
         <svg lucideTriangleAlert aria-hidden="true"></svg>
         <div>
           <strong>後端資源資料已同步</strong>
-          <span>配送路線與即時定位尚未由目前的後端 Controller 提供。</span>
+          <span>配送路線與即時定位會依已登入司機與後端 GPS 資料顯示。</span>
         </div>
       </section>
     </aside>
@@ -422,8 +325,8 @@
         role="dialog"
         aria-modal="true"
         [attr.aria-labelledby]="
-          formType === 'driver' || formType === 'edit-driver'
-            ? 'driver-form-title'
+          formType === 'admin'
+            ? 'admin-form-title'
             : formType === 'vehicle' || formType === 'edit-vehicle'
               ? 'vehicle-form-title'
               : formType === 'store' || formType === 'edit-store'
@@ -434,11 +337,11 @@
       >
         <header class="modal-header">
           <div>
-            <p class="section-eyebrow">BACKEND RESOURCE</p>
+            <p class="section-eyebrow">資源資料</p>
             <h3
               [id]="
-                formType === 'driver' || formType === 'edit-driver'
-                  ? 'driver-form-title'
+                formType === 'admin'
+                  ? 'admin-form-title'
                   : formType === 'vehicle' || formType === 'edit-vehicle'
                     ? 'vehicle-form-title'
                     : formType === 'store' || formType === 'edit-store'
@@ -447,21 +350,19 @@
               "
             >
               {{
-                formType === 'driver'
-                  ? '新增司機'
-                  : formType === 'edit-driver'
-                    ? '編輯司機'
-                    : formType === 'vehicle'
-                      ? '新增車輛'
-                      : formType === 'edit-vehicle'
-                        ? '編輯車輛'
-                        : formType === 'store'
-                          ? '新增店家'
-                          : formType === 'edit-store'
-                            ? '編輯店家'
-                            : formType === 'warehouse'
-                              ? '新增倉庫'
-                              : '編輯倉庫'
+                formType === 'admin'
+                  ? '新增管理員'
+                  : formType === 'vehicle'
+                    ? '新增車輛'
+                    : formType === 'edit-vehicle'
+                      ? '編輯車輛'
+                      : formType === 'store'
+                        ? '新增店家'
+                        : formType === 'edit-store'
+                          ? '編輯店家'
+                          : formType === 'warehouse'
+                            ? '新增倉庫'
+                            : '編輯倉庫'
               }}
             </h3>
           </div>
@@ -476,93 +377,49 @@
           </button>
         </header>
 
-        @if (formType === 'driver' || formType === 'edit-driver') {
-          <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
+        @if (formType === 'admin') {
+          <form class="resource-form" (submit)="$event.preventDefault(); submitAdmin()">
             <div class="form-grid">
+              <label class="form-field">
+                <span>主管姓名</span>
+                <input
+                  type="text"
+                  required
+                  [value]="adminForm().name"
+                  (input)="updateAdminText('name', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>手機號碼</span>
+                <input
+                  type="tel"
+                  required
+                  maxlength="10"
+                  [value]="adminForm().phone"
+                  (input)="updateAdminText('phone', $event)"
+                />
+              </label>
               <label class="form-field">
                 <span>登入帳號</span>
                 <input
                   type="text"
                   required
-                  [value]="driverForm().account"
-                  (input)="updateDriverText('account', $event)"
+                  autocomplete="username"
+                  [value]="adminForm().account"
+                  (input)="updateAdminText('account', $event)"
                 />
               </label>
               <label class="form-field">
-                <span>{{
-                  formType === 'edit-driver' ? '新密碼（不修改可留白）' : '初始密碼'
-                }}</span>
+                <span>初始密碼</span>
                 <input
                   type="password"
-                  autocomplete="new-password"
-                  [attr.minlength]="formType === 'driver' ? 8 : null"
+                  required
+                  minlength="8"
                   maxlength="12"
-                  [required]="formType === 'driver'"
-                  [placeholder]="formType === 'edit-driver' ? '留白則不變更密碼' : '8 到 12 個字元'"
-                  [value]="driverForm().password"
-                  (input)="updateDriverText('password', $event)"
+                  autocomplete="new-password"
+                  [value]="adminForm().password"
+                  (input)="updateAdminText('password', $event)"
                 />
-              </label>
-              <label class="form-field">
-                <span>司機姓名</span>
-                <input
-                  type="text"
-                  required
-                  [value]="driverForm().name"
-                  (input)="updateDriverText('name', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>電話</span>
-                <input
-                  type="tel"
-                  [value]="driverForm().phone"
-                  (input)="updateDriverText('phone', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>休息分鐘</span>
-                <input
-                  type="number"
-                  min="0"
-                  [value]="driverForm().restDuration"
-                  (input)="updateDriverNumber('restDuration', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>上班時間</span>
-                <input
-                  type="time"
-                  required
-                  [value]="driverForm().workStart"
-                  (input)="updateDriverText('workStart', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>下班時間</span>
-                <input
-                  type="time"
-                  required
-                  [value]="driverForm().workEnd"
-                  (input)="updateDriverText('workEnd', $event)"
-                />
-              </label>
-              <label class="form-field">
-                <span>加班上限分鐘</span>
-                <input
-                  type="number"
-                  min="0"
-                  [value]="driverForm().maxOvertimeMinutes"
-                  (input)="updateDriverNumber('maxOvertimeMinutes', $event)"
-                />
-              </label>
-              <label class="check-field">
-                <input
-                  type="checkbox"
-                  [checked]="driverForm().isActive"
-                  (change)="updateDriverActive($event)"
-                />
-                <span>{{ formType === 'edit-driver' ? '允許排班' : '建立為在職司機' }}</span>
               </label>
             </div>
 
@@ -573,9 +430,7 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{
-                  isSaving() ? '儲存中...' : formType === 'edit-driver' ? '儲存修改' : '新增司機'
-                }}
+                {{ isSaving() ? '建立中...' : '建立管理員帳號' }}
               </button>
             </div>
           </form>
@@ -858,7 +713,7 @@
         aria-modal="true"
         (click)="stopEvent($event)"
       >
-        <p class="section-eyebrow">CONFIRM ACTION</p>
+        <p class="section-eyebrow">確認操作</p>
         <h3>確定刪除{{ deleteTargetLabel(target) }}？</h3>
         <p>即將刪除「{{ target.name }}」，資料會透過後端 API 移除。</p>
         <div class="modal-actions">

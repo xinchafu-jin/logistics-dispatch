@@ -41,6 +41,14 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'schedules',
+        data: { title: '司機班表' },
+        loadComponent: () =>
+          import('./features/dispatch/pages/driver-schedule/driver-schedule').then(
+            (component) => component.DriverSchedule,
+          ),
+      },
+      {
         path: 'fleet',
         data: { title: '即時車隊' },
         loadComponent: () =>

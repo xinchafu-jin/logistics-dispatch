@@ -12,8 +12,49 @@ import * as L from 'leaflet';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DriverDto} from '../../../../core/services/dispatch-api.models';
 
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+// 倉庫與門市的圖示（lucide warehouse / store 的 path，直接內嵌）。
+//
+// 不走 lucide-angular：那是 Angular 元件，吐不出 Leaflet divIcon 需要的 HTML 字串；
+// 也不放 .svg 檔用 <img> 指，那又回到 Leaflet 預設 marker 打包後 404 的老問題。
+const WAREHOUSE_ICON_PATHS = `
+  <path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/>
+  <path d="M6 18h12"/>
+  <path d="M6 14h12"/>
+  <rect width="12" height="12" x="6" y="10"/>
+`;
+const STORE_ICON_PATHS = `
+  <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
+  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+  <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
+  <path d="M2 7h20"/>
+  <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/>
+`;
+
+/**
+ * 做一個圓形徽章樣式的 divIcon。
+ *
+ * divIcon 是 DOM 不是 canvas，所以顏色交給 scss 的 .map-badge 管，
+ * 不必像 circleMarker 那樣把色碼寫死在 TS 裡。
+ */
+function badgeIcon(kind: 'warehouse' | 'store', paths: string, size: number): L.DivIcon {
+  return L.divIcon({
+    className: '',   // 清掉 leaflet 預設的白底方框
+    html: `<span class="map-badge map-badge--${kind}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">${paths}</svg>
+    </span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],      // 徽章中心對準座標
+    tooltipAnchor: [0, -size / 2],
+  });
+}
+
 interface FleetDriver {
-  id: string;
+  id: number;
+  displayId: string;
   name: string;
   isActive: boolean;
 }
@@ -26,6 +67,19 @@ export interface MapPoint {
   lat: number;
   lng: number;
 }
+
+/** 一位司機當天的配送路線，倉庫出發依派車順序連到各門市 */
+export interface RouteLine {
+  id: number;                   // routeId，同時決定配色
+  label: string;                // tooltip：司機名
+  points: [number, number][];   // [緯度, 經度]，Leaflet 順序
+}
+
+/**
+ * 路線配色。避開既有的三個寫死色：倉庫 #e0ad76、門市 #63d1c6、司機 #7ee787，
+ * 否則線會跟點混成同一色。超過六條就從頭循環。
+ */
+const ROUTE_LINE_COLORS = ['#7aa2f7', '#f7768e', '#bb9af7', '#e0af68', '#2ac3de', '#9ece6a'];
 
 @Component({
   selector: 'app-live-fleet-map',
@@ -48,11 +102,19 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   readonly driverPoints = input<MapPoint[]>([]);
   /** 司機圖層開關，跟 showPoints 分開：門市是靜態資料，司機位置背後是持續輪詢 */
   readonly showDriverPoints = input(false);
+  /** 司機的配送路線，由 dashboard 依看板車道算出 */
+  readonly routeLines = input<RouteLine[]>([]);
+  /** 路線圖層開關 */
+  readonly showRouteLines = input(false);
   readonly drivers = signal<FleetDriver[]>([]);
-  readonly selectedDriverId = signal<string | null>(null);
+  readonly selectedDriverId = signal<number | null>(null);
   readonly selectedDriver = computed(() =>
     this.drivers().find((driver) => driver.id === this.selectedDriverId()),
   );
+  readonly selectedDriverPoint = computed(() => {
+    const driver = this.selectedDriver();
+    return driver ? this.driverPoints().find((point) => point.id === driver.id) ?? null : null;
+  });
   readonly activeDriverCount = computed(
     () => this.drivers().filter((driver) => driver.isActive).length,
   );
@@ -61,6 +123,11 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   private map?: L.Map;
   private resizeObserver?: ResizeObserver;
   private markerLayer?: L.LayerGroup;
+  /**
+   * 路線自己一層，不跟 markerLayer 共用：markerLayer 每次重畫都整層 clearLayers()，
+   * 混在一起的話點一更新（司機位置每 30 秒一次）就會把線一併清掉。
+   */
+  private lineLayer?: L.LayerGroup;
   /**
    * 地圖是否已建立。用 signal 而不是判斷 this.map，是因為 effect 會早於
    * ngAfterViewInit 執行：那時直接 return 掉之後 input 沒再變動，effect 就不會再跑，
@@ -80,6 +147,15 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       if (!this.mapReady()) return;
       this.drawPoints(warehouse, stores, visible, driverPoints, driversVisible);
     });
+
+    // 路線分開一個 effect：它只依賴 routeLines/showRouteLines，
+    // 跟點畫在一起的話，司機位置每 30 秒一輪詢就會連帶重畫所有線。
+    effect(() => {
+      const lines = this.routeLines();
+      const linesVisible = this.showRouteLines();
+      if (!this.mapReady()) return;
+      this.drawLines(lines, linesVisible);
+    });
   }
 
   ngAfterViewInit(): void {
@@ -92,12 +168,12 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       attributionControl: false,
       zoomControl: false,
       preferCanvas: true,
-    }).setView([23.006, 120.219], 13);
+    }).setView([22.6273, 120.3014], 13);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    L.tileLayer(OSM_TILE_URL, {
+      attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 19,
-      subdomains: 'abcd',
+      subdomains: 'abc',
     }).addTo(this.map);
     L.control.zoom({position: 'bottomright'}).addTo(this.map);
 
@@ -113,7 +189,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     this.map?.remove();
   }
 
-  selectDriver(id: string): void {
+  selectDriver(id: number): void {
     this.selectedDriverId.set(id);
   }
 
@@ -138,18 +214,13 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     this.markerLayer ??= L.layerGroup().addTo(map);
     this.markerLayer.clearLayers();
 
-    // 用 circleMarker 而不是 L.marker()：預設 marker 的 icon 圖片路徑是相對 leaflet.css
-    // 解析的，打包後常 404，畫面沒有點但不一定看得到錯誤。circleMarker 是向量，不碰圖檔。
-    //
-    // 顏色只能寫死：地圖開了 preferCanvas，圈畫在 canvas 上而不是 DOM，CSS 變數碰不到它。
-    // 這三個色值分別對應 styles.scss 的 --accent、側欄暖色提示、以及司機專用的亮綠。
+    // 倉庫與門市用 divIcon 圖示，不用 L.marker() 的預設圖釘：
+    // 預設圖釘的 icon 圖片路徑是相對 leaflet.css 解析的，打包後常 404，
+    // 畫面沒有點但不一定看得到錯誤。divIcon 是自己給的 HTML，不碰圖檔。
     if (visible && warehouse) {
-      L.circleMarker([warehouse.lat, warehouse.lng], {
-        radius: 10,
-        weight: 2,
-        color: '#e0ad76',
-        fillColor: '#e0ad76',
-        fillOpacity: 0.9,
+      L.marker([warehouse.lat, warehouse.lng], {
+        icon: badgeIcon('warehouse', WAREHOUSE_ICON_PATHS, 34),
+        keyboard: false,
       })
         .bindTooltip(`倉庫｜${warehouse.label}`, {direction: 'top'})
         .addTo(this.markerLayer);
@@ -157,18 +228,17 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
 
     if (visible) {
       for (const store of stores) {
-        L.circleMarker([store.lat, store.lng], {
-          radius: 6,
-          weight: 2,
-          color: '#63d1c6',
-          fillColor: '#0b0e0f',
-          fillOpacity: 0.9,
+        L.marker([store.lat, store.lng], {
+          icon: badgeIcon('store', STORE_ICON_PATHS, 26),
+          keyboard: false,
         })
           .bindTooltip(`${store.label}<br>${store.detail}`, {direction: 'top'})
           .addTo(this.markerLayer);
       }
     }
 
+    // 司機維持 circleMarker：位置每 30 秒重畫一次，向量圈畫在 canvas 上比較省，
+    // 而且一個小圓點在圖示之間反而好認。顏色只能寫死，canvas 碰不到 CSS 變數。
     if (driversVisible) {
       for (const driver of driverPoints) {
         L.circleMarker([driver.lat, driver.lng], {
@@ -184,10 +254,44 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     // 自動框選不把司機算進去：司機位置每 30 秒變動，框選只在換倉庫時算一次，
-    // 兩者週期對不上；而且司機一旦跑到台南以外，範圍會被拉到失去意義。
+    // 兩者週期對不上；而且司機一旦跑到高雄以外，範圍會被拉到失去意義。
     if (visible) {
       this.fitOnce(map, warehouse, stores);
     }
+  }
+
+  /**
+   * 重畫司機路線。
+   *
+   * 直線連點，不走實際道路 —— 線會穿過建物與港灣，長度也不等於里程，
+   * 畫面上要標距離請用看板算出來的 totalDistance。
+   */
+  private drawLines(lines: RouteLine[], visible: boolean): void {
+    const map = this.map;
+    if (!map) {
+      return;
+    }
+
+    this.lineLayer ??= L.layerGroup().addTo(map);
+    this.lineLayer.clearLayers();
+    if (!visible) {
+      return;
+    }
+
+    lines.forEach((line, index) => {
+      // 一個點連不成線，補上倉庫後至少要兩點才畫
+      if (line.points.length < 2) {
+        return;
+      }
+
+      L.polyline(line.points, {
+        color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length],
+        weight: 3,
+        opacity: 0.85,
+      })
+        .bindTooltip(line.label, {sticky: true})
+        .addTo(this.lineLayer!);
+    });
   }
 
   /**
@@ -224,7 +328,12 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   }
 
   private toFleetDriver(driver: DriverDto): FleetDriver {
-    const id = driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account;
-    return {id, name: driver.name, isActive: driver.isActive};
+    return {
+      id: driver.id ?? 0,
+      displayId: driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account,
+      name: driver.name,
+      isActive: driver.isActive,
+    };
   }
+
 }

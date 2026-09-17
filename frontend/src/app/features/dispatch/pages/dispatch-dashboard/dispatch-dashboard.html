@@ -1,7 +1,7 @@
 <main class="dispatch-dashboard">
   <section class="dashboard-intro" aria-label="今日配送總覽">
     <div>
-      <p class="dashboard-eyebrow">DAILY OPERATIONS</p>
+      <p class="dashboard-eyebrow">今日作業</p>
       <p class="dashboard-description">優先確認待審核配送需求，再依車輛與司機狀況完成排車。</p>
     </div>
 
@@ -45,6 +45,8 @@
         [showPoints]="showMapPoints()"
         [driverPoints]="mapDrivers()"
         [showDriverPoints]="showDriverPoints()"
+        [routeLines]="routeLines()"
+        [showRouteLines]="showRouteLines()"
       />
     </section>
 
@@ -52,7 +54,7 @@
       <section class="orders-section" aria-labelledby="pending-orders-title">
         <header class="section-heading">
           <div>
-            <p class="section-eyebrow">REVIEW QUEUE</p>
+            <p class="section-eyebrow">待審核清單</p>
             <h3 id="pending-orders-title">待確認配送</h3>
           </div>
 
@@ -78,7 +80,7 @@
       <section class="alerts-section" aria-labelledby="alerts-title">
         <header class="section-heading">
           <div>
-            <p class="section-eyebrow">REQUIRES ATTENTION</p>
+            <p class="section-eyebrow">待處理提醒</p>
             <h3 id="alerts-title">待處理提醒</h3>
           </div>
 
@@ -99,40 +101,26 @@
       </section>
     </aside>
   </div>
-  <div>
-    <ul>
-      <li>
-        <p>
-          <mat-slide-toggle
-            [checked]="showMapPoints()"
-            (change)="toggleMapPoints($event.checked)"
-          >商店 門市
-          </mat-slide-toggle
-          >
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle
-            [checked]="showDriverPoints()"
-            (change)="toggleDriverPoints($event.checked)"
-          >
-            司機位置
-          </mat-slide-toggle>
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle>Slide me!</mat-slide-toggle>
-        </p>
-      </li>
-      <li>
-        <p>
-          <mat-slide-toggle>Slide me!</mat-slide-toggle>
-        </p>
-      </li>
-    </ul>
-  </div>
+  <section class="map-layer-controls" aria-label="地圖圖層">
+    <mat-slide-toggle
+      [checked]="showMapPoints()"
+      (change)="toggleMapPoints($event.checked)"
+    >
+      配送門市
+    </mat-slide-toggle>
+    <mat-slide-toggle
+      [checked]="showDriverPoints()"
+      (change)="toggleDriverPoints($event.checked)"
+    >
+      司機位置
+    </mat-slide-toggle>
+    <mat-slide-toggle
+      [checked]="showRouteLines()"
+      (change)="toggleRouteLines($event.checked)"
+    >
+      司機路線
+    </mat-slide-toggle>
+  </section>
 
 
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
@@ -174,7 +162,7 @@
             <span>編組名稱</span>
             <input
               type="text"
-              placeholder="例如：台南東區常配線"
+              placeholder="例如：高雄左營常配線"
               [value]="templateName()"
               (input)="updateTemplateName($event)"
             />
@@ -340,9 +328,11 @@
                 <option
                   [value]="option.id"
                   [selected]="option.id === route.driverId"
-                  [disabled]="option.takenNote !== null"
+                  [disabled]="option.takenNote !== null || option.scheduleNote !== null"
                 >
-                  {{ option.name }}@if (option.takenNote) {
+                  {{ option.name }}@if (option.scheduleNote) {
+                  · {{ option.scheduleNote }}
+                } @else if (option.takenNote) {
                   · {{ option.takenNote }}
                 }
                 </option>

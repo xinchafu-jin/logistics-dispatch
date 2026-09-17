@@ -14,11 +14,12 @@ import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
-import {LiveFleetMap, MapPoint} from '../../components/live-fleet-map/live-fleet-map';
+import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {
   DispatchResultDto,
   DriverDto,
+  DriverShiftDto,
   DriverTakenDto,
   GpsPingDto,
   OrderDto,
@@ -26,6 +27,7 @@ import {
   ReassignRequest,
   RouteStatus,
   RouteStopDto,
+  ShiftType,
   StoreDto,
   TemplateDto,
   TemplateRouteRequest,
@@ -134,6 +136,8 @@ interface DriverOption {
   name: string;
   /** 不是 null 就代表當天已排在別處，選單要 disabled 並顯示這句原因 */
   takenNote: string | null;
+  /** 當日班表不符合出車資格時，保留司機並標示原因，避免看起來像資料消失。 */
+  scheduleNote: string | null;
 }
 
 interface SummaryCard {
@@ -183,6 +187,10 @@ export class DispatchDashboard implements OnInit {
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly drivers = signal<DriverDto[]>([]);
+  /** 排車不看是否已打卡，而是看今天已發布班表中的 WORK 班次。 */
+  readonly scheduleLoadState = signal<'loading' | 'ready' | 'unavailable'>('loading');
+  readonly scheduleMessage = signal('正在同步當日班表...');
+  readonly shiftsByDriverId = signal<ReadonlyMap<number, DriverShiftDto>>(new Map());
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
   readonly pendingOrders = signal<PendingOrder[]>([]);
@@ -217,7 +225,7 @@ export class DispatchDashboard implements OnInit {
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
   );
-  readonly warehouseName = signal('台南配送區');
+  readonly warehouseName = signal('高雄配送區');
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
@@ -227,7 +235,7 @@ export class DispatchDashboard implements OnInit {
     return [
       `今日配送需求 ${orders.length} 筆`,
       `${waitingSchedule} 筆待排車，資料來自 OrderController`,
-      `${delivering} 筆配送中，後端目前未提供即時 GPS Controller`,
+      `${delivering} 筆配送中，可開啟地圖的司機位置查看有效 GPS 回傳`,
       `已同步 ${this.drivers().length} 位司機與 ${this.vehicles().length} 台車輛`,
       `目前 ${this.warehouseName()} 已納入首頁資料來源`,
     ];
@@ -355,6 +363,65 @@ export class DispatchDashboard implements OnInit {
     return points;
   });
 
+  /** 司機路線圖層開關。預設關閉，一次全開線會疊在一起看不出誰是誰 */
+  readonly showRouteLines = signal(false);
+
+  toggleRouteLines(checked: boolean): void {
+    this.showRouteLines.set(checked);
+  }
+
+  /**
+   * 各司機的配送路線：倉庫出發，依派車順序直線連到各門市。
+   *
+   * 順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
+   * （moveItemInArray / transferArrayItem），sequence 要等 reassign 回來才更新，
+   * 照 sequence 畫會跟看板上看到的順序對不上。
+   *
+   * 只畫已指派司機的車道：這層就是「司機的路線」，沒司機就沒有主體可畫。
+   */
+  readonly routeLines = computed<RouteLine[]>(() => {
+    const warehouse = this.mapWarehouse();
+    if (!warehouse) {
+      return [];
+    }
+
+    const storeById = new Map(
+      this.stores()
+        .filter((store) => store.id != null)
+        .map((store) => [store.id!, store]),
+    );
+    const nameById = new Map(
+      this.drivers()
+        .filter((driver) => driver.id != null)
+        .map((driver) => [driver.id!, driver.name]),
+    );
+
+    const lines: RouteLine[] = [];
+    for (const route of this.routes()) {
+      if (route.driverId === null || route.cards.length === 0) {
+        continue;
+      }
+
+      const points: [number, number][] = [[warehouse.lat, warehouse.lng]];
+      for (const card of route.cards) {
+        const store = storeById.get(card.storeId);
+        // 沒座標的門市跳過，理由同 mapStores：0 或 undefined 會把線拉到幾內亞灣
+        if (!store?.lat || !store?.lng) {
+          continue;
+        }
+        points.push([store.lat, store.lng]);
+      }
+
+      lines.push({
+        id: route.routeId,
+        label: `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`,
+        points,
+      });
+    }
+
+    return lines;
+  });
+
   /**
    * 司機位置圖層開關。預設關閉 ——
    * 跟門市不同，這個一開就是持續輪詢的背景請求，不該預設一直跑。
@@ -376,7 +443,7 @@ export class DispatchDashboard implements OnInit {
     toObservable(this.showDriverPoints).pipe(
       switchMap((on) =>
         on
-          ? timer(0, 1_000).pipe(
+          ? timer(0, 30_000).pipe(
               switchMap(() => this.api.getLiveFleet().pipe(catchError(() => of<GpsPingDto[]>([])))),
             )
           : of<GpsPingDto[]>([]),
@@ -416,6 +483,7 @@ export class DispatchDashboard implements OnInit {
 
   onDateChange(event: Event): void {
     this.dispatchDate.set((event.target as HTMLInputElement).value);
+    this.loadScheduleEligibility();
     this.reloadBoard();
   }
 
@@ -444,7 +512,7 @@ export class DispatchDashboard implements OnInit {
         this.pendingOrders.set(this.toPendingOrders(orders, stores));
         this.alerts.set(this.toAlerts(drivers, vehicles));
         this.warehouseName.set(
-          warehouses.find((warehouse) => warehouse.isActive)?.name ?? '台南配送區',
+          warehouses.find((warehouse) => warehouse.isActive)?.name ?? '高雄配送區',
         );
         this.updatedAt.set(this.formatCurrentTime());
         this.loading.set(false);
@@ -455,6 +523,7 @@ export class DispatchDashboard implements OnInit {
           warehouses.find((warehouse) => warehouse.isActive)?.id ?? warehouses[0]?.id ?? 0;
         this.warehouseId.set(defaultWarehouseId);
         if (defaultWarehouseId) {
+          this.loadScheduleEligibility();
           this.reloadBoard();
         }
       },
@@ -508,7 +577,7 @@ export class DispatchDashboard implements OnInit {
     if (alerts.length === 0) {
       alerts.push({
         title: '目前沒有資源提醒',
-        detail: '後端目前尚未提供即時異常 Controller。',
+        detail: '目前沒有資源異常；異常案件 API 尚未完成 Service 串接。',
         tone: 'normal',
       });
     }
@@ -528,7 +597,7 @@ export class DispatchDashboard implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '台南配送區';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '高雄配送區';
   }
 
   private formatTime(value: string): string {
@@ -601,7 +670,11 @@ export class DispatchDashboard implements OnInit {
     }
 
     return this.drivers()
-      .filter((driver): driver is DriverDto & { id: number } => driver.id != null && driver.isActive)
+      // 已儲存的舊路線即使指到停職司機也要保留在選單裡，否則 select 會誤顯示成未指派。
+      .filter(
+        (driver): driver is DriverDto & { id: number } =>
+          driver.id != null && (driver.isActive || driver.id === route.driverId),
+      )
       .map((driver) => ({
         id: driver.id,
         name: driver.name,
@@ -609,6 +682,7 @@ export class DispatchDashboard implements OnInit {
           driver.id === route.driverId
             ? null
             : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
+        scheduleNote: this.driverScheduleNote(driver.id),
       }));
   }
 
@@ -629,6 +703,14 @@ export class DispatchDashboard implements OnInit {
 
     const selected = (event.target as HTMLSelectElement).value;
     const driverId = selected === '' ? null : Number(selected);
+    const scheduleNote = driverId === null ? null : this.driverScheduleNote(driverId);
+
+    // DOM 的 disabled option 已防住一般操作；這道檢查則保護鍵盤操作與日後的其他呼叫點。
+    if (driverId !== null && scheduleNote) {
+      this.boardError.set(`無法指派司機：${this.driverName(driverId)}${scheduleNote}。`);
+      (event.target as HTMLSelectElement).value = route.driverId === null ? '' : String(route.driverId);
+      return;
+    }
 
     this.routes.update((routes) =>
       routes.map((item) => (item.routeId === route.routeId ? {...item, driverId} : item)),
@@ -669,6 +751,14 @@ export class DispatchDashboard implements OnInit {
    */
   private submitReassign(): void {
     const request = this.buildReassignRequest();
+
+    const scheduleIssues = this.scheduleIssuesForRoutes(this.routes());
+    if (scheduleIssues.length > 0) {
+      this.boardError.set(`無法儲存排車：${scheduleIssues.join('；')}。`);
+      // 拖曳採樂觀更新；資格不符時重讀伺服器資料，避免畫面留下未儲存的排列。
+      this.reloadBoard();
+      return;
+    }
 
     // 全部訂單都被拖到未排入池時沒有東西可送。後端的 routes 有 @NotEmpty，
     // 送出去只會拿到 400，所以在這裡就停住。
@@ -720,8 +810,41 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    if (this.scheduleLoadState() !== 'ready') {
+      this.publishError.set(this.scheduleMessage() || '尚未完成當日班表驗證，暫時不能發布。');
+      return;
+    }
+
+    const warehouseIds = this.warehouses()
+      .map((warehouse) => warehouse.id)
+      .filter((warehouseId): warehouseId is number => warehouseId != null);
+    if (warehouseIds.length === 0) {
+      this.publishError.set('找不到可驗證的倉庫，暫時不能發布。');
+      return;
+    }
+
     this.publishing.set(true);
     this.publishError.set('');
+    // 發布是跨倉動作，發布前逐倉讀取草稿，避免其他倉有休假／請假司機時仍一起送出。
+    forkJoin(warehouseIds.map((warehouseId) => this.api.getDispatchBoard(this.dispatchDate(), warehouseId))).subscribe({
+      next: (boards) => {
+        const scheduleIssues = this.scheduleIssuesForDispatchBoards(boards);
+        if (scheduleIssues.length > 0) {
+          this.publishError.set(`無法發布排車：${scheduleIssues.join('；')}。`);
+          this.publishing.set(false);
+          return;
+        }
+
+        this.publishVerifiedDispatch();
+      },
+      error: (error: unknown) => {
+        this.publishError.set(`無法驗證各倉班表資格：${describeError(error)}`);
+        this.publishing.set(false);
+      },
+    });
+  }
+
+  private publishVerifiedDispatch(): void {
     this.api.publishDispatch(this.dispatchDate()).subscribe({
       next: (boards) => this.applyMyBoard(boards),
       error: (error: unknown) => {
@@ -965,6 +1088,130 @@ export class DispatchDashboard implements OnInit {
   vehicleLabel(vehicleId: number): string {
     const vehicle = this.vehicles().find((item) => item.id === vehicleId);
     return vehicle ? vehicle.plateNumber : `車輛 #${vehicleId}`;
+  }
+
+  /** 讀取當月已發布班表，將選定日期的班次建立成司機 id 索引。 */
+  private loadScheduleEligibility(): void {
+    const targetDate = this.dispatchDate();
+    this.scheduleLoadState.set('loading');
+    this.scheduleMessage.set('正在同步當日班表...');
+    this.shiftsByDriverId.set(new Map());
+
+    this.api.getScheduleMonth(targetDate.slice(0, 7)).subscribe({
+      next: (month) => {
+        if (targetDate !== this.dispatchDate()) {
+          return;
+        }
+
+        if (month.status !== 'PUBLISHED') {
+          this.scheduleLoadState.set('unavailable');
+          this.scheduleMessage.set('當月班表尚未發布，暫時不能指派司機。');
+          return;
+        }
+
+        this.api.getScheduleMonthShifts(month.id).subscribe({
+          next: (shifts) => {
+            if (targetDate !== this.dispatchDate()) {
+              return;
+            }
+
+            this.shiftsByDriverId.set(
+              new Map(
+                shifts
+                  .filter((shift) => shift.workDate === targetDate)
+                  .map((shift) => [shift.driverId, shift]),
+              ),
+            );
+            this.scheduleLoadState.set('ready');
+            this.scheduleMessage.set('');
+          },
+          error: (error: unknown) => this.markScheduleUnavailable(targetDate, error),
+        });
+      },
+      error: (error: unknown) => this.markScheduleUnavailable(targetDate, error),
+    });
+  }
+
+  private markScheduleUnavailable(targetDate: string, error: unknown): void {
+    if (targetDate !== this.dispatchDate()) {
+      return;
+    }
+
+    const isMissing = error instanceof HttpErrorResponse && error.status === 404;
+    this.scheduleLoadState.set('unavailable');
+    this.scheduleMessage.set(
+      isMissing
+        ? '找不到當月班表，暫時不能指派司機。'
+        : `無法讀取當日班表，暫時不能指派司機（${describeError(error)}）。`,
+    );
+  }
+
+  private driverScheduleNote(driverId: number): string | null {
+    const driver = this.drivers().find((item) => item.id === driverId);
+    if (!driver) {
+      return '司機資料不存在';
+    }
+    if (!driver.isActive) {
+      return '帳號已停用';
+    }
+    if (this.scheduleLoadState() === 'loading') {
+      return '正在同步當日班表';
+    }
+    if (this.scheduleLoadState() === 'unavailable') {
+      return this.scheduleMessage() || '當日班表不可用';
+    }
+
+    const shift = this.shiftsByDriverId().get(driverId);
+    if (!shift) {
+      return '今天未排班';
+    }
+
+    return this.shiftScheduleNote(shift.shiftType);
+  }
+
+  private shiftScheduleNote(shiftType: ShiftType): string | null {
+    switch (shiftType) {
+      case 'WORK':
+        return null;
+      case 'DAY_OFF':
+        return '今天休假';
+      case 'LEAVE':
+        return '今天請假';
+      case 'UNASSIGNED':
+        return '今天尚未安排';
+    }
+  }
+
+  private scheduleIssuesForRoutes(routes: readonly BoardRoute[]): string[] {
+    const assignedDriverIds = new Set(
+      routes
+        .filter((route) => route.cards.length > 0 && route.driverId !== null)
+        .map((route) => route.driverId!),
+    );
+
+    return [...assignedDriverIds].flatMap((driverId) => {
+      const note = this.driverScheduleNote(driverId);
+      return note ? [`${this.driverName(driverId)}${note}`] : [];
+    });
+  }
+
+  private scheduleIssuesForDispatchBoards(boards: readonly DispatchResultDto[]): string[] {
+    const assignedDriverIds = new Set(
+      boards.flatMap((board) =>
+        board.routes
+          .filter((route) => route.driverId !== null)
+          .map((route) => route.driverId!),
+      ),
+    );
+
+    return [...assignedDriverIds].flatMap((driverId) => {
+      const note = this.driverScheduleNote(driverId);
+      return note ? [`${this.driverName(driverId)}${note}`] : [];
+    });
+  }
+
+  private driverName(driverId: number): string {
+    return this.drivers().find((driver) => driver.id === driverId)?.name ?? `司機 #${driverId}`;
   }
 
   private reloadBoard(): void {

@@ -26,11 +26,6 @@
   background: #0b0e0f;
 }
 
-.fleet-map-canvas .leaflet-pane,
-.fleet-map-canvas .leaflet-control {
-  filter: saturate(78%) contrast(108%);
-}
-
 .fleet-map-canvas .leaflet-control-zoom {
   overflow: hidden;
   margin: 0 18px 18px 0;
@@ -64,9 +59,16 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px 44px;
-  background: linear-gradient(180deg, rgb(6 9 10 / 94%), transparent);
+  padding: 22px 24px;
   pointer-events: none;
+}
+
+// 拿掉原本的漸層遮罩後，標題直接疊在地圖上，
+// 用描邊式陰影撐住對比，淺色路面與深色公園上都讀得到。
+.fleet-map-header > div,
+.fleet-map-count {
+  text-shadow: 0 1px 3px rgb(6 9 10 / 92%),
+  0 0 10px rgb(6 9 10 / 72%);
 }
 
 .fleet-map-eyebrow {
@@ -218,7 +220,7 @@
   }
 
   .fleet-map-header {
-    padding: 18px 18px 34px;
+    padding: 18px;
   }
 
   .fleet-map-header h3 {

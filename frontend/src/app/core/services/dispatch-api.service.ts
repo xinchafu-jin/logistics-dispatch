@@ -2,12 +2,25 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {Observable} from 'rxjs';
 import {
+  AdminUserCreateRequest,
+  AdminUserDto,
+  AiChatReply,
+  AiChatRequest,
+  AiPendingActionDto,
   DispatchResultDto,
+  DriverAccountApplicationDto,
   DriverDto,
+  DriverShiftDto,
+  DriverShiftUpdateRequest,
   DriverStatusPayload,
+  ExceptionCaseDto,
+  EmergencyLeaveDto,
+  EmergencyLeaveReplacementCandidateDto,
   GpsPingDto,
+  LeaveRequest,
   OrderDto,
   ReassignRequest,
+  ScheduleMonthDto,
   StoreDto,
   StoreStatusPayload,
   TemplateDto,
@@ -28,12 +41,132 @@ export class DispatchApiService {
     return this.http.get<DriverDto[]>(`${API_ROOT}/drivers`);
   }
 
+  // ── 司機月班表 ────────────────────────────────────────
+
+  getScheduleMonth(month: string): Observable<ScheduleMonthDto> {
+    const params = new HttpParams().set('month', month);
+
+    return this.http.get<ScheduleMonthDto>(`${API_ROOT}/driver-schedules/months`, {params});
+  }
+
+  /** 建立指定月份的草稿；後端對同月份為冪等操作。 */
+  generateScheduleMonth(month: string): Observable<ScheduleMonthDto> {
+    const params = new HttpParams().set('month', month);
+
+    return this.http.post<ScheduleMonthDto>(`${API_ROOT}/driver-schedules/months`, null, {params});
+  }
+
+  getScheduleMonthShifts(scheduleMonthId: number): Observable<DriverShiftDto[]> {
+    return this.http.get<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/shifts`,
+    );
+  }
+
+  updateDriverShift(
+    shiftId: number,
+    request: DriverShiftUpdateRequest,
+  ): Observable<DriverShiftDto> {
+    return this.http.put<DriverShiftDto>(`${API_ROOT}/driver-schedules/shifts/${shiftId}`, request);
+  }
+
+  syncScheduleDrivers(scheduleMonthId: number): Observable<DriverShiftDto[]> {
+    return this.http.post<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/sync-drivers`,
+      null,
+    );
+  }
+
+  markDriverShiftLeave(shiftId: number, request: LeaveRequest): Observable<DriverShiftDto> {
+    return this.http.patch<DriverShiftDto>(
+      `${API_ROOT}/driver-schedules/shifts/${shiftId}/leave`,
+      request,
+    );
+  }
+
+  publishScheduleMonth(scheduleMonthId: number): Observable<ScheduleMonthDto> {
+    return this.http.post<ScheduleMonthDto>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/publish`,
+      null,
+    );
+  }
+
+  /** 讀取隔日 06:00 後已進入主管待確認區的配送異常。 */
+  getPendingExceptionConfirmations(): Observable<ExceptionCaseDto[]> {
+    return this.http.get<ExceptionCaseDto[]>(`${API_ROOT}/exceptions/pending-confirmation`);
+  }
+
+  /** 確認異常後，後端會將後續訂單送入待排車。 */
+  confirmExceptionCase(exceptionCaseId: number): Observable<ExceptionCaseDto> {
+    return this.http.patch<ExceptionCaseDto>(
+      `${API_ROOT}/exceptions/${exceptionCaseId}/confirm`,
+      null,
+    );
+  }
+
   getDriver(id: number): Observable<DriverDto> {
     return this.http.get<DriverDto>(`${API_ROOT}/drivers/${id}`);
   }
 
   createDriver(driver: DriverDto): Observable<DriverDto> {
     return this.http.post<DriverDto>(`${API_ROOT}/drivers`, driver);
+  }
+
+  createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
+    return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
+  }
+
+  getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {
+    return this.http.get<{ count: number }>(`${API_ROOT}/driver-account-applications/pending/count`);
+  }
+
+  getPendingDriverAccountApplications(): Observable<DriverAccountApplicationDto[]> {
+    return this.http.get<DriverAccountApplicationDto[]>(`${API_ROOT}/driver-account-applications/pending`);
+  }
+
+  approveDriverAccountApplication(applicationId: number): Observable<DriverAccountApplicationDto> {
+    return this.http.patch<DriverAccountApplicationDto>(
+      `${API_ROOT}/driver-account-applications/${applicationId}/approve`,
+      null,
+    );
+  }
+
+  rejectDriverAccountApplication(
+    applicationId: number,
+    reason: string,
+  ): Observable<DriverAccountApplicationDto> {
+    return this.http.patch<DriverAccountApplicationDto>(
+      `${API_ROOT}/driver-account-applications/${applicationId}/reject`,
+      { reason },
+    );
+  }
+
+  getPendingEmergencyLeaveRequests(): Observable<EmergencyLeaveDto[]> {
+    return this.http.get<EmergencyLeaveDto[]>(`${API_ROOT}/emergency-leave-requests/pending`);
+  }
+
+  getEmergencyLeaveReplacementCandidates(
+    requestId: number,
+  ): Observable<EmergencyLeaveReplacementCandidateDto[]> {
+    return this.http.get<EmergencyLeaveReplacementCandidateDto[]>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/replacement-candidates`,
+    );
+  }
+
+  approveEmergencyLeaveRequest(
+    requestId: number,
+    replacementDriverId: number,
+  ): Observable<EmergencyLeaveDto> {
+    return this.http.patch<EmergencyLeaveDto>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/approve`,
+      { replacementDriverId },
+    );
+  }
+
+  rejectEmergencyLeaveRequest(requestId: number, reason: string): Observable<EmergencyLeaveDto> {
+    return this.http.patch<EmergencyLeaveDto>(
+      `${API_ROOT}/emergency-leave-requests/${requestId}/reject`,
+      { reason },
+    );
   }
 
   updateDriver(id: number, driver: DriverDto): Observable<DriverDto> {
@@ -130,6 +263,10 @@ export class DispatchApiService {
 
   deleteOrder(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/orders/${id}`);
+  }
+
+  createOrdersBatch(orders: OrderDto[]): Observable<OrderDto[]> {
+    return this.http.post<OrderDto[]>(`${API_ROOT}/orders/batch`, { orders });
   }
 
   /**
@@ -243,5 +380,56 @@ export class DispatchApiService {
    */
   getLiveFleet(): Observable<GpsPingDto[]> {
     return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/live`);
+  }
+
+  getFleetDriverLatest(driverId: number): Observable<GpsPingDto> {
+    return this.http.get<GpsPingDto>(`${API_ROOT}/fleet/drivers/${driverId}/gps/latest`);
+  }
+
+  getFleetDriverCurrent(driverId: number): Observable<GpsPingDto> {
+    return this.http.get<GpsPingDto>(`${API_ROOT}/fleet/drivers/${driverId}/gps/current`);
+  }
+
+  getFleetDriverHistory(driverId: number, from: string, to: string): Observable<GpsPingDto[]> {
+    const params = new HttpParams().set('from', from).set('to', to);
+    return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/drivers/${driverId}/gps/history`, {
+      params,
+    });
+  }
+
+  /**
+   * 送一句話給 AI 助理。後端同步等模型跑完所有工具才回應，十幾秒是常態，
+   * 等待期間畫面要鎖住輸入，兩句同時送會打亂同一段對話記憶的順序。
+   */
+  chatWithAi(message: string): Observable<AiChatReply> {
+    const request: AiChatRequest = {message};
+    return this.http.post<AiChatReply>(`${API_ROOT}/ai/chat`, request);
+  }
+
+  /** 讀取待執行清單；開啟聊天室或重新整理後用來還原清單 */
+  getAiPlan(): Observable<AiPendingActionDto[]> {
+    return this.http.get<AiPendingActionDto[]>(`${API_ROOT}/ai/plan`);
+  }
+
+  /**
+   * 整批執行待執行清單。後端按日期與倉庫分組各呼叫一次 reassign，全有或全無；
+   * 回傳每組各一包看板。失敗回 400，清單保留在後端，可以修正後再按一次。
+   */
+  confirmAiPlan(): Observable<DispatchResultDto[]> {
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/ai/plan/confirm`, null);
+  }
+
+  /** 整批放棄待執行清單，不執行任何動作 */
+  clearAiPlan(): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/ai/plan`);
+  }
+
+  /**
+   * 刪除待執行清單中的單一項目，回傳刪除後的整份清單，前端直接整包取代。
+   * id 是清單項目的 UUID（AiPendingActionDto.id），不是訂單或車輛的 id；
+   * 找不到時後端不報錯，照樣回傳最新清單。跟 clearAiPlan 分開寫，漏傳 id 才不會變成整份清掉。
+   */
+  removeAiPlanAction(id: string): Observable<AiPendingActionDto[]> {
+    return this.http.delete<AiPendingActionDto[]>(`${API_ROOT}/ai/plan/${id}`);
   }
 }

@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { catchError, concatMap, forkJoin, from, map, of } from 'rxjs';
+import { forkJoin } from 'rxjs';
 import {
   LucideClipboardCheck,
   LucideFileUp,
@@ -82,9 +82,21 @@ function todayLocalDate(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * 目前一般訂單 API 仍要求前端送出 orderNumber，尚未提供自動編號端點。
+ * 因此在建立表單時以日期與隨機碼產生低碰撞編號；後端建立後仍會以唯一鍵做最後檢查。
+ */
+function generateOrderNumber(): string {
+  const date = todayLocalDate().replaceAll('-', '');
+  const random = globalThis.crypto?.randomUUID?.().replaceAll('-', '').slice(0, 8).toUpperCase()
+    ?? Math.random().toString(36).slice(2, 10).toUpperCase();
+
+  return `DO-${date}-${random}`;
+}
+
 function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
   return {
-    orderNumber: '',
+    orderNumber: generateOrderNumber(),
     storeId,
     warehouseId,
     sourceVendor: '',
@@ -232,7 +244,7 @@ export class OrderReview implements OnInit {
   }
 
   updateOrderText(
-    field: 'orderNumber' | 'sourceVendor' | 'itemDescription' | 'notes' | 'deliveryDate',
+    field: 'sourceVendor' | 'itemDescription' | 'notes' | 'deliveryDate',
     event: Event,
   ): void {
     const value = (event.target as HTMLInputElement).value;
@@ -369,10 +381,7 @@ export class OrderReview implements OnInit {
     }
   }
 
-  /**
-   * 後端只有單筆的 POST /api/orders，所以用 concatMap 逐筆送（送完一筆才送下一筆）。
-   * 也因此匯入是「部分成功」：失敗的列逐列回報，成功的照常進清單。
-   */
+  /** 後端以單一 transaction 建立本次通過前端驗證的所有訂單。 */
   confirmImport(): void {
     const state = this.importState();
 
@@ -381,48 +390,27 @@ export class OrderReview implements OnInit {
     }
 
     const { fileName, result } = state;
-    const saved: DeliveryOrder[] = [];
-    const failures: ImportFailure[] = [];
-
     this.importState.set({ stage: 'saving', fileName, result, done: 0 });
 
-    from(result.validRows)
-      .pipe(
-        concatMap((row) =>
-          this.api.createOrder(row.data).pipe(
-            map((created) => ({ row, created, message: '' })),
-            catchError((error: unknown) =>
-              of({ row, created: null, message: describeError(error) }),
-            ),
-          ),
-        ),
-      )
-      .subscribe({
-        next: ({ row, created, message }) => {
-          if (created) {
-            saved.push(this.toDeliveryOrder(created, this.stores()));
-          } else {
-            failures.push({ row: row.row, orderNumber: row.data.orderNumber, message });
-          }
-
-          this.importState.update((current) =>
-            current.stage === 'saving' ? { ...current, done: current.done + 1 } : current,
-          );
-        },
-        complete: () => {
-          if (saved.length > 0) {
-            this.orders.update((orders) => [...saved, ...orders]);
-            this.syncSelectedOrder();
-          }
-
-          this.actionMessage.set(
-            failures.length === 0
-              ? `已從 ${fileName} 匯入 ${saved.length} 筆訂單。`
-              : `${fileName} 匯入完成：成功 ${saved.length} 筆、失敗 ${failures.length} 筆。`,
-          );
-          this.importState.set({ stage: 'done', fileName, succeeded: saved.length, failures });
-        },
-      });
+    this.api.createOrdersBatch(result.validRows.map((row) => row.data)).subscribe({
+      next: (createdOrders) => {
+        const saved = createdOrders.map((order) => this.toDeliveryOrder(order, this.stores()));
+        this.orders.update((orders) => [...saved, ...orders]);
+        this.syncSelectedOrder();
+        this.actionMessage.set(`已從 ${fileName} 批次匯入 ${saved.length} 筆訂單。`);
+        this.importState.set({ stage: 'done', fileName, succeeded: saved.length, failures: [] });
+      },
+      error: (error: unknown) => {
+        const message = describeError(error);
+        const failures = result.validRows.map((row) => ({
+          row: row.row,
+          orderNumber: row.data.orderNumber,
+          message,
+        }));
+        this.actionMessage.set(`${fileName} 未完成匯入，後端未建立任何訂單。`);
+        this.importState.set({ stage: 'done', fileName, succeeded: 0, failures });
+      },
+    });
   }
 
   /** 預覽表格顯示用：把解析出來的 storeId 換回看得懂的門市名稱。 */
@@ -563,7 +551,7 @@ export class OrderReview implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '台南配送區';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '高雄配送區';
   }
 
   private formatTime(value: string): string {

@@ -1,8 +1,8 @@
 <main class="order-review-page">
   <section class="page-intro" aria-label="訂單審核">
     <div>
-      <p class="page-eyebrow">ORDER CONTROL</p>
-      <p>檢核台南配送需求，確認後送入待排車佇列。</p>
+      <p class="page-eyebrow">訂單管理</p>
+      <p>檢核高雄配送需求，確認後送入待排車佇列。</p>
     </div>
 
     <div class="intro-actions">
@@ -36,7 +36,7 @@
     <section class="order-list-panel" aria-labelledby="order-list-title">
       <header class="list-header">
         <div>
-          <p class="section-eyebrow">REVIEW QUEUE</p>
+          <p class="section-eyebrow">待審核清單</p>
           <h3 id="order-list-title">配送需求</h3>
         </div>
 
@@ -117,7 +117,7 @@
       @if (selectedOrder(); as order) {
         <header class="detail-header">
           <div>
-            <p class="section-eyebrow">DELIVERY DETAIL</p>
+            <p class="section-eyebrow">配送詳情</p>
             <h3>{{ order.store }}</h3>
             <span class="order-id">{{ order.id }}</span>
           </div>
@@ -199,7 +199,7 @@
       <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="order-form-title" (click)="$event.stopPropagation()">
         <header class="modal-header">
           <div>
-            <p class="section-eyebrow">BACKEND ORDER</p>
+            <p class="section-eyebrow">訂單資料</p>
             <h3 id="order-form-title">{{ formMode === 'edit' ? '編輯訂單' : '新增訂單' }}</h3>
           </div>
           <button type="button" class="modal-close" title="關閉" aria-label="關閉" (click)="closeForm()">
@@ -209,8 +209,8 @@
 
         <form class="order-form" (submit)="$event.preventDefault(); submitOrder()">
           <label>
-            <span>訂單編號</span>
-            <input type="text" required [value]="orderForm().orderNumber" (input)="updateOrderText('orderNumber', $event)" />
+            <span>{{ formMode === 'create' ? '訂單編號（系統自動產生）' : '訂單編號' }}</span>
+            <input type="text" readonly [value]="orderForm().orderNumber" />
           </label>
           <label>
             <span>店家</span>
@@ -290,7 +290,7 @@
         >
           <header class="modal-header">
             <div>
-              <p class="section-eyebrow">EXCEL IMPORT</p>
+              <p class="section-eyebrow">訂單匯入</p>
               <h3 id="import-title">匯入 Excel</h3>
             </div>
             <button
@@ -376,11 +376,11 @@
 
             @case ('saving') {
               <p class="import-hint">
-                匯入中... {{ state.done }} / {{ state.result.validRows.length }}
+                正在以批次建立 {{ state.result.validRows.length }} 筆訂單...
               </p>
               <progress
                 class="import-progress"
-                [value]="state.done"
+                [value]="1"
                 [max]="state.result.validRows.length"
               ></progress>
             }
@@ -429,7 +429,7 @@
   @if (deleteTarget(); as order) {
     <div class="modal-backdrop" (click)="cancelDelete()">
       <section class="confirm-modal" role="alertdialog" aria-modal="true" (click)="$event.stopPropagation()">
-        <p class="section-eyebrow">CONFIRM ACTION</p>
+        <p class="section-eyebrow">確認操作</p>
         <h3>確定刪除訂單？</h3>
         <p>即將刪除「{{ order.id }}」，此操作會呼叫後端 DELETE API。</p>
         <div class="modal-actions">

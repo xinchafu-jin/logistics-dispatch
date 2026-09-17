@@ -20,7 +20,7 @@ public class OsrmClient {
         //把座標陣列重組成座標字串 a,b ; x,y 格式
         String coords = locations.stream().map(item -> item[0] + "," + item[1]).
                 collect(Collectors.joining(";"));
-
+//餵給 OR-Tools 算最佳順序
         OsrmTableResponse tableResponse = restClient.get().
                 uri("/table/v1/driving/" + coords + "?annotations=distance").
                 retrieve().
@@ -47,4 +47,18 @@ public class OsrmClient {
         }
         return matrix;
     }
+
+
+    public OsrmRouteResponse.Route route(double[] from, double[] to) {
+        String coords = from[0] + "," + from[1] + ";" + to[0] + "," + to[1];
+        //導航：畫線給司機看
+        OsrmRouteResponse osrmRouteResponse = restClient.get().
+                uri("/route/v1/driving/" + coords + "?overview=full&geometries=geojson").
+                retrieve().body(OsrmRouteResponse.class);
+        if (osrmRouteResponse == null || osrmRouteResponse.getRoutes() == null || osrmRouteResponse.getRoutes().isEmpty()) {
+            throw new IllegalStateException("OSRM 沒有回傳，請確認 geometries=geojson 參數");
+        }
+        return osrmRouteResponse.getRoutes().getFirst();
+    }
+
 }

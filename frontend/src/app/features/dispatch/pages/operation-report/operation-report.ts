@@ -129,7 +129,7 @@ export class OperationReport implements OnInit {
       {
         label: '異常案件 API',
         count: '--',
-        detail: '最新 main 尚未提供 /api/exceptions',
+        detail: 'Controller 已建立，但目前固定回傳 501',
         tone: 'warning',
       },
     ];
@@ -252,6 +252,6 @@ export class OperationReport implements OnInit {
   }
 
   private extractArea(address: string): string {
-    return address.match(/台南市([^\s]+區)/)?.[1] ?? '未提供區域';
+    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '未提供區域';
   }
 }

@@ -1,6 +1,8 @@
 export type DriverStatus = 'ACTIVE' | 'INACTIVE';
 export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
+export type ScheduleStatus = 'DRAFT' | 'PUBLISHED';
+export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
 /** 路線的發布狀態。訂單層沒有「已發布」，發布是路線層的事。 */
 export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
@@ -10,6 +12,46 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
+export type OrderType = 'NORMAL' | 'REPLENISHMENT';
+export type ExceptionStatus = 'OPEN' | 'CLOSED';
+export type ExceptionType =
+  | 'NO_SIGNATURE'
+  | 'SHORTAGE'
+  | 'DAMAGE'
+  | 'SHORTAGE_AND_DAMAGE'
+  | 'DRIVER_REPORT'
+  | 'PHONE_HANDLED';
+export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+
+/** 後端隔日送審的配送異常案件。 */
+export interface ExceptionCaseDto {
+  id: number;
+  type: ExceptionType;
+  status: ExceptionStatus;
+  description: string;
+  sourceOrderId: number | null;
+  sourceOrderNumber: string | null;
+  sourceOrderType: OrderType | null;
+  deliveryRecordId: number | null;
+  expectedBoxCount: number | null;
+  deliveredBoxCount: number | null;
+  shortageBoxCount: number | null;
+  damagedBoxCount: number | null;
+  replacementRequiredBoxCount: number | null;
+  followUpOrderId: number | null;
+  followUpOrderNumber: string | null;
+  followUpOrderType: OrderType | null;
+  followUpOrderStatus: OrderStatus | null;
+  followUpDeliveryDate: string | null;
+  reviewAvailableAt: string | null;
+  queuedAt: string | null;
+  createdAt: string | null;
+  handledBy: string | null;
+  handledAt: string | null;
+  resolution: string | null;
+}
 
 export interface DriverDto {
   id?: number;
@@ -22,6 +64,117 @@ export interface DriverDto {
   restDuration: number;
   maxOvertimeMinutes?: number;
   isActive: boolean;
+}
+
+/** 建立後台管理員時送往 POST /api/admin-users 的資料。 */
+export interface AdminUserCreateRequest {
+  account: string;
+  password: string;
+  name: string;
+  phone: string;
+}
+
+/** 後端回傳的管理員資料不包含密碼。 */
+export interface AdminUserDto {
+  id: number;
+  account: string;
+  name: string;
+  phone: string;
+}
+
+/** 司機登入前提交的帳號申請。nationalId 只會被後端當成初始密碼雜湊。 */
+export interface DriverAccountApplicationRequest {
+  account: string;
+  name: string;
+  phone: string;
+  nationalId: string;
+}
+
+export interface DriverAccountApplicationDto {
+  id: number;
+  account: string;
+  name: string;
+  phone: string;
+  nationalIdMasked: string;
+  status: DriverApplicationStatus;
+  appliedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  approvedDriverId: number | null;
+}
+
+export interface EmergencyLeaveDto {
+  id: number;
+  driverId: number;
+  driverName: string | null;
+  workDate: string;
+  attendanceRecordId: number | null;
+  routeId: number | null;
+  routeStatus: RouteStatus | null;
+  vehicleId: number | null;
+  plateNumber: string | null;
+  reason: string;
+  status: EmergencyLeaveStatus;
+  replacementDriverId: number | null;
+  replacementDriverName: string | null;
+  transferredOrderCount: number;
+  gpsOverrideGranted: boolean;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  routeReassignedAt: string | null;
+  clockedOutAt: string | null;
+}
+
+export interface EmergencyLeaveReplacementCandidateDto {
+  driverId: number;
+  account: string;
+  name: string;
+  attendanceStatus: AttendanceStatus | null;
+  clockedIn: boolean;
+}
+
+/** 每月司機班表主檔。 */
+export interface ScheduleMonthDto {
+  id: number;
+  /** yyyy-MM-dd，永遠是該月份的第一天。 */
+  scheduleMonth: string;
+  status: ScheduleStatus;
+  generatedAt: string;
+  publishedAt: string | null;
+}
+
+/** 指定月份中，一位司機的一日班次。 */
+export interface DriverShiftDto {
+  id: number;
+  scheduleMonthId: number;
+  driverId: number;
+  /** yyyy-MM-dd */
+  workDate: string;
+  shiftType: ShiftType;
+  /** HH:mm 或 HH:mm:ss；休假與請假為 null。 */
+  workStart: string | null;
+  workEnd: string | null;
+  overtimeMinutes: number;
+  changeReason: string;
+  lastModifiedAt: string | null;
+  version: number | null;
+}
+
+/** 對應 PUT /api/driver-schedules/shifts/{shiftId}。 */
+export interface DriverShiftUpdateRequest {
+  shiftType: ShiftType;
+  workStart: string | null;
+  workEnd: string | null;
+  overtimeMinutes: number;
+  changeReason: string;
+}
+
+/** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
+export interface LeaveRequest {
+  reason: string;
 }
 
 export interface VehicleDto {
@@ -285,10 +438,47 @@ export interface TemplateRouteRequest {
   storeIds: number[];
 }
 
-export interface GpsPingDTO {
-  id: number;
-  driverIda: number;
-  lat: number;
-  lng: number;
-  timestamp: number;
+/* ── AI 調度助理 ───────────────────────────────────────────────
+ * 對話只會把動作加入待執行清單，調度員按確認才真正寫入。
+ * 對話與清單都以登入者 JWT 區分，後端存在記憶體，重啟即消失。
+ */
+
+/** 對應後端 AiActionType */
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY';
+
+/** POST /api/ai/chat 的請求本體 */
+export interface AiChatRequest {
+  message: string;
+}
+
+/** POST /api/ai/chat 的回應：助理回覆外加最新的待執行清單 */
+export interface AiChatReply {
+  /** 模型產生的文字，可能含 Markdown */
+  reply: string;
+  /** 整份清單而非本次新增的部分，前端直接整包取代 */
+  pendingActions: AiPendingActionDto[];
+}
+
+/** 待執行清單中的一項動作。對應後端 PendingActionResponse。 */
+export interface AiPendingActionDto {
+  /**
+   * 清單項目編號（UUID），加入清單時由後端產生，用於刪除單一項目與 @for 的 track。
+   * 跟下面的業務 id 無關，畫面上不顯示。
+   */
+  id: string;
+  type: AiActionType;
+  /** 給人看的說明，姓名、車牌取自資料庫，確認視窗直接顯示這段 */
+  summary: string;
+  /** 配送日期，yyyy-MM-dd */
+  date: string;
+  /** PUBLISH_DAY 為 null：發布範圍是當天全部倉庫 */
+  warehouseId: number | null;
+  /** 只給分組標題顯示用；PUBLISH_DAY 為 null，畫面顯示「全部倉庫」 */
+  warehouseName: string | null;
+  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
+  vehicleId: number | null;
+  /** 只有 ASSIGN_DRIVER 有值 */
+  driverId: number | null;
+  /** 只有 MOVE_ORDER 有值 */
+  orderId: number | null;
 }

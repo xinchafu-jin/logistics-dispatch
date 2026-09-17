@@ -293,6 +293,17 @@ public class DispatchService {
             }
         }
 
+        for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
+            VehiclesEntity vehiclesEntity = vehiclesMap.get(ra.getVehicleId());
+            int loadedBoxes = 0;
+            for (Long orderId : ra.getOrderIds()) {
+                loadedBoxes += ordersMap.get(orderId).getBoxCount();
+            }
+            if (loadedBoxes > vehiclesEntity.getCapacity()) {
+                throw new IllegalArgumentException("車輛 " + vehiclesEntity.getPlateNumber()
+                        + " 裝載 " + loadedBoxes + " 箱，超過容量 " + vehiclesEntity.getCapacity() + " 箱");
+            }
+        }
         // ══ 驗證到此結束，以下開始改資料 ══
 
         // 清掉當天既有草稿並解綁訂單；沒被重新指派的訂單就自動留在未排入池
@@ -526,7 +537,6 @@ public class DispatchService {
 
         return boardsOf(date, routes);
     }
-
 
 
     /**

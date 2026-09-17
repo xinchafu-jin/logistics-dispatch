@@ -49,6 +49,145 @@ describe('DispatchApiService', () => {
     }
   });
 
+  it('reads the live fleet through the administrator GPS endpoint', () => {
+    service.getLiveFleet().subscribe((pings) => expect(pings).toEqual([]));
+
+    const request = httpTesting.expectOne('/api/fleet/live');
+    expect(request.request.method).toBe('GET');
+    request.flush([]);
+  });
+
+  it('reads due delivery exceptions and confirms one through the administrator contract', () => {
+    service.getPendingExceptionConfirmations().subscribe((incidents) => expect(incidents).toEqual([]));
+    service.confirmExceptionCase(47).subscribe();
+
+    const pending = httpTesting.expectOne('/api/exceptions/pending-confirmation');
+    expect(pending.request.method).toBe('GET');
+    pending.flush([]);
+
+    const confirm = httpTesting.expectOne('/api/exceptions/47/confirm');
+    expect(confirm.request.method).toBe('PATCH');
+    expect(confirm.request.body).toBeNull();
+    confirm.flush({ id: 47, status: 'CLOSED' });
+  });
+
+  it('uses driver application and emergency leave review contracts', () => {
+    service.getPendingDriverAccountApplicationCount().subscribe();
+    service.getPendingDriverAccountApplications().subscribe();
+    service.approveDriverAccountApplication(17).subscribe();
+    service.rejectDriverAccountApplication(18, '資料不完整').subscribe();
+    service.getPendingEmergencyLeaveRequests().subscribe();
+    service.getEmergencyLeaveReplacementCandidates(31).subscribe();
+    service.approveEmergencyLeaveRequest(31, 9).subscribe();
+    service.rejectEmergencyLeaveRequest(32, '請補充請假原因').subscribe();
+
+    const count = httpTesting.expectOne('/api/driver-account-applications/pending/count');
+    expect(count.request.method).toBe('GET');
+    count.flush({ count: 2 });
+
+    const applications = httpTesting.expectOne('/api/driver-account-applications/pending');
+    expect(applications.request.method).toBe('GET');
+    applications.flush([]);
+
+    const approveApplication = httpTesting.expectOne('/api/driver-account-applications/17/approve');
+    expect(approveApplication.request.method).toBe('PATCH');
+    expect(approveApplication.request.body).toBeNull();
+    approveApplication.flush({ id: 17, status: 'APPROVED' });
+
+    const rejectApplication = httpTesting.expectOne('/api/driver-account-applications/18/reject');
+    expect(rejectApplication.request.method).toBe('PATCH');
+    expect(rejectApplication.request.body).toEqual({ reason: '資料不完整' });
+    rejectApplication.flush({ id: 18, status: 'REJECTED' });
+
+    const pendingLeaves = httpTesting.expectOne('/api/emergency-leave-requests/pending');
+    expect(pendingLeaves.request.method).toBe('GET');
+    pendingLeaves.flush([]);
+
+    const candidates = httpTesting.expectOne(
+      '/api/emergency-leave-requests/31/replacement-candidates',
+    );
+    expect(candidates.request.method).toBe('GET');
+    candidates.flush([]);
+
+    const approveLeave = httpTesting.expectOne('/api/emergency-leave-requests/31/approve');
+    expect(approveLeave.request.method).toBe('PATCH');
+    expect(approveLeave.request.body).toEqual({ replacementDriverId: 9 });
+    approveLeave.flush({ id: 31, status: 'APPROVED' });
+
+    const rejectLeave = httpTesting.expectOne('/api/emergency-leave-requests/32/reject');
+    expect(rejectLeave.request.method).toBe('PATCH');
+    expect(rejectLeave.request.body).toEqual({ reason: '請補充請假原因' });
+    rejectLeave.flush({ id: 32, status: 'REJECTED' });
+  });
+
+  it('uses batch order, administrator, and per-driver GPS contracts', () => {
+    const order = {
+      orderNumber: 'DO-BATCH-001',
+      storeId: 3,
+      warehouseId: 1,
+      boxCount: 4,
+      notes: '',
+      deliveryDate: '2026-09-04',
+      status: 'PENDING_CONFIRM' as const,
+    };
+
+    service.createOrdersBatch([order]).subscribe();
+    service
+      .createAdminUser({
+        account: 'dispatch-admin',
+        password: 'Password1',
+        name: '調度主管',
+        phone: '0912345678',
+      })
+      .subscribe();
+    service.getFleetDriverLatest(8).subscribe();
+    service.getFleetDriverCurrent(8).subscribe();
+    service.getFleetDriverHistory(8, '2026-09-04T08:00', '2026-09-04T18:00').subscribe();
+
+    const batchRequest = httpTesting.expectOne('/api/orders/batch');
+    expect(batchRequest.request.method).toBe('POST');
+    expect(batchRequest.request.body).toEqual({ orders: [order] });
+    batchRequest.flush([{ id: 21, ...order }]);
+
+    const adminRequest = httpTesting.expectOne('/api/admin-users');
+    expect(adminRequest.request.method).toBe('POST');
+    expect(adminRequest.request.body).toEqual({
+      account: 'dispatch-admin',
+      password: 'Password1',
+      name: '調度主管',
+      phone: '0912345678',
+    });
+    adminRequest.flush({ id: 3, account: 'dispatch-admin', name: '調度主管', phone: '0912345678' });
+
+    const latestRequest = httpTesting.expectOne('/api/fleet/drivers/8/gps/latest');
+    expect(latestRequest.request.method).toBe('GET');
+    latestRequest.flush({
+      id: 1,
+      driverId: 8,
+      lat: 22.99,
+      lng: 120.2,
+      timestamp: '2026-09-04T09:00',
+    });
+
+    const currentRequest = httpTesting.expectOne('/api/fleet/drivers/8/gps/current');
+    expect(currentRequest.request.method).toBe('GET');
+    currentRequest.flush({
+      id: 1,
+      driverId: 8,
+      lat: 22.99,
+      lng: 120.2,
+      timestamp: '2026-09-04T09:00',
+    });
+
+    const historyRequest = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams ===
+          '/api/fleet/drivers/8/gps/history?from=2026-09-04T08:00&to=2026-09-04T18:00' &&
+        request.method === 'GET',
+    );
+    historyRequest.flush([]);
+  });
+
   it('writes order status using the backend PUT contract', () => {
     service
       .updateOrder(12, {
@@ -132,6 +271,71 @@ describe('DispatchApiService', () => {
     });
   });
 
+  it('uses the driver schedule endpoints with the backend request shapes', () => {
+    service.getScheduleMonth('2026-09').subscribe();
+    service.generateScheduleMonth('2026-09').subscribe();
+    service.getScheduleMonthShifts(41).subscribe();
+    service
+      .updateDriverShift(86, {
+        shiftType: 'WORK',
+        workStart: '08:30',
+        workEnd: '17:30',
+        overtimeMinutes: 30,
+        changeReason: '支援月初配送量',
+      })
+      .subscribe();
+    service.syncScheduleDrivers(41).subscribe();
+    service.markDriverShiftLeave(87, {reason: '已核准特休'}).subscribe();
+    service.publishScheduleMonth(41).subscribe();
+
+    const getMonth = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams === '/api/driver-schedules/months?month=2026-09' &&
+        request.method === 'GET',
+    );
+    expect(getMonth.request.method).toBe('GET');
+    getMonth.flush({id: 41, scheduleMonth: '2026-09-01', status: 'DRAFT'});
+
+    const createMonth = httpTesting.expectOne(
+      (request) =>
+        request.urlWithParams === '/api/driver-schedules/months?month=2026-09' &&
+        request.method === 'POST',
+    );
+    expect(createMonth.request.method).toBe('POST');
+    expect(createMonth.request.body).toBeNull();
+    createMonth.flush({id: 41, scheduleMonth: '2026-09-01', status: 'DRAFT'});
+
+    const shifts = httpTesting.expectOne('/api/driver-schedules/months/41/shifts');
+    expect(shifts.request.method).toBe('GET');
+    shifts.flush([]);
+
+    const updateShift = httpTesting.expectOne('/api/driver-schedules/shifts/86');
+    expect(updateShift.request.method).toBe('PUT');
+    expect(updateShift.request.body).toEqual({
+      shiftType: 'WORK',
+      workStart: '08:30',
+      workEnd: '17:30',
+      overtimeMinutes: 30,
+      changeReason: '支援月初配送量',
+    });
+    updateShift.flush({id: 86, shiftType: 'WORK'});
+
+    const syncDrivers = httpTesting.expectOne('/api/driver-schedules/months/41/sync-drivers');
+    expect(syncDrivers.request.method).toBe('POST');
+    expect(syncDrivers.request.body).toBeNull();
+    syncDrivers.flush([]);
+
+    const leave = httpTesting.expectOne('/api/driver-schedules/shifts/87/leave');
+    expect(leave.request.method).toBe('PATCH');
+    expect(leave.request.body).toEqual({reason: '已核准特休'});
+    leave.flush({id: 87, shiftType: 'LEAVE'});
+
+    const publish = httpTesting.expectOne('/api/driver-schedules/months/41/publish');
+    expect(publish.request.method).toBe('POST');
+    expect(publish.request.body).toBeNull();
+    publish.flush({id: 41, scheduleMonth: '2026-09-01', status: 'PUBLISHED'});
+  });
+
   it('deletes a driver through the backend DELETE contract', () => {
     service.deleteDriver(8).subscribe();
 
@@ -181,14 +385,14 @@ describe('DispatchApiService', () => {
   it('writes warehouses through the backend CRUD contract', () => {
     const warehouse = {
       warehouseCode: 'WH-001',
-      name: '台南倉庫',
+      name: '高雄倉庫',
       lat: 23,
       lng: 120,
       isActive: true,
     };
 
     service.createWarehouse(warehouse).subscribe();
-    service.updateWarehouse(5, { ...warehouse, name: '台南中央倉庫' }).subscribe();
+    service.updateWarehouse(5, { ...warehouse, name: '高雄中央倉庫' }).subscribe();
     service.deleteWarehouse(5).subscribe();
 
     const createRequest = httpTesting.expectOne('/api/warehouses');
@@ -200,8 +404,8 @@ describe('DispatchApiService', () => {
       (request) => request.url === '/api/warehouses/5' && request.method === 'PUT',
     );
     expect(updateRequest.request.method).toBe('PUT');
-    expect(updateRequest.request.body.name).toBe('台南中央倉庫');
-    updateRequest.flush({ id: 5, ...warehouse, name: '台南中央倉庫' });
+    expect(updateRequest.request.body.name).toBe('高雄中央倉庫');
+    updateRequest.flush({ id: 5, ...warehouse, name: '高雄中央倉庫' });
 
     const deleteRequest = httpTesting.expectOne(
       (request) => request.url === '/api/warehouses/5' && request.method === 'DELETE',

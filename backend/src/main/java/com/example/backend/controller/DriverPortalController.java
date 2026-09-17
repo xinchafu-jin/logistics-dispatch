@@ -1,21 +1,11 @@
 package com.example.backend.controller;
 
-import com.example.backend.dto.request.AttendanceRecordDTO;
-import com.example.backend.dto.request.ArriveRequestDTO;
-import com.example.backend.dto.request.DeliverRequestDTO;
-import com.example.backend.dto.request.DriverShiftDTO;
-import com.example.backend.dto.request.GpsPingDTO;
-import com.example.backend.dto.request.MileageRequestDTO;
-import com.example.backend.dto.request.NoSignatureRequestDTO;
+import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
+import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
-import com.example.backend.service.AttendanceService;
-import com.example.backend.service.DeliveryService;
-import com.example.backend.service.DriverScheduleService;
-import com.example.backend.service.DriverTasksService;
-import com.example.backend.service.GpsPingsService;
-import com.example.backend.service.MileageLogsService;
+import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -47,6 +37,7 @@ public class DriverPortalController {
     private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
+    private final GPSRouteService gpsRouteService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -54,7 +45,8 @@ public class DriverPortalController {
             DriverScheduleService driverScheduleService,
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
-            MileageLogsService mileageLogsService
+            MileageLogsService mileageLogsService,
+            GPSRouteService gpsRouteService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -62,6 +54,7 @@ public class DriverPortalController {
         this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
+        this.gpsRouteService = gpsRouteService;
     }
 
     /** 查詢今天的打卡、休息及 GPS 上傳狀態。 */
@@ -178,4 +171,10 @@ public class DriverPortalController {
                 "api", api
         ));
     }
+
+    @PostMapping("/route")
+    public GPSRouteResponse find(@Valid @RequestBody GPSRouteDTO dto) {
+        return gpsRouteService.findRoute(dto);
+    }
+
 }

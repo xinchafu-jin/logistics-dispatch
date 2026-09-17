@@ -60,6 +60,36 @@ describe('AuthService', () => {
     service.restoreSession().subscribe((user) => expect(user).toBeNull());
   });
 
+  it('verifies an administrator identity before resetting the password', () => {
+    service
+      .verifyForgottenPassword({
+        account: ' manager ',
+        phone: ' 0912345678 ',
+      })
+      .subscribe();
+    service
+      .resetForgottenPassword({
+        account: ' manager ',
+        phone: ' 0912345678 ',
+        newPassword: 'Password1',
+      })
+      .subscribe();
+
+    const verifyRequest = httpTesting.expectOne('/api/auth/admin/forgot-password/verify');
+    expect(verifyRequest.request.method).toBe('POST');
+    expect(verifyRequest.request.body).toEqual({ account: 'manager', phone: '0912345678' });
+    verifyRequest.flush(null);
+
+    const resetRequest = httpTesting.expectOne('/api/auth/admin/forgot-password/reset');
+    expect(resetRequest.request.method).toBe('POST');
+    expect(resetRequest.request.body).toEqual({
+      account: 'manager',
+      phone: '0912345678',
+      newPassword: 'Password1',
+    });
+    resetRequest.flush(null);
+  });
+
   it('restores the current user with the in-memory token', () => {
     service
       .login({

@@ -1,23 +1,32 @@
 <section class="live-fleet-map" aria-labelledby="fleet-map-title">
   <header class="fleet-map-header">
     <div>
-      <p class="fleet-map-eyebrow">FLEET MONITOR</p>
-      <h3 id="fleet-map-title">台南配送區域地圖</h3>
+      <p class="fleet-map-eyebrow">車隊監控</p>
+      <h3 id="fleet-map-title">高雄配送區域地圖</h3>
     </div>
     <span class="fleet-map-count">{{ activeDriverCount() }} 位可排班司機</span>
   </header>
 
-  <div #mapCanvas class="fleet-map-canvas" aria-label="台南配送區域地圖"></div>
+  <div #mapCanvas class="fleet-map-canvas" aria-label="高雄配送區域地圖"></div>
 
   <aside class="fleet-tracking-panel" aria-label="司機定位狀態">
-    <p class="fleet-map-eyebrow">GPS STATUS</p>
-    <strong>等待定位 API</strong>
+    <p class="fleet-map-eyebrow">定位狀態</p>
+    <strong>{{ driverPoints().length ? '定位回傳中' : '尚未取得定位資料' }}</strong>
     @if (selectedDriver(); as driver) {
-      <p>{{ driver.name }} · {{ driver.id }}</p>
+      <p>{{ driver.name }} · {{ driver.displayId }}</p>
+      @if (selectedDriverPoint(); as point) {
+        <small>{{ point.detail }}</small>
+      } @else {
+        <small>尚未上班或尚未回傳有效定位。</small>
+      }
     } @else {
       <p>尚未取得司機資料。</p>
     }
-    <small>目前後端尚未提供 GPS 回傳，因此不顯示假位置。</small>
+    @if (driverPoints().length) {
+      <small>僅顯示後端回傳且仍在有效時間內的工作中司機。</small>
+    } @else {
+      <small>後端目前沒有回傳有效定位。</small>
+    }
 
     <div class="tracking-driver-list">
       @for (driver of drivers(); track driver.id) {
@@ -30,7 +39,7 @@
           <i [class.is-active]="driver.isActive" aria-hidden="true"></i>
           <span>
             <strong>{{ driver.name }}</strong>
-            <small>{{ driver.id }} · {{ driver.isActive ? '可排班' : '未啟用' }}</small>
+            <small>{{ driver.displayId }} · {{ driver.isActive ? '可排班' : '未啟用' }}</small>
           </span>
         </button>
       } @empty {
@@ -39,12 +48,11 @@
     </div>
   </aside>
 
-  <p class="fleet-map-notice">定位功能將在後端新增 GPS API 後自動接上。</p>
+  <p class="fleet-map-notice">僅顯示正在上班且後端回傳有效定位的司機。</p>
   <p class="fleet-map-attribution">
     &copy;
     <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
       >OpenStreetMap</a
     >
-    &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>
   </p>
 </section>
