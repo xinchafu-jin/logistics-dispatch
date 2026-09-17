@@ -450,18 +450,57 @@
           <p class="eyebrow">司機</p>
           <h1>司機資訊</h1>
         </div>
+        <section class="profile-photo-card" aria-label="司機大頭照">
+          <div class="profile-photo-preview">
+            @if (profilePhotoUrl(); as photoUrl) {
+              <img
+                [src]="photoUrl"
+                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                (error)="handleProfilePhotoLoadError()"
+              />
+            } @else {
+              <span aria-hidden="true">{{ profileInitial() }}</span>
+            }
+          </div>
+          <div class="profile-photo-copy">
+            <strong>{{ profile()?.name ?? user()?.name }}</strong>
+            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
+            <label
+              class="profile-photo-action"
+              [class.is-disabled]="isProfilePhotoUploading()"
+            >
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                [disabled]="isProfilePhotoUploading()"
+                (change)="selectProfilePhoto($event)"
+              />
+              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
+            </label>
+          </div>
+        </section>
+        @if (profilePhotoMessage()) {
+          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+        }
+        @if (profileError()) {
+          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+        }
         <dl class="profile-list">
           <div>
             <dt>姓名</dt>
-            <dd>{{ user()?.name }}</dd>
+            <dd>{{ profile()?.name ?? user()?.name }}</dd>
           </div>
           <div>
             <dt>帳號</dt>
-            <dd>{{ user()?.account }}</dd>
+            <dd>{{ profile()?.account ?? user()?.account }}</dd>
           </div>
           <div>
             <dt>司機編號</dt>
-            <dd>#{{ user()?.id }}</dd>
+            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>電話</dt>
+            <dd>{{ profile()?.phone || '未設定' }}</dd>
           </div>
           <div>
             <dt>登入狀態</dt>

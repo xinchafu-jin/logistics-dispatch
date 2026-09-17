@@ -9,6 +9,7 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.sql.Driver;
 import java.util.List;
@@ -20,10 +21,16 @@ public class DriversService {
 
     private final DriversDAO driversDAO;
     private final PasswordEncoder passwordEncoder;
+    private final DriverPhotoStorageService driverPhotoStorageService;
 
-    public DriversService(DriversDAO driversDAO, PasswordEncoder passwordEncoder) {
+    public DriversService(
+            DriversDAO driversDAO,
+            PasswordEncoder passwordEncoder,
+            DriverPhotoStorageService driverPhotoStorageService
+    ) {
         this.driversDAO = driversDAO;
         this.passwordEncoder = passwordEncoder;
+        this.driverPhotoStorageService = driverPhotoStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -106,6 +113,12 @@ public class DriversService {
         return toDTO(driversDAO.save(entity));
     }
 
+    public DriversDTO updateProfilePhoto(Long id, MultipartFile photo) {
+        DriversEntity entity = findEntity(id);
+        entity.setProfilePhotoUrl(driverPhotoStorageService.store(photo));
+        return toDTO(driversDAO.save(entity));
+    }
+
     public void delete(Long id) {
         driversDAO.delete(findEntity(id));
     }
@@ -156,6 +169,7 @@ public class DriversService {
         dto.setAccount(entity.getAccount());
         dto.setName(entity.getName());
         dto.setPhone(entity.getPhone());
+        dto.setProfilePhotoUrl(entity.getProfilePhotoUrl());
         dto.setWorkStart(entity.getWorkStart());
         dto.setWorkEnd(entity.getWorkEnd());
         dto.setRestDuration(entity.getRestDuration());

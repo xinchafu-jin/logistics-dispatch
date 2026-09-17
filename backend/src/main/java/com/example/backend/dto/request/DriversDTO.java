@@ -31,6 +31,10 @@ public class DriversDTO {
     @Size(max = 10, message = DRIVER_PHONE_MAX_LENGTH)
     private String phone;
 
+    /** 只由大頭照上傳 API 設定，避免一般司機編輯 API 任意寫入圖片網址。 */
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String profilePhotoUrl;
+
     @NotNull(message = DRIVER_WORK_START_REQUIRED)
     private LocalTime workStart;
 
@@ -62,6 +66,9 @@ public class DriversDTO {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getProfilePhotoUrl() { return profilePhotoUrl; }
+    public void setProfilePhotoUrl(String profilePhotoUrl) { this.profilePhotoUrl = profilePhotoUrl; }
 
     public LocalTime getWorkStart() { return workStart; }
     public void setWorkStart(LocalTime workStart) { this.workStart = workStart; }

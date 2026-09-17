@@ -50,6 +50,7 @@ import {
   AttendanceRecordDto,
   DeliveryRecordResponse,
   EmergencyLeaveResponse,
+  DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
   DriverTaskStop,
@@ -188,6 +189,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isEmergencyLeaveFormOpen = signal(false);
   protected readonly isEmergencyLeaveSubmitting = signal(false);
   protected readonly isEmergencyLeaveHistoryLoading = signal(false);
+  protected readonly profile = signal<DriverProfileDto | null>(null);
+  protected readonly profileError = signal<string | null>(null);
+  protected readonly profilePhotoMessage = signal<string | null>(null);
+  protected readonly isProfilePhotoUploading = signal(false);
+  protected readonly profilePhotoLoadFailed = signal(false);
   protected readonly navigationRouteState = signal<NavigationRouteState>('idle');
   protected readonly navigationDistanceMeters = signal<number | null>(null);
   protected readonly navigationDurationSeconds = signal<number | null>(null);
@@ -229,6 +235,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadAttendance();
     this.loadPublishedShifts();
     this.loadTodayTasks();
+    this.loadProfile();
   }
 
   ngAfterViewInit(): void {
@@ -260,6 +267,55 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected refreshAttendance(): void {
     this.loadAttendance();
+  }
+
+  protected profilePhotoUrl(): string | null {
+    if (this.profilePhotoLoadFailed()) {
+      return null;
+    }
+    return this.profile()?.profilePhotoUrl ?? null;
+  }
+
+  protected profileInitial(): string {
+    const name = this.profile()?.name ?? this.user()?.name ?? '司';
+    return name.trim().slice(0, 1) || '司';
+  }
+
+  protected handleProfilePhotoLoadError(): void {
+    this.profilePhotoLoadFailed.set(true);
+  }
+
+  protected selectProfilePhoto(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || this.isProfilePhotoUploading()) {
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      this.profileError.set('大頭照不可超過 5 MB。');
+      input.value = '';
+      return;
+    }
+
+    this.isProfilePhotoUploading.set(true);
+    this.profileError.set(null);
+    this.profilePhotoMessage.set(null);
+
+    this.operations.uploadProfilePhoto(file).subscribe({
+      next: (profile) => {
+        this.profile.set(profile);
+        this.profilePhotoLoadFailed.set(false);
+        this.profilePhotoMessage.set('大頭照已更新。');
+        this.isProfilePhotoUploading.set(false);
+      },
+      error: (error: unknown) => {
+        this.profileError.set(this.getErrorMessage(error, '大頭照上傳失敗。'));
+        this.isProfilePhotoUploading.set(false);
+      },
+    });
+
+    input.value = '';
   }
 
   protected signOut(): void {
@@ -818,6 +874,19 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected shiftTypeClass(shiftType: DriverShiftDto['shiftType']): string {
     return `is-${shiftType.toLowerCase()}`;
+  }
+
+  private loadProfile(): void {
+    this.profileError.set(null);
+    this.operations.getProfile().subscribe({
+      next: (profile) => {
+        this.profile.set(profile);
+        this.profilePhotoLoadFailed.set(false);
+      },
+      error: (error: unknown) => {
+        this.profileError.set(this.getErrorMessage(error, '無法取得司機資料。'));
+      },
+    });
   }
 
   private loadAttendance(): void {

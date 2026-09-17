@@ -17,9 +17,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -146,6 +148,24 @@ public class DriverScheduleService {
         return findMonthShifts(scheduleMonthId);
     }
 
+    /** 新司機核准後，自生效日起補入所有已存在月份的班表。 */
+    public void synchronizeDriverAvailability(DriversEntity driver, LocalDate effectiveFrom) {
+        if (driver == null || driver.getId() == null || effectiveFrom == null
+                || !Boolean.TRUE.equals(driver.getIsActive())) {
+            return;
+        }
+
+        for (ScheduleMonthsEntity month : scheduleMonthsDAO.findAll()) {
+            LocalDate monthStart = month.getScheduleMonth();
+            LocalDate monthEnd = YearMonth.from(monthStart).atEndOfMonth();
+            if (monthEnd.isBefore(effectiveFrom)) {
+                continue;
+            }
+
+            addMissingDriverShifts(month, driver, latest(monthStart, effectiveFrom));
+        }
+    }
+
     /**
      * 主管將今天或未來的班次改為臨時請假；草稿及已發布班表都可使用。
      * 若司機已打過上班卡，應保留原班次並以實際下班時間記錄提早離開。
@@ -244,6 +264,49 @@ public class DriverScheduleService {
         shift.setOvertimeMinutes(0);
         shift.setChangeReason("系統建立班表");
         return shift;
+    }
+
+    private DriverShiftsEntity newWorkingShift(Long monthId, DriversEntity driver, LocalDate date) {
+        DriverShiftsEntity shift = new DriverShiftsEntity();
+        shift.setScheduleMonthId(monthId);
+        shift.setDriverId(driver.getId());
+        shift.setWorkDate(date);
+        shift.setShiftType(ShiftType.WORK);
+        shift.setWorkStart(driver.getWorkStart());
+        shift.setWorkEnd(driver.getWorkEnd());
+        shift.setOvertimeMinutes(0);
+        shift.setChangeReason("新到職，系統預設上班");
+        return shift;
+    }
+
+    private void addMissingDriverShifts(
+            ScheduleMonthsEntity month,
+            DriversEntity driver,
+            LocalDate addFrom
+    ) {
+        LocalDate monthEnd = YearMonth.from(month.getScheduleMonth()).atEndOfMonth();
+        if (addFrom.isAfter(monthEnd)) {
+            return;
+        }
+
+        Set<LocalDate> existingDates = new HashSet<>();
+        for (DriverShiftsEntity shift :
+                driverShiftsDAO.findAllByDriverIdAndWorkDateBetweenOrderByWorkDateAsc(
+                        driver.getId(), addFrom, monthEnd)) {
+            existingDates.add(shift.getWorkDate());
+        }
+
+        List<DriverShiftsEntity> newShifts = addFrom.datesUntil(monthEnd.plusDays(1))
+                .filter(date -> !existingDates.contains(date))
+                .map(date -> newWorkingShift(month.getId(), driver, date))
+                .toList();
+        if (!newShifts.isEmpty()) {
+            driverShiftsDAO.saveAll(newShifts);
+        }
+    }
+
+    private LocalDate latest(LocalDate first, LocalDate second) {
+        return first.isAfter(second) ? first : second;
     }
 
     private void applyWorkingShift(DriverShiftDTO dto, DriverShiftsEntity shift, DriversEntity driver) {

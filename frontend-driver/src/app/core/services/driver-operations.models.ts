@@ -62,6 +62,19 @@ export interface DriverAccountApplicationResponse {
   approvedDriverId: number | null;
 }
 
+export interface DriverProfileDto {
+  id: number;
+  account: string;
+  name: string;
+  phone: string | null;
+  profilePhotoUrl: string | null;
+  workStart: string;
+  workEnd: string;
+  restDuration: number;
+  maxOvertimeMinutes: number | null;
+  isActive: boolean;
+}
+
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface EmergencyLeaveRequest {

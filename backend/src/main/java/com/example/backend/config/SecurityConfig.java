@@ -53,13 +53,18 @@ public class SecurityConfig {
                                 "/api/auth/driver/forgot-password/reset"
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/driver-photos/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/driver-account-applications").permitAll()
                         .requestMatchers("/api/driver/**")
                         .hasRole(AuthService.ROLE_DRIVER)
                         .requestMatchers("/api/driver-schedules/**", "/api/fleet/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
                                 "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**", "/api/fuel-prices/**",
-                                "/api/ai/**", "/api/reports/**")
+                                "/api/ai/**", "/api/reports/**", "/api/driver-account-applications/**",
+                                "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**", "/api/fuel-prices/**", "/api/ai/**",
+                                "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**", "/api/fuel-prices/**",
+                                "/api/ai/**", "/api/reports/**", "/api/exceptions/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .anyRequest().authenticated()
                 )
