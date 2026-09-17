@@ -2,8 +2,10 @@ package com.example.backend.service;
 
 import com.example.backend.constants.AiActionType;
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.ShiftType;
 import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DispatchResponse;
+import com.example.backend.dto.respones.DriverAvailabilityResponse;
 import com.example.backend.dto.respones.PendingActionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -18,6 +20,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class AiAssistantService {
@@ -50,7 +53,9 @@ public class AiAssistantService {
                 .build();
     }
 
-    //ConcurrentHashMap 為了可以多執行緒使用 實際上我也不知道會不會有多個帳號同時使用 寫起來放 不用也可以
+    // 同一份清單有兩個入口會同時改：對話中 AI 工具加入項目、調度員按刪除。
+    // 外層 ConcurrentHashMap 管「誰的清單」，內層 CopyOnWriteArrayList 管清單本身（見 addToPlan），
+    // 兩層都要執行緒安全，只有外層安全的話，同一份 list 被同時 add 和 removeIf 仍會出錯。
     private final Map<String, List<PendingActionResponse>> pendingAction = new ConcurrentHashMap<>();
 
     public String chat(String conversationId, String message) {
@@ -76,6 +81,20 @@ public class AiAssistantService {
     // 調度員反悔時整批清
     public void clearPlan(String conversationId) {
         pendingAction.remove(conversationId);
+    }
+
+    /**
+     * 刪除清單中的單一項目，回傳刪除後的整份清單，前端直接整包取代。
+     *
+     * <p>找不到 id 不報錯：最可能是已經確認、清除或在另一個分頁刪過了，
+     * 前端要的只是最新清單。用項目 id 而不用位置刪，另一個分頁畫面過期時才不會刪到別筆。</p>
+     */
+    public List<PendingActionResponse> removeAction(String conversationId, String id) {
+        List<PendingActionResponse> actions = pendingAction.get(conversationId);
+        if (actions != null) {
+            actions.removeIf(action -> action.getId().equals(id));
+        }
+        return getPlan(conversationId);
     }
 
     @Transactional
@@ -188,6 +207,8 @@ public class AiAssistantService {
         pendingActionResponse.setType(AiActionType.MOVE_ORDER);
         pendingActionResponse.setDate(deliveryDate);
         pendingActionResponse.setWarehouseId(warehouseId);
+        // findWarehouseIdByName 是 equals 完全比對，能走到這裡代表這個字串與資料庫名稱一字不差
+        pendingActionResponse.setWarehouseName(warehouseName);
         pendingActionResponse.setOrderId(orders.getId());
         pendingActionResponse.setVehicleId(targetVehicleId);
         String from;
@@ -267,6 +288,48 @@ public class AiAssistantService {
         return driverScheduleService.findMonthShifts(scheduleMonthId);
     }
 
+    @Tool(description = "查詢某一天可以派車的司機。可派的條件：當天班表是上班、還沒被派到任何倉庫的路線、"
+            + "也不在待執行清單裡。回傳可派與不可派兩份清單，不可派的附原因。指派司機前必須先呼叫此工具")
+    DriverAvailabilityResponse findAvailableDrivers(
+            @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
+            ToolContext toolContext) {
+        String conversationId = (String) toolContext.getContext().get("conversationId");
+        LocalDate workDate = LocalDate.parse(date);
+
+        // 當月還沒產生班表時 findMonth 會丟例外，訊息「找不到 yyyy-MM 的班表」直接回給 AI
+        ScheduleMonthDTO month = driverScheduleService.findMonth(YearMonth.from(workDate));
+        Map<Long, DriverShiftDTO> shifts = findShiftsOn(month.getId(), workDate);
+        Map<Long, String> taken = findTakenDrivers(workDate);
+        Map<Long, String> pending = findPendingDrivers(conversationId, workDate);
+
+        DriverAvailabilityResponse response = new DriverAvailabilityResponse();
+        response.setDate(workDate);
+        response.setScheduleStatus(month.getStatus());
+
+        for (DriversDTO driver : driversService.findAll()) {
+            // 停用的司機直接不列：列進不可派清單，AI 只會多解釋一段調度員不在意的事
+            if (!Boolean.TRUE.equals(driver.getIsActive())) {
+                continue;
+            }
+            DriverShiftDTO shift = shifts.get(driver.getId());
+            String reason = unavailableReason(shift, taken.get(driver.getId()), pending.get(driver.getId()));
+
+            DriverAvailabilityResponse.DriverItem item = new DriverAvailabilityResponse.DriverItem();
+            item.setDriverId(driver.getId());
+            item.setAccount(driver.getAccount());
+            item.setName(driver.getName());
+            if (reason == null) {
+                item.setWorkStart(shift.getWorkStart());
+                item.setWorkEnd(shift.getWorkEnd());
+                response.getAvailable().add(item);
+            } else {
+                item.setReason(reason);
+                response.getUnavailable().add(item);
+            }
+        }
+        return response;
+    }
+
     @Tool(description = "依日期與倉庫查詢當天訂單清單，含指派狀態")
     List<OrdersDTO> findOrders(
             @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String deliveryDate,
@@ -286,7 +349,7 @@ public class AiAssistantService {
             @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
             @ToolParam(description = "倉庫名稱") String warehouseName,
             @ToolParam(description = "車牌號碼") String plateNumber,
-            @ToolParam(description = "司機帳號，必須從 listDrivers 取得") String driverAccount,
+            @ToolParam(description = "司機帳號，先用 findAvailableDrivers 確認當天可派") String driverAccount,
             ToolContext toolContext) {
         String conversationId = (String) toolContext.getContext().get("conversationId");
         return addAssignDriverAction(conversationId, date, warehouseName, plateNumber, driverAccount);
@@ -346,6 +409,8 @@ public class AiAssistantService {
         action.setType(AiActionType.ASSIGN_DRIVER);
         action.setDate(deliveryDate);
         action.setWarehouseId(warehouseId);
+        // 同 addMoveOrderAction：名稱已與資料庫完全比對過
+        action.setWarehouseName(warehouseName);
         action.setVehicleId(vehicleId);
         action.setDriverId(driver.getId());
         // 姓名與帳號都取自資料庫，不用 LLM 傳進來的字串，確認視窗看到的必定是真實資料
@@ -386,11 +451,12 @@ public class AiAssistantService {
     }
 
     private List<PendingActionResponse> addToPlan(String conversationId, PendingActionResponse action) {
-        List<PendingActionResponse> actions = pendingAction.get(conversationId);
-        if (actions == null) {
-            actions = new ArrayList<>();
-            pendingAction.put(conversationId, actions);
-        }
+        // id 在這裡統一產生：三種動作都經過這裡，之後加新動作也不會漏設。
+        // 用 UUID 不用遞增數字：後端重啟計數器歸零，沒重整的舊畫面送來的編號會對到另一筆新項目
+        action.setId(UUID.randomUUID().toString());
+        // computeIfAbsent 取代原本的 get 再 put：兩個請求同時第一次加入時，不會各自建一份 list 互相覆蓋
+        List<PendingActionResponse> actions =
+                pendingAction.computeIfAbsent(conversationId, key -> new CopyOnWriteArrayList<>());
         actions.add(action);
         return actions;
     }
@@ -404,6 +470,98 @@ public class AiAssistantService {
             }
         }
         return null;
+    }
+
+    /** 指定那天每位司機的班次，以 driverId 查。班表只能整月撈，這裡只留那一天 */
+    private Map<Long, DriverShiftDTO> findShiftsOn(Long scheduleMonthId, LocalDate workDate) {
+        Map<Long, DriverShiftDTO> shifts = new HashMap<>();
+        for (DriverShiftDTO shift : driverScheduleService.findMonthShifts(scheduleMonthId)) {
+            if (workDate.equals(shift.getWorkDate())) {
+                shifts.put(shift.getDriverId(), shift);
+            }
+        }
+        return shifts;
+    }
+
+    /**
+     * 當天已經在路線上的司機，值是「車牌（倉庫）」。
+     *
+     * <p>司機不綁倉庫、一天只開一條線，所以要掃全部倉庫，只看一個倉會漏。
+     * 草稿路線上的司機也算：reassign 同樣會擋一天兩條線。
+     * 同倉互換司機時對方也會顯示已被派，這是提示，proposeAssignDriver 不會因此擋下。</p>
+     */
+    private Map<Long, String> findTakenDrivers(LocalDate date) {
+        Map<Long, String> taken = new HashMap<>();
+        for (WarehousesDTO warehouse : warehousesService.findAll()) {
+            DispatchResponse board = dispatchService.getBoard(date, warehouse.getId());
+            for (DispatchResponse.RouteResponse route : board.getRoutes()) {
+                if (route.getDriverId() != null) {
+                    taken.put(route.getDriverId(), route.getPlateNumber() + "（" + warehouse.getName() + "）");
+                }
+            }
+        }
+        return taken;
+    }
+
+    /**
+     * 待執行清單裡已經指派出去、還沒確認的司機，值是那筆動作的摘要。
+     *
+     * <p>這些指派資料庫還查不到。不另外標出來的話，AI 可能在同一份清單裡把同一個人派兩次，
+     * 要到按確認時才被 reassign 擋下，整批回滾。</p>
+     */
+    private Map<Long, String> findPendingDrivers(String conversationId, LocalDate date) {
+        Map<Long, String> pending = new HashMap<>();
+        for (PendingActionResponse action : getPlan(conversationId)) {
+            if (action.getType() == AiActionType.ASSIGN_DRIVER && date.equals(action.getDate())) {
+                pending.put(action.getDriverId(), action.getSummary());
+            }
+        }
+        return pending;
+    }
+
+    /**
+     * 不可派的原因；可派回傳 null。
+     *
+     * <p>班表優先：沒上班的人就算被派了也不能出車。
+     * 但「沒上班卻被派」要特別講出來 —— reassign 不檢查班表，這種資料確實可能存在，
+     * 只回「休假」的話，那條路線其實缺人的問題會被藏起來。</p>
+     */
+    private String unavailableReason(DriverShiftDTO shift, String taken, String pending) {
+        String shiftReason = shiftReason(shift);
+        if (shiftReason != null) {
+            if (taken != null) {
+                return shiftReason + "，但目前仍被派在 " + taken + "，那條路線需要改派";
+            }
+            return shiftReason;
+        }
+        if (taken != null) {
+            return "已被派在 " + taken;
+        }
+        if (pending != null) {
+            return "已在待執行清單中：" + pending;
+        }
+        return null;
+    }
+
+    /** 班次不是上班時的原因；上班回傳 null */
+    private String shiftReason(DriverShiftDTO shift) {
+        if (shift == null) {
+            // 司機在當月班表產生之後才建立，還沒同步進班表
+            return "當月班表沒有這位司機的班次";
+        }
+        if (shift.getShiftType() == ShiftType.WORK) {
+            return null;
+        }
+        if (shift.getShiftType() == ShiftType.DAY_OFF) {
+            return "休假";
+        }
+        if (shift.getShiftType() == ShiftType.LEAVE) {
+            if (shift.getChangeReason() == null) {
+                return "請假";
+            }
+            return "請假（" + shift.getChangeReason() + "）";
+        }
+        return "未排班";
     }
 
 }

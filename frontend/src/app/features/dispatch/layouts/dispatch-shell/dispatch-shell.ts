@@ -1,4 +1,4 @@
-import {Component, OnInit, computed, inject, signal, output} from '@angular/core';
+import {Component, OnInit, TemplateRef, computed, inject, signal, output, viewChild} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {MatListModule} from '@angular/material/list';
 import {
@@ -16,6 +16,8 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatButtonModule} from '@angular/material/button';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {TextFieldModule} from '@angular/cdk/text-field';
+import {MatExpansionModule} from '@angular/material/expansion';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {
   LucideArrowLeftToLine,
   LucideArrowRightToLine,
@@ -32,10 +34,12 @@ import {
   LucideTriangleAlert,
   LucideTruck,
   LucideWorkflow,
+  LucideX,
 } from '@lucide/angular';
 import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
 import {AuthService} from '../../../../core/auth/auth.service';
 import {
+  AiPendingActionDto,
   DriverAccountApplicationDto, DriverDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
@@ -90,7 +94,10 @@ interface ChatMessage {
     MatSelectModule,
     TextFieldModule,
     LucideSendHorizontal,
+    LucideX,
     FormsModule,
+    MatExpansionModule,
+    MatDialogModule,
   ],
   templateUrl: './dispatch-shell.html',
   styleUrl: './dispatch-shell.scss',
@@ -126,14 +133,22 @@ export class DispatchShell implements OnInit {
   protected readonly chatInput = signal("");
   //等待回復開關
   protected readonly chatWaiting = false;
+  // 任務開關
+  readonly panelOpenState = signal(false);
+
+
   protected readonly notificationCount = computed(
     () => this.pendingApplicationCount() + this.pendingEmergencyLeaves().length,
   );
 
+  protected readonly aiPendingAction = signal<AiPendingActionDto[]>([]);
 
   private readonly authService = inject(AuthService);
   private readonly api = inject(DispatchApiService);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  // 確認執行視窗的內容，寫在 dispatch-shell.html 最下面的 <ng-template #confirmPlanDialog>
+  private readonly confirmPlanDialog = viewChild.required<TemplateRef<unknown>>('confirmPlanDialog');
 
   /**
    * 標頭顯示的分頁標題。來源是路由 data（app.routes.ts），各頁不再自己畫標題。
@@ -390,6 +405,7 @@ export class DispatchShell implements OnInit {
   protected openChat(): void {
     this.chatView.set('wide');
     this.loadChatDrivers();
+    this.loadPlan();
   }
 
   protected closeChat(): void {
@@ -455,9 +471,55 @@ export class DispatchShell implements OnInit {
     this.api.chatWithAi(message).subscribe({
       next: (chat) => {
         this.chatOutput.update((messages) => [...messages, {role: 'assistant', text: chat.reply}]);
+        // 回應帶的是整份清單（不是只有這次新增的），直接整包換掉；AI 回覆的文字不能當清單內容
+        this.applyPlan(chat.pendingActions);
       }
     });
   }
 
-  protected readonly output = output;
+
+  private loadPlan(): void {
+    this.api.getAiPlan().subscribe({
+      next: (actions) => {
+        this.applyPlan(actions);
+      }
+    })
+
+  }
+
+  private applyPlan(actions: AiPendingActionDto[]): void {
+    this.aiPendingAction.set(actions);
+  }
+
+  // 刪除
+  protected delAllPlan(): void {
+    this.api.clearAiPlan().subscribe({
+      next: () => {
+        this.loadPlan();
+      }
+    })
+  }
+
+  protected delPan(id: string): void {
+    this.api.removeAiPlanAction(id).subscribe({
+      next: (action) => {
+        this.loadPlan();
+      }
+    })
+
+  }
+
+  // 確認執行：先開視窗讓調度員看過清單，按「執行」才呼叫 API
+  protected openConfirmPlan(): void {
+    this.dialog.open(this.confirmPlanDialog()).afterClosed().subscribe((ok) => {
+      // 按取消是 false；點背景、按 Esc 是 undefined，只有按「執行」才是 true
+      if (!ok) {
+        return;
+      }
+      this.api.confirmAiPlan().subscribe({
+        next: () => this.applyPlan([]),
+      });
+    });
+  }
+
 }

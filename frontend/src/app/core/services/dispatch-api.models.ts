@@ -444,7 +444,7 @@ export interface TemplateRouteRequest {
  */
 
 /** 對應後端 AiActionType */
-export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER';
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY';
 
 /** POST /api/ai/chat 的請求本體 */
 export interface AiChatRequest {
@@ -461,14 +461,22 @@ export interface AiChatReply {
 
 /** 待執行清單中的一項動作。對應後端 PendingActionResponse。 */
 export interface AiPendingActionDto {
+  /**
+   * 清單項目編號（UUID），加入清單時由後端產生，用於刪除單一項目與 @for 的 track。
+   * 跟下面的業務 id 無關，畫面上不顯示。
+   */
+  id: string;
   type: AiActionType;
   /** 給人看的說明，姓名、車牌取自資料庫，確認視窗直接顯示這段 */
   summary: string;
   /** 配送日期，yyyy-MM-dd */
   date: string;
-  warehouseId: number;
-  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車 */
-  vehicleId: number;
+  /** PUBLISH_DAY 為 null：發布範圍是當天全部倉庫 */
+  warehouseId: number | null;
+  /** 只給分組標題顯示用；PUBLISH_DAY 為 null，畫面顯示「全部倉庫」 */
+  warehouseName: string | null;
+  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
+  vehicleId: number | null;
   /** 只有 ASSIGN_DRIVER 有值 */
   driverId: number | null;
   /** 只有 MOVE_ORDER 有值 */

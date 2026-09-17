@@ -334,9 +334,62 @@
           <div class="chat-panel__conversation">
             @if (selectedChatContact(); as contact) {
               @if (contact.kind === 'ai') {
-                <h3>AI 調度助理</h3>
-                @for (message of chatOutput(); track $index) {
-                  <p>{{message.text}}</p>
+
+                <h3 class="chat-panel__title">AI 調度助理</h3>
+
+                <!-- 由上而下：訊息（自己捲動）→ 待執行清單 → 輸入框；清單與輸入框固定在底部，訊息再多也不會把它們擠出面板 -->
+                <div class="chat-messages">
+                  @for (message of chatOutput(); track $index) {
+                    <p class="chat-message" [class.is-user]="message.role === 'user'">{{ message.text }}</p>
+                  }
+                </div>
+
+                <!-- 待執行清單：空的時候整塊不顯示。顯示的是後端組好的 summary，不是 AI 的回覆文字 -->
+                @if (aiPendingAction().length > 0) {
+                  <!-- [expanded] 仍要綁：聊天室收合或清單清空時抽屜會被銷毀，重新出現要照 signal 還原展開狀態 -->
+                  <mat-expansion-panel
+                    class="chat-plan"
+                    [expanded]="panelOpenState()"
+                    (opened)="panelOpenState.set(true)"
+                    (closed)="panelOpenState.set(false)"
+                  >
+                    <mat-expansion-panel-header>
+                      <mat-panel-title>待執行清單 · {{ aiPendingAction().length }} 項</mat-panel-title>
+                    </mat-expansion-panel-header>
+
+                    <ul class="chat-plan__list">
+                      @for (action of aiPendingAction(); track action.id) {
+                        <li class="chat-plan__item">
+                          <div class="chat-plan__text">
+                            <!-- 指派司機、移動訂單的 summary 沒有日期與倉庫，要另外顯示；發布的 summary 已經有了 -->
+                            @if (action.warehouseId !== null) {
+                              <div class="chat-plan__meta">{{ action.date }} · {{ action.warehouseName }}</div>
+                            }
+                            <div>{{ action.summary }}</div>
+                          </div>
+                          <!-- 刪除單一項目，邏輯還沒接（delPlan 要改成收 action.id）；
+                               aria-label 帶 summary，不然螢幕閱讀器只會念出好幾個一樣的「移除」 -->
+                          <button
+                            type="button"
+                            matIconButton
+                            class="chat-panel__icon-button"
+                            [attr.aria-label]="'移除：' + action.summary"
+                            (click)="delPan(action.id)"
+                          >
+                            <svg lucideX aria-hidden="true"></svg>
+                          </button>
+                        </li>
+                      }
+                    </ul>
+
+                    <!-- 清除與確認放在抽屜裡：收合時按不到，調度員一定得先看過清單才能確認 -->
+                    <mat-action-row>
+                      <!-- 邏輯還沒接：DELETE /api/ai/plan -->
+                      <button type="button" matButton (click)="delAllPlan()">全部清除</button>
+                      <!-- 先開確認視窗（模板在本檔最下面），按「執行」才 POST /api/ai/plan/confirm -->
+                      <button type="button" matButton="filled" (click)="openConfirmPlan()">確認執行</button>
+                    </mat-action-row>
+                  </mat-expansion-panel>
                 }
 
                 <!-- 送出邏輯還沒接，先 preventDefault 避免瀏覽器送出表單重新整理頁面 -->
@@ -364,8 +417,8 @@
                 </form>
               } @else {
                 <!-- 司機：後端還沒有司機聊天 API，先顯示提示 -->
-                <h3>{{ contact.name }}</h3>
-                <p>尚未開放與 {{ contact.name }} 的聊天</p>
+                <h3 class="chat-panel__title">{{ contact.name }}</h3>
+                <p class="chat-panel__placeholder">尚未開放與 {{ contact.name }} 的聊天</p>
               }
             }
           </div>
@@ -376,3 +429,18 @@
     <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">聊天室</button>
   }
 </div>
+
+<!-- 確認執行的視窗內容：交給 MatDialog 開啟（openConfirmPlan），不另外開元件。
+     放在最外層、不能包在 @if 裡，否則聊天室關著時 viewChild 找不到 -->
+<ng-template #confirmPlanDialog>
+  <h2 mat-dialog-title>確認執行 {{ aiPendingAction().length }} 項</h2>
+  <mat-dialog-content>
+    @for (action of aiPendingAction(); track action.id) {
+      <p>{{ action.summary }}</p>
+    }
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button type="button" matButton [mat-dialog-close]="false">取消</button>
+    <button type="button" matButton="filled" [mat-dialog-close]="true">執行</button>
+  </mat-dialog-actions>
+</ng-template>
