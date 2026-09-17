@@ -2,10 +2,12 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
+import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.constants.ShiftType;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.EmergencyLeaveRequestsDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.ReportReadDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -59,10 +61,12 @@ public class ReportService {
     private final VehiclesDAO vehiclesDAO;
     private final WarehousesDAO warehousesDAO;
     private final StoresDAO storesDAO;
+    private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
 
     public ReportService(
             ReportReadDAO reportReadDAO, OrdersDAO ordersDAO, RoutesDAO routesDAO, DriversDAO driversDAO,
-            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO
+            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO,
+            EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO
     ) {
         this.reportReadDAO = reportReadDAO;
         this.ordersDAO = ordersDAO;
@@ -71,6 +75,7 @@ public class ReportService {
         this.vehiclesDAO = vehiclesDAO;
         this.warehousesDAO = warehousesDAO;
         this.storesDAO = storesDAO;
+        this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
     }
 
     public static class Range {
@@ -174,7 +179,10 @@ public class ReportService {
             LocalDateTime end = scheduledEnd(shift);
             LocalDateTime clockOutDeadline = clockOutDueAt(shift);
             boolean clockInDue = start != null && !now.isBefore(start);
-            boolean clockOutDue = clockOutDeadline != null && !now.isBefore(clockOutDeadline);
+            // 今日仍在工作或加班者，不列為漏打下班卡；隔日再納入分母。
+            boolean clockOutDue = clockOutDeadline != null && !now.isBefore(clockOutDeadline)
+                    && (punch == null || punch.getClockOutAt() != null
+                    || shift.getWorkDate().isBefore(now.toLocalDate()));
             boolean hasIn = punch != null && punch.getClockInAt() != null;
             boolean hasOut = punch != null && punch.getClockOutAt() != null;
             String name = driverName(drivers, shift.getDriverId());
@@ -205,7 +213,7 @@ public class ReportService {
             Long outDelta = hasOut && end != null ? minutes(end, punch.getClockOutAt()) : null;
             rows.add(new ReportResponses.AttendanceRow(
                     shift.getId(), shift.getDriverId(), name, shift.getWorkDate(), shift.getShiftType(),
-                    start, end, clockOutDeadline, shift.getOvertimeMinutes(),
+                    start, end, clockOutDeadline,
                     hasIn ? punch.getClockInAt() : null, hasOut ? punch.getClockOutAt() : null,
                     inDelta, outDelta, outDelta == null ? null : Math.max(0, outDelta),
                     hasIn && hasOut ? minutes(punch.getClockInAt(), punch.getClockOutAt()) : null,
@@ -251,7 +259,10 @@ public class ReportService {
                     .thenComparing(OrdersEntity::getId));
             VehiclesEntity vehicle = vehicles.get(route.getVehicleId());
             WarehousesEntity warehouse = warehouses.get(route.getWarehouseId());
-            MileageMatch match = matchMileage(route, routesByDriverDay, mileageByDriverDay);
+            MileageMatch match = emergencyLeaveRequestsDAO.existsByRouteIdAndStatus(
+                    route.getId(), EmergencyLeaveStatus.APPROVED)
+                    ? new MileageMatch(null, null, null, null, "DRIVER_HANDOVER")
+                    : matchMileage(route, routesByDriverDay, mileageByDriverDay);
             Double plannedKm = km(route.getTotalDistance());
             Double difference = match.getActualKm() == null || plannedKm == null
                     ? null : match.getActualKm() - plannedKm;
@@ -366,9 +377,7 @@ public class ReportService {
                     distinctStores(driverOrders),
                     (int) driverDeliveries.stream().filter(delivery ->
                             Boolean.TRUE.equals(delivery.getNoSignature())).count(),
-                    noSignatureOrderIds, "CURRENT_ORDER_ASSIGNMENT_ONLY",
-                    workShifts.stream().mapToLong(shift -> shift.getOvertimeMinutes() == null
-                            ? 0 : shift.getOvertimeMinutes()).sum(), afterScheduledEnd));
+                    noSignatureOrderIds, "CURRENT_ORDER_ASSIGNMENT_ONLY", afterScheduledEnd));
         }
         rows.sort(Comparator.comparing(ReportResponses.DriverRow::getDriverId));
         return new ReportResponses.Drivers(range.getFrom(), range.getTo(), rows);
@@ -731,8 +740,7 @@ public class ReportService {
 
     private static LocalDateTime clockOutDueAt(DriverShiftsEntity shift) {
         LocalDateTime end = scheduledEnd(shift);
-        return end == null ? null : end.plusMinutes(Math.max(0, shift.getOvertimeMinutes() == null
-                ? 0 : shift.getOvertimeMinutes()));
+        return end;
     }
 
     private static long minutes(LocalDateTime start, LocalDateTime end) {

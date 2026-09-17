@@ -38,6 +38,10 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
 
     List<OrdersEntity> findByRouteIdOrderBySequence(Long routeId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select orders from OrdersEntity orders where orders.routeId = :routeId order by orders.id")
+    List<OrdersEntity> findByRouteIdForUpdate(@Param("routeId") Long routeId);
+
     List<OrdersEntity> findByDeliveryDateAndWarehouseIdAndRouteIdIsNull(LocalDate date, Long warehouseId);
 
     /**

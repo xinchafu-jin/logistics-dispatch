@@ -57,7 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/driver-account-applications").permitAll()
                         .requestMatchers("/api/driver/**")
                         .hasRole(AuthService.ROLE_DRIVER)
-                        .requestMatchers("/api/driver-schedules/**", "/api/fleet/**")
+                        .requestMatchers("/api/driver-schedules/**", "/api/fleet/**", "/api/emergency-leave-requests/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
                                 "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**", "/api/fuel-prices/**",

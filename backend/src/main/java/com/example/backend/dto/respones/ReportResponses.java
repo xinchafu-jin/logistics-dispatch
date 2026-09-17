@@ -614,7 +614,6 @@ public final class ReportResponses {
         private LocalDateTime scheduledStartAt;
         private LocalDateTime scheduledEndAt;
         private LocalDateTime clockOutDueAt;
-        private Integer plannedOvertimeMinutes;
         private LocalDateTime clockInAt;
         private LocalDateTime clockOutAt;
         private Long clockInDeltaMinutes;
@@ -640,7 +639,6 @@ public final class ReportResponses {
                 LocalDateTime scheduledStartAt,
                 LocalDateTime scheduledEndAt,
                 LocalDateTime clockOutDueAt,
-                Integer plannedOvertimeMinutes,
                 LocalDateTime clockInAt,
                 LocalDateTime clockOutAt,
                 Long clockInDeltaMinutes,
@@ -662,7 +660,6 @@ public final class ReportResponses {
             this.scheduledStartAt = scheduledStartAt;
             this.scheduledEndAt = scheduledEndAt;
             this.clockOutDueAt = clockOutDueAt;
-            this.plannedOvertimeMinutes = plannedOvertimeMinutes;
             this.clockInAt = clockInAt;
             this.clockOutAt = clockOutAt;
             this.clockInDeltaMinutes = clockInDeltaMinutes;
@@ -739,14 +736,6 @@ public final class ReportResponses {
 
         public void setClockOutDueAt(LocalDateTime clockOutDueAt) {
             this.clockOutDueAt = clockOutDueAt;
-        }
-
-        public Integer getPlannedOvertimeMinutes() {
-            return plannedOvertimeMinutes;
-        }
-
-        public void setPlannedOvertimeMinutes(Integer plannedOvertimeMinutes) {
-            this.plannedOvertimeMinutes = plannedOvertimeMinutes;
         }
 
         public LocalDateTime getClockInAt() {
@@ -1350,7 +1339,6 @@ public final class ReportResponses {
         private int noSignatureCount;
         private List<Long> noSignatureOrderIds;
         private String deliveryAttributionStatus;
-        private long plannedOvertimeMinutes;
         private long minutesAfterScheduledEnd;
 
         public DriverRow() {
@@ -1379,7 +1367,6 @@ public final class ReportResponses {
                 int noSignatureCount,
                 List<Long> noSignatureOrderIds,
                 String deliveryAttributionStatus,
-                long plannedOvertimeMinutes,
                 long minutesAfterScheduledEnd
         ) {
             this.driverId = driverId;
@@ -1404,7 +1391,6 @@ public final class ReportResponses {
             this.noSignatureCount = noSignatureCount;
             this.noSignatureOrderIds = noSignatureOrderIds;
             this.deliveryAttributionStatus = deliveryAttributionStatus;
-            this.plannedOvertimeMinutes = plannedOvertimeMinutes;
             this.minutesAfterScheduledEnd = minutesAfterScheduledEnd;
         }
 
@@ -1582,14 +1568,6 @@ public final class ReportResponses {
 
         public void setDeliveryAttributionStatus(String deliveryAttributionStatus) {
             this.deliveryAttributionStatus = deliveryAttributionStatus;
-        }
-
-        public long getPlannedOvertimeMinutes() {
-            return plannedOvertimeMinutes;
-        }
-
-        public void setPlannedOvertimeMinutes(long plannedOvertimeMinutes) {
-            this.plannedOvertimeMinutes = plannedOvertimeMinutes;
         }
 
         public long getMinutesAfterScheduledEnd() {

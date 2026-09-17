@@ -43,7 +43,7 @@ public class AttendanceRecordsEntity {
     @Column(name = "break_ends_at")
     private LocalDateTime breakEndsAt;
 
-    /** 超過班表下班時間 30 分鐘、正式進入加班的時間點。 */
+    /** 表定下班後累積滿第一段 30 分鐘加班的時間點。 */
     @Column(name = "overtime_started_at")
     private LocalDateTime overtimeStartedAt;
 

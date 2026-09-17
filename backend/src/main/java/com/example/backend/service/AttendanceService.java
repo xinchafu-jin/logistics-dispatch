@@ -129,7 +129,7 @@ public class AttendanceService {
                 .orElse(false);
     }
 
-    /** 每分鐘更新今天尚未下班的出勤時數；超過排定下班時間 30 分鐘後切換成加班。 */
+    /** 每分鐘更新出勤時數；表定下班後每滿 30 分鐘計入一段加班。 */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Taipei")
     public void refreshOpenAttendanceWorkTimes() {
         LocalDateTime now = now();
@@ -237,16 +237,18 @@ public class AttendanceService {
                 : scheduledEnd;
         int afterShiftMinutes = workedMinutesBetween(overtimeRangeStart, effectiveEnd, attendance);
 
-        if (afterShiftMinutes < OVERTIME_THRESHOLD_MINUTES) {
+        int completedOvertimeMinutes =
+                afterShiftMinutes / OVERTIME_THRESHOLD_MINUTES * OVERTIME_THRESHOLD_MINUTES;
+        if (completedOvertimeMinutes == 0) {
             return new WorkTimeSummary(totalMinutes, 0, totalMinutes, null);
         }
 
-        int regularMinutes = Math.max(0, totalMinutes - afterShiftMinutes);
+        int regularMinutes = Math.max(0, totalMinutes - completedOvertimeMinutes);
         long breakAfterShift = breakOverlapMinutes(overtimeRangeStart, effectiveEnd, attendance);
         LocalDateTime overtimeStartedAt = attendance.getOvertimeStartedAt() == null
                 ? overtimeRangeStart.plusMinutes(OVERTIME_THRESHOLD_MINUTES + breakAfterShift)
                 : attendance.getOvertimeStartedAt();
-        return new WorkTimeSummary(regularMinutes, afterShiftMinutes, totalMinutes, overtimeStartedAt);
+        return new WorkTimeSummary(regularMinutes, completedOvertimeMinutes, totalMinutes, overtimeStartedAt);
     }
 
     private LocalDateTime resolveScheduledEnd(LocalDate workDate, DriverShiftsEntity shift) {
@@ -311,7 +313,9 @@ public class AttendanceService {
         dto.setRegularWorkHours(toHours(entity.getRegularWorkMinutes()));
         dto.setOvertimeHours(toHours(entity.getOvertimeMinutes()));
         dto.setTotalWorkHours(toHours(entity.getTotalWorkMinutes()));
-        dto.setStatus(entity.getStatus());
+        // 現行司機端僅認得 WORKING/ON_BREAK/CLOCKED_OUT；實際加班分鐘仍由後端紀錄。
+        dto.setStatus(entity.getStatus() == AttendanceStatus.OVERTIME
+                ? AttendanceStatus.WORKING : entity.getStatus());
         dto.setGpsAllowed(entity.getStatus() == AttendanceStatus.WORKING
                 || entity.getStatus() == AttendanceStatus.OVERTIME);
 

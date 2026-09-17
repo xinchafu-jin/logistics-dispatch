@@ -5,6 +5,7 @@ import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
+import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,6 +42,7 @@ public class DriverPortalController {
     private final MileageLogsService mileageLogsService;
     private final GPSRouteService gpsRouteService;
     private final DriversService driversService;
+    private final EmergencyLeaveService emergencyLeaveService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -50,7 +52,8 @@ public class DriverPortalController {
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
             GPSRouteService gpsRouteService,
-            DriversService driversService
+            DriversService driversService,
+            EmergencyLeaveService emergencyLeaveService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -60,6 +63,7 @@ public class DriverPortalController {
         this.mileageLogsService = mileageLogsService;
         this.gpsRouteService = gpsRouteService;
         this.driversService = driversService;
+        this.emergencyLeaveService = emergencyLeaveService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -79,10 +83,9 @@ public class DriverPortalController {
 
     /** 查詢今天的打卡、休息、正常工時、加班工時、總工時及 GPS 上傳狀態。 */
     @GetMapping("/attendance/today")
-    public ResponseEntity<AttendanceRecordDTO> findTodayAttendance(@AuthenticationPrincipal Jwt jwt) {
+    public AttendanceRecordDTO findTodayAttendance(@AuthenticationPrincipal Jwt jwt) {
         return attendanceService.findToday(driverId(jwt))
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.noContent().build());
+                .orElseThrow(() -> new IllegalArgumentException("尚未打上班卡"));
     }
 
     /** 司機上班打卡；今天必須有已發布的上班班次。 */
@@ -126,6 +129,19 @@ public class DriverPortalController {
     @GetMapping("/tasks/today")
     public DriverTasksResponse findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
         return driverTasksService.findToday(driverId(jwt));
+    }
+
+    @PostMapping("/emergency-leave-requests")
+    public EmergencyLeaveResponse requestEmergencyLeave(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody EmergencyLeaveRequestDTO request
+    ) {
+        return emergencyLeaveService.submit(driverId(jwt), request.getReason());
+    }
+
+    @GetMapping("/emergency-leave-requests")
+    public List<EmergencyLeaveResponse> findMyEmergencyLeaves(@AuthenticationPrincipal Jwt jwt) {
+        return emergencyLeaveService.findMine(driverId(jwt));
     }
 
     /** 記錄司機抵達門市的時間。 */
