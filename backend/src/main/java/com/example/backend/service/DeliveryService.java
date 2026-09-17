@@ -82,7 +82,7 @@ public class DeliveryService {
         return toResponse(deliveryRecordsDAO.save(record), order, null, null);
     }
 
-    /** 完成交貨，保存實際箱數與照片並將訂單設為完成。 */
+    /** 完成交貨，保存實際箱數與備註並將訂單設為完成。 */
     public DeliveryRecordResponse deliver(Long driverId, DeliverRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
@@ -99,7 +99,6 @@ public class DeliveryService {
         record.setShortageBoxCount(0);
         record.setDamagedBoxCount(0);
         record.setReplacementRequiredBoxCount(0);
-        record.setPhotoUrl(request.getPhoto().trim());
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(false);
 
@@ -120,7 +119,6 @@ public class DeliveryService {
         record.setShortageBoxCount(0);
         record.setDamagedBoxCount(0);
         record.setReplacementRequiredBoxCount(0);
-        record.setPhotoUrl(request.getPhoto().trim());
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(true);
         record = deliveryRecordsDAO.save(record);

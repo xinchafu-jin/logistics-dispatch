@@ -631,6 +631,8 @@ public class DispatchService {
         }
         ordersDAO.saveAll(boundOrders);
         ordersDAO.flush();
+        // route_vehicle_segments 以 route_id 外鍵指向 routes；必須先清子表再刪路線。
+        routesDAO.deleteVehicleSegmentsByRouteIdIn(draftRouteIds);
         routesDAO.deleteAllById(draftRouteIds);
         // 必須立刻送出 DELETE：Hibernate flush 時會先做 INSERT 再做 DELETE，
         // 不先清掉舊路線的話，新路線會撞上 uk_routes_date_vehicle 唯一鍵

@@ -126,13 +126,11 @@ export interface ArriveRequest {
 export interface DeliverRequest {
   orderId: number;
   boxCount: number;
-  photo: string;
   notes?: string;
 }
 
 export interface NoSignatureRequest {
   orderId: number;
-  photo: string;
   notes?: string;
 }
 

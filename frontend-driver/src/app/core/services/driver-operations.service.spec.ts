@@ -120,12 +120,10 @@ describe('DriverOperationsService', () => {
     service.deliver({
       orderId: 41,
       boxCount: 12,
-      photo: 'https://upload.example.test/proofs/41.jpg',
       notes: '已交貨',
     }).subscribe();
     service.noSignature({
       orderId: 42,
-      photo: 'https://upload.example.test/proofs/42.jpg',
       notes: '現場無人',
     }).subscribe();
     service.startMileage({ odometer: 18_400 }).subscribe();
@@ -139,7 +137,6 @@ describe('DriverOperationsService', () => {
     expect(deliver.request.body).toEqual({
       orderId: 41,
       boxCount: 12,
-      photo: 'https://upload.example.test/proofs/41.jpg',
       notes: '已交貨',
     });
     deliver.flush({});
@@ -147,7 +144,6 @@ describe('DriverOperationsService', () => {
     const noSignature = httpTesting.expectOne('/api/driver/no-signature');
     expect(noSignature.request.body).toEqual({
       orderId: 42,
-      photo: 'https://upload.example.test/proofs/42.jpg',
       notes: '現場無人',
     });
     noSignature.flush({});

@@ -324,21 +324,7 @@
                       </div>
                       @if (isDeliveryActionOpen(stop)) {
                         <section class="delivery-action-panel" aria-label="交貨處理">
-                          <p>
-                            預計
-                            {{ stop.expectedBoxCount }}
-                            箱。交貨與無人簽收皆須使用已上傳完成的照片憑證。
-                          </p>
-                          <label>
-                            <span>照片憑證網址</span>
-                            <input
-                              type="url"
-                              inputmode="url"
-                              placeholder="貼上照片上傳服務回傳的網址"
-                              [value]="deliveryPhotoUrl()"
-                              (input)="updateDeliveryPhoto($event)"
-                            />
-                          </label>
+                          <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
                           <label>
                             <span>備註（選填）</span>
                             <textarea

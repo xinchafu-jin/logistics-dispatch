@@ -172,7 +172,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly taskError = signal<string | null>(null);
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
   protected readonly activeDeliveryOrderId = signal<number | null>(null);
-  protected readonly deliveryPhotoUrl = signal('');
   protected readonly deliveryNotes = signal('');
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
@@ -467,7 +466,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     this.activeDeliveryOrderId.set(stop.orderId);
-    this.deliveryPhotoUrl.set('');
     this.deliveryNotes.set('');
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
@@ -475,13 +473,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected closeDeliveryAction(): void {
     this.activeDeliveryOrderId.set(null);
-    this.deliveryPhotoUrl.set('');
     this.deliveryNotes.set('');
     this.taskActionError.set(null);
-  }
-
-  protected updateDeliveryPhoto(event: Event): void {
-    this.deliveryPhotoUrl.set((event.target as HTMLInputElement).value);
   }
 
   protected updateDeliveryNotes(event: Event): void {
@@ -516,18 +509,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const photo = this.deliveryPhotoUrl().trim();
-    if (!photo) {
-      this.taskActionError.set('請貼上照片上傳服務回傳的憑證網址。');
-      return;
-    }
-
     this.submitDeliveryResult(
       () =>
         this.operations.deliver({
           orderId: stop.orderId,
           boxCount: stop.expectedBoxCount,
-          photo,
           notes: this.optionalDeliveryNotes(),
         }),
       '交貨已完成。',
@@ -539,17 +525,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const photo = this.deliveryPhotoUrl().trim();
-    if (!photo) {
-      this.taskActionError.set('請貼上現場照片上傳服務回傳的憑證網址。');
-      return;
-    }
-
     this.submitDeliveryResult(
       () =>
         this.operations.noSignature({
           orderId: stop.orderId,
-          photo,
           notes: this.optionalDeliveryNotes(),
         }),
       '已登記無人簽收，後端已建立待處理異常。',

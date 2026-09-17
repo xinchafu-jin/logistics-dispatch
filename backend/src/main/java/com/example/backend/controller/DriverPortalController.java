@@ -152,7 +152,7 @@ public class DriverPortalController {
         return deliveryService.arrive(driverId(jwt), request);
     }
 
-    /** 寫入交貨結果、箱數、備註及照片。 */
+    /** 寫入交貨結果、箱數及備註。 */
     @PostMapping("/deliver")
     public DeliveryRecordResponse deliver(
             @AuthenticationPrincipal Jwt jwt,
@@ -160,7 +160,7 @@ public class DriverPortalController {
         return deliveryService.deliver(driverId(jwt), request);
     }
 
-    /** 登記無人簽收並保留現場照片。 */
+    /** 登記無人簽收並建立後續處理訂單。 */
     @PostMapping("/no-signature")
     public DeliveryRecordResponse noSignature(
             @AuthenticationPrincipal Jwt jwt,
