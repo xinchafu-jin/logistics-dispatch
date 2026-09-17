@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS exception_cases;
 DROP TABLE IF EXISTS gps_pings;
 DROP TABLE IF EXISTS mileage_logs;
 DROP TABLE IF EXISTS distance_matrix_cache;
+DROP TABLE IF EXISTS fuel_price_history;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS routes;
 DROP TABLE IF EXISTS template_stops;
@@ -31,6 +32,7 @@ DROP TABLE IF EXISTS dispatch_templates;
 DROP TABLE IF EXISTS route_template_stores;
 DROP TABLE IF EXISTS route_templates;
 DROP TABLE IF EXISTS vehicles;
+DROP TABLE IF EXISTS driver_account_applications;
 DROP TABLE IF EXISTS drivers;
 DROP TABLE IF EXISTS stores;
 DROP TABLE IF EXISTS warehouses;
@@ -91,6 +93,18 @@ CREATE TABLE vehicles (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
+CREATE TABLE fuel_price_history (
+  id              BIGINT       NOT NULL AUTO_INCREMENT,
+  fuel_type       ENUM('GASOLINE_92','GASOLINE_95','GASOLINE_98','DIESEL','OTHER') NOT NULL,
+  price_per_liter DECIMAL(8,3) NOT NULL,
+  effective_from  DATETIME(6)  NOT NULL,
+  source           VARCHAR(100) NOT NULL,
+  fetched_at       DATETIME(6)  NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_fuel_price_type_effective (fuel_type, effective_from)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 CREATE TABLE drivers (
   id                   BIGINT      NOT NULL AUTO_INCREMENT,
   account              VARCHAR(60) NOT NULL,
@@ -98,6 +112,7 @@ CREATE TABLE drivers (
   password             VARCHAR(100) DEFAULT NULL,
   name                 VARCHAR(50) NOT NULL,
   phone                VARCHAR(30) DEFAULT NULL,
+  profile_photo_url    VARCHAR(500) DEFAULT NULL COMMENT '司機大頭照相對網址',
   work_start           TIME        NOT NULL,
   work_end             TIME        NOT NULL,
   rest_duration        INT         NOT NULL,
@@ -105,6 +120,28 @@ CREATE TABLE drivers (
   is_active            BIT(1)      NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_drivers_account (account)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE driver_account_applications (
+  id                 BIGINT       NOT NULL AUTO_INCREMENT,
+  account            VARCHAR(60)  NOT NULL,
+  password_hash      VARCHAR(100) NOT NULL,
+  national_id_masked VARCHAR(10)  NOT NULL,
+  name               VARCHAR(50)  NOT NULL,
+  phone              VARCHAR(30)  NOT NULL,
+  status             ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING',
+  applied_at         DATETIME(6)  NOT NULL,
+  reviewed_by        VARCHAR(50)  DEFAULT NULL,
+  reviewed_at        DATETIME(6)  DEFAULT NULL,
+  rejection_reason   VARCHAR(500) DEFAULT NULL,
+  approved_driver_id BIGINT       DEFAULT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_driver_account_applications_account (account),
+  KEY idx_driver_account_applications_status_applied (status, applied_at),
+  KEY idx_driver_account_applications_approved_driver (approved_driver_id),
+  CONSTRAINT fk_driver_account_applications_approved_driver
+    FOREIGN KEY (approved_driver_id) REFERENCES drivers (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -221,7 +258,10 @@ CREATE TABLE orders (
   notes               VARCHAR(500) DEFAULT NULL,
   delivery_date       DATE         NOT NULL,
   status              ENUM('PENDING_CONFIRM','CONFIRMED',
-                           'IN_DELIVERY','COMPLETED','CANCELLED','FAILED') NOT NULL,
+                           'IN_DELIVERY','NO_SIGNATURE','COMPLETED','CANCELLED','FAILED') NOT NULL,
+  order_type          ENUM('NORMAL','REPLENISHMENT','REDELIVERY') NOT NULL DEFAULT 'NORMAL',
+  parent_order_id     BIGINT       DEFAULT NULL,
+  retry_count         INT          NOT NULL DEFAULT 0,
   route_id            BIGINT       DEFAULT NULL,
   assigned_vehicle_id BIGINT       DEFAULT NULL,
   assigned_driver_id  BIGINT       DEFAULT NULL,
@@ -236,13 +276,15 @@ CREATE TABLE orders (
   KEY idx_orders_date_wh_route (delivery_date, warehouse_id, route_id),
   -- 撈某條路線的停靠點：findByRouteIdOrderBySequence
   KEY idx_orders_route_seq (route_id, `sequence`),
+  KEY idx_orders_parent (parent_order_id),
   -- 全部用 RESTRICT（預設）：刪除路線前必須先解除訂單綁定，
   -- 避免訂單被留在 SCHEDULED 卻沒有路線的不一致狀態
   CONSTRAINT fk_orders_store     FOREIGN KEY (store_id)            REFERENCES stores (id),
   CONSTRAINT fk_orders_warehouse FOREIGN KEY (warehouse_id)        REFERENCES warehouses (id),
   CONSTRAINT fk_orders_route     FOREIGN KEY (route_id)            REFERENCES routes (id),
   CONSTRAINT fk_orders_vehicle   FOREIGN KEY (assigned_vehicle_id) REFERENCES vehicles (id),
-  CONSTRAINT fk_orders_driver    FOREIGN KEY (assigned_driver_id)  REFERENCES drivers (id)
+  CONSTRAINT fk_orders_driver    FOREIGN KEY (assigned_driver_id)  REFERENCES drivers (id),
+  CONSTRAINT fk_orders_parent    FOREIGN KEY (parent_order_id)     REFERENCES orders (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -256,7 +298,11 @@ CREATE TABLE delivery_records (
   order_id            BIGINT      NOT NULL,
   arrived_at          DATETIME(6) DEFAULT NULL,
   delivered_at        DATETIME(6) DEFAULT NULL,
+  expected_box_count  INT         DEFAULT NULL,
   delivered_box_count INT         DEFAULT NULL,
+  shortage_box_count  INT         DEFAULT NULL,
+  damaged_box_count   INT         DEFAULT NULL,
+  replacement_required_box_count INT DEFAULT NULL,
   lat                 DOUBLE      DEFAULT NULL,
   lng                 DOUBLE      DEFAULT NULL,
   photo_url           VARCHAR(500) DEFAULT NULL,
@@ -269,7 +315,12 @@ CREATE TABLE delivery_records (
 CREATE TABLE exception_cases (
   id          BIGINT       NOT NULL AUTO_INCREMENT,
   order_id    BIGINT       DEFAULT NULL,
-  type        ENUM('DRIVER_REPORT','NO_SIGNATURE','PHONE_HANDLED') NOT NULL,
+  delivery_record_id BIGINT DEFAULT NULL,
+  follow_up_order_id BIGINT DEFAULT NULL,
+  review_available_at DATETIME(6) DEFAULT NULL,
+  queued_at   DATETIME(6)  DEFAULT NULL,
+  type        ENUM('NO_SIGNATURE','SHORTAGE','DAMAGE','SHORTAGE_AND_DAMAGE',
+                   'DRIVER_REPORT','PHONE_HANDLED') NOT NULL,
   description VARCHAR(1000) DEFAULT NULL,
   created_at  DATETIME(6)  NOT NULL,
   handled_by  VARCHAR(50)  DEFAULT NULL,

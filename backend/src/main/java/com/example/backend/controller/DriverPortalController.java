@@ -5,6 +5,7 @@ import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
+import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -17,7 +18,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -38,6 +41,8 @@ public class DriverPortalController {
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
     private final GPSRouteService gpsRouteService;
+    private final DriversService driversService;
+    private final EmergencyLeaveService emergencyLeaveService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -46,7 +51,9 @@ public class DriverPortalController {
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
-            GPSRouteService gpsRouteService
+            GPSRouteService gpsRouteService,
+            DriversService driversService,
+            EmergencyLeaveService emergencyLeaveService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -55,12 +62,30 @@ public class DriverPortalController {
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
         this.gpsRouteService = gpsRouteService;
+        this.driversService = driversService;
+        this.emergencyLeaveService = emergencyLeaveService;
     }
 
-    /** 查詢今天的打卡、休息及 GPS 上傳狀態。 */
+    /** 取得目前登入司機的基本資料與大頭照網址。 */
+    @GetMapping("/profile")
+    public DriversDTO findProfile(@AuthenticationPrincipal Jwt jwt) {
+        return driversService.findById(driverId(jwt));
+    }
+
+    /** 由登入中的司機上傳或更換自己的大頭照。 */
+    @PostMapping(value = "/profile/photo", consumes = "multipart/form-data")
+    public DriversDTO uploadProfilePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return driversService.updateProfilePhoto(driverId(jwt), file);
+    }
+
+    /** 查詢今天的打卡、休息、正常工時、加班工時、總工時及 GPS 上傳狀態。 */
     @GetMapping("/attendance/today")
     public AttendanceRecordDTO findTodayAttendance(@AuthenticationPrincipal Jwt jwt) {
-        return attendanceService.findToday(driverId(jwt));
+        return attendanceService.findToday(driverId(jwt))
+                .orElseThrow(() -> new IllegalArgumentException("尚未打上班卡"));
     }
 
     /** 司機上班打卡；今天必須有已發布的上班班次。 */
@@ -104,6 +129,19 @@ public class DriverPortalController {
     @GetMapping("/tasks/today")
     public DriverTasksResponse findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
         return driverTasksService.findToday(driverId(jwt));
+    }
+
+    @PostMapping("/emergency-leave-requests")
+    public EmergencyLeaveResponse requestEmergencyLeave(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody EmergencyLeaveRequestDTO request
+    ) {
+        return emergencyLeaveService.submit(driverId(jwt), request.getReason());
+    }
+
+    @GetMapping("/emergency-leave-requests")
+    public List<EmergencyLeaveResponse> findMyEmergencyLeaves(@AuthenticationPrincipal Jwt jwt) {
+        return emergencyLeaveService.findMine(driverId(jwt));
     }
 
     /** 記錄司機抵達門市的時間。 */

@@ -18,6 +18,7 @@ USE logistics;
 -- 清空舊資料（依外鍵相依順序反向刪除）
 DELETE FROM orders;
 DELETE FROM routes;
+DELETE FROM fuel_price_history;
 DELETE FROM vehicles;
 DELETE FROM drivers;
 DELETE FROM stores;
@@ -25,6 +26,7 @@ DELETE FROM warehouses;
 
 ALTER TABLE orders     AUTO_INCREMENT = 1;
 ALTER TABLE routes     AUTO_INCREMENT = 1;
+ALTER TABLE fuel_price_history AUTO_INCREMENT = 1;
 ALTER TABLE vehicles   AUTO_INCREMENT = 1;
 ALTER TABLE drivers    AUTO_INCREMENT = 1;
 ALTER TABLE stores     AUTO_INCREMENT = 1;
@@ -66,6 +68,14 @@ INSERT INTO vehicles (warehouse_id, plate_number, vehicle_type, capacity, fuel_c
 -- WH002 仁德轉運站
 (2, 'TN-2001', '3.5噸貨車', 40, 8.0,  'AVAILABLE'),
 (2, 'TN-2002', '小貨車',    25, 11.5, 'AVAILABLE');
+
+-- 貨車使用的超級柴油歷史牌價（元／公升）。
+INSERT INTO fuel_price_history
+(fuel_type, price_per_liter, effective_from, source, fetched_at) VALUES
+('DIESEL', 29.300, '2026-08-24 00:00:00', 'CPC_OFFICIAL_HISTORY', '2026-09-14 15:37:08.253538'),
+('DIESEL', 29.300, '2026-08-31 00:00:00', 'CPC_OFFICIAL_HISTORY', '2026-09-14 15:37:08.253538'),
+('DIESEL', 29.300, '2026-09-07 00:00:00', 'CPC_OFFICIAL_HISTORY', '2026-09-14 15:37:08.253538'),
+('DIESEL', 29.900, '2026-09-14 00:00:00', 'CPC_OFFICIAL_HISTORY', '2026-09-14 15:37:08.253538');
 
 -- ══════════════════════════════════════════
 -- 司機（id = 1~3）

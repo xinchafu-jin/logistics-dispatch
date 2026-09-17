@@ -3,6 +3,7 @@ package com.example.backend.service;
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.OrderType;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.DeliveryRecordsDAO;
 import com.example.backend.dao.DriversDAO;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 import static com.example.backend.constants.ValidMsg.*;
 
@@ -34,8 +36,6 @@ import static com.example.backend.constants.ValidMsg.*;
 public class DeliveryService {
 
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
-    private static final long NO_SIGNATURE_WAIT_MINUTES = 10L;
-
     private final DeliveryRecordsDAO deliveryRecordsDAO;
     private final ExceptionCasesDAO exceptionCasesDAO;
     private final OrdersDAO ordersDAO;
@@ -71,11 +71,15 @@ public class DeliveryService {
         DeliveryRecordsEntity record = new DeliveryRecordsEntity();
         record.setOrderId(order.getId());
         record.setArrivedAt(now);
+        record.setExpectedBoxCount(order.getBoxCount());
+        record.setShortageBoxCount(0);
+        record.setDamagedBoxCount(0);
+        record.setReplacementRequiredBoxCount(0);
         record.setNoSignature(false);
 
         order.setStatus(OrderStatus.IN_DELIVERY);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, null);
+        return toResponse(deliveryRecordsDAO.save(record), order, null, null);
     }
 
     /** 完成交貨，保存實際箱數與照片並將訂單設為完成。 */
@@ -90,43 +94,86 @@ public class DeliveryService {
 
         DeliveryRecordsEntity record = findInProgressRecord(order.getId());
         record.setDeliveredAt(now);
+        record.setExpectedBoxCount(order.getBoxCount());
         record.setDeliveredBoxCount(request.getBoxCount());
+        record.setShortageBoxCount(0);
+        record.setDamagedBoxCount(0);
+        record.setReplacementRequiredBoxCount(0);
         record.setPhotoUrl(request.getPhoto().trim());
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(false);
 
         order.setStatus(OrderStatus.COMPLETED);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, null);
+        return toResponse(deliveryRecordsDAO.save(record), order, null, null);
     }
 
-    /** 無人簽收會同時結束本次嘗試、建立待處理異常並將訂單設為失敗。 */
+    /** 無人簽收會保留原單與本次紀錄，並建立隔日待確認的重送新單。 */
     public DeliveryRecordResponse noSignature(Long driverId, NoSignatureRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
         requireOrderStatus(order, OrderStatus.IN_DELIVERY, DELIVERY_NO_SIGNATURE_STATUS_INVALID);
 
         DeliveryRecordsEntity record = findInProgressRecord(order.getId());
-        if (now.isBefore(record.getArrivedAt().plusMinutes(NO_SIGNATURE_WAIT_MINUTES))) {
-            throw new IllegalArgumentException(
-                    DELIVERY_NO_SIGNATURE_WAIT_REQUIRED.formatted(NO_SIGNATURE_WAIT_MINUTES));
-        }
+        record.setExpectedBoxCount(order.getBoxCount());
         record.setDeliveredBoxCount(0);
+        record.setShortageBoxCount(0);
+        record.setDamagedBoxCount(0);
+        record.setReplacementRequiredBoxCount(0);
         record.setPhotoUrl(request.getPhoto().trim());
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(true);
+        record = deliveryRecordsDAO.save(record);
+
+        OrdersEntity followUpOrder = createNoSignatureFollowUpOrder(order, now.toLocalDate().plusDays(1));
 
         ExceptionCasesEntity exceptionCase = new ExceptionCasesEntity();
         exceptionCase.setOrderId(order.getId());
+        exceptionCase.setDeliveryRecordId(record.getId());
+        exceptionCase.setFollowUpOrderId(followUpOrder.getId());
+        exceptionCase.setReviewAvailableAt(followUpOrder.getDeliveryDate().atTime(6, 0));
         exceptionCase.setType(ExceptionType.NO_SIGNATURE);
         exceptionCase.setDescription(
                 record.getNotes() == null ? DELIVERY_NO_SIGNATURE_DESCRIPTION : record.getNotes());
         exceptionCase.setStatus(ExceptionStatus.OPEN);
         exceptionCase = exceptionCasesDAO.save(exceptionCase);
 
-        order.setStatus(OrderStatus.FAILED);
+        order.setStatus(OrderStatus.NO_SIGNATURE);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, exceptionCase.getId());
+        return toResponse(record, order, exceptionCase.getId(), followUpOrder);
+    }
+
+    private OrdersEntity createNoSignatureFollowUpOrder(
+            OrdersEntity sourceOrder,
+            LocalDate deliveryDate
+    ) {
+        int retryCount = valueOrZero(sourceOrder.getRetryCount()) + 1;
+        OrdersEntity followUpOrder = new OrdersEntity();
+        followUpOrder.setOrderNumber(noSignatureOrderNumber(
+                sourceOrder.getId(), deliveryDate, retryCount));
+        followUpOrder.setStoreId(sourceOrder.getStoreId());
+        followUpOrder.setWarehouseId(sourceOrder.getWarehouseId());
+        followUpOrder.setSourceVendor(sourceOrder.getSourceVendor());
+        followUpOrder.setItemDescription(sourceOrder.getItemDescription());
+        followUpOrder.setBoxCount(sourceOrder.getBoxCount());
+        followUpOrder.setNotes(sourceOrder.getNotes());
+        followUpOrder.setDeliveryDate(deliveryDate);
+        followUpOrder.setStatus(OrderStatus.PENDING_CONFIRM);
+        followUpOrder.setOrderType(OrderType.REDELIVERY);
+        followUpOrder.setParentOrderId(sourceOrder.getId());
+        followUpOrder.setRetryCount(retryCount);
+        return ordersDAO.save(followUpOrder);
+    }
+
+    private String noSignatureOrderNumber(
+            Long sourceOrderId,
+            LocalDate deliveryDate,
+            int retryCount
+    ) {
+        String compactDate = deliveryDate.format(DateTimeFormatter.BASIC_ISO_DATE).substring(2);
+        String sourceId = Long.toString(sourceOrderId, 36).toUpperCase();
+        String retry = Integer.toString(retryCount, 36).toUpperCase();
+        return "NS-" + compactDate + "-" + sourceId + "-" + retry;
     }
 
     private OrdersEntity findAuthorizedOrderForUpdate(Long driverId, Long orderId, LocalDate today) {
@@ -195,10 +242,15 @@ public class DeliveryService {
         return value.trim();
     }
 
+    private int valueOrZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
     private DeliveryRecordResponse toResponse(
             DeliveryRecordsEntity record,
             OrdersEntity order,
-            Long exceptionCaseId
+            Long exceptionCaseId,
+            OrdersEntity followUpOrder
     ) {
         return new DeliveryRecordResponse(
                 record.getId(),
@@ -206,11 +258,15 @@ public class DeliveryService {
                 order.getStatus(),
                 record.getArrivedAt(),
                 record.getDeliveredAt(),
+                record.getExpectedBoxCount(),
                 record.getDeliveredBoxCount(),
                 record.getPhotoUrl(),
                 record.getNotes(),
                 record.getNoSignature(),
-                exceptionCaseId
+                exceptionCaseId,
+                followUpOrder == null ? null : followUpOrder.getId(),
+                followUpOrder == null ? null : followUpOrder.getOrderNumber(),
+                followUpOrder == null ? null : followUpOrder.getDeliveryDate()
         );
     }
 }

@@ -41,9 +41,10 @@ public class DriverShiftsEntity {
     @Column(name = "work_end")
     private LocalTime workEnd;
 
-    /** 主管排班時同時設定的預計加班分鐘數。 */
+    /** 相容既有資料庫的 NOT NULL 欄位；排班流程不再讀寫預排加班，一律存 0。 */
+    @Deprecated
     @Column(name = "overtime_minutes", nullable = false)
-    private Integer overtimeMinutes = 0;
+    private Integer legacyOvertimeMinutes = 0;
 
     /** 主管最後一次修改班次時留下的原因，例如臨時請假。 */
     @Column(name = "change_reason", length = 255)
@@ -117,14 +118,6 @@ public class DriverShiftsEntity {
 
     public void setWorkEnd(LocalTime workEnd) {
         this.workEnd = workEnd;
-    }
-
-    public Integer getOvertimeMinutes() {
-        return overtimeMinutes;
-    }
-
-    public void setOvertimeMinutes(Integer overtimeMinutes) {
-        this.overtimeMinutes = overtimeMinutes;
     }
 
     public String getChangeReason() {

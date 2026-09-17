@@ -2,6 +2,7 @@ package com.example.backend.dto.request;
 
 import com.example.backend.constants.AttendanceStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -17,6 +18,13 @@ public class AttendanceRecordDTO {
     private LocalDateTime breakStartedAt;
     private LocalDateTime breakEndsAt;
     private Long remainingBreakSeconds;
+    private LocalDateTime overtimeStartedAt;
+    private Integer regularWorkMinutes;
+    private Integer overtimeMinutes;
+    private Integer totalWorkMinutes;
+    private BigDecimal regularWorkHours;
+    private BigDecimal overtimeHours;
+    private BigDecimal totalWorkHours;
     private AttendanceStatus status;
     private Boolean gpsAllowed;
 
@@ -98,6 +106,62 @@ public class AttendanceRecordDTO {
 
     public void setRemainingBreakSeconds(Long remainingBreakSeconds) {
         this.remainingBreakSeconds = remainingBreakSeconds;
+    }
+
+    public LocalDateTime getOvertimeStartedAt() {
+        return overtimeStartedAt;
+    }
+
+    public void setOvertimeStartedAt(LocalDateTime overtimeStartedAt) {
+        this.overtimeStartedAt = overtimeStartedAt;
+    }
+
+    public Integer getRegularWorkMinutes() {
+        return regularWorkMinutes;
+    }
+
+    public void setRegularWorkMinutes(Integer regularWorkMinutes) {
+        this.regularWorkMinutes = regularWorkMinutes;
+    }
+
+    public Integer getOvertimeMinutes() {
+        return overtimeMinutes;
+    }
+
+    public void setOvertimeMinutes(Integer overtimeMinutes) {
+        this.overtimeMinutes = overtimeMinutes;
+    }
+
+    public Integer getTotalWorkMinutes() {
+        return totalWorkMinutes;
+    }
+
+    public void setTotalWorkMinutes(Integer totalWorkMinutes) {
+        this.totalWorkMinutes = totalWorkMinutes;
+    }
+
+    public BigDecimal getRegularWorkHours() {
+        return regularWorkHours;
+    }
+
+    public void setRegularWorkHours(BigDecimal regularWorkHours) {
+        this.regularWorkHours = regularWorkHours;
+    }
+
+    public BigDecimal getOvertimeHours() {
+        return overtimeHours;
+    }
+
+    public void setOvertimeHours(BigDecimal overtimeHours) {
+        this.overtimeHours = overtimeHours;
+    }
+
+    public BigDecimal getTotalWorkHours() {
+        return totalWorkHours;
+    }
+
+    public void setTotalWorkHours(BigDecimal totalWorkHours) {
+        this.totalWorkHours = totalWorkHours;
     }
 
     public AttendanceStatus getStatus() {

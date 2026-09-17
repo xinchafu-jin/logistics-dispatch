@@ -18,6 +18,16 @@ public final class ValidMsg {
     public static final String DRIVER_OVERTIME_MIN = "加班上限不能小於 0";
     public static final String DRIVER_ACTIVE_REQUIRED = "請選擇司機是否在職";
 
+    // Driver account application
+    public static final String DRIVER_APPLICATION_ACCOUNT_REQUIRED = "登入帳號不能為空";
+    public static final String DRIVER_APPLICATION_ACCOUNT_MAX_LENGTH = "登入帳號不能超過 50 字元";
+    public static final String DRIVER_APPLICATION_NAME_REQUIRED = "司機姓名不能為空";
+    public static final String DRIVER_APPLICATION_NAME_MAX_LENGTH = "司機姓名不能超過 30 字元";
+    public static final String DRIVER_APPLICATION_PHONE_REQUIRED = "手機號碼不能為空";
+    public static final String DRIVER_APPLICATION_PHONE_FORMAT = "手機號碼必須是 09 開頭的 10 位數字";
+    public static final String DRIVER_APPLICATION_NATIONAL_ID_REQUIRED = "身分證字號不能為空";
+    public static final String DRIVER_APPLICATION_NATIONAL_ID_FORMAT = "身分證字號格式不正確";
+
     // Reassign（拖曳改派）
     public static final String REASSIGN_DATE_REQUIRED = "配送日期不能為空";
     public static final String REASSIGN_WAREHOUSE_ID_REQUIRED = "倉庫不能為空";
@@ -69,7 +79,6 @@ public final class ValidMsg {
     public static final String DELIVERY_NOT_ARRIVED = "訂單尚未登記抵達門市";
     public static final String DELIVERY_ALREADY_FINISHED = "這次配送已經完成交貨或回報無人簽收";
     public static final String DELIVERY_STATUS_SUFFIX = "，目前狀態：%s";
-    public static final String DELIVERY_NO_SIGNATURE_WAIT_REQUIRED = "抵達門市後需等候 %d 分鐘才能回報無人簽收";
     public static final String DELIVERY_NO_SIGNATURE_DESCRIPTION = "門市無人簽收";
 
     // Template（常配編組）

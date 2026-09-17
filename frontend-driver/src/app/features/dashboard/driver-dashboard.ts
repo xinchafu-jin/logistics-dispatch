@@ -50,6 +50,7 @@ import {
   AttendanceRecordDto,
   DeliveryRecordResponse,
   EmergencyLeaveResponse,
+  DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
   DriverTaskStop,
@@ -88,6 +89,22 @@ export function findNearest(
   }
 
   return {distance, index};
+}
+
+function calculateRouteDistance(route: L.LatLng[]): number {
+  let distance = 0;
+  for (let i = 0; i < route.length - 1; i++) {
+    distance += route[i].distanceTo(route[i + 1]);
+  }
+  return distance;
+}
+
+function calculateRemainingRouteDistance(here: L.LatLng, route: L.LatLng[]): number {
+  if (route.length === 0) {
+    return 0;
+  }
+
+  return here.distanceTo(route[0]) + calculateRouteDistance(route);
 }
 
 //todo 之後看是否加進階選項參數化
@@ -172,6 +189,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isEmergencyLeaveFormOpen = signal(false);
   protected readonly isEmergencyLeaveSubmitting = signal(false);
   protected readonly isEmergencyLeaveHistoryLoading = signal(false);
+  protected readonly profile = signal<DriverProfileDto | null>(null);
+  protected readonly profileError = signal<string | null>(null);
+  protected readonly profilePhotoMessage = signal<string | null>(null);
+  protected readonly isProfilePhotoUploading = signal(false);
+  protected readonly profilePhotoLoadFailed = signal(false);
   protected readonly navigationRouteState = signal<NavigationRouteState>('idle');
   protected readonly navigationDistanceMeters = signal<number | null>(null);
   protected readonly navigationDurationSeconds = signal<number | null>(null);
@@ -194,7 +216,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private destinationMarker: L.Marker | null = null;
   private navigationLine: L.Polyline | null = null;
   private routeLatLng: L.LatLng[] = [];
-  private watchId: number | null = null;
+  private routeDistanceScale = 1;
+  private routeDurationSecondsPerMeter: number | null = null;
   private wakeLock: WakeLockSentinel | null = null;
   protected readonly isNavigating = signal(false);
   private offRouteStreak = 0;
@@ -212,6 +235,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadAttendance();
     this.loadPublishedShifts();
     this.loadTodayTasks();
+    this.loadProfile();
   }
 
   ngAfterViewInit(): void {
@@ -243,6 +267,55 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected refreshAttendance(): void {
     this.loadAttendance();
+  }
+
+  protected profilePhotoUrl(): string | null {
+    if (this.profilePhotoLoadFailed()) {
+      return null;
+    }
+    return this.profile()?.profilePhotoUrl ?? null;
+  }
+
+  protected profileInitial(): string {
+    const name = this.profile()?.name ?? this.user()?.name ?? '司';
+    return name.trim().slice(0, 1) || '司';
+  }
+
+  protected handleProfilePhotoLoadError(): void {
+    this.profilePhotoLoadFailed.set(true);
+  }
+
+  protected selectProfilePhoto(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || this.isProfilePhotoUploading()) {
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      this.profileError.set('大頭照不可超過 5 MB。');
+      input.value = '';
+      return;
+    }
+
+    this.isProfilePhotoUploading.set(true);
+    this.profileError.set(null);
+    this.profilePhotoMessage.set(null);
+
+    this.operations.uploadProfilePhoto(file).subscribe({
+      next: (profile) => {
+        this.profile.set(profile);
+        this.profilePhotoLoadFailed.set(false);
+        this.profilePhotoMessage.set('大頭照已更新。');
+        this.isProfilePhotoUploading.set(false);
+      },
+      error: (error: unknown) => {
+        this.profileError.set(this.getErrorMessage(error, '大頭照上傳失敗。'));
+        this.isProfilePhotoUploading.set(false);
+      },
+    });
+
+    input.value = '';
   }
 
   protected signOut(): void {
@@ -693,7 +766,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.mapLocationWatchId = navigator.geolocation.watchPosition(
       (position) => this.applyMapPosition(position, true),
       (error) => {
-        if (!this.currentMapLocation) {
+        if (this.isNavigating() || !this.currentMapLocation) {
           this.mapLocationStatus.set(this.getLocationErrorMessage(error));
         }
       },
@@ -716,7 +789,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private applyMapPosition(position: GeolocationPosition, animate: boolean): void {
     const location = L.latLng(position.coords.latitude, position.coords.longitude);
-    this.showMapLocation(location, animate);
+    if (this.isNavigating()) {
+      this.applyNavigationPosition(location);
+    } else {
+      this.showMapLocation(location, animate);
+    }
     this.saveMapLocation(location);
     this.mapLocationStatus.set('已定位至目前位置');
   }
@@ -797,6 +874,19 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected shiftTypeClass(shiftType: DriverShiftDto['shiftType']): string {
     return `is-${shiftType.toLowerCase()}`;
+  }
+
+  private loadProfile(): void {
+    this.profileError.set(null);
+    this.operations.getProfile().subscribe({
+      next: (profile) => {
+        this.profile.set(profile);
+        this.profilePhotoLoadFailed.set(false);
+      },
+      error: (error: unknown) => {
+        this.profileError.set(this.getErrorMessage(error, '無法取得司機資料。'));
+      },
+    });
   }
 
   private loadAttendance(): void {
@@ -1094,6 +1184,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const destination = this.destinationLocation();
     if (!destination) {
       this.routeLatLng = [];
+      this.routeDistanceScale = 1;
+      this.routeDurationSecondsPerMeter = null;
       this.navigationRouteState.set('idle');
       this.navigationDistanceMeters.set(null);
       this.navigationDurationSeconds.set(null);
@@ -1262,6 +1354,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }).subscribe({
       next: (res): void => {
         this.routeLatLng = res.path.map(([lat, lng]) => L.latLng(lat, lng));
+        const polylineDistance = calculateRouteDistance(this.routeLatLng);
+        this.routeDistanceScale = polylineDistance > 0 ? res.distance / polylineDistance : 1;
+        this.routeDurationSecondsPerMeter = res.distance > 0 ? res.duration / res.distance : null;
         this.navigationDistanceMeters.set(res.distance);
         this.navigationDurationSeconds.set(res.duration);
         this.navigationRouteState.set('ready');
@@ -1269,6 +1364,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       },
       error: (res) => {
         this.routeLatLng = [];
+        this.routeDistanceScale = 1;
+        this.routeDurationSecondsPerMeter = null;
         this.navigationDistanceMeters.set(null);
         this.navigationDurationSeconds.set(null);
         this.navigationRouteState.set('error');
@@ -1284,32 +1381,20 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (this.isNavigating()) {
       return;
     }
-    //不用RxJS 風格 舊的都西只能這樣
     this.isNavigating.set(true);
-    this.watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        this.onPosition(position);
-      },
-      (error) => {
-        this.mapLocationStatus.set(this.getLocationErrorMessage(error));
-      },
-      {enableHighAccuracy: true, maximumAge: 0, timeout: 10_000}
-    );
+    this.offRouteStreak = 0;
+    this.renderNavigationMap(false);
     void this.requestWakeLock();
   }
 
   protected stopNavigation(): void {
     this.isNavigating.set(false);
-    if (this.watchId != null) {
-      navigator.geolocation.clearWatch(this.watchId);
-      this.watchId = null;
-    }
+    this.offRouteStreak = 0;
+    this.renderNavigationMap(false);
     void this.releaseWakeLock();
   }
 
-  protected onPosition(position: GeolocationPosition) {
-    const here = L.latLng(position.coords.latitude, position.coords.longitude);
-    //無路線 更新位置點
+  private applyNavigationPosition(here: L.LatLng): void {
     if (this.routeLatLng.length === 0) {
       this.showMapLocation(here, false);
       return;
@@ -1318,8 +1403,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (distance > OFF_ROUTE_METERS) {
       this.offRouteStreak++;
     } else {
-      this.offRouteStreak = 0
+      this.offRouteStreak = 0;
       this.routeLatLng = this.routeLatLng.slice(index);
+      this.updateRemainingRouteMetrics(here);
     }
     this.showMapLocation(here, false);
 
@@ -1331,6 +1417,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.fetchRoute(false);
     }
 
+  }
+
+  private updateRemainingRouteMetrics(here: L.LatLng): void {
+    const calculatedDistance =
+      calculateRemainingRouteDistance(here, this.routeLatLng) * this.routeDistanceScale;
+    const currentDistance = this.navigationDistanceMeters();
+    const remainingDistance = Math.max(
+      0,
+      currentDistance === null ? calculatedDistance : Math.min(currentDistance, calculatedDistance),
+    );
+
+    this.navigationDistanceMeters.set(remainingDistance);
+    if (this.routeDurationSecondsPerMeter !== null) {
+      this.navigationDurationSeconds.set(remainingDistance * this.routeDurationSecondsPerMeter);
+    }
   }
 
 

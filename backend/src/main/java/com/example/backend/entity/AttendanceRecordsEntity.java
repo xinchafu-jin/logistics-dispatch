@@ -43,6 +43,19 @@ public class AttendanceRecordsEntity {
     @Column(name = "break_ends_at")
     private LocalDateTime breakEndsAt;
 
+    /** 表定下班後累積滿第一段 30 分鐘加班的時間點。 */
+    @Column(name = "overtime_started_at")
+    private LocalDateTime overtimeStartedAt;
+
+    @Column(name = "regular_work_minutes", nullable = false)
+    private Integer regularWorkMinutes = 0;
+
+    @Column(name = "overtime_minutes", nullable = false)
+    private Integer overtimeMinutes = 0;
+
+    @Column(name = "total_work_minutes", nullable = false)
+    private Integer totalWorkMinutes = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AttendanceStatus status = AttendanceStatus.WORKING;
@@ -121,6 +134,38 @@ public class AttendanceRecordsEntity {
 
     public void setBreakEndsAt(LocalDateTime breakEndsAt) {
         this.breakEndsAt = breakEndsAt;
+    }
+
+    public LocalDateTime getOvertimeStartedAt() {
+        return overtimeStartedAt;
+    }
+
+    public void setOvertimeStartedAt(LocalDateTime overtimeStartedAt) {
+        this.overtimeStartedAt = overtimeStartedAt;
+    }
+
+    public Integer getRegularWorkMinutes() {
+        return regularWorkMinutes;
+    }
+
+    public void setRegularWorkMinutes(Integer regularWorkMinutes) {
+        this.regularWorkMinutes = regularWorkMinutes;
+    }
+
+    public Integer getOvertimeMinutes() {
+        return overtimeMinutes;
+    }
+
+    public void setOvertimeMinutes(Integer overtimeMinutes) {
+        this.overtimeMinutes = overtimeMinutes;
+    }
+
+    public Integer getTotalWorkMinutes() {
+        return totalWorkMinutes;
+    }
+
+    public void setTotalWorkMinutes(Integer totalWorkMinutes) {
+        this.totalWorkMinutes = totalWorkMinutes;
     }
 
     public AttendanceStatus getStatus() {
