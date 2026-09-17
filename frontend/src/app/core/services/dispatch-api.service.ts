@@ -423,4 +423,13 @@ export class DispatchApiService {
   clearAiPlan(): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/ai/plan`);
   }
+
+  /**
+   * 刪除待執行清單中的單一項目，回傳刪除後的整份清單，前端直接整包取代。
+   * id 是清單項目的 UUID（AiPendingActionDto.id），不是訂單或車輛的 id；
+   * 找不到時後端不報錯，照樣回傳最新清單。跟 clearAiPlan 分開寫，漏傳 id 才不會變成整份清掉。
+   */
+  removeAiPlanAction(id: string): Observable<AiPendingActionDto[]> {
+    return this.http.delete<AiPendingActionDto[]>(`${API_ROOT}/ai/plan/${id}`);
+  }
 }

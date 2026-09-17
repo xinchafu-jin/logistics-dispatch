@@ -821,10 +821,101 @@ app-brand-logo {
   border-right: 1px solid var(--metal-edge);
 }
 
+// 對話區由上而下：標題 → 訊息 → 待執行清單 → 輸入框。
+// 原本的 grid + place-items: center 會把所有東西疊在中間，訊息一多就把輸入框擠出面板
 .chat-panel__conversation {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px 16px 16px;
   color: var(--muted);
+}
+
+.chat-panel__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+// 司機聊天未開放的提示維持置中
+.chat-panel__placeholder {
+  margin: auto;
+}
+
+// flex: 1 撐滿剩餘空間；min-height: 0 不能省，flex 子項預設不會縮到比內容小，少了它訊息多時會直接撐破面板而不是捲動
+.chat-messages {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-message {
+  align-self: flex-start;
+  max-width: 85%;
+  margin: 0;
+  color: var(--text);
+  // AI 回覆常帶換行，一般 <p> 會把換行吃掉擠成一行
+  white-space: pre-wrap;
+}
+
+.chat-message.is-user {
+  align-self: flex-end;
+  color: var(--accent);
+}
+
+// 抽屜：用 Material 提供的 CSS 變數拿掉預設陰影與底色，不必跟它的選擇器比權重
+.chat-plan {
+  --mat-expansion-container-elevation-shadow: none;
+  --mat-expansion-container-background-color: transparent;
+  flex-shrink: 0;
+  border: 1px solid var(--metal-edge);
+}
+
+// 項目多時在抽屜內捲動，不把上面的訊息區擠沒
+.chat-plan__list {
+  max-height: 160px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.chat-plan__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text);
+}
+
+.chat-plan__item + .chat-plan__item {
+  border-top: 1px solid var(--metal-edge);
+}
+
+// min-width: 0 讓長的 summary 換行，而不是把右邊的刪除按鈕推出去
+.chat-plan__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-plan__meta {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.chat-composer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-composer__field {
+  flex: 1;
 }
 
 /* 窄版：對話區已移除，聯絡人改成單欄填滿，不然右邊會空一塊 */

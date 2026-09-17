@@ -4,7 +4,7 @@ import {
   inject,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
-  provideZoneChangeDetection,
+  provideZoneChangeDetection, isDevMode,
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -12,6 +12,7 @@ import { firstValueFrom } from 'rxjs';
 import { routes } from './app.routes';
 import { driverAuthInterceptor } from './core/auth/driver-auth.interceptor';
 import { DriverAuthService } from './core/auth/driver-auth.service';
+import { provideServiceWorker } from '@angular/service-worker';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -19,6 +20,9 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideHttpClient(withInterceptors([driverAuthInterceptor])),
     provideRouter(routes),
-    provideAppInitializer(() => firstValueFrom(inject(DriverAuthService).restoreSession())),
+    provideAppInitializer(() => firstValueFrom(inject(DriverAuthService).restoreSession())), provideServiceWorker('ngsw-worker.js', {
+            enabled: !isDevMode(),
+            registrationStrategy: 'registerWhenStable:30000'
+          }),
   ],
 };

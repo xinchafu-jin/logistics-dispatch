@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,6 +50,16 @@ public class AiAssistantController {
     @DeleteMapping("/plan")
     public void clearPlan(@AuthenticationPrincipal Jwt jwt) {
         aiAssistantService.clearPlan(conversationId(jwt));
+    }
+
+    /**
+     * 刪除清單中的單一項目，回傳刪除後的整份清單。
+     *
+     * <p>只會在登入者自己的清單裡找這個 id，別人清單的項目 id 對不到，不必另外檢查擁有者。</p>
+     */
+    @DeleteMapping("/plan/{id}")
+    public List<PendingActionResponse> removeAction(@AuthenticationPrincipal Jwt jwt, @PathVariable String id) {
+        return aiAssistantService.removeAction(conversationId(jwt), id);
     }
 
     /**
