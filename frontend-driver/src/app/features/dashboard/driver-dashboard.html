@@ -1,4 +1,4 @@
-<main class="driver-app" [class.is-dark-theme]="isDarkTheme()">
+<main class="driver-app">
   <section class="map-surface" [class.is-hidden]="activeTab() !== 'map'" aria-label="司機地圖">
     <div #driverMap class="driver-map"></div>
   </section>
@@ -39,19 +39,6 @@
           <small>{{ currentWeather.temperature }}°</small>
         }
       </span>
-      <button
-        type="button"
-        class="icon-button"
-        (click)="toggleTheme()"
-        [title]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
-        [attr.aria-label]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
-      >
-        @if (isDarkTheme()) {
-          <svg lucideSun aria-hidden="true"></svg>
-        } @else {
-          <svg lucideMoon aria-hidden="true"></svg>
-        }
-      </button>
     </div>
   </header>
 
@@ -71,6 +58,7 @@
         class="attendance-sheet"
         [class.is-expanded]="isAttendanceSheetExpanded()"
         [class.is-dragging]="isAttendanceSheetDragging()"
+        [class.is-navigation-active]="isNavigating()"
         [style.--attendance-sheet-drag.px]="attendanceSheetDragOffset()"
         aria-labelledby="attendance-title"
       >

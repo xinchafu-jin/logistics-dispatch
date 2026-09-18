@@ -1,13 +1,12 @@
 import { Component, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { ElectricGazeVisual } from '../../components/electric-gaze-visual/electric-gaze-visual';
 import { BrandLogo } from '../../../../shared/ui/brand-logo/brand-logo';
 import { CurrentWeather, WeatherService } from '../../../../core/services/weather.service';
 import { AuthService } from '../../../../core/auth/auth.service';
 
 @Component({
   selector: 'app-login',
-  imports: [BrandLogo, ElectricGazeVisual],
+  imports: [BrandLogo],
   templateUrl: './login.html',
   styleUrl: './login.scss',
 })

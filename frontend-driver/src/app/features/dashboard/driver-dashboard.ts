@@ -29,7 +29,6 @@ import {
   LucideLocateFixed,
   LucideMap,
   LucideMapPin,
-  LucideMoon,
   LucideNavigation,
   LucidePackageCheck,
   LucidePlay,
@@ -135,7 +134,6 @@ const RECALC_COOLDOWN_MS = 15_000;
     LucideLocateFixed,
     LucideMap,
     LucideMapPin,
-    LucideMoon,
     LucideNavigation,
     LucidePackageCheck,
     LucidePlay,
@@ -152,7 +150,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly user = inject(DriverAuthService).user;
   protected readonly weather = signal<DriverWeather | null>(null);
   protected readonly weatherUnavailable = signal(false);
-  protected readonly isDarkTheme = signal(this.readSavedTheme() === 'dark');
   protected readonly attendance = signal<AttendanceRecordDto | null>(null);
   protected readonly attendanceViewState = signal<AttendanceViewState>('loading');
   protected readonly attendanceError = signal<string | null>(null);
@@ -324,15 +321,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     clearStoredMapLocation();
     this.authService.logout();
     void this.router.navigateByUrl('/login');
-  }
-
-  protected toggleTheme(): void {
-    const nextTheme = this.isDarkTheme() ? 'light' : 'dark';
-    this.isDarkTheme.set(nextTheme === 'dark');
-
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('logistics-dispatch.driver-theme', nextTheme);
-    }
   }
 
   protected toggleAttendanceSheet(): void {
@@ -1310,14 +1298,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return '';
   }
 
-  private readSavedTheme(): 'light' | 'dark' {
-    if (typeof localStorage === 'undefined') {
-      return 'dark';
-    }
-
-    return localStorage.getItem('logistics-dispatch.driver-theme') === 'light' ? 'light' : 'dark';
-  }
-
   private fetchRoute(animate: boolean) {
     const from = this.currentMapLocation;
     const to = this.destinationLocation();
@@ -1360,9 +1340,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (this.isNavigating()) {
       return;
     }
+
+    this.isAttendanceSheetExpanded.set(false);
+    this.attendanceSheetDragOffset.set(0);
     this.isNavigating.set(true);
     this.offRouteStreak = 0;
     this.renderNavigationMap(false);
+    this.focusNavigationOrigin();
     void this.requestWakeLock();
   }
 
@@ -1371,6 +1355,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.offRouteStreak = 0;
     this.renderNavigationMap(false);
     void this.releaseWakeLock();
+  }
+
+  private focusNavigationOrigin(): void {
+    if (!this.driverMap || !this.currentMapLocation) {
+      return;
+    }
+
+    this.driverMap.setView(this.currentMapLocation, Math.max(this.driverMap.getZoom(), 16), {
+      animate: true,
+    });
   }
 
   private applyNavigationPosition(here: L.LatLng): void {

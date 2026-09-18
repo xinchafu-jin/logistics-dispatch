@@ -39,29 +39,6 @@ export interface GpsPingRequest {
   lng: number;
 }
 
-export interface DriverAccountApplicationRequest {
-  account: string;
-  name: string;
-  phone: string;
-  nationalId: string;
-}
-
-export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-export interface DriverAccountApplicationResponse {
-  id: number;
-  account: string;
-  name: string;
-  phone: string;
-  nationalIdMasked: string;
-  status: DriverApplicationStatus;
-  appliedAt: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  approvedDriverId: number | null;
-}
-
 export interface DriverProfileDto {
   id: number;
   account: string;
