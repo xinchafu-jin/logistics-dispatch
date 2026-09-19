@@ -30,7 +30,7 @@ public class AiAssistantController {
     @PostMapping("/chat")
     public ChatReply chat(@AuthenticationPrincipal Jwt jwt, @RequestBody ChatRequest request) {
         String conversationId = conversationId(jwt);
-        String reply = aiAssistantService.chat(conversationId, request.getMessage());
+        String reply = aiAssistantService.chat(adminId(jwt), conversationId, request.getMessage());
         return new ChatReply(reply, aiAssistantService.getPlan(conversationId));
     }
 
@@ -70,6 +70,15 @@ public class AiAssistantController {
      */
     private String conversationId(Jwt jwt) {
         return "admin:" + jwt.getClaim("userId").toString();
+    }
+
+    /** 取出要用誰的 AI API Key；/api/ai/** 限定 ADMIN，所以這裡拿到的一定是主管 ID。 */
+    private Long adminId(Jwt jwt) {
+        Number userId = jwt.getClaim("userId");
+        if (userId == null) {
+            throw new IllegalArgumentException("JWT 缺少 userId");
+        }
+        return userId.longValue();
     }
 
     /** 調度員輸入的一句話。 */

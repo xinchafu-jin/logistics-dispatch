@@ -1,0 +1,64 @@
+<main class="personal-profile-page">
+  <section class="page-intro" aria-label="個人設定">
+    <p class="page-eyebrow">個人設定</p>
+  </section>
+
+  <section class="api-key-card">
+    @if (status(); as keyStatus) {
+      <p class="api-key-status">
+        @if (keyStatus.configured) {
+          目前金鑰：{{ keyStatus.maskedKey }}（更新於
+          {{ keyStatus.updatedAt | date: 'yyyy/MM/dd HH:mm' }}）
+        } @else {
+          尚未設定金鑰，設定後才能使用 AI 助理
+        }
+      </p>
+    }
+
+    <!-- 只 import ReactiveFormsModule 時沒有 ngSubmit，用原生 submit 並擋掉瀏覽器重新整理 -->
+    <form class="api-key-form" (submit)="$event.preventDefault(); saveApiKey()">
+      <!-- outline：卡片底色半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
+      <mat-form-field class="api-key-form__field" appearance="outline" subscriptSizing="dynamic">
+        <mat-label>請輸入 API key</mat-label>
+        <input
+          matInput
+          autocomplete="off"
+          [type]="hide() ? 'password' : 'text'"
+          [formControl]="apiKeyControl"
+        />
+        <!-- 只有眼睛圖示要貼在欄位框內，所以留在 mat-form-field 裡並標 matSuffix -->
+        <button
+          type="button"
+          matIconButton
+          matSuffix
+          (click)="clickEvent($event)"
+          [attr.aria-label]="hide() ? '顯示金鑰' : '隱藏金鑰'"
+          [attr.aria-pressed]="!hide()"
+        >
+          <mat-icon>{{ hide() ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+      </mat-form-field>
+
+      <!-- 動作按鈕搬到欄位外；留在 mat-form-field 裡沒掛 matSuffix 會被塞進 input 那一格，把欄位撐壞 -->
+      <div class="api-key-form__actions">
+        <button type="submit" matButton [disabled]="apiKeyControl.invalid || apiKeyControl.disabled">
+          Send
+          <mat-icon iconPositionEnd>send</mat-icon>
+        </button>
+        <!-- 沒設定過就沒東西可移除，按鈕不顯示 -->
+        @if (status()?.configured) {
+          <button type="button" matFab aria-label="移除金鑰" (click)="removeApiKey()">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </div>
+    </form>
+
+    @if (apiKeyControl.touched && apiKeyControl.hasError('minlength')) {
+      <p class="api-key-error">金鑰太短，請確認是否完整複製</p>
+    }
+    @if (errorMessage()) {
+      <p class="api-key-error">{{ errorMessage() }}</p>
+    }
+  </section>
+</main>

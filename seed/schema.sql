@@ -114,6 +114,10 @@ CREATE TABLE admin_users (
   password VARCHAR(100) NOT NULL,
   name     VARCHAR(60)  NOT NULL,
   phone    VARCHAR(30)  DEFAULT NULL,
+  -- AI 助理 API Key：密文（AES-GCM，16 進位）、末 4 碼（畫面辨識用）、最後設定時間
+  ai_api_key_encrypted  VARCHAR(512) DEFAULT NULL,
+  ai_api_key_last4      VARCHAR(4)   DEFAULT NULL,
+  ai_api_key_updated_at DATETIME(6)  DEFAULT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_admin_users_account (account)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

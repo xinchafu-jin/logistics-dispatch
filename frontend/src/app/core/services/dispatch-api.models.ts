@@ -82,6 +82,21 @@ export interface AdminUserDto {
   phone: string;
 }
 
+/** 自己的 AI API Key 設定狀態。後端只回遮罩，完整的 Key 拿不到也不該拿。 */
+export interface AiApiKeyStatusDto {
+  configured: boolean;
+  /** 遮罩後的 Key，例如 ****4g86；未設定為 null */
+  maskedKey: string | null;
+  /** 最後一次設定的時間，ISO 字串；未設定為 null */
+  updatedAt: string | null;
+}
+
+/** 送往 PUT /api/admin-users/me/ai-api-key 的資料。 */
+export interface AiApiKeyRequest {
+  /** 完整的 Key，只在送出這一次使用，不要留在 localStorage */
+  apiKey: string;
+}
+
 /** 司機登入前提交的帳號申請。nationalId 只會被後端當成初始密碼雜湊。 */
 export interface DriverAccountApplicationRequest {
   account: string;

@@ -2,6 +2,7 @@ package com.example.backend.config;
 
 import com.example.backend.service.AuthService;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,6 +12,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.encrypt.Encryptors;
+import org.springframework.security.crypto.encrypt.TextEncryptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -124,4 +127,22 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
+    // api key
+    @Bean
+    public TextEncryptor aiApiKeyEncryptor(
+            //todo 暫時加預設啟動 否則無法啟動專案
+            @Value("${app.crypto.password:dev-only-change-this-crypto-password-2026}") String password,
+            @Value("${app.crypto.salt:0123456789abcdef}") String salt
+//            @Value("${app.crypto.password}")String password,
+//            @Value("${app.crypto.salt}")String salt
+    ){
+        if (password.length() < 32) {
+            throw new IllegalStateException("APP_CRYPTO_PASSWORD 必須至少 32 字元");
+        }
+        if (!salt.matches("^[0-9a-fA-F]{16,}$") || salt.length() % 2 != 0) {
+            throw new IllegalStateException("APP_CRYPTO_SALT 必須是偶數長度的 16 進位字串，至少 16 字元");
+        }
+        return Encryptors.delux(password, salt);
+    }
+
 }

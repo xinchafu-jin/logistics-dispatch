@@ -4,6 +4,8 @@ import {Observable} from 'rxjs';
 import {
   AdminUserCreateRequest,
   AdminUserDto,
+  AiApiKeyRequest,
+  AiApiKeyStatusDto,
   AiChatReply,
   AiChatRequest,
   AiPendingActionDto,
@@ -113,6 +115,23 @@ export class DispatchApiService {
 
   createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
+  }
+
+  // ── 自己的 AI API Key ─────────────────────────────────
+  // 路徑固定是 /me，後端從 JWT 取主管 ID，前端不必也不能指定是誰。
+
+  getAiApiKeyStatus(): Observable<AiApiKeyStatusDto> {
+    return this.http.get<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`);
+  }
+
+  /** 新增與修改共用：一人只有一把 Key，兩者都是加密後覆蓋舊的 */
+  saveAiApiKey(request: AiApiKeyRequest): Observable<AiApiKeyStatusDto> {
+    return this.http.put<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`, request);
+  }
+
+  /** 移除後 AI 聊天會回「請先到個人資料設定 AI API Key」 */
+  removeAiApiKey(): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/admin-users/me/ai-api-key`);
   }
 
   getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {

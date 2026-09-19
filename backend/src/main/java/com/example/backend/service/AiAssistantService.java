@@ -11,8 +11,11 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,17 +27,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class AiAssistantService {
-    private final ChatClient chatClient;
+    private final ChatMemory chatMemory;
+    private final OpenAiChatModel openAiChatModel;
+    private final AdminUsersService adminUsersService;
+    private final String baseUrl;
+
     private final OrdersService ordersService;
     private final DriverScheduleService driverScheduleService;
     private final DispatchService dispatchService;
     private final DriversService driversService;
     private final WarehousesService warehousesService;
 
-    public AiAssistantService(
 
-            ChatClient.Builder chatClientBuilder,
+    public AiAssistantService(
             ChatMemory chatMemory,
+            OpenAiChatModel openAiChatModel,
+            AdminUsersService adminUsersService,
+            @Value("${spring.ai.openai.base-url}") String baseUrl,
             OrdersService ordersService,
             DriverScheduleService driverScheduleService,
             DispatchService dispatchService,
@@ -45,12 +54,10 @@ public class AiAssistantService {
         this.dispatchService = dispatchService;
         this.driversService = driversService;
         this.warehousesService = warehousesService;
-        this.chatClient = chatClientBuilder
-                .defaultSystem("你是物流調度系統的助理，用繁體中文，台灣圈用語簡潔回覆調度員關於班表、訂單、派車的查詢。" +
-                        "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。")
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .defaultTools(this)
-                .build();
+        this.openAiChatModel = openAiChatModel;
+        this.adminUsersService = adminUsersService;
+        this.baseUrl = baseUrl;
+        this.chatMemory = chatMemory;
     }
 
     // 同一份清單有兩個入口會同時改：對話中 AI 工具加入項目、調度員按刪除。
@@ -58,8 +65,8 @@ public class AiAssistantService {
     // 兩層都要執行緒安全，只有外層安全的話，同一份 list 被同時 add 和 removeIf 仍會出錯。
     private final Map<String, List<PendingActionResponse>> pendingAction = new ConcurrentHashMap<>();
 
-    public String chat(String conversationId, String message) {
-        return chatClient.prompt()
+    public String chat(Long adminId, String conversationId, String message) {
+        return chatClientFor(adminId).prompt()
                 .user(message)
                 // 不加Lambda會每對話一次都new 一個advisors
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId))
@@ -67,6 +74,46 @@ public class AiAssistantService {
                 .toolContext(Map.of("conversationId", conversationId))
                 .call()
                 .content();
+    }
+
+    /**
+     * 只用這位主管自己設定的 Key；沒設定就擋下來，不會改用系統設定的 Key。
+     *
+     * <p>每句話都重新查一次 DB 並解密，主管換了 Key 下一句就生效，不必重啟或清快取。</p>
+     */
+    private ChatClient chatClientFor(Long adminId) {
+        String personalKey = adminUsersService.findAiApiKey(adminId);
+        if (personalKey == null) {
+            throw new IllegalArgumentException("請先到個人資料設定 AI API Key");
+        }
+        return buildChatClient(buildPersonalChatModel(personalKey));
+    }
+
+    /**
+     * 用個人 Key 建一個 model。
+     *
+     * <p>baseUrl 一定要自己帶：自動設定只把 base-url 用在它另外建的 HTTP client 上，
+     * openAiChatModel.getOptions() 裡的 baseUrl 是 null，不帶的話會改打 api.openai.com，
+     * 等於把 DeepSeek 的 Key 送到別家。</p>
+     */
+    private OpenAiChatModel buildPersonalChatModel(String apiKey) {
+        OpenAiChatOptions options = openAiChatModel.getOptions().mutate()
+                .baseUrl(baseUrl)
+                .apiKey(apiKey)
+                .build();
+        return OpenAiChatModel.builder()
+                .options(options)
+                .build();
+    }
+
+    /** 提示詞、對話記憶、可用工具都在這裡設定，換誰的 Key 助理的行為都一樣。 */
+    private ChatClient buildChatClient(OpenAiChatModel chatModel) {
+        return ChatClient.builder(chatModel)
+                .defaultSystem("你是物流調度系統的助理，用繁體中文，台灣圈用語簡潔回覆調度員關於班表、訂單、派車的查詢。" +
+                        "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。")
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
+                .defaultTools(this)
+                .build();
     }
 
     // 讀取待執行清單；回傳複本，避免外部直接改到內部狀態
@@ -472,7 +519,9 @@ public class AiAssistantService {
         return null;
     }
 
-    /** 指定那天每位司機的班次，以 driverId 查。班表只能整月撈，這裡只留那一天 */
+    /**
+     * 指定那天每位司機的班次，以 driverId 查。班表只能整月撈，這裡只留那一天
+     */
     private Map<Long, DriverShiftDTO> findShiftsOn(Long scheduleMonthId, LocalDate workDate) {
         Map<Long, DriverShiftDTO> shifts = new HashMap<>();
         for (DriverShiftDTO shift : driverScheduleService.findMonthShifts(scheduleMonthId)) {
@@ -543,7 +592,9 @@ public class AiAssistantService {
         return null;
     }
 
-    /** 班次不是上班時的原因；上班回傳 null */
+    /**
+     * 班次不是上班時的原因；上班回傳 null
+     */
     private String shiftReason(DriverShiftDTO shift) {
         if (shift == null) {
             // 司機在當月班表產生之後才建立，還沒同步進班表
@@ -563,5 +614,6 @@ public class AiAssistantService {
         }
         return "未排班";
     }
+
 
 }
