@@ -1,0 +1,63 @@
+:host {
+  display: block;
+
+  // mat.theme 的顏色 token 是用 light-dark() 產的，全站底色是深的但 body 宣告 light，
+  // 不切成 dark 的話 Material 欄位會是黑字黑底。只影響這頁的 Material 元件。
+  color-scheme: dark;
+}
+
+.personal-profile-page {
+  width: min(100%, 720px);
+  margin: 0 auto;
+}
+
+.page-eyebrow {
+  margin: 0 0 7px;
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.page-intro h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.page-intro p:not(.page-eyebrow) {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.api-key-card {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+// 欄位吃滿剩下的寬度，按鈕靠右；寬度不夠時按鈕整組往下折
+.api-key-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.api-key-form__field {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.api-key-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}

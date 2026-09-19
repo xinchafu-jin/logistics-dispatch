@@ -33,6 +33,7 @@ import {
   LucideSun,
   LucideTriangleAlert,
   LucideTruck,
+  LucideUserRound,
   LucideWorkflow,
   LucideX,
 } from '@lucide/angular';
@@ -79,6 +80,7 @@ interface ChatMessage {
     LucideMapPinned,
     LucideMoon,
     LucideSun,
+    LucideUserRound,
     LucideLogOut,
     LucideTriangleAlert,
     LucideChartNoAxesCombined,
