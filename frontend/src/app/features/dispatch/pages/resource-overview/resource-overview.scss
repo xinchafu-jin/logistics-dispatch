@@ -92,11 +92,11 @@
   outline: none;
 }
 
-.secondary-action svg,
-.primary-action svg,
-.danger-action svg,
-.icon-button svg,
-.row-action svg {
+.secondary-action mat-icon,
+.primary-action mat-icon,
+.danger-action mat-icon,
+.icon-button mat-icon,
+.row-action mat-icon {
   width: 15px;
   height: 15px;
   stroke-width: 1.8;
@@ -289,7 +289,7 @@
   box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
 }
 
-.search-field svg {
+.search-field mat-icon {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
@@ -461,7 +461,7 @@
   border-radius: 6px;
 }
 
-.vehicle-badge svg {
+.vehicle-badge mat-icon {
   width: 18px;
   height: 18px;
   stroke-width: 1.65;
@@ -632,7 +632,7 @@
   border-top: 1px solid rgb(255 255 255 / 7%);
 }
 
-.resource-alert svg {
+.resource-alert mat-icon {
   width: 17px;
   height: 17px;
   color: #e4a74d;

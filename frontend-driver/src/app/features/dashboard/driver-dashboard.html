@@ -17,22 +17,22 @@
       >
         @switch (weather()?.icon) {
           @case ('晴') {
-            <svg lucideSun aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">wb_sunny</mat-icon>
           }
           @case ('雨') {
-            <svg lucideCloudRain aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">beach_access</mat-icon>
           }
           @case ('霧') {
-            <svg lucideCloudFog aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">cloud</mat-icon>
           }
           @case ('雪') {
-            <svg lucideCloudSnow aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">ac_unit</mat-icon>
           }
           @case ('雷') {
-            <svg lucideCloudLightning aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">flash_on</mat-icon>
           }
           @default {
-            <svg lucideCloudSun aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">wb_cloudy</mat-icon>
           }
         }
         @if (weather(); as currentWeather) {
@@ -51,7 +51,7 @@
         title="取得目前位置"
         aria-label="取得目前位置"
       >
-        <svg lucideLocateFixed aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">my_location</mat-icon>
       </button>
 
       <section
@@ -79,9 +79,9 @@
             <strong>{{ statusLabel() }}</strong>
           </span>
           @if (isAttendanceSheetExpanded()) {
-            <svg lucideChevronDown aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">keyboard_arrow_down</mat-icon>
           } @else {
-            <svg lucideChevronUp aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">keyboard_arrow_up</mat-icon>
           }
         </button>
         <div id="attendance-drawer-content" class="attendance-drawer-content">
@@ -92,7 +92,7 @@
           </div>
           @if (attendance()?.gpsAllowed) {
             <span class="gps-status is-active"
-            ><svg lucideMapPin aria-hidden="true"></svg> GPS 回報中</span
+            ><mat-icon aria-hidden="true">location_on</mat-icon> GPS 回報中</span
             >
           } @else {
             <span class="gps-status">GPS 已停止</span>
@@ -153,10 +153,10 @@
             (click)="clockIn()"
             [disabled]="isSubmitting()"
           >
-            <svg lucidePlay aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">play_arrow</mat-icon>
             {{ isSubmitting() ? '處理中...' : '上班打卡' }}
           </button>
-        } @else if (attendance(); as todayAttendance) {
+          } @else if (attendance(); as todayAttendance) {
           <div class="attendance-meta">
             <span>
               <small>上班</small>
@@ -180,7 +180,7 @@
                 (click)="startBreak()"
                 [disabled]="isSubmitting() || todayAttendance.breakUsed"
               >
-                <svg lucideCoffee aria-hidden="true"></svg>
+                <mat-icon aria-hidden="true">coffee</mat-icon>
                 {{ todayAttendance.breakUsed ? '今日休息已使用' : '休息' }}
               </button>
               <button
@@ -189,7 +189,7 @@
                 (click)="clockOut()"
                 [disabled]="isSubmitting()"
               >
-                <svg lucideCircleStop aria-hidden="true"></svg>
+                <mat-icon aria-hidden="true">stop_circle</mat-icon>
                 下班
               </button>
             </div>
@@ -202,6 +202,74 @@
             <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
           }
         }
+
+        <section class="mileage-panel mileage-panel--drawer" aria-labelledby="mileage-title">
+          <div class="mileage-heading">
+            <div>
+              <p class="eyebrow">車輛</p>
+              <h2 id="mileage-title">今日里程</h2>
+            </div>
+            <mat-icon aria-hidden="true">speed</mat-icon>
+          </div>
+          <p>上班後記錄出車里程，下班前記錄收車里程。</p>
+          <div class="mileage-form-row">
+            <label>
+              <span>出車表讀數（km）</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                placeholder="例如 18400"
+                [value]="startMileageReading()"
+                (input)="updateStartMileage($event)"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              />
+            </label>
+            <button
+              type="button"
+              class="mileage-start-button"
+              (click)="submitStartMileage()"
+              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+            >
+              <mat-icon aria-hidden="true">play_arrow</mat-icon>
+              出車
+            </button>
+          </div>
+          <div class="mileage-form-row">
+            <label>
+              <span>收車表讀數（km）</span>
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                step="1"
+                placeholder="例如 18438"
+                [value]="endMileageReading()"
+                (input)="updateEndMileage($event)"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              />
+            </label>
+            <button
+              type="button"
+              class="mileage-end-button"
+              (click)="submitEndMileage()"
+              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+            >
+              <mat-icon aria-hidden="true">stop_circle</mat-icon>
+              收車
+            </button>
+          </div>
+          @if (!canRecordMileage()) {
+            <small class="mileage-note">完成上班打卡後才能登記；休息與下班狀態不會送出里程。</small>
+          }
+          @if (mileageMessage()) {
+            <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>
+          }
+          @if (mileageError()) {
+            <p class="mileage-feedback is-error">{{ mileageError() }}</p>
+          }
+        </section>
         </div>
       </section>
     </section>
@@ -220,18 +288,18 @@
         }
         @if (taskViewState() === 'loading') {
           <div class="empty-state">
-            <svg lucideListTodo aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
             <h2>正在取得今日任務</h2>
           </div>
         } @else if (taskViewState() === 'error') {
           <div class="empty-state">
-            <svg lucideListTodo aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
             <h2>任務暫時無法取得</h2>
             <p>{{ taskError() }}</p>
           </div>
         } @else if (taskViewState() === 'empty') {
           <div class="empty-state">
-            <svg lucideListTodo aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
             <h2>今天沒有已發布任務</h2>
             <p>主管發布路線後，任務與導航目的地會顯示在這裡。</p>
           </div>
@@ -285,7 +353,7 @@
                               : '後端尚未提供這個站點的座標'
                           "
                         >
-                          <svg lucideNavigation aria-hidden="true"></svg>
+                          <mat-icon aria-hidden="true">near_me</mat-icon>
                           <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
                         </button>
                         @if (canMarkArrived(stop)) {
@@ -295,7 +363,7 @@
                             (click)="arriveAtStop(stop)"
                             [disabled]="isTaskSubmitting()"
                           >
-                            <svg lucideMapPin aria-hidden="true"></svg>
+                            <mat-icon aria-hidden="true">location_on</mat-icon>
                             <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
                           </button>
                         } @else if (canCompleteDelivery(stop)) {
@@ -305,7 +373,7 @@
                             (click)="openDeliveryAction(stop)"
                             [disabled]="isTaskSubmitting()"
                           >
-                            <svg lucidePackageCheck aria-hidden="true"></svg>
+                            <mat-icon aria-hidden="true">inventory_2</mat-icon>
                             <span>交貨</span>
                           </button>
                         }
@@ -330,7 +398,7 @@
                               (click)="completeDelivery(stop)"
                               [disabled]="isTaskSubmitting()"
                             >
-                              <svg lucideCircleCheck aria-hidden="true"></svg>
+                              <mat-icon aria-hidden="true">check_circle</mat-icon>
                               {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
                             </button>
                             <button
@@ -339,7 +407,7 @@
                               (click)="reportNoSignature(stop)"
                               [disabled]="isTaskSubmitting()"
                             >
-                              <svg lucideTriangleAlert aria-hidden="true"></svg>
+                              <mat-icon aria-hidden="true">warning_amber</mat-icon>
                               無人簽收
                             </button>
                             <button
@@ -371,21 +439,21 @@
             title="上個月"
             aria-label="上個月"
           >
-            <svg lucideChevronLeft aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">chevron_left</mat-icon>
           </button>
           <strong>{{ scheduleMonthLabel() }}</strong>
           <button type="button" (click)="changeScheduleMonth(1)" title="下個月" aria-label="下個月">
-            <svg lucideChevronRight aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">chevron_right</mat-icon>
           </button>
         </div>
         @if (scheduleViewState() === 'loading') {
           <div class="empty-state">
-            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">calendar_month</mat-icon>
             <h2>正在取得已發布班表</h2>
           </div>
         } @else if (scheduleViewState() === 'error') {
           <div class="empty-state">
-            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">calendar_month</mat-icon>
             <h2>班表暫時無法取得</h2>
             <p>{{ scheduleError() }}</p>
           </div>
@@ -414,7 +482,7 @@
           </div>
         } @else {
           <div class="empty-state">
-            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">calendar_month</mat-icon>
             <h2>這個月沒有已發布班表</h2>
             <p>主管發布班表後，司機端會在這裡顯示。</p>
           </div>
@@ -481,80 +549,13 @@
             <dd>已安全登入</dd>
           </div>
         </dl>
-        <section class="mileage-panel" aria-labelledby="mileage-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">車輛</p>
-              <h2 id="mileage-title">今日里程</h2>
-            </div>
-            <svg lucideGauge aria-hidden="true"></svg>
-          </div>
-          <p>請在上班後記錄出車里程，並於下班前記錄收車里程。</p>
-          <div class="mileage-form-row">
-            <label>
-              <span>出車表讀數（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18400"
-                [value]="startMileageReading()"
-                (input)="updateStartMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
-            <button
-              type="button"
-              class="mileage-start-button"
-              (click)="submitStartMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
-            >
-              <svg lucidePlay aria-hidden="true"></svg>
-              出車
-            </button>
-          </div>
-          <div class="mileage-form-row">
-            <label>
-              <span>收車表讀數（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18438"
-                [value]="endMileageReading()"
-                (input)="updateEndMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
-            <button
-              type="button"
-              class="mileage-end-button"
-              (click)="submitEndMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
-            >
-              <svg lucideCircleStop aria-hidden="true"></svg>
-              收車
-            </button>
-          </div>
-          @if (!canRecordMileage()) {
-            <small class="mileage-note">完成上班打卡後才能登記；休息與下班狀態不會送出里程。</small>
-          }
-          @if (mileageMessage()) {
-            <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>
-          }
-          @if (mileageError()) {
-            <p class="mileage-feedback is-error">{{ mileageError() }}</p>
-          }
-        </section>
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
           <div class="mileage-heading">
             <div>
               <p class="eyebrow">出勤異動</p>
               <h2 id="emergency-leave-title">臨時請假</h2>
             </div>
-            <svg lucideTriangleAlert aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">warning_amber</mat-icon>
           </div>
           <p>上班途中無法繼續配送時，可送出申請，由主管指定接手司機。</p>
 
@@ -628,7 +629,7 @@
 
   <nav class="bottom-navigation" aria-label="司機工作台導覽">
     <button type="button" [class.is-active]="activeTab() === 'map'" (click)="setActiveTab('map')">
-      <svg lucideMap aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">map</mat-icon>
       <span>導航</span>
     </button>
     <button
@@ -636,7 +637,7 @@
       [class.is-active]="activeTab() === 'tasks'"
       (click)="setActiveTab('tasks')"
     >
-      <svg lucideListTodo aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
       <span>任務</span>
     </button>
     <button
@@ -644,7 +645,7 @@
       [class.is-active]="activeTab() === 'profile'"
       (click)="setActiveTab('profile')"
     >
-      <svg lucideUserRound aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">person</mat-icon>
       <span>司機</span>
     </button>
     <button
@@ -652,7 +653,7 @@
       [class.is-active]="activeTab() === 'schedule'"
       (click)="setActiveTab('schedule')"
     >
-      <svg lucideCalendarDays aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">calendar_month</mat-icon>
       <span>班表</span>
     </button>
   </nav>

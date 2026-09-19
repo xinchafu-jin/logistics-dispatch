@@ -7,7 +7,7 @@
 
     <div class="intro-actions">
       <button type="button" class="button-primary create-order-button" (click)="openCreateOrder()">
-        <svg lucidePlus aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">add</mat-icon>
         新增訂單
       </button>
       <input
@@ -22,7 +22,7 @@
         class="button-secondary import-order-button"
         (click)="importInput.click()"
       >
-        <svg lucideFileUp aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">upload_file</mat-icon>
         匯入 Excel
       </button>
       <div class="review-summary" aria-label="今日審核狀態">
@@ -58,7 +58,7 @@
         </div>
 
         <label class="search-field">
-          <svg lucideSearch aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">search</mat-icon>
           <span class="sr-only">搜尋訂單</span>
           <input
             type="search"
@@ -71,17 +71,17 @@
 
       @if (loading()) {
         <p class="development-note">
-          <svg lucideClipboardCheck aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">fact_check</mat-icon>
           正在從後端載入訂單與門市資料...
         </p>
       } @else if (errorMessage()) {
         <p class="development-note">
-          <svg lucideClipboardCheck aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">fact_check</mat-icon>
           {{ errorMessage() }}
         </p>
       } @else {
         <p class="development-note">
-          <svg lucideClipboardCheck aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">fact_check</mat-icon>
           已同步後端 OrderController 與 StoreController。
         </p>
       }
@@ -147,13 +147,13 @@
         </dl>
 
         <section class="detail-block">
-          <p class="detail-label"><svg lucideMapPinned aria-hidden="true"></svg>配送地址</p>
+          <p class="detail-label"><mat-icon aria-hidden="true">map</mat-icon>配送地址</p>
           <strong>{{ order.area }}</strong>
           <span>{{ order.address }}</span>
         </section>
 
         <section class="detail-block">
-          <p class="detail-label"><svg lucideTruck aria-hidden="true"></svg>收貨資訊</p>
+          <p class="detail-label"><mat-icon aria-hidden="true">local_shipping</mat-icon>收貨資訊</p>
           <strong>{{ order.contact }}</strong>
           @if (order.note) {
             <span>{{ order.note }}</span>
@@ -177,7 +177,7 @@
 
         <div class="manage-actions">
           <button type="button" class="icon-action" title="編輯訂單" (click)="openEditOrder(order)">
-            <svg lucidePencil aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">edit</mat-icon>
             編輯
           </button>
           <button
@@ -186,7 +186,7 @@
             title="刪除訂單"
             (click)="requestDeleteOrder(order)"
           >
-            <svg lucideTrash2 aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">delete</mat-icon>
             刪除
           </button>
         </div>
@@ -203,7 +203,7 @@
             <h3 id="order-form-title">{{ formMode === 'edit' ? '編輯訂單' : '新增訂單' }}</h3>
           </div>
           <button type="button" class="modal-close" title="關閉" aria-label="關閉" (click)="closeForm()">
-            <svg lucideX aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">close</mat-icon>
           </button>
         </header>
 
@@ -300,7 +300,7 @@
               aria-label="關閉"
               (click)="closeImport()"
             >
-              <svg lucideX aria-hidden="true"></svg>
+              <mat-icon aria-hidden="true">close</mat-icon>
             </button>
           </header>
 

@@ -9,23 +9,23 @@
       <p class="updated-at">資料更新於 {{ updatedAt() }}</p>
       <div class="action-buttons">
         <button type="button" class="secondary-action" (click)="openCreateAdmin()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增管理員
         </button>
         <button type="button" class="secondary-action" (click)="openCreateDriver()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增司機
         </button>
         <button type="button" class="secondary-action" (click)="openCreateVehicle()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增車輛
         </button>
         <button type="button" class="secondary-action" (click)="openCreateStore()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增店家
         </button>
         <button type="button" class="secondary-action" (click)="openCreateWarehouse()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增倉庫
         </button>
       </div>
@@ -101,7 +101,7 @@
         </div>
 
         <label class="search-field">
-          <svg lucideSearch aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">search</mat-icon>
           <span class="sr-only">搜尋人員或車輛</span>
           <input
             type="search"
@@ -129,7 +129,7 @@
           @for (vehicle of visibleVehicles(); track vehicle.backendId ?? vehicle.id) {
             <article class="resource-row">
               <div class="resource-person vehicle-identity">
-                <span class="vehicle-badge"><svg lucideTruck aria-hidden="true"></svg></span>
+                <span class="vehicle-badge"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
                 <div>
                   <strong>{{ vehicle.id }}</strong>
                   <span>{{ vehicle.type }} · {{ vehicle.capacity }}</span>
@@ -154,7 +154,7 @@
                   [attr.aria-label]="'編輯車輛 ' + vehicle.id"
                   (click)="openEditVehicle(vehicle)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -163,7 +163,7 @@
                   [attr.aria-label]="'刪除車輛 ' + vehicle.id"
                   (click)="requestDeleteVehicle(vehicle)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -224,7 +224,7 @@
                   [attr.aria-label]="'編輯店家 ' + store.name"
                   (click)="openEditStore(store)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -233,7 +233,7 @@
                   [attr.aria-label]="'刪除店家 ' + store.name"
                   (click)="requestDeleteStore(store)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -279,7 +279,7 @@
                   [attr.aria-label]="'編輯倉庫 ' + warehouse.name"
                   (click)="openEditWarehouse(warehouse)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -288,7 +288,7 @@
                   [attr.aria-label]="'刪除倉庫 ' + warehouse.name"
                   (click)="requestDeleteWarehouse(warehouse)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -313,7 +313,7 @@
       </p>
 
       <section class="resource-alert" aria-label="資源提醒">
-        <svg lucideTriangleAlert aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">warning_amber</mat-icon>
         <div>
           <strong>後端資源資料已同步</strong>
           <span>配送路線與即時定位會依已登入司機與後端 GPS 資料顯示。</span>
@@ -383,7 +383,7 @@
             aria-label="關閉"
             (click)="closeForm()"
           >
-            <svg lucideX aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">close</mat-icon>
           </button>
         </header>
 

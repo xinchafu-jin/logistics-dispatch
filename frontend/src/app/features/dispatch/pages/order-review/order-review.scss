@@ -83,10 +83,10 @@
   gap: 7px;
 }
 
-.create-order-button svg,
-.import-order-button svg,
-.icon-action svg,
-.modal-close svg {
+.create-order-button mat-icon,
+.import-order-button mat-icon,
+.icon-action mat-icon,
+.modal-close mat-icon {
   width: 16px;
   height: 16px;
   stroke-width: 1.8;
@@ -203,7 +203,7 @@
   box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
 }
 
-.search-field svg {
+.search-field mat-icon {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
@@ -236,7 +236,7 @@
   font-size: 0.6875rem;
 }
 
-.development-note svg {
+.development-note mat-icon {
   width: 15px;
   height: 15px;
   color: var(--accent);
@@ -403,7 +403,7 @@
   font-weight: 600;
 }
 
-.detail-label svg {
+.detail-label mat-icon {
   width: 15px;
   height: 15px;
   color: var(--accent);

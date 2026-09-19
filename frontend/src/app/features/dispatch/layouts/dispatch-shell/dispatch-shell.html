@@ -28,7 +28,7 @@
         [title]="notificationCount() ? '主管待辦 ' + notificationCount() + ' 項' : '主管待辦'"
         (click)="toggleNotifications()"
       >
-        <svg lucideBell aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">notifications</mat-icon>
         @if (notificationCount() > 0) {
           <span class="notification-badge">{{ notificationCount() > 99 ? '99+' : notificationCount() }}</span>
         }
@@ -41,9 +41,9 @@
         [attr.aria-label]="isLightTheme() ? '切換為深色模式' : '切換為淺色模式'"
       >
         @if (isLightTheme()) {
-          <svg lucideMoon aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">dark_mode</mat-icon>
         } @else {
-          <svg lucideSun aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">light_mode</mat-icon>
         }
       </button>
       <button
@@ -54,7 +54,7 @@
         title="登出系統"
         aria-label="登出系統"
       >
-        <svg lucideLogOut aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">logout</mat-icon>
       </button>
     </div>
   </header>
@@ -205,57 +205,59 @@
   }
 
   <aside class="dispatch-sidebar">
-    <nav class="sidebar-nav" aria-label="物流後台主選單">
+    <mat-nav-list class="sidebar-nav" aria-label="物流後台主選單">
       <p class="nav-group-title">調度作業</p>
 
       <a
+        mat-list-item
         class="nav-item"
         routerLink="/dispatch/dashboard"
         routerLinkActive="is-active"
         [routerLinkActiveOptions]="{ exact: true }"
       >
-        <svg lucideWorkflow aria-hidden="true"></svg>
+        <mat-icon matListItemIcon aria-hidden="true">account_tree</mat-icon>
         <span>今日調度</span>
       </a>
 
       <p class="nav-group-title">管理與監控</p>
 
-      <a class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
-        <svg lucideClipboardCheck aria-hidden="true"></svg>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">fact_check</mat-icon>
         <span>訂單審核</span>
       </a>
 
-      <a class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
-        <svg lucideTruck aria-hidden="true"></svg>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">local_shipping</mat-icon>
         <span>人車資源</span>
       </a>
 
       <a
+        mat-list-item
         class="nav-item"
         routerLink="/dispatch/schedules"
         routerLinkActive="is-active"
         title="司機班表"
         aria-label="司機班表"
       >
-        <svg lucideCalendarDays aria-hidden="true"></svg>
+        <mat-icon matListItemIcon aria-hidden="true">calendar_month</mat-icon>
         <span>司機班表</span>
       </a>
 
-      <a class="nav-item" routerLink="/dispatch/fleet" routerLinkActive="is-active">
-        <svg lucideMapPinned aria-hidden="true"></svg>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/fleet" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">map</mat-icon>
         <span>即時車隊</span>
       </a>
 
-      <a class="nav-item" routerLink="/dispatch/anomalies" routerLinkActive="is-active">
-        <svg lucideTriangleAlert aria-hidden="true"></svg>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/anomalies" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">warning_amber</mat-icon>
         <span>異常中心</span>
       </a>
 
-      <a class="nav-item" routerLink="/dispatch/reports" routerLinkActive="is-active">
-        <svg lucideChartNoAxesCombined aria-hidden="true"></svg>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/reports" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">bar_chart</mat-icon>
         <span>營運報表</span>
       </a>
-    </nav>
+    </mat-nav-list>
   </aside>
 
   <main class="dispatch-workspace">
@@ -277,9 +279,9 @@
             (click)="toggleChatWidth()"
           >
             @if (chatView() === 'wide') {
-              <svg lucideArrowRightToLine aria-hidden="true"></svg>
+              <mat-icon aria-hidden="true">keyboard_double_arrow_right</mat-icon>
             } @else {
-              <svg lucideArrowLeftToLine aria-hidden="true"></svg>
+              <mat-icon aria-hidden="true">keyboard_double_arrow_left</mat-icon>
             }
           </button>
           <button
@@ -290,7 +292,7 @@
             matTooltip="收合"
             (click)="closeChat()"
           >
-            <svg lucideChevronDown aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">keyboard_arrow_down</mat-icon>
           </button>
         </div>
       </header>
@@ -376,7 +378,7 @@
                             [attr.aria-label]="'移除：' + action.summary"
                             (click)="delPan(action.id)"
                           >
-                            <svg lucideX aria-hidden="true"></svg>
+                            <mat-icon aria-hidden="true">close</mat-icon>
                           </button>
                         </li>
                       }
@@ -412,7 +414,7 @@
                   <button type="submit"
                           matIconButton aria-label="送出"
                   >
-                    <svg lucideSendHorizontal aria-hidden="true"></svg>
+                    <mat-icon aria-hidden="true">send</mat-icon>
                   </button>
                 </form>
               } @else {

@@ -114,9 +114,10 @@ input {
   border-radius: 50%;
 }
 
-.map-badge svg {
-  width: 58%;
-  height: 58%;
+.map-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 // 倉庫沿用側欄的暖色提示，門市沿用主色，跟原本的圓點配色一致
@@ -158,7 +159,7 @@ input {
 
   .summary-card.tone-warning strong,
   .assignment-item.tone-warning .assignment-status,
-  .resource-alert svg {
+  .resource-alert mat-icon {
     color: #89500a;
   }
 

@@ -90,7 +90,7 @@ export interface GpsRouteRequest {
 }
 
 export interface GpsRouteResponse {
-  /** 每個點依 Leaflet 順序提供：[緯度, 經度]。 */
+  /** 後端每個點固定提供：[緯度, 經度]；MapLibre 顯示前會由前端轉成 [經度, 緯度]。 */
   path: [number, number][];
   distance: number;
   duration: number;

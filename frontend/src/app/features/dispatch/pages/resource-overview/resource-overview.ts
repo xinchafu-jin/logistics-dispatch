@@ -1,14 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin, Observable } from 'rxjs';
-import {
-  LucidePlus,
-  LucidePencil,
-  LucideSearch,
-  LucideTrash2,
-  LucideTriangleAlert,
-  LucideTruck,
-  LucideX,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   AdminUserCreateRequest,
@@ -166,13 +158,7 @@ interface VehicleResource {
 @Component({
   selector: 'app-resource-overview',
   imports: [
-    LucidePlus,
-    LucidePencil,
-    LucideSearch,
-    LucideTrash2,
-    LucideTriangleAlert,
-    LucideTruck,
-    LucideX,
+    MatIconModule,
   ],
   templateUrl: './resource-overview.html',
   styleUrl: './resource-overview.scss',
