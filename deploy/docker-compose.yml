@@ -1,0 +1,93 @@
+# 四個服務：mysql / osrm / backend / web
+#
+# 只有 web 對外開埠，其餘三個只在 Docker 內部網路互通，
+# 外面掃不到資料庫和 OSRM。
+#
+# 服務之間用「服務名稱」互相連線（Docker 內建 DNS 會解析），
+# 不能用 127.0.0.1——那在容器裡是它自己。
+#
+# 用法：
+#   docker compose config          驗證設定與變數展開
+#   docker compose up -d --build   建置並啟動
+#   docker compose logs -f backend 看後端日誌
+#   docker compose down            停止（保留資料）
+#   docker compose down -v         停止並刪除資料庫 ⚠️ 不可復原
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    # 中文資料（門市、司機、倉庫名稱）必須 utf8mb4，少了會變問號
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: logistics
+      MYSQL_USER: logistics
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    ports:
+      # 只給本機 DataGrip 連用，前綴的 127.0.0.1 不能省，否則資料庫對外網公開。
+      # 本機已有 MySQL 佔用 3306，所以預設對映 3307。
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    mem_limit: 800m
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # 首次初始化資料庫要十幾秒，這段期間的失敗不計入 retries
+      start_period: 30s
+
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend
+    restart: unless-stopped
+    # 本機用全台路網；VM 上在 .env 設 OSRM_DATA=demo 改用切過的台南範圍
+    command: osrm-routed --algorithm mld /data/${OSRM_DATA:-taiwan-latest}.osrm
+    volumes:
+      - ../osrm:/data:ro
+    mem_limit: 3g
+
+  backend:
+    # 映像由 GitHub Actions 建置並推上 ghcr.io（runner 是 amd64，跟 VM 一致）。
+    # 本機開發時 docker-compose.override.yml 會補上 build:，改成從原始碼建。
+    image: ghcr.io/xinchafu-jin/logistics-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        # 只寫 depends_on 只保證「容器啟動」，不保證「MySQL 能接受連線」。
+        # 沒有這個條件，後端會在資料庫還沒準備好時啟動，Flyway 失敗後容器退出。
+        condition: service_healthy
+      osrm:
+        condition: service_started
+    environment:
+      # 不帶 useSSL=false：MySQL 8.4 預設 caching_sha2_password，
+      # 非加密連線下驅動要先索取公鑰而被拒（Public Key Retrieval is not allowed）。
+      # 省略後 Connector/J 預設 sslMode=PREFERRED，走 TLS 就沒這個問題。
+      DB_URL: jdbc:mysql://mysql:3306/logistics?serverTimezone=Asia/Taipei&rewriteBatchedStatements=true
+      DB_USER: logistics
+      DB_PASSWORD: ${DB_PASSWORD}
+      # 容器內部用 OSRM 的原始埠 5000，不是對外映射的 5001
+      OSRM_BASE_URL: http://osrm:5000
+      JWT_SECRET: ${JWT_SECRET}
+      APP_CRYPTO_PASSWORD: ${APP_CRYPTO_PASSWORD}
+      APP_CRYPTO_SALT: ${APP_CRYPTO_SALT}
+      AI_API_KEY: ${AI_API_KEY:-}
+      SHOW_SQL: "false"
+    mem_limit: 1600m
+
+  web:
+    image: ghcr.io/xinchafu-jin/logistics-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # certbot 在 VM 上簽憑證後會用到；本機這兩個目錄是空的，不影響啟動
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+
+volumes:
+  mysql-data:

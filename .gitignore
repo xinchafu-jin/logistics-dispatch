@@ -23,3 +23,7 @@ build/
 
 # 系統
 .DS_Store
+
+# Docker 部署密鑰，絕對不能進版控
+deploy/.env
+deploy/certbot/

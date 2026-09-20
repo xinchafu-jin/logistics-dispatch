@@ -1,0 +1,21 @@
+# 本機開發用的覆寫檔。
+#
+# docker compose 會「自動」把這份合併進 docker-compose.yml，所以本機指令照舊：
+#   docker compose up -d --build      從原始碼建置並啟動
+#
+# VM 上要明確指定只讀基礎檔，才會改成從 ghcr.io 拉映像：
+#   docker compose -f docker-compose.yml up -d
+#
+# 基礎檔裡的 image: 仍然有效——本機建好的映像會被標上同一個名稱，
+# 所以兩邊的映像名稱一致，不會出現「本機跑的跟正式機不是同一個東西」的困惑。
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web/Dockerfile

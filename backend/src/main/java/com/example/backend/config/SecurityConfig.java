@@ -130,11 +130,9 @@ public class SecurityConfig {
     // api key
     @Bean
     public TextEncryptor aiApiKeyEncryptor(
-            //todo 暫時加預設啟動 否則無法啟動專案
-            @Value("${app.crypto.password:dev-only-change-this-crypto-password-2026}") String password,
-            @Value("${app.crypto.salt:0123456789abcdef}") String salt
-//            @Value("${app.crypto.password}")String password,
-//            @Value("${app.crypto.salt}")String salt
+
+            @Value("${app.crypto.password}")String password,
+            @Value("${app.crypto.salt}")String salt
     ){
         if (password.length() < 32) {
             throw new IllegalStateException("APP_CRYPTO_PASSWORD 必須至少 32 字元");
