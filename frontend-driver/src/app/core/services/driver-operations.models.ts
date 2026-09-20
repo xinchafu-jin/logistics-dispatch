@@ -1,4 +1,4 @@
-export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
 export interface AttendanceRecordDto {
   id: number;

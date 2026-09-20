@@ -172,7 +172,7 @@
             </span>
           </div>
 
-          @if (todayAttendance.status === 'WORKING') {
+          @if (todayAttendance.status === 'WORKING' || todayAttendance.status === 'OVERTIME') {
             <div class="attendance-actions">
               <button
                 type="button"
@@ -261,7 +261,7 @@
             </button>
           </div>
           @if (!canRecordMileage()) {
-            <small class="mileage-note">完成上班打卡後才能登記；休息與下班狀態不會送出里程。</small>
+            <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
           }
           @if (mileageMessage()) {
             <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>

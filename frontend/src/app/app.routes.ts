@@ -73,6 +73,14 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'profile',
+        data: { title: '個人設定' },
+        loadComponent: () =>
+          import('./features/dispatch/pages/personal-profile/personal-profile').then(
+            (component) => component.PersonalProfile,
+          ),
+      },
+      {
         path: '',
         pathMatch: 'full',
         redirectTo: 'dashboard',

@@ -1,0 +1,67 @@
+<main class="personal-profile-page">
+  <section class="page-intro" aria-label="個人設定">
+    <p class="page-eyebrow">個人設定</p>
+    <h2>AI 助理設定</h2>
+    <p>設定後，AI 調度助理會使用你的個人 API Key 執行對話與調度規劃。</p>
+  </section>
+
+  <section class="api-key-card" aria-labelledby="api-key-title">
+    <header>
+      <span class="api-key-card__icon"><mat-icon aria-hidden="true">key</mat-icon></span>
+      <div>
+        <h3 id="api-key-title">AI API Key</h3>
+        @if (isLoading()) {
+          <p>正在取得設定狀態...</p>
+        } @else if (status()?.configured) {
+          <p>目前已設定 {{ status()?.maskedKey }}，更新於 {{ status()?.updatedAt | date: 'yyyy/MM/dd HH:mm' }}。</p>
+        } @else {
+          <p>尚未設定，AI 調度助理暫時無法使用。</p>
+        }
+      </div>
+    </header>
+
+    <form class="api-key-form" (submit)="$event.preventDefault(); saveApiKey()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>輸入 API Key</mat-label>
+        <input
+          matInput
+          autocomplete="off"
+          [type]="hideKey() ? 'password' : 'text'"
+          [formControl]="apiKeyControl"
+        />
+        <button
+          type="button"
+          matIconButton
+          matSuffix
+          (click)="toggleKeyVisibility()"
+          [attr.aria-label]="hideKey() ? '顯示 API Key' : '隱藏 API Key'"
+        >
+          <mat-icon aria-hidden="true">{{ hideKey() ? 'visibility_off' : 'visibility' }}</mat-icon>
+        </button>
+      </mat-form-field>
+
+      <div class="api-key-form__actions">
+        <button type="submit" matButton="filled" [disabled]="apiKeyControl.invalid || isSaving()">
+          <mat-icon aria-hidden="true">save</mat-icon>
+          {{ isSaving() ? '儲存中...' : '儲存金鑰' }}
+        </button>
+        @if (status()?.configured) {
+          <button type="button" matButton class="remove-key" (click)="removeApiKey()" [disabled]="isRemoving()">
+            <mat-icon aria-hidden="true">delete</mat-icon>
+            {{ isRemoving() ? '移除中...' : '移除' }}
+          </button>
+        }
+      </div>
+    </form>
+
+    @if (apiKeyControl.touched && apiKeyControl.hasError('minlength')) {
+      <p class="feedback is-error">金鑰至少需要 8 個字元。</p>
+    }
+    @if (feedback()) {
+      <p class="feedback is-success">{{ feedback() }}</p>
+    }
+    @if (errorMessage()) {
+      <p class="feedback is-error">{{ errorMessage() }}</p>
+    }
+  </section>
+</main>

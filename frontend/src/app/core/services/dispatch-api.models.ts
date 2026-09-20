@@ -23,7 +23,7 @@ export type ExceptionType =
   | 'PHONE_HANDLED';
 export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
 /** 後端隔日送審的配送異常案件。 */
 export interface ExceptionCaseDto {
@@ -80,6 +80,18 @@ export interface AdminUserDto {
   account: string;
   name: string;
   phone: string;
+}
+
+/** 後端只回傳遮罩後的 API Key，完整內容不會再次傳回前端。 */
+export interface AiApiKeyStatusDto {
+  configured: boolean;
+  maskedKey: string | null;
+  updatedAt: string | null;
+}
+
+/** 只在儲存時送出，不寫入瀏覽器儲存空間。 */
+export interface AiApiKeyRequest {
+  apiKey: string;
 }
 
 /** 司機登入前提交的帳號申請。nationalId 只會被後端當成初始密碼雜湊。 */

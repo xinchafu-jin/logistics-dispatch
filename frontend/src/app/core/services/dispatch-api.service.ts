@@ -4,6 +4,8 @@ import {Observable} from 'rxjs';
 import {
   AdminUserCreateRequest,
   AdminUserDto,
+  AiApiKeyRequest,
+  AiApiKeyStatusDto,
   AiChatReply,
   AiChatRequest,
   AiPendingActionDto,
@@ -113,6 +115,18 @@ export class DispatchApiService {
 
   createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
+  }
+
+  getAiApiKeyStatus(): Observable<AiApiKeyStatusDto> {
+    return this.http.get<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`);
+  }
+
+  saveAiApiKey(request: AiApiKeyRequest): Observable<AiApiKeyStatusDto> {
+    return this.http.put<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`, request);
+  }
+
+  removeAiApiKey(): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/admin-users/me/ai-api-key`);
   }
 
   getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {

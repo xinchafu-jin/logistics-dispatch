@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import {Router} from '@angular/router';
 import {MatIconModule} from '@angular/material/icon';
-import * as maplibregl from 'maplibre-gl';
+import type * as maplibregl from 'maplibre-gl';
 import {Observable, single} from 'rxjs';
 import {DriverAuthService} from '../../core/auth/driver-auth.service';
 import {
@@ -175,7 +175,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly weatherService = inject(DriverWeatherService);
   private readonly router = inject(Router);
   private breakTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly maplibre = maplibregl;
+  private attendanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
+  private maplibre: typeof import('maplibre-gl') | null = null;
   private driverMap: maplibregl.Map | null = null;
   private currentMapLocation: MapPosition | null = null;
   private currentLocationMarker: maplibregl.Marker | null = null;
@@ -211,6 +212,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.stopNavigation();
     this.clearBreakTimer();
+    this.clearAttendanceRefreshTimer();
     this.gpsTracking.stop();
     this.stopMapLocationWatch();
     this.currentLocationMarker?.remove();
@@ -503,7 +505,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected canRecordMileage(): boolean {
-    return this.attendance()?.status === 'WORKING';
+    return this.isWorkingOrOvertime(this.attendance()?.status);
   }
 
   protected submitStartMileage(): void {
@@ -747,6 +749,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return '休息中';
     }
 
+    if (status === 'OVERTIME') {
+      return '加班中';
+    }
+
     if (status === 'CLOCKED_OUT') {
       return '已下班';
     }
@@ -827,8 +833,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private loadAttendance(): void {
-    this.attendanceViewState.set('loading');
+  private loadAttendance(silent = false): void {
+    if (!silent) {
+      this.attendanceViewState.set('loading');
+    }
     this.attendanceError.set(null);
 
     this.operations.getTodayAttendance().subscribe({
@@ -838,12 +846,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
           this.attendance.set(null);
           this.attendanceViewState.set('not-clocked-in');
           this.gpsTracking.stop();
+          this.clearAttendanceRefreshTimer();
           return;
         }
 
         this.attendanceViewState.set('error');
         this.attendanceError.set(this.getErrorMessage(error, '無法取得今日出勤狀態。'));
         this.gpsTracking.stop();
+        this.clearAttendanceRefreshTimer();
       },
     });
   }
@@ -1006,11 +1016,18 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     if (attendance.status === 'ON_BREAK') {
       this.gpsTracking.stop();
+      this.clearAttendanceRefreshTimer();
       this.startBreakCountdown();
       return;
     }
 
     this.clearBreakTimer();
+    if (this.isWorkingOrOvertime(attendance.status)) {
+      this.startAttendanceRefreshTimer();
+    } else {
+      this.clearAttendanceRefreshTimer();
+    }
+
     if (attendance.gpsAllowed) {
       this.gpsTracking.start();
       return;
@@ -1045,6 +1062,25 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  private isWorkingOrOvertime(status: AttendanceRecordDto['status'] | undefined): boolean {
+    return status === 'WORKING' || status === 'OVERTIME';
+  }
+
+  private startAttendanceRefreshTimer(): void {
+    if (this.attendanceRefreshTimer !== null) {
+      return;
+    }
+
+    this.attendanceRefreshTimer = setInterval(() => this.loadAttendance(true), 60_000);
+  }
+
+  private clearAttendanceRefreshTimer(): void {
+    if (this.attendanceRefreshTimer !== null) {
+      clearInterval(this.attendanceRefreshTimer);
+      this.attendanceRefreshTimer = null;
+    }
+  }
+
   private resetAttendanceSheetDrag(event: PointerEvent): void {
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) {
@@ -1063,6 +1099,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
+    const maplibregl = await import('maplibre-gl');
+    this.maplibre = maplibregl;
     this.driverMap = new maplibregl.Map({
       container: mapElement,
       center: [120.3014, 22.6273],
