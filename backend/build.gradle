@@ -32,6 +32,11 @@ dependencies {
     // mysql connector: mysql 驅動
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'com.mysql:mysql-connector-j'
+    // 資料庫版本控管：schema 由 db/migration 下的 V*.sql 管理，
+    // 啟動時自動比對 flyway_schema_history，只跑還沒套用過的檔案。
+    // 改 entity 欄位時新增 V2、V3…，不要修改已套用過的檔案（checksum 會對不上）。
+    implementation 'org.springframework.boot:spring-boot-flyway'
+    implementation 'org.flywaydb:flyway-mysql'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     // 程式碼修改後儲存會自動重啟 Application
 //    developmentOnly 'org.springframework.boot:spring-boot-devtools'
@@ -46,6 +51,7 @@ dependencies {
     implementation 'com.google.ortools:ortools-java:9.12.4544'
     // spring ai 依賴
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+
 }
 
 

@@ -1,0 +1,18 @@
+
+**/node_modules
+**/build
+**/dist
+**/.gradle
+**/.angular
+osrm/
+gps-api-tester/
+
+.git
+**/.env
+
+# 其他不參與佈署的
+gps-joystick-extension/
+docs/
+images/
+http/
+**/.DS_Store
