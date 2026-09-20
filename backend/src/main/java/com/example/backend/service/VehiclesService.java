@@ -85,6 +85,7 @@ public class VehiclesService {
         dto.setVehicleType(entity.getVehicleType());
         dto.setCapacity(entity.getCapacity());
         dto.setFuelConsumption(entity.getFuelConsumption());
+        dto.setCumulativeMileageKm(entity.getCumulativeMileageKm());
         dto.setStatus(entity.getStatus());
         dto.setWarehouseId(entity.getWarehouseId());
         return dto;

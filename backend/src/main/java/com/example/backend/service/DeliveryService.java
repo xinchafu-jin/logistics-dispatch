@@ -88,23 +88,34 @@ public class DeliveryService {
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
         requireOrderStatus(order, OrderStatus.IN_DELIVERY, DELIVERY_DELIVER_STATUS_INVALID);
 
-        if (!order.getBoxCount().equals(request.getBoxCount())) {
-            throw new IllegalArgumentException(DELIVERY_BOX_COUNT_MISMATCH.formatted(order.getBoxCount()));
-        }
+        int expected = order.getBoxCount();
+        int delivered = request.getBoxCount();
+        int shortage = request.getShortageBoxCount() == null
+                ? expected - delivered : request.getShortageBoxCount();
+        int damaged = valueOrZero(request.getDamagedBoxCount());
+        int replacement = valueOrZero(request.getReplacementRequiredBoxCount());
+        validateDeliveryCounts(expected, delivered, shortage, damaged, replacement);
 
         DeliveryRecordsEntity record = findInProgressRecord(order.getId());
         record.setDeliveredAt(now);
         record.setExpectedBoxCount(order.getBoxCount());
-        record.setDeliveredBoxCount(request.getBoxCount());
-        record.setShortageBoxCount(0);
-        record.setDamagedBoxCount(0);
-        record.setReplacementRequiredBoxCount(0);
+        record.setDeliveredBoxCount(delivered);
+        record.setShortageBoxCount(shortage);
+        record.setDamagedBoxCount(damaged);
+        record.setReplacementRequiredBoxCount(replacement);
+        record.setPhotoUrl(trimToNull(request.getPhotoUrl()));
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(false);
 
+        record = deliveryRecordsDAO.save(record);
         order.setStatus(OrderStatus.COMPLETED);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, null, null);
+        OrdersEntity followUpOrder = replacement > 0
+                ? createReplacementOrder(order, replacement, now.toLocalDate().plusDays(1))
+                : null;
+        Long exceptionCaseId = createQualityExceptionIfNeeded(
+                order, record, shortage, damaged, replacement, followUpOrder);
+        return toResponse(record, order, exceptionCaseId, followUpOrder);
     }
 
     /** 無人簽收會保留原單與本次紀錄，並建立隔日待確認的重送新單。 */
@@ -119,6 +130,7 @@ public class DeliveryService {
         record.setShortageBoxCount(0);
         record.setDamagedBoxCount(0);
         record.setReplacementRequiredBoxCount(0);
+        record.setPhotoUrl(trimToNull(request.getPhotoUrl()));
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(true);
         record = deliveryRecordsDAO.save(record);
@@ -172,6 +184,58 @@ public class DeliveryService {
         String sourceId = Long.toString(sourceOrderId, 36).toUpperCase();
         String retry = Integer.toString(retryCount, 36).toUpperCase();
         return "NS-" + compactDate + "-" + sourceId + "-" + retry;
+    }
+
+    private Long createQualityExceptionIfNeeded(
+            OrdersEntity order,
+            DeliveryRecordsEntity record,
+            int shortage,
+            int damaged,
+            int replacement,
+            OrdersEntity followUpOrder
+    ) {
+        if (shortage == 0 && damaged == 0) {
+            return null;
+        }
+        ExceptionCasesEntity exceptionCase = new ExceptionCasesEntity();
+        exceptionCase.setOrderId(order.getId());
+        exceptionCase.setDeliveryRecordId(record.getId());
+        exceptionCase.setType(shortage > 0 && damaged > 0
+                ? ExceptionType.SHORTAGE_AND_DAMAGE
+                : shortage > 0 ? ExceptionType.SHORTAGE : ExceptionType.DAMAGE);
+        exceptionCase.setDescription("交貨短少 " + shortage + " 箱、損壞 " + damaged
+                + " 箱、需補送 " + replacement + " 箱");
+        if (followUpOrder != null) {
+            exceptionCase.setFollowUpOrderId(followUpOrder.getId());
+            exceptionCase.setReviewAvailableAt(followUpOrder.getDeliveryDate().atTime(6, 0));
+        }
+        exceptionCase.setStatus(ExceptionStatus.OPEN);
+        return exceptionCasesDAO.save(exceptionCase).getId();
+    }
+
+    private OrdersEntity createReplacementOrder(
+            OrdersEntity sourceOrder,
+            int replacementBoxes,
+            LocalDate deliveryDate
+    ) {
+        int retryCount = valueOrZero(sourceOrder.getRetryCount()) + 1;
+        OrdersEntity followUpOrder = new OrdersEntity();
+        followUpOrder.setOrderNumber("RP-"
+                + deliveryDate.format(DateTimeFormatter.BASIC_ISO_DATE).substring(2)
+                + "-" + Long.toString(sourceOrder.getId(), 36).toUpperCase()
+                + "-" + Integer.toString(retryCount, 36).toUpperCase());
+        followUpOrder.setStoreId(sourceOrder.getStoreId());
+        followUpOrder.setWarehouseId(sourceOrder.getWarehouseId());
+        followUpOrder.setSourceVendor(sourceOrder.getSourceVendor());
+        followUpOrder.setItemDescription(sourceOrder.getItemDescription());
+        followUpOrder.setBoxCount(replacementBoxes);
+        followUpOrder.setNotes("來源訂單 " + sourceOrder.getOrderNumber() + " 的品質異常補送");
+        followUpOrder.setDeliveryDate(deliveryDate);
+        followUpOrder.setStatus(OrderStatus.PENDING_CONFIRM);
+        followUpOrder.setOrderType(OrderType.REPLENISHMENT);
+        followUpOrder.setParentOrderId(sourceOrder.getId());
+        followUpOrder.setRetryCount(retryCount);
+        return ordersDAO.save(followUpOrder);
     }
 
     private OrdersEntity findAuthorizedOrderForUpdate(Long driverId, Long orderId, LocalDate today) {
@@ -244,6 +308,28 @@ public class DeliveryService {
         return value == null ? 0 : value;
     }
 
+    private void validateDeliveryCounts(
+            int expected,
+            int delivered,
+            int shortage,
+            int damaged,
+            int replacement
+    ) {
+        if (delivered < 0 || shortage < 0 || damaged < 0 || replacement < 0) {
+            throw new IllegalArgumentException("交貨箱數不能小於 0");
+        }
+        if (delivered + shortage != expected) {
+            throw new IllegalArgumentException(
+                    "實際交付箱數加缺少箱數必須等於應到箱數 " + expected);
+        }
+        if (damaged > delivered) {
+            throw new IllegalArgumentException("損壞箱數不能大於實際交付箱數");
+        }
+        if (replacement > shortage + damaged) {
+            throw new IllegalArgumentException("需要補送箱數不能大於缺少箱數與損壞箱數總和");
+        }
+    }
+
     private DeliveryRecordResponse toResponse(
             DeliveryRecordsEntity record,
             OrdersEntity order,
@@ -258,6 +344,9 @@ public class DeliveryService {
                 record.getDeliveredAt(),
                 record.getExpectedBoxCount(),
                 record.getDeliveredBoxCount(),
+                record.getShortageBoxCount(),
+                record.getDamagedBoxCount(),
+                record.getReplacementRequiredBoxCount(),
                 record.getPhotoUrl(),
                 record.getNotes(),
                 record.getNoSignature(),

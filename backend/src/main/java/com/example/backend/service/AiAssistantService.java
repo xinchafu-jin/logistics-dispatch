@@ -27,7 +27,7 @@ public class AiAssistantService {
     private final ChatClient chatClient;
     private final OrdersService ordersService;
     private final DriverScheduleService driverScheduleService;
-    private final DispatchService dispatchService;
+    private final DispatchWorkflowService dispatchWorkflowService;
     private final DriversService driversService;
     private final WarehousesService warehousesService;
 
@@ -37,12 +37,12 @@ public class AiAssistantService {
             ChatMemory chatMemory,
             OrdersService ordersService,
             DriverScheduleService driverScheduleService,
-            DispatchService dispatchService,
+            DispatchWorkflowService dispatchWorkflowService,
             DriversService driversService,
             WarehousesService warehousesService) {
         this.ordersService = ordersService;
         this.driverScheduleService = driverScheduleService;
-        this.dispatchService = dispatchService;
+        this.dispatchWorkflowService = dispatchWorkflowService;
         this.driversService = driversService;
         this.warehousesService = warehousesService;
         this.chatClient = chatClientBuilder
@@ -132,15 +132,15 @@ public class AiAssistantService {
             LocalDate date = group.getFirst().getDate();
             Long warehouseId = group.getFirst().getWarehouseId();
 
-            DispatchResponse board = dispatchService.getBoard(date, warehouseId);
+            DispatchResponse board = dispatchWorkflowService.getBoard(date, warehouseId);
             ReassignDTO dto = toReassignDTO(board);
             for (PendingActionResponse action : group) {
                 apply(dto, action);
             }
-            results.add(dispatchService.reassign(dto));
+            results.add(dispatchWorkflowService.reassign(dto));
         }
         for (LocalDate date : publishDates) {
-            results.addAll(dispatchService.publish(date));
+            results.addAll(dispatchWorkflowService.publish(date));
         }
         pendingAction.remove(conversationId);
         return results;
@@ -196,7 +196,7 @@ public class AiAssistantService {
     String addMoveOrderAction(String conversationId, String date, String orderNumber, String targetPlateNumber, String warehouseName) {
         LocalDate deliveryDate = LocalDate.parse(date);
         Long warehouseId = findWarehouseIdByName(warehouseName);
-        DispatchResponse board = dispatchService.getBoard(deliveryDate, warehouseId);
+        DispatchResponse board = dispatchWorkflowService.getBoard(deliveryDate, warehouseId);
         Long targetVehicleId = findVehicleIdByPlate(board, targetPlateNumber);
         OrdersDTO orders = findConfirmedOrderByNumber(deliveryDate, warehouseId, orderNumber, warehouseName);
         String currentPlate = findCurrentPlate(board, orders.getId());
@@ -341,7 +341,7 @@ public class AiAssistantService {
     DispatchResponse getDispatchBoard(
             @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
             @ToolParam(description = "倉庫 ID，從 listWarehouses 取得") Long warehouseId) {
-        return dispatchService.getBoard(LocalDate.parse(date), warehouseId);
+        return dispatchWorkflowService.getBoard(LocalDate.parse(date), warehouseId);
     }
 
     @Tool(description = "指派司機給某天某條路線。此動作不會立即執行，只會加入待執行清單")
@@ -401,7 +401,7 @@ public class AiAssistantService {
     private String addAssignDriverAction(String conversationId, String date, String warehouseName, String plateNumber, String driverAccount) {
         LocalDate deliveryDate = LocalDate.parse(date);
         Long warehouseId = findWarehouseIdByName(warehouseName);
-        DispatchResponse board = dispatchService.getBoard(deliveryDate, warehouseId);
+        DispatchResponse board = dispatchWorkflowService.getBoard(deliveryDate, warehouseId);
         Long vehicleId = findVehicleIdByPlate(board, plateNumber);
         DriversDTO driver = findActiveDriverByAccount(driverAccount);
 
@@ -493,7 +493,7 @@ public class AiAssistantService {
     private Map<Long, String> findTakenDrivers(LocalDate date) {
         Map<Long, String> taken = new HashMap<>();
         for (WarehousesDTO warehouse : warehousesService.findAll()) {
-            DispatchResponse board = dispatchService.getBoard(date, warehouse.getId());
+            DispatchResponse board = dispatchWorkflowService.getBoard(date, warehouse.getId());
             for (DispatchResponse.RouteResponse route : board.getRoutes()) {
                 if (route.getDriverId() != null) {
                     taken.put(route.getDriverId(), route.getPlateNumber() + "（" + warehouse.getName() + "）");

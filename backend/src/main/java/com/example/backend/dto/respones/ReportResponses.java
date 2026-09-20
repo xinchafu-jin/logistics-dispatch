@@ -908,6 +908,8 @@ public final class ReportResponses {
         private int failedOrders;
         private int noSignatureOrders;
         private Double plannedKm;
+        private Double plannedFuelCost;
+        private Integer plannedWorkMinutes;
         private Double actualKm;
         private Double differenceKm;
         private Double differencePercent;
@@ -939,6 +941,8 @@ public final class ReportResponses {
                 int failedOrders,
                 int noSignatureOrders,
                 Double plannedKm,
+                Double plannedFuelCost,
+                Integer plannedWorkMinutes,
                 Double actualKm,
                 Double differenceKm,
                 Double differencePercent,
@@ -966,6 +970,8 @@ public final class ReportResponses {
             this.failedOrders = failedOrders;
             this.noSignatureOrders = noSignatureOrders;
             this.plannedKm = plannedKm;
+            this.plannedFuelCost = plannedFuelCost;
+            this.plannedWorkMinutes = plannedWorkMinutes;
             this.actualKm = actualKm;
             this.differenceKm = differenceKm;
             this.differencePercent = differencePercent;
@@ -1118,6 +1124,22 @@ public final class ReportResponses {
 
         public void setPlannedKm(Double plannedKm) {
             this.plannedKm = plannedKm;
+        }
+
+        public Double getPlannedFuelCost() {
+            return plannedFuelCost;
+        }
+
+        public void setPlannedFuelCost(Double plannedFuelCost) {
+            this.plannedFuelCost = plannedFuelCost;
+        }
+
+        public Integer getPlannedWorkMinutes() {
+            return plannedWorkMinutes;
+        }
+
+        public void setPlannedWorkMinutes(Integer plannedWorkMinutes) {
+            this.plannedWorkMinutes = plannedWorkMinutes;
         }
 
         public Double getActualKm() {
@@ -1649,6 +1671,7 @@ public final class ReportResponses {
         private Double publishedPlannedKm;
         private Double actualKm;
         private String actualMileageStatus;
+        private Double cumulativeMileageKm;
         private List<VehicleRouteLoad> routeLoads;
 
         public VehicleRow() {
@@ -1669,6 +1692,7 @@ public final class ReportResponses {
                 Double publishedPlannedKm,
                 Double actualKm,
                 String actualMileageStatus,
+                Double cumulativeMileageKm,
                 List<VehicleRouteLoad> routeLoads
         ) {
             this.vehicleId = vehicleId;
@@ -1685,6 +1709,7 @@ public final class ReportResponses {
             this.publishedPlannedKm = publishedPlannedKm;
             this.actualKm = actualKm;
             this.actualMileageStatus = actualMileageStatus;
+            this.cumulativeMileageKm = cumulativeMileageKm;
             this.routeLoads = routeLoads;
         }
 
@@ -1798,6 +1823,14 @@ public final class ReportResponses {
 
         public void setActualMileageStatus(String actualMileageStatus) {
             this.actualMileageStatus = actualMileageStatus;
+        }
+
+        public Double getCumulativeMileageKm() {
+            return cumulativeMileageKm;
+        }
+
+        public void setCumulativeMileageKm(Double cumulativeMileageKm) {
+            this.cumulativeMileageKm = cumulativeMileageKm;
         }
 
         public List<VehicleRouteLoad> getRouteLoads() {
@@ -2208,6 +2241,11 @@ public final class ReportResponses {
         private int completedOrders;
         private int failedOrders;
         private int noSignatureAttempts;
+        private long shortageBoxes;
+        private long damagedBoxes;
+        private long replacementRequiredBoxes;
+        private Double shortageRatePercent;
+        private Double damagedRatePercent;
         private List<StoreDaily> dailyTrend;
         private List<DeliveryEvent> deliveries;
 
@@ -2222,6 +2260,11 @@ public final class ReportResponses {
                 int completedOrders,
                 int failedOrders,
                 int noSignatureAttempts,
+                long shortageBoxes,
+                long damagedBoxes,
+                long replacementRequiredBoxes,
+                Double shortageRatePercent,
+                Double damagedRatePercent,
                 List<StoreDaily> dailyTrend,
                 List<DeliveryEvent> deliveries
         ) {
@@ -2232,6 +2275,11 @@ public final class ReportResponses {
             this.completedOrders = completedOrders;
             this.failedOrders = failedOrders;
             this.noSignatureAttempts = noSignatureAttempts;
+            this.shortageBoxes = shortageBoxes;
+            this.damagedBoxes = damagedBoxes;
+            this.replacementRequiredBoxes = replacementRequiredBoxes;
+            this.shortageRatePercent = shortageRatePercent;
+            this.damagedRatePercent = damagedRatePercent;
             this.dailyTrend = dailyTrend;
             this.deliveries = deliveries;
         }
@@ -2292,6 +2340,46 @@ public final class ReportResponses {
             this.noSignatureAttempts = noSignatureAttempts;
         }
 
+        public long getShortageBoxes() {
+            return shortageBoxes;
+        }
+
+        public void setShortageBoxes(long shortageBoxes) {
+            this.shortageBoxes = shortageBoxes;
+        }
+
+        public long getDamagedBoxes() {
+            return damagedBoxes;
+        }
+
+        public void setDamagedBoxes(long damagedBoxes) {
+            this.damagedBoxes = damagedBoxes;
+        }
+
+        public long getReplacementRequiredBoxes() {
+            return replacementRequiredBoxes;
+        }
+
+        public void setReplacementRequiredBoxes(long replacementRequiredBoxes) {
+            this.replacementRequiredBoxes = replacementRequiredBoxes;
+        }
+
+        public Double getShortageRatePercent() {
+            return shortageRatePercent;
+        }
+
+        public void setShortageRatePercent(Double shortageRatePercent) {
+            this.shortageRatePercent = shortageRatePercent;
+        }
+
+        public Double getDamagedRatePercent() {
+            return damagedRatePercent;
+        }
+
+        public void setDamagedRatePercent(Double damagedRatePercent) {
+            this.damagedRatePercent = damagedRatePercent;
+        }
+
         public List<StoreDaily> getDailyTrend() {
             return dailyTrend;
         }
@@ -2315,6 +2403,9 @@ public final class ReportResponses {
         private long boxes;
         private int completedOrders;
         private int failedOrders;
+        private long shortageBoxes;
+        private long damagedBoxes;
+        private long replacementRequiredBoxes;
 
         public StoreDaily() {
         }
@@ -2324,13 +2415,19 @@ public final class ReportResponses {
                 int orders,
                 long boxes,
                 int completedOrders,
-                int failedOrders
+                int failedOrders,
+                long shortageBoxes,
+                long damagedBoxes,
+                long replacementRequiredBoxes
         ) {
             this.date = date;
             this.orders = orders;
             this.boxes = boxes;
             this.completedOrders = completedOrders;
             this.failedOrders = failedOrders;
+            this.shortageBoxes = shortageBoxes;
+            this.damagedBoxes = damagedBoxes;
+            this.replacementRequiredBoxes = replacementRequiredBoxes;
         }
 
         public LocalDate getDate() {
@@ -2372,6 +2469,30 @@ public final class ReportResponses {
         public void setFailedOrders(int failedOrders) {
             this.failedOrders = failedOrders;
         }
+
+        public long getShortageBoxes() {
+            return shortageBoxes;
+        }
+
+        public void setShortageBoxes(long shortageBoxes) {
+            this.shortageBoxes = shortageBoxes;
+        }
+
+        public long getDamagedBoxes() {
+            return damagedBoxes;
+        }
+
+        public void setDamagedBoxes(long damagedBoxes) {
+            this.damagedBoxes = damagedBoxes;
+        }
+
+        public long getReplacementRequiredBoxes() {
+            return replacementRequiredBoxes;
+        }
+
+        public void setReplacementRequiredBoxes(long replacementRequiredBoxes) {
+            this.replacementRequiredBoxes = replacementRequiredBoxes;
+        }
     }
 
     public static class DeliveryEvent {
@@ -2383,6 +2504,11 @@ public final class ReportResponses {
         private LocalDateTime deliveredAt;
         private Boolean noSignature;
         private String photoUrl;
+        private Integer expectedBoxCount;
+        private Integer deliveredBoxCount;
+        private Integer shortageBoxCount;
+        private Integer damagedBoxCount;
+        private Integer replacementRequiredBoxCount;
 
         public DeliveryEvent() {
         }
@@ -2395,7 +2521,12 @@ public final class ReportResponses {
                 LocalDateTime arrivedAt,
                 LocalDateTime deliveredAt,
                 Boolean noSignature,
-                String photoUrl
+                String photoUrl,
+                Integer expectedBoxCount,
+                Integer deliveredBoxCount,
+                Integer shortageBoxCount,
+                Integer damagedBoxCount,
+                Integer replacementRequiredBoxCount
         ) {
             this.deliveryRecordId = deliveryRecordId;
             this.orderId = orderId;
@@ -2405,6 +2536,11 @@ public final class ReportResponses {
             this.deliveredAt = deliveredAt;
             this.noSignature = noSignature;
             this.photoUrl = photoUrl;
+            this.expectedBoxCount = expectedBoxCount;
+            this.deliveredBoxCount = deliveredBoxCount;
+            this.shortageBoxCount = shortageBoxCount;
+            this.damagedBoxCount = damagedBoxCount;
+            this.replacementRequiredBoxCount = replacementRequiredBoxCount;
         }
 
         public Long getDeliveryRecordId() {
@@ -2469,6 +2605,46 @@ public final class ReportResponses {
 
         public void setPhotoUrl(String photoUrl) {
             this.photoUrl = photoUrl;
+        }
+
+        public Integer getExpectedBoxCount() {
+            return expectedBoxCount;
+        }
+
+        public void setExpectedBoxCount(Integer expectedBoxCount) {
+            this.expectedBoxCount = expectedBoxCount;
+        }
+
+        public Integer getDeliveredBoxCount() {
+            return deliveredBoxCount;
+        }
+
+        public void setDeliveredBoxCount(Integer deliveredBoxCount) {
+            this.deliveredBoxCount = deliveredBoxCount;
+        }
+
+        public Integer getShortageBoxCount() {
+            return shortageBoxCount;
+        }
+
+        public void setShortageBoxCount(Integer shortageBoxCount) {
+            this.shortageBoxCount = shortageBoxCount;
+        }
+
+        public Integer getDamagedBoxCount() {
+            return damagedBoxCount;
+        }
+
+        public void setDamagedBoxCount(Integer damagedBoxCount) {
+            this.damagedBoxCount = damagedBoxCount;
+        }
+
+        public Integer getReplacementRequiredBoxCount() {
+            return replacementRequiredBoxCount;
+        }
+
+        public void setReplacementRequiredBoxCount(Integer replacementRequiredBoxCount) {
+            this.replacementRequiredBoxCount = replacementRequiredBoxCount;
         }
     }
 

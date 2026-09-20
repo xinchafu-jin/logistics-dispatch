@@ -10,23 +10,32 @@ import java.nio.file.Path;
 @Configuration
 public class DriverPhotoResourceConfig implements WebMvcConfigurer {
 
-    private final String resourceLocation;
+    private final String driverPhotoLocation;
+    private final String deliveryPhotoLocation;
 
     public DriverPhotoResourceConfig(
-            @Value("${app.storage.driver-photos-dir:uploads/driver-photos}") String storageDirectory
+            @Value("${app.storage.driver-photos-dir:uploads/driver-photos}") String storageDirectory,
+            @Value("${app.storage.delivery-photos-dir:uploads/delivery-photos}") String deliveryStorageDirectory
     ) {
         String location = Path.of(storageDirectory)
                 .toAbsolutePath()
                 .normalize()
                 .toUri()
                 .toString();
-        this.resourceLocation = location.endsWith("/") ? location : location + "/";
+        this.driverPhotoLocation = location.endsWith("/") ? location : location + "/";
+        String deliveryLocation = Path.of(deliveryStorageDirectory)
+                .toAbsolutePath().normalize().toUri().toString();
+        this.deliveryPhotoLocation = deliveryLocation.endsWith("/")
+                ? deliveryLocation : deliveryLocation + "/";
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/uploads/driver-photos/**")
-                .addResourceLocations(resourceLocation)
+                .addResourceLocations(driverPhotoLocation)
+                .setCachePeriod(3600);
+        registry.addResourceHandler("/uploads/delivery-photos/**")
+                .addResourceLocations(deliveryPhotoLocation)
                 .setCachePeriod(3600);
     }
 }

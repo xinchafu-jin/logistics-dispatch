@@ -14,6 +14,11 @@ import java.util.Optional;
 @Repository
 public interface FuelPriceHistoryDAO extends JpaRepository<FuelPriceHistoryEntity, Long> {
 
+    Optional<FuelPriceHistoryEntity> findByFuelTypeAndEffectiveFrom(
+            FuelType fuelType,
+            LocalDateTime effectiveFrom
+    );
+
     Optional<FuelPriceHistoryEntity>
     findFirstByFuelTypeAndEffectiveFromLessThanEqualOrderByEffectiveFromDesc(
             FuelType fuelType,

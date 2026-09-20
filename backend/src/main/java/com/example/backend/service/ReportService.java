@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 public class ReportService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final String COMPLETION_DEFINITION =
-            "COMPLETED / (CONFIRMED + IN_DELIVERY + COMPLETED + FAILED)；"
+            "COMPLETED / (CONFIRMED + IN_DELIVERY + COMPLETED + NO_SIGNATURE + FAILED)；"
                     + "按配送日期分組，以查詢當下狀態計算；排除待確認與取消";
 
     private final ReportReadDAO reportReadDAO;
@@ -240,12 +240,15 @@ public class ReportService {
         Map<Long, List<OrdersEntity>> ordersByRoute = orders.stream()
                 .filter(order -> order.getRouteId() != null)
                 .collect(Collectors.groupingBy(OrdersEntity::getRouteId));
-        Map<Long, List<DeliveryRecordsEntity>> deliveriesByOrder = deliveryByOrder(orders);
         Map<DriverDate, List<RoutesEntity>> routesByDriverDay = allRoutes.stream()
                 .filter(route -> route.getDriverId() != null)
                 .collect(Collectors.groupingBy(route -> new DriverDate(route.getDriverId(), route.getDate())));
-        Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay = reportReadDAO.mileage(range.getFrom(), range.getTo())
-                .stream().collect(Collectors.groupingBy(log -> new DriverDate(log.getDriverId(), log.getDate())));
+        List<MileageLogsEntity> mileageLogs = reportReadDAO.mileage(range.getFrom(), range.getTo());
+        Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay = mileageLogs.stream()
+                .collect(Collectors.groupingBy(log -> new DriverDate(log.getDriverId(), log.getDate())));
+        Map<Long, List<MileageLogsEntity>> mileageByRoute = mileageLogs.stream()
+                .filter(log -> log.getRouteId() != null)
+                .collect(Collectors.groupingBy(MileageLogsEntity::getRouteId));
         Map<Long, DriversEntity> drivers = index(driversDAO.findAll(), DriversEntity::getId);
         Map<Long, VehiclesEntity> vehicles = index(vehiclesDAO.findAll(), VehiclesEntity::getId);
         Map<Long, WarehousesEntity> warehouses = index(warehousesDAO.findAll(), WarehousesEntity::getId);
@@ -262,7 +265,7 @@ public class ReportService {
             MileageMatch match = emergencyLeaveRequestsDAO.existsByRouteIdAndStatus(
                     route.getId(), EmergencyLeaveStatus.APPROVED)
                     ? new MileageMatch(null, null, null, null, "DRIVER_HANDOVER")
-                    : matchMileage(route, routesByDriverDay, mileageByDriverDay);
+                    : matchMileage(route, routesByDriverDay, mileageByDriverDay, mileageByRoute);
             Double plannedKm = km(route.getTotalDistance());
             Double difference = match.getActualKm() == null || plannedKm == null
                     ? null : match.getActualKm() - plannedKm;
@@ -286,8 +289,9 @@ public class ReportService {
                     vehicle == null ? null : vehicle.getCapacity(),
                     percent(route.getLoadRate()), distinctStores(assigned), assigned.size(), boxes(assigned),
                     countStatus(assigned, OrderStatus.COMPLETED), countStatus(assigned, OrderStatus.FAILED),
-                    (int) assigned.stream().filter(order -> hasNoSignature(deliveriesByOrder, order.getId())).count(),
-                    plannedKm, match.getActualKm(), difference, differencePercent, comparisonStatus,
+                    countStatus(assigned, OrderStatus.NO_SIGNATURE),
+                    plannedKm, route.getEstimatedFuelCost(), route.getEstimatedWorkMinutes(),
+                    match.getActualKm(), difference, differencePercent, comparisonStatus,
                     match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder));
         }
         return new ReportResponses.Routes(range.getFrom(), range.getTo(),
@@ -304,7 +308,6 @@ public class ReportService {
         List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), null);
         Map<Long, RoutesEntity> routeById = index(routes, RoutesEntity::getId);
         List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), null);
-        Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder = deliveryByOrder(orders);
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         List<ReportResponses.DriverRow> rows = new ArrayList<>();
 
@@ -326,11 +329,9 @@ public class ReportService {
                     .toList();
             List<OrdersEntity> driverOrders = orders.stream()
                     .filter(order -> id.equals(assignedDriver(order, routeById))).toList();
-            List<DeliveryRecordsEntity> driverDeliveries = driverOrders.stream()
-                    .flatMap(order -> deliveryByOrder.getOrDefault(order.getId(), List.of()).stream()).toList();
-            List<Long> noSignatureOrderIds = driverDeliveries.stream()
-                    .filter(delivery -> Boolean.TRUE.equals(delivery.getNoSignature()))
-                    .map(DeliveryRecordsEntity::getOrderId).distinct().sorted().toList();
+            List<Long> noSignatureOrderIds = driverOrders.stream()
+                    .filter(order -> order.getStatus() == OrderStatus.NO_SIGNATURE)
+                    .map(OrdersEntity::getId).distinct().sorted().toList();
             List<AttendanceRecordsEntity> completePunches = punches.stream()
                     .filter(punch -> punch.getClockInAt() != null && punch.getClockOutAt() != null).toList();
             List<MileageLogsEntity> completeMileage = driverMileage.stream()
@@ -343,8 +344,7 @@ public class ReportService {
                     : duplicateMileageDate ? "MULTIPLE_MILEAGE_LOGS_FOR_DRIVER_DAY"
                     : incompleteMileage > 0 ? "INCOMPLETE_MILEAGE_LOG" : "COMPLETE";
             Double actualKm = !"COMPLETE".equals(actualMileageStatus) ? null
-                    : completeMileage.stream().mapToDouble(log ->
-                            log.getEndOdometer() - log.getStartOdometer()).sum();
+                    : completeMileage.stream().mapToDouble(log -> actualKilometers(log)).sum();
             long afterScheduledEnd = 0;
             int missingIn = 0;
             for (DriverShiftsEntity shift : workShifts) {
@@ -375,8 +375,7 @@ public class ReportService {
                     driverOrders.size(), countStatus(driverOrders, OrderStatus.COMPLETED),
                     countStatus(driverOrders, OrderStatus.FAILED), boxes(driverOrders),
                     distinctStores(driverOrders),
-                    (int) driverDeliveries.stream().filter(delivery ->
-                            Boolean.TRUE.equals(delivery.getNoSignature())).count(),
+                    noSignatureOrderIds.size(),
                     noSignatureOrderIds, "CURRENT_ORDER_ASSIGNMENT_ONLY", afterScheduledEnd));
         }
         rows.sort(Comparator.comparing(ReportResponses.DriverRow::getDriverId));
@@ -392,6 +391,7 @@ public class ReportService {
         }
         List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
         List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.getFrom(), range.getTo());
         Map<Long, List<OrdersEntity>> ordersByRoute = orders.stream()
                 .filter(order -> order.getRouteId() != null)
                 .collect(Collectors.groupingBy(OrdersEntity::getRouteId));
@@ -419,6 +419,17 @@ public class ReportService {
             }).toList();
             List<RoutesEntity> publishedVehicleRoutes = vehicleRoutes.stream()
                     .filter(route -> route.getStatus() == RouteStatus.PUBLISHED).toList();
+            List<MileageLogsEntity> vehicleMileage = mileage.stream()
+                    .filter(log -> vehicle.getId().equals(log.getVehicleId())).toList();
+            List<MileageLogsEntity> settledVehicleMileage = vehicleMileage.stream()
+                    .filter(log -> log.getMileageSettledAt() != null && log.getGpsDistanceKm() != null)
+                    .toList();
+            Double vehicleActualKm = settledVehicleMileage.isEmpty() ? null
+                    : settledVehicleMileage.stream()
+                            .mapToDouble(MileageLogsEntity::getGpsDistanceKm).sum();
+            String vehicleMileageStatus = vehicleMileage.isEmpty() ? "NO_MILEAGE_LOG"
+                    : settledVehicleMileage.size() != vehicleMileage.size()
+                    ? "INCOMPLETE_GPS_MILEAGE" : "COMPLETE";
             List<Double> knownLoads = publishedVehicleRoutes.stream().map(RoutesEntity::getLoadRate)
                     .filter(load -> load != null).toList();
             rows.add(new ReportResponses.VehicleRow(
@@ -430,7 +441,8 @@ public class ReportService {
                     knownLoads.size() != publishedVehicleRoutes.size() || knownLoads.isEmpty()
                             ? null : knownLoads.stream().mapToDouble(Double::doubleValue)
                             .average().orElseThrow() * 100,
-                    sumPlannedKm(publishedVehicleRoutes), null, "MILEAGE_LOG_HAS_NO_VEHICLE_ID", loads));
+                    sumPlannedKm(publishedVehicleRoutes), vehicleActualKm, vehicleMileageStatus,
+                    vehicle.getCumulativeMileageKm(), loads));
         }
         rows.sort(Comparator.comparing(ReportResponses.VehicleRow::getVehicleId));
         return new ReportResponses.Vehicles(range.getFrom(), range.getTo(), lowLoadThresholdPercent, rows);
@@ -506,24 +518,50 @@ public class ReportService {
                     .collect(Collectors.groupingBy(OrdersEntity::getDeliveryDate));
             List<ReportResponses.StoreDaily> daily = ordersByDay.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
-                    .map(entry -> new ReportResponses.StoreDaily(
-                            entry.getKey(), entry.getValue().size(), boxes(entry.getValue()),
-                            countStatus(entry.getValue(), OrderStatus.COMPLETED),
-                            countStatus(entry.getValue(), OrderStatus.FAILED)))
+                    .map(entry -> {
+                        Set<Long> dailyOrderIds = entry.getValue().stream()
+                                .map(OrdersEntity::getId).collect(Collectors.toSet());
+                        List<DeliveryRecordsEntity> dailyQuality = deliveries.stream()
+                                .filter(delivery -> dailyOrderIds.contains(delivery.getOrderId()))
+                                .filter(ReportService::isCompletedDeliveryRecord)
+                                .toList();
+                        return new ReportResponses.StoreDaily(
+                                entry.getKey(), entry.getValue().size(), boxes(entry.getValue()),
+                                countStatus(entry.getValue(), OrderStatus.COMPLETED),
+                                countStatus(entry.getValue(), OrderStatus.FAILED),
+                                sumBoxes(dailyQuality, DeliveryRecordsEntity::getShortageBoxCount),
+                                sumBoxes(dailyQuality, DeliveryRecordsEntity::getDamagedBoxCount),
+                                sumBoxes(dailyQuality, DeliveryRecordsEntity::getReplacementRequiredBoxCount));
+                    })
                     .toList();
             List<ReportResponses.DeliveryEvent> events = deliveries.stream().map(delivery -> {
                 OrdersEntity order = orderById.get(delivery.getOrderId());
                 return new ReportResponses.DeliveryEvent(
                         delivery.getId(), delivery.getOrderId(), order.getOrderNumber(),
                         order.getDeliveryDate(), delivery.getArrivedAt(), delivery.getDeliveredAt(),
-                        delivery.getNoSignature(), delivery.getPhotoUrl());
+                        delivery.getNoSignature(), delivery.getPhotoUrl(),
+                        delivery.getExpectedBoxCount(), delivery.getDeliveredBoxCount(),
+                        delivery.getShortageBoxCount(), delivery.getDamagedBoxCount(),
+                        delivery.getReplacementRequiredBoxCount());
             }).toList();
+            List<DeliveryRecordsEntity> qualityDeliveries = deliveries.stream()
+                    .filter(ReportService::isCompletedDeliveryRecord).toList();
+            long expectedQualityBoxes = sumBoxes(
+                    qualityDeliveries, DeliveryRecordsEntity::getExpectedBoxCount);
+            long shortageBoxes = sumBoxes(
+                    qualityDeliveries, DeliveryRecordsEntity::getShortageBoxCount);
+            long damagedBoxes = sumBoxes(
+                    qualityDeliveries, DeliveryRecordsEntity::getDamagedBoxCount);
+            long replacementBoxes = sumBoxes(
+                    qualityDeliveries, DeliveryRecordsEntity::getReplacementRequiredBoxCount);
             rows.add(new ReportResponses.StoreRow(
                     store.getId(), store.getName(), storeOrders.size(), boxes(storeOrders),
                     countStatus(storeOrders, OrderStatus.COMPLETED),
                     countStatus(storeOrders, OrderStatus.FAILED),
-                    (int) deliveries.stream().filter(delivery ->
-                            Boolean.TRUE.equals(delivery.getNoSignature())).count(), daily, events));
+                    countStatus(storeOrders, OrderStatus.NO_SIGNATURE),
+                    shortageBoxes, damagedBoxes, replacementBoxes,
+                    qualityRate(shortageBoxes, expectedQualityBoxes),
+                    qualityRate(damagedBoxes, expectedQualityBoxes), daily, events));
         }
         rows.sort(Comparator.comparing(ReportResponses.StoreRow::getStoreId));
         return new ReportResponses.Stores(range.getFrom(), range.getTo(), rows);
@@ -561,8 +599,16 @@ public class ReportService {
                     ? deliveriesByOrder.getOrDefault(exceptionCase.getOrderId(), List.of()).stream()
                     .filter(delivery -> Boolean.TRUE.equals(delivery.getNoSignature())).toList()
                     : List.of();
+            DeliveryRecordsEntity linkedDelivery = exceptionCase.getDeliveryRecordId() == null
+                    ? null
+                    : deliveriesByOrder.getOrDefault(exceptionCase.getOrderId(), List.of()).stream()
+                    .filter(delivery -> exceptionCase.getDeliveryRecordId().equals(delivery.getId()))
+                    .findFirst().orElse(null);
             String photoStatus;
-            if (exceptionCase.getType() != ExceptionType.NO_SIGNATURE) {
+            if (linkedDelivery != null) {
+                photoStatus = linkedDelivery.getPhotoUrl() == null
+                        ? "PHOTO_NOT_RECORDED" : "MATCHED_BY_DELIVERY_RECORD";
+            } else if (exceptionCase.getType() != ExceptionType.NO_SIGNATURE) {
                 photoStatus = "NOT_APPLICABLE";
             } else if (noSignatureAttempts.isEmpty()) {
                 photoStatus = "NO_PHOTO_RECORD";
@@ -572,7 +618,9 @@ public class ReportService {
                 photoStatus = noSignatureAttempts.getFirst().getPhotoUrl() == null
                         ? "PHOTO_NOT_RECORDED" : "MATCHED_BY_ORDER";
             }
-            String photoUrl = noSignatureAttempts.size() == 1
+            String photoUrl = linkedDelivery != null
+                    ? linkedDelivery.getPhotoUrl()
+                    : noSignatureAttempts.size() == 1
                     ? noSignatureAttempts.getFirst().getPhotoUrl() : null;
             Long resolutionMinutes = exceptionCase.getStatus() == ExceptionStatus.CLOSED
                     && exceptionCase.getHandledAt() != null
@@ -594,7 +642,7 @@ public class ReportService {
                 (int) rows.stream().filter(row -> row.getStatus() == ExceptionStatus.OPEN).count(),
                 (int) rows.stream().filter(row -> row.getStatus() == ExceptionStatus.CLOSED).count(),
                 (int) rows.stream().filter(row -> row.getType() == ExceptionType.NO_SIGNATURE).count(),
-                "僅統計資料庫已有的異常；一般司機異常回報與結案流程尚未完整實作",
+                "僅統計資料庫已保存的異常；無資料的日期不會用假數字補齊",
                 repeated(rows, ReportResponses.ExceptionRow::getStoreId),
                 repeated(rows, ReportResponses.ExceptionRow::getRouteId), rows);
     }
@@ -664,10 +712,15 @@ public class ReportService {
 
     private static MileageMatch matchMileage(
             RoutesEntity route, Map<DriverDate, List<RoutesEntity>> routesByDriverDay,
-            Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay
+            Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay,
+            Map<Long, List<MileageLogsEntity>> mileageByRoute
     ) {
-        if (route.getStatus() != RouteStatus.PUBLISHED) {
-            return new MileageMatch(null, null, null, null, "ROUTE_NOT_PUBLISHED");
+        List<MileageLogsEntity> directMatches = mileageByRoute.getOrDefault(route.getId(), List.of());
+        if (directMatches.size() > 1) {
+            return new MileageMatch(null, null, null, null, "MULTIPLE_ROUTE_MILEAGE_LOGS");
+        }
+        if (directMatches.size() == 1) {
+            return mileageMatch(directMatches.getFirst(), "READY_ROUTE_LINKED_GPS");
         }
         if (route.getDriverId() == null) {
             return new MileageMatch(null, null, null, null, "NO_DRIVER");
@@ -684,33 +737,43 @@ public class ReportService {
             return new MileageMatch(null, null, null, null, "MULTIPLE_MILEAGE_LOGS");
         }
         MileageLogsEntity log = logs.getFirst();
+        return mileageMatch(log, "READY_INFERRED_DRIVER_DATE");
+    }
+
+    private static MileageMatch mileageMatch(MileageLogsEntity log, String readyStatus) {
         LocalDateTime start = log.getStartTime();
         LocalDateTime end = log.getEndTime();
         Long duration = start != null && end != null && !end.isBefore(start) ? minutes(start, end) : null;
         if (!completeMileage(log)) {
-            return new MileageMatch(null, start, end, duration, "INCOMPLETE_MILEAGE_LOG");
+            String status = log.getRouteId() == null ? "INCOMPLETE_MILEAGE_LOG"
+                    : log.getGpsDistanceStatus() == null
+                    ? "INCOMPLETE_GPS_MILEAGE" : log.getGpsDistanceStatus();
+            return new MileageMatch(null, start, end, duration, status);
         }
-        return new MileageMatch((double) (log.getEndOdometer() - log.getStartOdometer()),
-                start, end, duration, "READY_INFERRED_DRIVER_DATE");
+        return new MileageMatch(actualKilometers(log), start, end, duration, readyStatus);
     }
 
     private static boolean completeMileage(MileageLogsEntity log) {
-        return log.getStartOdometer() != null && log.getEndOdometer() != null
-                && log.getEndOdometer() >= log.getStartOdometer()
+        return actualKilometers(log) != null
                 && log.getStartTime() != null && log.getEndTime() != null
                 && !log.getEndTime().isBefore(log.getStartTime());
+    }
+
+    /** 新紀錄以 GPS 結算；沒有路線／車輛關聯的舊紀錄才沿用人工里程表差值。 */
+    private static Double actualKilometers(MileageLogsEntity log) {
+        if (log.getRouteId() != null || log.getVehicleId() != null) {
+            return log.getMileageSettledAt() == null ? null : log.getGpsDistanceKm();
+        }
+        if (log.getStartOdometer() == null || log.getEndOdometer() == null
+                || log.getEndOdometer() < log.getStartOdometer()) {
+            return null;
+        }
+        return (double) (log.getEndOdometer() - log.getStartOdometer());
     }
 
     private Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder(List<OrdersEntity> orders) {
         return reportReadDAO.deliveriesForOrders(orders.stream().map(OrdersEntity::getId).toList())
                 .stream().collect(Collectors.groupingBy(DeliveryRecordsEntity::getOrderId));
-    }
-
-    private static boolean hasNoSignature(
-            Map<Long, List<DeliveryRecordsEntity>> deliveriesByOrder, Long orderId
-    ) {
-        return deliveriesByOrder.getOrDefault(orderId, List.of()).stream()
-                .anyMatch(delivery -> Boolean.TRUE.equals(delivery.getNoSignature()));
     }
 
     private static Long assignedDriver(OrdersEntity order, Map<Long, RoutesEntity> routesById) {
@@ -753,11 +816,28 @@ public class ReportService {
 
     private static boolean completionEligible(OrderStatus status) {
         return status == OrderStatus.CONFIRMED || status == OrderStatus.IN_DELIVERY
-                || status == OrderStatus.COMPLETED || status == OrderStatus.FAILED;
+                || status == OrderStatus.COMPLETED || status == OrderStatus.NO_SIGNATURE
+                || status == OrderStatus.FAILED;
     }
 
     private static long boxes(List<OrdersEntity> orders) {
         return orders.stream().mapToLong(order -> order.getBoxCount() == null ? 0 : order.getBoxCount()).sum();
+    }
+
+    private static boolean isCompletedDeliveryRecord(DeliveryRecordsEntity record) {
+        return record.getDeliveredAt() != null && !Boolean.TRUE.equals(record.getNoSignature());
+    }
+
+    private static long sumBoxes(
+            List<DeliveryRecordsEntity> records,
+            Function<DeliveryRecordsEntity, Integer> getter
+    ) {
+        return records.stream().map(getter).filter(Objects::nonNull)
+                .mapToLong(Integer::longValue).sum();
+    }
+
+    private static Double qualityRate(long numerator, long denominator) {
+        return denominator == 0 ? null : numerator * 100.0 / denominator;
     }
 
     private static int distinctStores(List<OrdersEntity> orders) {

@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.ExceptionStatus;
+import com.example.backend.constants.ExceptionType;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.OrderType;
 import com.example.backend.constants.RouteStatus;
@@ -62,6 +63,39 @@ public class DeliveryExceptionService {
                 .stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExceptionCaseResponse> findAll(ExceptionStatus status, ExceptionType type) {
+        return exceptionCasesDAO.findAll().stream()
+                .filter(item -> status == null || item.getStatus() == status)
+                .filter(item -> type == null || item.getType() == type)
+                .sorted((left, right) -> right.getCreatedAt().compareTo(left.getCreatedAt()))
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional
+    public ExceptionCaseResponse closeGeneral(
+            Long exceptionCaseId,
+            String reviewedBy,
+            String resolution
+    ) {
+        ExceptionCasesEntity exceptionCase = exceptionCasesDAO.findForUpdate(exceptionCaseId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "找不到配送異常，ID：" + exceptionCaseId));
+        if (exceptionCase.getType() == ExceptionType.NO_SIGNATURE) {
+            throw new IllegalArgumentException("無人簽收請使用確認補送或恢復原單流程");
+        }
+        if (exceptionCase.getStatus() != ExceptionStatus.OPEN) {
+            throw new IllegalArgumentException("此配送異常已經結案");
+        }
+        exceptionCase.setStatus(ExceptionStatus.CLOSED);
+        exceptionCase.setHandledBy(reviewedBy);
+        exceptionCase.setHandledAt(LocalDateTime.now(TAIPEI));
+        exceptionCase.setResolution(resolution.trim());
+        exceptionCasesDAO.save(exceptionCase);
+        return toResponse(exceptionCase);
     }
 
     /** 主管確認後結案，並把後續訂單送入可排車的 CONFIRMED 狀態。 */
@@ -176,7 +210,7 @@ public class DeliveryExceptionService {
         return candidate;
     }
 
-    private ExceptionCaseResponse toResponse(ExceptionCasesEntity exceptionCase) {
+    public ExceptionCaseResponse toResponse(ExceptionCasesEntity exceptionCase) {
         OrdersEntity sourceOrder = exceptionCase.getOrderId() == null
                 ? null
                 : ordersDAO.findById(exceptionCase.getOrderId()).orElse(null);

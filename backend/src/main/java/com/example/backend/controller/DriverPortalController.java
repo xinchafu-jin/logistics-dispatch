@@ -6,11 +6,11 @@ import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.dto.respones.EmergencyLeaveResponse;
+import com.example.backend.dto.respones.ExceptionCaseResponse;
+import com.example.backend.dto.respones.PhotoUploadResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +24,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 司機端使用的出勤、GPS 與班表 API。
@@ -40,9 +39,11 @@ public class DriverPortalController {
     private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
+    private final DriverExceptionService driverExceptionService;
     private final GPSRouteService gpsRouteService;
     private final DriversService driversService;
     private final EmergencyLeaveService emergencyLeaveService;
+    private final DeliveryPhotoStorageService deliveryPhotoStorageService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -51,9 +52,11 @@ public class DriverPortalController {
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
+            DriverExceptionService driverExceptionService,
             GPSRouteService gpsRouteService,
             DriversService driversService,
-            EmergencyLeaveService emergencyLeaveService
+            EmergencyLeaveService emergencyLeaveService,
+            DeliveryPhotoStorageService deliveryPhotoStorageService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -61,9 +64,11 @@ public class DriverPortalController {
         this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
+        this.driverExceptionService = driverExceptionService;
         this.gpsRouteService = gpsRouteService;
         this.driversService = driversService;
         this.emergencyLeaveService = emergencyLeaveService;
+        this.deliveryPhotoStorageService = deliveryPhotoStorageService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -168,13 +173,22 @@ public class DriverPortalController {
         return deliveryService.noSignature(driverId(jwt), request);
     }
 
+    /** 上傳交貨或無人簽收照片；回傳網址再放入 deliver/no-signature 請求。 */
+    @PostMapping(value = "/delivery-photo", consumes = "multipart/form-data")
+    public PhotoUploadResponse uploadDeliveryPhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        driverId(jwt);
+        return new PhotoUploadResponse(deliveryPhotoStorageService.store(file));
+    }
+
     /** 司機回報配送途中發生的異常。 */
     @PostMapping("/exception")
-    public ResponseEntity<Map<String, Object>> reportException(
+    public ExceptionCaseResponse reportException(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestBody Map<String, Object> request) {
-        driverId(jwt);
-        return pending("POST /api/driver/exception");
+            @Valid @RequestBody DriverExceptionRequestDTO request) {
+        return driverExceptionService.report(driverId(jwt), request);
     }
 
     /** 記錄今日出車時的里程表讀數。 */
@@ -193,6 +207,12 @@ public class DriverPortalController {
         return mileageLogsService.end(driverId(jwt), request);
     }
 
+    /** GPS 點較晚送達或 OSRM 暫時失敗時，重新結算今天已收車的里程。 */
+    @PostMapping("/mileage/recalculate")
+    public MileageLogResponse recalculateMileage(@AuthenticationPrincipal Jwt jwt) {
+        return mileageLogsService.recalculate(driverId(jwt));
+    }
+
     /** 從登入 Token 取得資料庫中的司機 ID。 */
     private Long driverId(Jwt jwt) {
         Number userId = jwt.getClaim("userId");
@@ -200,14 +220,6 @@ public class DriverPortalController {
             throw new IllegalArgumentException("JWT 缺少 userId");
         }
         return userId.longValue();
-    }
-
-    private ResponseEntity<Map<String, Object>> pending(String api) {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
-                "success", false,
-                "message", "Controller 已建立，尚未接上 Service",
-                "api", api
-        ));
     }
 
     @PostMapping("/route")

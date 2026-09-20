@@ -15,6 +15,9 @@ public class DeliveryRecordResponse {
     private LocalDateTime deliveredAt;
     private Integer expectedBoxCount;
     private Integer deliveredBoxCount;
+    private Integer shortageBoxCount;
+    private Integer damagedBoxCount;
+    private Integer replacementRequiredBoxCount;
     private String photoUrl;
     private String notes;
     private Boolean noSignature;
@@ -34,6 +37,9 @@ public class DeliveryRecordResponse {
             LocalDateTime deliveredAt,
             Integer expectedBoxCount,
             Integer deliveredBoxCount,
+            Integer shortageBoxCount,
+            Integer damagedBoxCount,
+            Integer replacementRequiredBoxCount,
             String photoUrl,
             String notes,
             Boolean noSignature,
@@ -49,6 +55,9 @@ public class DeliveryRecordResponse {
         this.deliveredAt = deliveredAt;
         this.expectedBoxCount = expectedBoxCount;
         this.deliveredBoxCount = deliveredBoxCount;
+        this.shortageBoxCount = shortageBoxCount;
+        this.damagedBoxCount = damagedBoxCount;
+        this.replacementRequiredBoxCount = replacementRequiredBoxCount;
         this.photoUrl = photoUrl;
         this.notes = notes;
         this.noSignature = noSignature;
@@ -112,6 +121,30 @@ public class DeliveryRecordResponse {
 
     public void setDeliveredBoxCount(Integer deliveredBoxCount) {
         this.deliveredBoxCount = deliveredBoxCount;
+    }
+
+    public Integer getShortageBoxCount() {
+        return shortageBoxCount;
+    }
+
+    public void setShortageBoxCount(Integer shortageBoxCount) {
+        this.shortageBoxCount = shortageBoxCount;
+    }
+
+    public Integer getDamagedBoxCount() {
+        return damagedBoxCount;
+    }
+
+    public void setDamagedBoxCount(Integer damagedBoxCount) {
+        this.damagedBoxCount = damagedBoxCount;
+    }
+
+    public Integer getReplacementRequiredBoxCount() {
+        return replacementRequiredBoxCount;
+    }
+
+    public void setReplacementRequiredBoxCount(Integer replacementRequiredBoxCount) {
+        this.replacementRequiredBoxCount = replacementRequiredBoxCount;
     }
 
     public String getPhotoUrl() {

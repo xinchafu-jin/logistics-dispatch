@@ -55,7 +55,7 @@ public class DispatchService {
         WarehousesEntity warehousesEntity =
                 warehousesDAO.findById(warehouseId).
                         orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
-        clearExistingDraftRoutes(date, warehouseId);
+        Map<Long, RoutesEntity> reusableRoutes = clearExistingDraftRoutes(date, warehouseId);
         // 撈當日「已確認且尚未排入路線」的訂單。
         // 取消 SCHEDULED 狀態後，排過的單也留在 CONFIRMED，靠 route_id 區分排了沒，
         // 所以這裡要多篩 route_id IS NULL，不能只看狀態（否則會把已排的單重撈回來重排）。
@@ -131,10 +131,14 @@ public class DispatchService {
             VehiclesEntity vehicle = vehicles.get(
                     vr.getVehicleIndex()
             );
-            RoutesEntity route = new RoutesEntity();
-            route.setDate(date);
-            route.setWarehouseId(warehouseId);
-            route.setVehicleId(vehicle.getId());
+            RoutesEntity route = reusableRoutes.remove(vehicle.getId());
+            if (route == null) {
+                route = new RoutesEntity();
+                route.setDate(date);
+                route.setWarehouseId(warehouseId);
+                route.setVehicleId(vehicle.getId());
+            }
+            route.setDriverId(null);
             route.setTotalDistance(
                     (double) vr.getDistance());
             RoutesEntity saveRoute = routesDAO.save(route);
@@ -286,6 +290,9 @@ public class DispatchService {
             if (warehouseId.equals(other.getWarehouseId())) {
                 continue;
             }
+            if (!hasActiveOrders(other.getId())) {
+                continue;
+            }
             if (driverIds.contains(other.getDriverId())) {
                 throw new IllegalArgumentException(
                         "司機 " + driverNameOf(other.getDriverId()) + " 當天已排在 "
@@ -307,7 +314,7 @@ public class DispatchService {
         // ══ 驗證到此結束，以下開始改資料 ══
 
         // 清掉當天既有草稿並解綁訂單；沒被重新指派的訂單就自動留在未排入池
-        clearExistingDraftRoutes(date, warehouseId);
+        Map<Long, RoutesEntity> reusableRoutes = clearExistingDraftRoutes(date, warehouseId);
 
         // 距離矩陣的索引：0 是倉庫，其後依訂單在請求中出現的順序排列
         List<OrdersEntity> assignedOrders = new ArrayList<>();
@@ -345,11 +352,14 @@ public class DispatchService {
         for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
             VehiclesEntity vehicle = vehiclesMap.get(ra.getVehicleId());
 
-            // 一律重建路線，不沿用 dto 的 routeId —— 上面已經把當天草稿整批清掉了
-            RoutesEntity route = new RoutesEntity();
-            route.setDate(date);
-            route.setWarehouseId(warehouseId);
-            route.setVehicleId(vehicle.getId());
+            // 已有結案訂單的草稿會保留原 route；同車重排時沿用它，避免破壞配送歷史。
+            RoutesEntity route = reusableRoutes.remove(vehicle.getId());
+            if (route == null) {
+                route = new RoutesEntity();
+                route.setDate(date);
+                route.setWarehouseId(warehouseId);
+                route.setVehicleId(vehicle.getId());
+            }
             // 未指派時是 null，正好對上 uk_routes_date_driver（NULL 不參與唯一性比對）
             route.setDriverId(ra.getDriverId());
             RoutesEntity saveRoute = routesDAO.save(route);
@@ -496,7 +506,8 @@ public class DispatchService {
         // 先整批收集完才判斷，否則會邊翻邊發現問題，讀的人搞不清楚翻到哪裡。
         List<String> missing = new ArrayList<>();
         for (RoutesEntity route : routes) {
-            if (route.getStatus() == RouteStatus.DRAFT && route.getDriverId() == null) {
+            if (route.getStatus() == RouteStatus.DRAFT && hasActiveOrders(route.getId())
+                    && route.getDriverId() == null) {
                 missing.add(plateNumberOf(route.getVehicleId()));
             }
         }
@@ -506,7 +517,10 @@ public class DispatchService {
         }
 
         for (RoutesEntity route : routes) {
-            if (route.getStatus() == RouteStatus.DRAFT) {
+            boolean hasActiveOrders = ordersDAO.findByRouteIdOrderBySequence(route.getId()).stream()
+                    .anyMatch(order -> order.getStatus() == OrderStatus.CONFIRMED
+                            || order.getStatus() == OrderStatus.IN_DELIVERY);
+            if (route.getStatus() == RouteStatus.DRAFT && hasActiveOrders) {
                 route.setStatus(RouteStatus.PUBLISHED);
             }
         }
@@ -550,7 +564,7 @@ public class DispatchService {
 
         List<RoutesEntity> others = new ArrayList<>();
         for (RoutesEntity route : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
-            if (!warehouseId.equals(route.getWarehouseId())) {
+            if (!warehouseId.equals(route.getWarehouseId()) && hasActiveOrders(route.getId())) {
                 others.add(route);
             }
         }
@@ -601,13 +615,13 @@ public class DispatchService {
         return taken;
     }
 
-    private void clearExistingDraftRoutes(LocalDate date, Long warehouseId) {
+    private Map<Long, RoutesEntity> clearExistingDraftRoutes(LocalDate date, Long warehouseId) {
 
         List<RoutesEntity> existing = routesDAO.findByDateAndWarehouseId(date, warehouseId);
         List<String> publishedPlates = new ArrayList<>();
         List<Long> draftRouteIds = new ArrayList<>();
         if (existing.isEmpty()) {
-            return;
+            return new HashMap<>();
         }
         for (RoutesEntity item : existing) {
             if (item.getStatus() == RouteStatus.PUBLISHED) {
@@ -622,7 +636,8 @@ public class DispatchService {
                     "當天已有發布的排班（" + String.join("、", publishedPlates) + "），請先撤回再重排");
         }
         List<OrdersEntity> boundOrders = ordersDAO.findByRouteIdIn(draftRouteIds);
-        for (OrdersEntity order : boundOrders) {
+        for (OrdersEntity order : boundOrders.stream()
+                .filter(order -> order.getStatus() == OrderStatus.CONFIRMED).toList()) {
             order.setRouteId(null);
             order.setSequence(null);
             order.setAssignedVehicleId(null);
@@ -631,12 +646,31 @@ public class DispatchService {
         }
         ordersDAO.saveAll(boundOrders);
         ordersDAO.flush();
+
+        Set<Long> retainedRouteIds = boundOrders.stream()
+                .filter(order -> order.getStatus() != OrderStatus.CONFIRMED)
+                .map(OrdersEntity::getRouteId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<Long, RoutesEntity> reusableRoutes = existing.stream()
+                .filter(route -> retainedRouteIds.contains(route.getId()))
+                .collect(java.util.stream.Collectors.toMap(
+                        RoutesEntity::getVehicleId,
+                        route -> route,
+                        (first, ignored) -> first,
+                        HashMap::new));
+        List<Long> deletableRouteIds = draftRouteIds.stream()
+                .filter(routeId -> !retainedRouteIds.contains(routeId))
+                .toList();
         // route_vehicle_segments 以 route_id 外鍵指向 routes；必須先清子表再刪路線。
-        routesDAO.deleteVehicleSegmentsByRouteIdIn(draftRouteIds);
-        routesDAO.deleteAllById(draftRouteIds);
-        // 必須立刻送出 DELETE：Hibernate flush 時會先做 INSERT 再做 DELETE，
-        // 不先清掉舊路線的話，新路線會撞上 uk_routes_date_vehicle 唯一鍵
-        routesDAO.flush();
+        if (!deletableRouteIds.isEmpty()) {
+            routesDAO.deleteVehicleSegmentsByRouteIdIn(deletableRouteIds);
+            routesDAO.deleteAllById(deletableRouteIds);
+            // 必須立刻送出 DELETE：Hibernate flush 時會先做 INSERT 再做 DELETE，
+            // 不先清掉舊路線的話，新路線會撞上 uk_routes_date_vehicle 唯一鍵
+            routesDAO.flush();
+        }
+        return reusableRoutes;
     }
 
     private String plateNumberOf(Long vehicleId) {
@@ -645,6 +679,12 @@ public class DispatchService {
             return vehicle.get().getPlateNumber();
         }
         return "車牌" + vehicleId;
+    }
+
+    private boolean hasActiveOrders(Long routeId) {
+        return ordersDAO.findByRouteIdOrderBySequence(routeId).stream()
+                .anyMatch(order -> order.getStatus() == OrderStatus.CONFIRMED
+                        || order.getStatus() == OrderStatus.IN_DELIVERY);
     }
 
     private DispatchResponse.WarehouseResponse toWarehouse(WarehousesEntity warehouse) {
