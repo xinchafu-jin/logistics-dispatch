@@ -1,17 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
-import {
-  LucideClipboardCheck,
-  LucideFileUp,
-  LucideMapPinned,
-  LucidePencil,
-  LucidePlus,
-  LucideSearch,
-  LucideTrash2,
-  LucideTruck,
-  LucideX,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   OrderImportResult,
@@ -121,15 +111,7 @@ function describeError(error: unknown): string {
 @Component({
   selector: 'app-order-review',
   imports: [
-    LucideClipboardCheck,
-    LucideFileUp,
-    LucideMapPinned,
-    LucidePencil,
-    LucidePlus,
-    LucideSearch,
-    LucideTrash2,
-    LucideTruck,
-    LucideX,
+    MatIconModule,
   ],
   templateUrl: './order-review.html',
   styleUrl: './order-review.scss',

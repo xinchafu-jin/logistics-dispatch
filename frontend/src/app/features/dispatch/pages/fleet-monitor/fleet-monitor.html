@@ -7,9 +7,9 @@
 
     <div class="gps-state">
       @if (gpsErrorMessage()) {
-        <svg lucideTriangleAlert aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">warning_amber</mat-icon>
       } @else {
-        <svg lucideMapPinned aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">map</mat-icon>
       }
       <span>{{ gpsState() }}</span>
       @if (gpsUpdatedAt()) {
@@ -23,28 +23,28 @@
         [disabled]="refreshing()"
         (click)="refresh()"
       >
-        <svg lucideRefreshCw [class.is-spinning]="refreshing()" aria-hidden="true"></svg>
+        <mat-icon [class.is-spinning]="refreshing()" aria-hidden="true">refresh</mat-icon>
       </button>
     </div>
   </section>
 
   <section class="fleet-summary" aria-label="車隊摘要">
     <article>
-      <span class="summary-icon"><svg lucideUserRound aria-hidden="true"></svg></span>
+      <span class="summary-icon"><mat-icon aria-hidden="true">person</mat-icon></span>
       <div>
         <p>司機總數</p>
         <strong>{{ drivers().length }}</strong>
       </div>
     </article>
     <article>
-      <span class="summary-icon is-active"><svg lucideMapPinned aria-hidden="true"></svg></span>
+      <span class="summary-icon is-active"><mat-icon aria-hidden="true">map</mat-icon></span>
       <div>
         <p>可排班</p>
         <strong>{{ activeCount() }}</strong>
       </div>
     </article>
     <article>
-      <span class="summary-icon is-muted"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
+      <span class="summary-icon is-muted"><mat-icon aria-hidden="true">warning_amber</mat-icon></span>
       <div>
         <p>未啟用</p>
         <strong>{{ inactiveCount() }}</strong>
@@ -119,7 +119,7 @@
               [disabled]="detailLoading()"
               (click)="refreshSelectedDriver()"
             >
-              <svg lucideRefreshCw [class.is-spinning]="detailLoading()" aria-hidden="true"></svg>
+              <mat-icon [class.is-spinning]="detailLoading()" aria-hidden="true">refresh</mat-icon>
             </button>
           </header>
 

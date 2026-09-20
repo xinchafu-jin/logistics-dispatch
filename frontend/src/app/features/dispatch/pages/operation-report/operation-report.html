@@ -74,7 +74,7 @@
 
       <div class="signal-list">
         <article class="signal-item tone-accent">
-          <span class="summary-icon"><svg lucideCircleCheck aria-hidden="true"></svg></span>
+          <span class="summary-icon"><mat-icon aria-hidden="true">check_circle</mat-icon></span>
           <div>
             <p>配送完成率</p>
             <strong>{{ report().completion }}</strong>
@@ -82,7 +82,7 @@
           </div>
         </article>
         <article class="signal-item">
-          <span class="summary-icon"><svg lucideClock3 aria-hidden="true"></svg></span>
+          <span class="summary-icon"><mat-icon aria-hidden="true">schedule</mat-icon></span>
           <div>
             <p>準時送達率</p>
             <strong>{{ report().onTime }}</strong>
@@ -90,7 +90,7 @@
           </div>
         </article>
         <article class="signal-item">
-          <span class="summary-icon"><svg lucideRoute aria-hidden="true"></svg></span>
+          <span class="summary-icon"><mat-icon aria-hidden="true">route</mat-icon></span>
           <div>
             <p>平均配送時間</p>
             <strong>{{ report().deliveryTime }}</strong>
@@ -98,7 +98,7 @@
           </div>
         </article>
         <article class="signal-item tone-warning">
-          <span class="summary-icon"><svg lucideTriangleAlert aria-hidden="true"></svg></span>
+          <span class="summary-icon"><mat-icon aria-hidden="true">warning_amber</mat-icon></span>
           <div>
             <p>異常發生率</p>
             <strong>{{ report().exceptionRate }}</strong>
@@ -141,7 +141,7 @@
       </div>
 
       <div class="chart-footnote">
-        <svg lucideChartNoAxesCombined aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">bar_chart</mat-icon>
         <span>趨勢依後端 deliveryDate 計算；準時率尚未由後端提供。</span>
       </div>
     </section>

@@ -66,13 +66,7 @@ describe('DriverOperationsService', () => {
     request.flush({ date: '2026-09-02', driverId: 1, driverName: '測試司機', routes: [] });
   });
 
-  it('uses the driver application, road route, and emergency leave contracts', () => {
-    const application = {
-      account: 'driver-apply',
-      name: '王小明',
-      phone: '0912345678',
-      nationalId: 'A123456789',
-    };
+  it('uses the road route and emergency leave contracts', () => {
     const route = {
       fromLat: 22.6273,
       fromLng: 120.3014,
@@ -80,15 +74,9 @@ describe('DriverOperationsService', () => {
       toLng: 120.3022,
     };
 
-    service.submitAccountApplication(application).subscribe();
     service.gpsRoute(route).subscribe();
     service.submitEmergencyLeave({ reason: '身體不適，需要返回休息。' }).subscribe();
     service.getEmergencyLeaves().subscribe();
-
-    const applicationRequest = httpTesting.expectOne('/api/driver-account-applications');
-    expect(applicationRequest.request.method).toBe('POST');
-    expect(applicationRequest.request.body).toEqual(application);
-    applicationRequest.flush({ id: 8, status: 'PENDING' });
 
     const routeRequest = httpTesting.expectOne('/api/driver/route');
     expect(routeRequest.request.method).toBe('POST');
@@ -120,12 +108,10 @@ describe('DriverOperationsService', () => {
     service.deliver({
       orderId: 41,
       boxCount: 12,
-      photo: 'https://upload.example.test/proofs/41.jpg',
       notes: '已交貨',
     }).subscribe();
     service.noSignature({
       orderId: 42,
-      photo: 'https://upload.example.test/proofs/42.jpg',
       notes: '現場無人',
     }).subscribe();
     service.startMileage({ odometer: 18_400 }).subscribe();
@@ -139,7 +125,6 @@ describe('DriverOperationsService', () => {
     expect(deliver.request.body).toEqual({
       orderId: 41,
       boxCount: 12,
-      photo: 'https://upload.example.test/proofs/41.jpg',
       notes: '已交貨',
     });
     deliver.flush({});
@@ -147,7 +132,6 @@ describe('DriverOperationsService', () => {
     const noSignature = httpTesting.expectOne('/api/driver/no-signature');
     expect(noSignature.request.body).toEqual({
       orderId: 42,
-      photo: 'https://upload.example.test/proofs/42.jpg',
       notes: '現場無人',
     });
     noSignature.flush({});

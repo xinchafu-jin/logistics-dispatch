@@ -14,38 +14,19 @@ import {DriverDto} from '../../../../core/services/dispatch-api.models';
 
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
-// 倉庫與門市的圖示（lucide warehouse / store 的 path，直接內嵌）。
-//
-// 不走 lucide-angular：那是 Angular 元件，吐不出 Leaflet divIcon 需要的 HTML 字串；
-// 也不放 .svg 檔用 <img> 指，那又回到 Leaflet 預設 marker 打包後 404 的老問題。
-const WAREHOUSE_ICON_PATHS = `
-  <path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/>
-  <path d="M6 18h12"/>
-  <path d="M6 14h12"/>
-  <rect width="12" height="12" x="6" y="10"/>
-`;
-const STORE_ICON_PATHS = `
-  <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/>
-  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-  <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/>
-  <path d="M2 7h20"/>
-  <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/>
-`;
-
 /**
- * 做一個圓形徽章樣式的 divIcon。
+ * 做一個圓形文字徽章。Leaflet 的 divIcon 不會經過 Angular 的元件生命週期，
+ * 因此不放外來 SVG 圖示，直接以「倉／店」區分標記。
  *
  * divIcon 是 DOM 不是 canvas，所以顏色交給 scss 的 .map-badge 管，
  * 不必像 circleMarker 那樣把色碼寫死在 TS 裡。
  */
-function badgeIcon(kind: 'warehouse' | 'store', paths: string, size: number): L.DivIcon {
+function badgeIcon(kind: 'warehouse' | 'store', size: number): L.DivIcon {
+  const label = kind === 'warehouse' ? '倉' : '店';
+
   return L.divIcon({
     className: '',   // 清掉 leaflet 預設的白底方框
-    html: `<span class="map-badge map-badge--${kind}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-           aria-hidden="true">${paths}</svg>
-    </span>`,
+    html: `<span class="map-badge map-badge--${kind}" aria-hidden="true">${label}</span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],      // 徽章中心對準座標
     tooltipAnchor: [0, -size / 2],
@@ -219,7 +200,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     // 畫面沒有點但不一定看得到錯誤。divIcon 是自己給的 HTML，不碰圖檔。
     if (visible && warehouse) {
       L.marker([warehouse.lat, warehouse.lng], {
-        icon: badgeIcon('warehouse', WAREHOUSE_ICON_PATHS, 34),
+        icon: badgeIcon('warehouse', 34),
         keyboard: false,
       })
         .bindTooltip(`倉庫｜${warehouse.label}`, {direction: 'top'})
@@ -229,7 +210,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     if (visible) {
       for (const store of stores) {
         L.marker([store.lat, store.lng], {
-          icon: badgeIcon('store', STORE_ICON_PATHS, 26),
+          icon: badgeIcon('store', 26),
           keyboard: false,
         })
           .bindTooltip(`${store.label}<br>${store.detail}`, {direction: 'top'})

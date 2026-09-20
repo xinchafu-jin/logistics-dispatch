@@ -15,16 +15,16 @@
         (click)="refresh()"
         [disabled]="loading() || confirming()"
       >
-        <svg lucideRefreshCw aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">refresh</mat-icon>
       </button>
     </div>
   </section>
 
   @if (errorMessage()) {
-    <p class="feedback is-error"><svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}</p>
+    <p class="feedback is-error"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
   }
   @if (actionMessage()) {
-    <p class="feedback is-success"><svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}</p>
+    <p class="feedback is-success"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
   }
 
   <section class="anomaly-summary" aria-label="到期異常摘要">

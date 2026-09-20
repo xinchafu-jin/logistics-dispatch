@@ -343,7 +343,7 @@
               class="board-dropzone"
               cdkDropList
               [cdkDropListData]="route.cards"
-              [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE'"
+              [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE' || route.hasLockedStops"
               (cdkDropListDropped)="onDrop($event)"
             >
               @for (card of route.cards; track card.orderId) {
@@ -352,10 +352,12 @@
                 </p>
               } @empty {
                 <p class="board-empty">
-                  @if (route.status === 'AVAILABLE') {
-                    把訂單拖到這裡
-                  } @else {
+                  @if (route.status !== 'AVAILABLE') {
                     {{ statusLabel(route.status) }}，無法排入
+                  } @else if (route.hasLockedStops) {
+                    已完成或已取消訂單不列入調度看板
+                  } @else {
+                    把訂單拖到這裡
                   }
                 </p>
               }

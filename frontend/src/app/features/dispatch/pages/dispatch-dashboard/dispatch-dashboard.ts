@@ -116,6 +116,8 @@ interface BoardRoute {
   totalDistance: number;
   /** 空槽沒有路線，一律當作草稿 */
   routeStatus: RouteStatus;
+  /** 含有已完成、已取消等不能重新排程的訂單時，整條既有路線僅供檢視。 */
+  hasLockedStops: boolean;
   cards: BoardCard[];
 }
 
@@ -1234,11 +1236,17 @@ export class DispatchDashboard implements OnInit {
     // 車輛＝固定槽位：這個倉的每台車都給一格，後端有回路線的就填進去。
     // 維修／報廢的車也畫出來（灰掉），讓調度員知道為什麼少了一台可用車。
     const routeByVehicle = new Map(result.routes.map((route) => [route.vehicleId, route]));
+    const dispatchableOrderIds = new Set(
+      this.orders()
+        .filter((order) => order.status === 'CONFIRMED')
+        .map((order) => order.id),
+    );
     this.routes.set(
       this.vehicles()
         .filter((vehicle) => vehicle.id != null && vehicle.warehouseId === this.warehouseId())
         .map((vehicle) => {
           const route = routeByVehicle.get(vehicle.id!);
+          const routeStops = route?.stops ?? [];
           return {
             routeId: route?.routeId ?? 0,
             vehicleId: vehicle.id!,
@@ -1249,11 +1257,18 @@ export class DispatchDashboard implements OnInit {
             driverId: route?.driverId ?? null,
             totalDistance: route?.totalDistance ?? 0,
             routeStatus: route?.status ?? 'DRAFT',
-            cards: route ? route.stops.map(toBoardCard) : [],
+            hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
+            cards: routeStops
+              .filter((stop) => dispatchableOrderIds.has(stop.orderId))
+              .map(toBoardCard),
           };
         }),
     );
-    this.unassigned.set(result.unassignedOrders.map(toBoardCard));
+    this.unassigned.set(
+      result.unassignedOrders
+        .filter((order) => dispatchableOrderIds.has(order.orderId))
+        .map(toBoardCard),
+    );
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
   }
 }

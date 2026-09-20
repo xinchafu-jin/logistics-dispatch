@@ -78,12 +78,12 @@
   opacity: 0.58;
 }
 
-.refresh-gps svg {
+.refresh-gps mat-icon {
   width: 15px;
   height: 15px;
 }
 
-.refresh-gps svg.is-spinning {
+.refresh-gps mat-icon.is-spinning {
   animation: refresh-spin 0.8s linear infinite;
 }
 
@@ -93,7 +93,7 @@
   }
 }
 
-.gps-state svg {
+.gps-state mat-icon {
   width: 16px;
   height: 16px;
 }
@@ -138,7 +138,7 @@
   background: rgb(163 175 176 / 10%);
 }
 
-.summary-icon svg {
+.summary-icon mat-icon {
   width: 18px;
   height: 18px;
 }

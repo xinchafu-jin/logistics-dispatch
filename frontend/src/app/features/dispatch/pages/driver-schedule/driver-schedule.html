@@ -14,7 +14,7 @@
         title="上一個月"
         aria-label="上一個月"
       >
-        <svg lucideChevronLeft aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">chevron_left</mat-icon>
       </button>
       <label>
         <span>班表月份</span>
@@ -27,7 +27,7 @@
         title="下一個月"
         aria-label="下一個月"
       >
-        <svg lucideChevronRight aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">chevron_right</mat-icon>
       </button>
       <button
         type="button"
@@ -37,43 +37,43 @@
         aria-label="重新整理"
         [disabled]="saving()"
       >
-        <svg lucideRefreshCw aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">refresh</mat-icon>
       </button>
     </div>
   </header>
 
   @if (errorMessage()) {
     <p class="feedback is-error">
-      <svg lucideTriangleAlert aria-hidden="true"></svg>{{ errorMessage() }}
+      <mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}
     </p>
   }
   @if (actionMessage()) {
     <p class="feedback is-success">
-      <svg lucideCircleCheck aria-hidden="true"></svg>{{ actionMessage() }}
+      <mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}
     </p>
   }
 
   @if (loading()) {
     <section class="empty-state" aria-live="polite">
-      <svg lucideFileClock aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">pending_actions</mat-icon>
       <p>正在讀取 {{ displayMonth() }} 班表...</p>
     </section>
   } @else if (scheduleMissing()) {
     <section class="empty-state">
-      <svg lucideCalendarDays aria-hidden="true"></svg>
+      <mat-icon aria-hidden="true">calendar_month</mat-icon>
       <div>
         <h3>{{ displayMonth() }} 尚未建立班表</h3>
         <p>建立後會依當下啟用的司機產生整月「未排定」班次。</p>
       </div>
       <button type="button" class="primary-action" (click)="generateMonth()" [disabled]="saving()">
-        <svg lucideCalendarDays aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">calendar_month</mat-icon>
         建立草稿班表
       </button>
     </section>
   } @else if (scheduleMonth(); as month) {
     <section class="schedule-summary" aria-label="班表摘要">
       <div class="schedule-status" [class.is-published]="isPublished()">
-        <svg lucideCalendarDays aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">calendar_month</mat-icon>
         <div>
           <span>發布狀態</span>
           <strong>{{ scheduleStatusLabel() }}</strong>
@@ -104,7 +104,7 @@
           (click)="syncDrivers()"
           [disabled]="!isDraft() || saving()"
         >
-          <svg lucideUserRound aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">person</mat-icon>
           同步新司機
         </button>
         <button
@@ -113,7 +113,7 @@
           (click)="publishMonth()"
           [disabled]="!isDraft() || saving()"
         >
-          <svg lucideSend aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">send</mat-icon>
           發布班表
         </button>
       </div>
@@ -393,7 +393,7 @@
                   (click)="markLeave()"
                   [disabled]="!canMarkLeave() || saving()"
                 >
-                  <svg lucideFileClock aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">pending_actions</mat-icon>
                   登記請假
                 </button>
               } @else {
@@ -403,7 +403,7 @@
                   (click)="saveShift()"
                   [disabled]="!isDraft() || saving()"
                 >
-                  <svg lucideSave aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">save</mat-icon>
                   儲存班次
                 </button>
               }
@@ -422,7 +422,7 @@
           }
         } @else {
           <div class="editor-placeholder">
-            <svg lucideCalendarDays aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">calendar_month</mat-icon>
             <h3>選擇一個班次</h3>
             <p>點選左側表格中的班次，即可安排上班、休假或請假。</p>
           </div>

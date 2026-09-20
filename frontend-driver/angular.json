@@ -31,8 +31,7 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.scss"],
-            "allowedCommonJsDependencies": ["leaflet"]
+            "styles": ["src/styles.scss"]
           },
           "configurations": {
             "production": {
@@ -44,8 +43,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "18kB",
-                  "maximumError": "20kB"
+                  "maximumWarning": "22kB",
+                  "maximumError": "24kB"
                 }
               ],
               "outputHashing": "all",
@@ -63,7 +62,10 @@
           "builder": "@angular/build:dev-server",
           "options": {
             "proxyConfig": "proxy.conf.json",
-            "port": 4001
+            "port": 4001,
+            "prebundle": {
+              "exclude": ["maplibre-gl"]
+            }
           },
           "configurations": {
             "production": {

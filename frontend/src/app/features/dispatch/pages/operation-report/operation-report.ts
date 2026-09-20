@@ -1,12 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
-import {
-  LucideChartNoAxesCombined,
-  LucideCircleCheck,
-  LucideClock3,
-  LucideRoute,
-  LucideTriangleAlert,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import { OrderDto, StoreDto } from '../../../../core/services/dispatch-api.models';
 
@@ -57,11 +51,7 @@ interface ExceptionSource {
 @Component({
   selector: 'app-operation-report',
   imports: [
-    LucideChartNoAxesCombined,
-    LucideCircleCheck,
-    LucideClock3,
-    LucideRoute,
-    LucideTriangleAlert,
+    MatIconModule,
   ],
   templateUrl: './operation-report.html',
   styleUrl: './operation-report.scss',
