@@ -30,7 +30,7 @@ services:
       # 只給本機 DataGrip 連用，前綴的 127.0.0.1 不能省，否則資料庫對外網公開。
       # 本機已有 MySQL 佔用 3306，所以預設對映 3307。
       - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
-    mem_limit: 800m
+    mem_limit: 900m
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
@@ -42,11 +42,11 @@ services:
   osrm:
     image: ghcr.io/project-osrm/osrm-backend
     restart: unless-stopped
-    # 本機用全台路網；VM 上在 .env 設 OSRM_DATA=demo 改用切過的台南範圍
+    # 路網檔名由 .env 的 OSRM_DATA 指定，本機與 VM 都用全台
     command: osrm-routed --algorithm mld /data/${OSRM_DATA:-taiwan-latest}.osrm
     volumes:
-      - ../osrm:/data:ro
-    mem_limit: 3g
+      - ${OSRM_DIR:-../osrm}:/data:ro
+    mem_limit: 1200m
 
   backend:
     # 映像由 GitHub Actions 建置並推上 ghcr.io（runner 是 amd64，跟 VM 一致）。
@@ -74,7 +74,7 @@ services:
       APP_CRYPTO_SALT: ${APP_CRYPTO_SALT}
       AI_API_KEY: ${AI_API_KEY:-}
       SHOW_SQL: "false"
-    mem_limit: 1600m
+    mem_limit: 1400m
 
   web:
     image: ghcr.io/xinchafu-jin/logistics-web:${IMAGE_TAG:-latest}
