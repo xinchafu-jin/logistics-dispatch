@@ -1,64 +1,114 @@
 <main class="personal-profile-page">
   <section class="page-intro" aria-label="個人設定">
     <p class="page-eyebrow">個人設定</p>
+    <h2>帳號與 AI 助理</h2>
+    <p>管理登入帳號的基本資料與 AI 調度助理設定。</p>
   </section>
 
-  <section class="api-key-card">
-    @if (status(); as keyStatus) {
-      <p class="api-key-status">
-        @if (keyStatus.configured) {
-          目前金鑰：{{ keyStatus.maskedKey }}（更新於
-          {{ keyStatus.updatedAt | date: 'yyyy/MM/dd HH:mm' }}）
-        } @else {
-          尚未設定金鑰，設定後才能使用 AI 助理
-        }
-      </p>
-    }
+  <section class="profile-card" aria-labelledby="profile-title">
+    <header>
+      <span class="profile-card__icon"><mat-icon aria-hidden="true">manage_accounts</mat-icon></span>
+      <div>
+        <h3 id="profile-title">個人資料</h3>
+        <p>更新後台使用者的顯示資料。</p>
+      </div>
+    </header>
 
-    <!-- 只 import ReactiveFormsModule 時沒有 ngSubmit，用原生 submit 並擋掉瀏覽器重新整理 -->
+    <form class="profile-form" [formGroup]="profileForm" (ngSubmit)="saveProfile()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>帳號</mat-label>
+        <input matInput formControlName="account" autocomplete="username" />
+        <mat-icon matSuffix aria-hidden="true">lock</mat-icon>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>姓名</mat-label>
+        <input matInput formControlName="name" autocomplete="name" />
+        @if (profileForm.controls.name.touched && profileForm.controls.name.hasError('required')) {
+          <mat-error>請輸入姓名。</mat-error>
+        } @else if (profileForm.controls.name.touched && profileForm.controls.name.hasError('maxlength')) {
+          <mat-error>姓名不可超過 50 個字元。</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>聯絡電話</mat-label>
+        <input matInput formControlName="phone" autocomplete="tel" inputmode="tel" />
+        @if (profileForm.controls.phone.touched && profileForm.controls.phone.hasError('pattern')) {
+          <mat-error>請輸入有效的電話格式。</mat-error>
+        }
+      </mat-form-field>
+
+      <div class="profile-form__actions">
+        <button type="submit" matButton="filled">
+          <mat-icon aria-hidden="true">save</mat-icon>
+          儲存個人資料
+        </button>
+      </div>
+    </form>
+
+    @if (profileFeedback()) {
+      <p class="feedback is-info">{{ profileFeedback() }}</p>
+    }
+  </section>
+
+  <section class="api-key-card" aria-labelledby="api-key-title">
+    <header>
+      <span class="api-key-card__icon"><mat-icon aria-hidden="true">key</mat-icon></span>
+      <div>
+        <h3 id="api-key-title">AI API Key</h3>
+        @if (isLoading()) {
+          <p>正在取得設定狀態...</p>
+        } @else if (status()?.configured) {
+          <p>目前已設定 {{ status()?.maskedKey }}，更新於 {{ status()?.updatedAt | date: 'yyyy/MM/dd HH:mm' }}。</p>
+        } @else {
+          <p>尚未設定，AI 調度助理暫時無法使用。</p>
+        }
+      </div>
+    </header>
+
     <form class="api-key-form" (submit)="$event.preventDefault(); saveApiKey()">
-      <!-- outline：卡片底色半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
-      <mat-form-field class="api-key-form__field" appearance="outline" subscriptSizing="dynamic">
-        <mat-label>請輸入 API key</mat-label>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>輸入 API Key</mat-label>
         <input
           matInput
           autocomplete="off"
-          [type]="hide() ? 'password' : 'text'"
+          [type]="hideKey() ? 'password' : 'text'"
           [formControl]="apiKeyControl"
         />
-        <!-- 只有眼睛圖示要貼在欄位框內，所以留在 mat-form-field 裡並標 matSuffix -->
         <button
           type="button"
           matIconButton
           matSuffix
-          (click)="clickEvent($event)"
-          [attr.aria-label]="hide() ? '顯示金鑰' : '隱藏金鑰'"
-          [attr.aria-pressed]="!hide()"
+          (click)="toggleKeyVisibility()"
+          [attr.aria-label]="hideKey() ? '顯示 API Key' : '隱藏 API Key'"
         >
-          <mat-icon>{{ hide() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          <mat-icon aria-hidden="true">{{ hideKey() ? 'visibility_off' : 'visibility' }}</mat-icon>
         </button>
       </mat-form-field>
 
-      <!-- 動作按鈕搬到欄位外；留在 mat-form-field 裡沒掛 matSuffix 會被塞進 input 那一格，把欄位撐壞 -->
       <div class="api-key-form__actions">
-        <button type="submit" matButton [disabled]="apiKeyControl.invalid || apiKeyControl.disabled">
-          Send
-          <mat-icon iconPositionEnd>send</mat-icon>
+        <button type="submit" matButton="filled" [disabled]="apiKeyControl.invalid || isSaving()">
+          <mat-icon aria-hidden="true">save</mat-icon>
+          {{ isSaving() ? '儲存中...' : '儲存金鑰' }}
         </button>
-        <!-- 沒設定過就沒東西可移除，按鈕不顯示 -->
         @if (status()?.configured) {
-          <button type="button" matFab aria-label="移除金鑰" (click)="removeApiKey()">
-            <mat-icon>delete</mat-icon>
+          <button type="button" matButton class="remove-key" (click)="removeApiKey()" [disabled]="isRemoving()">
+            <mat-icon aria-hidden="true">delete</mat-icon>
+            {{ isRemoving() ? '移除中...' : '移除' }}
           </button>
         }
       </div>
     </form>
 
     @if (apiKeyControl.touched && apiKeyControl.hasError('minlength')) {
-      <p class="api-key-error">金鑰太短，請確認是否完整複製</p>
+      <p class="feedback is-error">金鑰至少需要 8 個字元。</p>
+    }
+    @if (feedback()) {
+      <p class="feedback is-success">{{ feedback() }}</p>
     }
     @if (errorMessage()) {
-      <p class="api-key-error">{{ errorMessage() }}</p>
+      <p class="feedback is-error">{{ errorMessage() }}</p>
     }
   </section>
 </main>

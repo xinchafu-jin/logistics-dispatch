@@ -18,10 +18,15 @@ import {
   ExceptionCaseDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
+  FuelPriceDto,
   GpsPingDto,
   LeaveRequest,
   OrderDto,
   ReassignRequest,
+  ReportCollectionDto,
+  ReportQuery,
+  ReportSummaryDto,
+  RouteMetricsDto,
   ScheduleMonthDto,
   StoreDto,
   StoreStatusPayload,
@@ -71,6 +76,16 @@ export class DispatchApiService {
     return this.http.put<DriverShiftDto>(`${API_ROOT}/driver-schedules/shifts/${shiftId}`, request);
   }
 
+  updateDriverShiftsBatch(
+    scheduleMonthId: number,
+    updates: DriverShiftDto[],
+  ): Observable<DriverShiftDto[]> {
+    return this.http.put<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/shifts/batch`,
+      updates,
+    );
+  }
+
   syncScheduleDrivers(scheduleMonthId: number): Observable<DriverShiftDto[]> {
     return this.http.post<DriverShiftDto[]>(
       `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/sync-drivers`,
@@ -83,6 +98,57 @@ export class DispatchApiService {
       `${API_ROOT}/driver-schedules/shifts/${shiftId}/leave`,
       request,
     );
+  }
+
+  getRouteMetrics(routeId: number): Observable<RouteMetricsDto> {
+    return this.http.get<RouteMetricsDto>(`${API_ROOT}/dispatch/routes/${routeId}/metrics`);
+  }
+
+  getLatestFuelPrice(): Observable<FuelPriceDto> {
+    return this.http.get<FuelPriceDto>(`${API_ROOT}/fuel-prices/latest`);
+  }
+
+  syncFuelPrice(): Observable<FuelPriceDto> {
+    return this.http.post<FuelPriceDto>(`${API_ROOT}/fuel-prices/sync`, null);
+  }
+
+  getFuelPriceHistory(from?: string, to?: string): Observable<FuelPriceDto[]> {
+    let params = new HttpParams();
+    if (from) params = params.set('from', from);
+    if (to) params = params.set('to', to);
+    return this.http.get<FuelPriceDto[]>(`${API_ROOT}/fuel-prices/history`, {params});
+  }
+
+  getReportSummary(query: ReportQuery): Observable<ReportSummaryDto> {
+    return this.http.get<ReportSummaryDto>(`${API_ROOT}/reports/summary`, {params: this.reportParams(query)});
+  }
+
+  getReportAttendance(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/attendance`, {params: this.reportParams(query)});
+  }
+
+  getReportRoutes(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/routes`, {params: this.reportParams(query)});
+  }
+
+  getReportDrivers(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/drivers`, {params: this.reportParams(query)});
+  }
+
+  getReportVehicles(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/vehicles`, {params: this.reportParams(query)});
+  }
+
+  getReportWarehouses(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/warehouses`, {params: this.reportParams(query)});
+  }
+
+  getReportStores(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/stores`, {params: this.reportParams(query)});
+  }
+
+  getReportExceptions(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/exceptions`, {params: this.reportParams(query)});
   }
 
   publishScheduleMonth(scheduleMonthId: number): Observable<ScheduleMonthDto> {
@@ -117,19 +183,14 @@ export class DispatchApiService {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
   }
 
-  // ── 自己的 AI API Key ─────────────────────────────────
-  // 路徑固定是 /me，後端從 JWT 取主管 ID，前端不必也不能指定是誰。
-
   getAiApiKeyStatus(): Observable<AiApiKeyStatusDto> {
     return this.http.get<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`);
   }
 
-  /** 新增與修改共用：一人只有一把 Key，兩者都是加密後覆蓋舊的 */
   saveAiApiKey(request: AiApiKeyRequest): Observable<AiApiKeyStatusDto> {
     return this.http.put<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`, request);
   }
 
-  /** 移除後 AI 聊天會回「請先到個人資料設定 AI API Key」 */
   removeAiApiKey(): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/admin-users/me/ai-api-key`);
   }
@@ -450,5 +511,11 @@ export class DispatchApiService {
    */
   removeAiPlanAction(id: string): Observable<AiPendingActionDto[]> {
     return this.http.delete<AiPendingActionDto[]>(`${API_ROOT}/ai/plan/${id}`);
+  }
+
+  private reportParams(query: ReportQuery): HttpParams {
+    return Object.entries(query).reduce((params, [key, value]) => {
+      return value === undefined || value === null ? params : params.set(key, String(value));
+    }, new HttpParams());
   }
 }

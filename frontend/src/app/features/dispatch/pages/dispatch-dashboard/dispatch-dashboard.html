@@ -122,6 +122,34 @@
     </mat-slide-toggle>
   </section>
 
+  <section class="route-metrics-panel" aria-label="路線成本與里程預估">
+    <header>
+      <div>
+        <p class="section-eyebrow">行車估算</p>
+        <h3>路線里程與油耗</h3>
+      </div>
+      @if (latestFuelPrice(); as fuelPrice) {
+        <span>柴油 {{ formatMetric(fuelPrice.pricePerLiter, 2) }} 元／L</span>
+      } @else {
+        <span>尚未取得柴油牌價</span>
+      }
+      <button type="button" class="template-secondary" (click)="syncFuelPrice()">同步油價</button>
+    </header>
+    @if (routeMetricsLoading()) {
+      <p>正在計算路線資料...</p>
+    } @else if (selectedRouteMetrics(); as metrics) {
+      <dl>
+        <div><dt>規劃里程</dt><dd>{{ formatMetric(metrics.plannedKm) }} km</dd></div>
+        <div><dt>GPS 預估</dt><dd>{{ formatMetric(metrics.gpsEstimatedKm) }} km</dd></div>
+        <div><dt>預估油費</dt><dd>NT$ {{ formatMetric(metrics.plannedFuelCost, 0) }}</dd></div>
+        <div><dt>剩餘行程</dt><dd>{{ formatMetric(metrics.remainingKm) }} km</dd></div>
+      </dl>
+    } @else {
+      <p>在下方任一路線按「查看行車預估」，可取得 OSRM 距離、GPS 估算與油耗。</p>
+    }
+    @if (routeMetricsError()) { <p class="board-error">{{ routeMetricsError() }}</p> }
+  </section>
+
 
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
@@ -311,6 +339,11 @@
                 {{ route.totalDistance / 1000 | number: '1.1-1' }} km
               }
             </h4>
+            @if (route.routeId) {
+              <button type="button" class="route-metrics-action" (click)="viewRouteMetrics(route)">
+                查看行車預估
+              </button>
+            }
 
             <!--
               選中狀態綁在 option 上而不是 select 的 [value]：

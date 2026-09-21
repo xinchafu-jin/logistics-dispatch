@@ -30,6 +30,18 @@ public interface MileageLogsDAO extends JpaRepository<MileageLogsEntity, Long> {
 
     Optional<MileageLogsEntity> findByRouteId(Long routeId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select mileage
+            from MileageLogsEntity mileage
+            where mileage.vehicleId = :vehicleId
+              and mileage.date = :date
+              and mileage.endTime is null
+            """)
+    List<MileageLogsEntity> findOpenByVehicleForUpdate(
+            @Param("vehicleId") Long vehicleId,
+            @Param("date") LocalDate date);
+
     List<MileageLogsEntity> findByMileageSettledAtIsNullAndEndTimeIsNotNull();
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

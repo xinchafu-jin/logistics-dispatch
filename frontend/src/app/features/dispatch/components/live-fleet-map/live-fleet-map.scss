@@ -69,24 +69,25 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 22px 24px;
+  padding: 14px;
   pointer-events: none;
 }
 
-// 拿掉原本的漸層遮罩後，標題直接疊在地圖上，
-// 用描邊式陰影撐住對比，淺色路面與深色公園上都讀得到。
-.fleet-map-header > div,
-.fleet-map-count {
-  text-shadow: 0 1px 3px rgb(6 9 10 / 92%),
-  0 0 10px rgb(6 9 10 / 72%);
+.fleet-map-header > div {
+  padding: 9px 11px;
+  border: 1px solid rgb(203 221 214 / 92%);
+  border-radius: 6px;
+  background: rgb(250 253 251 / 92%);
+  box-shadow: 0 4px 12px rgb(20 52 42 / 12%);
+  backdrop-filter: blur(8px);
 }
 
 .fleet-map-eyebrow {
-  margin: 0 0 6px;
-  color: var(--accent);
-  font-size: 0.6875rem;
+  margin: 0 0 3px;
+  color: #087c6b;
+  font-size: 0.625rem;
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0;
 }
 
 .fleet-map-header h3,
@@ -98,13 +99,21 @@
 }
 
 .fleet-map-header h3 {
-  font-size: 1.25rem;
+  color: #173129;
+  font-size: 1rem;
+  line-height: 1.25;
 }
 
 .fleet-map-count {
-  color: #dce5e4;
-  font-size: 0.75rem;
+  padding: 8px 10px;
+  border: 1px solid rgb(203 221 214 / 92%);
+  border-radius: 6px;
+  color: #31584d;
+  background: rgb(250 253 251 / 92%);
+  box-shadow: 0 4px 12px rgb(20 52 42 / 12%);
+  font-size: 0.6875rem;
   white-space: nowrap;
+  backdrop-filter: blur(8px);
 }
 
 .fleet-tracking-panel {

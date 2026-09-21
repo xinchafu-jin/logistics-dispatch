@@ -49,14 +49,6 @@ export const routes: Routes = [
           ),
       },
       {
-        path: 'fleet',
-        data: { title: '即時車隊' },
-        loadComponent: () =>
-          import('./features/dispatch/pages/fleet-monitor/fleet-monitor').then(
-            (component) => component.FleetMonitor,
-          ),
-      },
-      {
         path: 'anomalies',
         data: { title: '異常中心' },
         loadComponent: () =>
@@ -74,7 +66,7 @@ export const routes: Routes = [
       },
       {
         path: 'profile',
-        data: { title: '個人資料' },
+        data: { title: '個人設定' },
         loadComponent: () =>
           import('./features/dispatch/pages/personal-profile/personal-profile').then(
             (component) => component.PersonalProfile,

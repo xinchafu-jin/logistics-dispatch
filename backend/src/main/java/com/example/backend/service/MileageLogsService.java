@@ -2,7 +2,9 @@ package com.example.backend.service;
 
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.EmergencyLeaveRequestsDAO;
 import com.example.backend.dao.MileageLogsDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -35,6 +37,8 @@ public class MileageLogsService {
     private final VehiclesDAO vehiclesDAO;
     private final AttendanceService attendanceService;
     private final VehicleMileageSettlementService vehicleMileageSettlementService;
+    private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
+    private final WarehouseProximityService warehouseProximityService;
 
     public MileageLogsService(
             MileageLogsDAO mileageLogsDAO,
@@ -43,7 +47,9 @@ public class MileageLogsService {
             OrdersDAO ordersDAO,
             VehiclesDAO vehiclesDAO,
             AttendanceService attendanceService,
-            VehicleMileageSettlementService vehicleMileageSettlementService
+            VehicleMileageSettlementService vehicleMileageSettlementService,
+            EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO,
+            WarehouseProximityService warehouseProximityService
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
         this.driversDAO = driversDAO;
@@ -52,6 +58,8 @@ public class MileageLogsService {
         this.vehiclesDAO = vehiclesDAO;
         this.attendanceService = attendanceService;
         this.vehicleMileageSettlementService = vehicleMileageSettlementService;
+        this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
+        this.warehouseProximityService = warehouseProximityService;
     }
 
     public MileageLogResponse start(Long driverId, MileageRequestDTO request) {
@@ -76,6 +84,9 @@ public class MileageLogsService {
         }
         if (mileageLogsDAO.findForUpdate(driverId, today).isPresent()) {
             throw new IllegalArgumentException("今天已經登記過出車里程");
+        }
+        if (!mileageLogsDAO.findOpenByVehicleForUpdate(route.getVehicleId(), today).isEmpty()) {
+            throw new IllegalArgumentException("這台車仍有其他司機尚未結束的里程，請完成交接後再出車");
         }
 
         MileageLogsEntity mileage = new MileageLogsEntity();
@@ -119,11 +130,17 @@ public class MileageLogsService {
                         && order.getStatus() != OrderStatus.NO_SIGNATURE)
                 .map(order -> order.getOrderNumber() + "(" + order.getStatus() + ")")
                 .toList();
-        if (!unfinishedOrders.isEmpty()) {
+        boolean approvedEmergencyHandover = emergencyLeaveRequestsDAO
+                .existsByDriverIdAndWorkDateAndRouteIdAndStatus(
+                        driverId, now.toLocalDate(), mileage.getRouteId(), EmergencyLeaveStatus.APPROVED);
+        if (!unfinishedOrders.isEmpty() && !approvedEmergencyHandover) {
             throw new IllegalArgumentException(
                     "仍有任務尚未確認到貨或無人簽收，不能結束里程："
                             + String.join("、", unfinishedOrders));
         }
+
+        warehouseProximityService.requireWithinWarehouseRadius(
+                driverId, mileage.getRouteId(), now);
 
         mileage.setEndOdometer(request.getOdometer());
         mileage.setEndTime(now);

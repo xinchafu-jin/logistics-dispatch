@@ -23,7 +23,7 @@ export type ExceptionType =
   | 'PHONE_HANDLED';
 export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
 /** 後端隔日送審的配送異常案件。 */
 export interface ExceptionCaseDto {
@@ -82,18 +82,15 @@ export interface AdminUserDto {
   phone: string;
 }
 
-/** 自己的 AI API Key 設定狀態。後端只回遮罩，完整的 Key 拿不到也不該拿。 */
+/** 後端只回傳遮罩後的 API Key，完整內容不會再次傳回前端。 */
 export interface AiApiKeyStatusDto {
   configured: boolean;
-  /** 遮罩後的 Key，例如 ****4g86；未設定為 null */
   maskedKey: string | null;
-  /** 最後一次設定的時間，ISO 字串；未設定為 null */
   updatedAt: string | null;
 }
 
-/** 送往 PUT /api/admin-users/me/ai-api-key 的資料。 */
+/** 只在儲存時送出，不寫入瀏覽器儲存空間。 */
 export interface AiApiKeyRequest {
-  /** 完整的 Key，只在送出這一次使用，不要留在 localStorage */
   apiKey: string;
 }
 
@@ -190,6 +187,87 @@ export interface DriverShiftUpdateRequest {
 /** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
 export interface LeaveRequest {
   reason: string;
+  version?: number | null;
+}
+
+export interface FuelPriceDto {
+  id: number;
+  fuelType: 'DIESEL' | string;
+  pricePerLiter: number;
+  effectiveFrom: string;
+  fetchedAt: string;
+}
+
+export interface RouteMetricsDto {
+  routeId: number;
+  date: string;
+  plannedKm: number | null;
+  plannedDriveMinutes: number | null;
+  plannedTotalMinutes: number | null;
+  plannedFuelLiters: number | null;
+  plannedFuelCost: number | null;
+  gpsEstimatedKm: number | null;
+  gpsEstimatedFuelLiters: number | null;
+  gpsEstimatedFuelCost: number | null;
+  remainingKm: number | null;
+  remainingDriveMinutes: number | null;
+  estimatedNextArrivalAt: string | null;
+  estimatedReturnAt: string | null;
+  mileageStatus: string | null;
+  fuelStatus: string | null;
+}
+
+export type BackendReportPeriod = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
+
+export interface ReportQuery {
+  period?: BackendReportPeriod;
+  date?: string;
+  from?: string;
+  to?: string;
+  warehouseId?: number;
+  driverId?: number;
+  vehicleId?: number;
+  storeId?: number;
+  routeId?: number;
+}
+
+export interface ReportDailySummaryDto {
+  date: string;
+  totalOrders: number;
+  totalBoxes: number;
+  completedOrders: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+}
+
+export interface ReportSummaryDto {
+  from: string;
+  to: string;
+  totalOrders: number;
+  totalBoxes: number;
+  distinctStores: number;
+  pendingConfirmationOrders: number;
+  confirmedUnassignedOrders: number;
+  assignedOrders: number;
+  inDeliveryOrders: number;
+  completedOrders: number;
+  failedOrders: number;
+  cancelledOrders: number;
+  publishedRoutes: number;
+  dispatchedDrivers: number;
+  dispatchedVehicles: number;
+  unassignedOrders: number;
+  unassignedBoxes: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+  dailyTrend: ReportDailySummaryDto[];
+}
+
+/** 其餘報表 API 的共同範圍欄位；各資料列由後端依端點回傳。 */
+export interface ReportCollectionDto<T = Record<string, unknown>> {
+  from: string;
+  to: string;
+  [key: string]: string | number | boolean | null | T[];
 }
 
 export interface VehicleDto {

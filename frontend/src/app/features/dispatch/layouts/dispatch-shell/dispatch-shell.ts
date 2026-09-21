@@ -19,25 +19,6 @@ import {TextFieldModule} from '@angular/cdk/text-field';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {MatIconModule} from '@angular/material/icon';
-import {
-  LucideArrowLeftToLine,
-  LucideArrowRightToLine,
-  LucideBell,
-  LucideCalendarDays,
-  LucideChartNoAxesCombined,
-  LucideChevronDown,
-  LucideClipboardCheck,
-  LucideLogOut,
-  LucideMapPinned,
-  LucideMoon,
-  LucideSendHorizontal,
-  LucideSun,
-  LucideTriangleAlert,
-  LucideTruck,
-  LucideUserRound,
-  LucideWorkflow,
-  LucideX,
-} from '@lucide/angular';
 import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
 import {AuthService} from '../../../../core/auth/auth.service';
 import {
@@ -74,21 +55,6 @@ interface ChatMessage {
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
-    LucideBell,
-    LucideCalendarDays,
-    LucideWorkflow,
-    LucideClipboardCheck,
-    LucideTruck,
-    LucideMapPinned,
-    LucideMoon,
-    LucideSun,
-    LucideUserRound,
-    LucideLogOut,
-    LucideTriangleAlert,
-    LucideChartNoAxesCombined,
-    LucideArrowLeftToLine,
-    LucideArrowRightToLine,
-    LucideChevronDown,
     MatButtonModule,
     MatTooltipModule,
     BrandLogo,
@@ -97,8 +63,6 @@ interface ChatMessage {
     MatInputModule,
     MatSelectModule,
     TextFieldModule,
-    LucideSendHorizontal,
-    LucideX,
     FormsModule,
     MatExpansionModule,
     MatDialogModule,

@@ -50,10 +50,10 @@
         class="profile-link"
         routerLink="/dispatch/profile"
         routerLinkActive="is-active"
-        title="個人資料"
-        aria-label="個人資料"
+        title="個人設定"
+        aria-label="個人設定"
       >
-        <svg lucideUserRound aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">person</mat-icon>
       </a>
       <button
         type="button"
@@ -250,11 +250,6 @@
       >
         <mat-icon matListItemIcon aria-hidden="true">calendar_month</mat-icon>
         <span>司機班表</span>
-      </a>
-
-      <a mat-list-item class="nav-item" routerLink="/dispatch/fleet" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">map</mat-icon>
-        <span>即時車隊</span>
       </a>
 
       <a mat-list-item class="nav-item" routerLink="/dispatch/anomalies" routerLinkActive="is-active">

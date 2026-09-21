@@ -1,11 +1,14 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.AttendanceStatus;
+import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.constants.ShiftType;
 import com.example.backend.dao.AttendanceRecordsDAO;
 import com.example.backend.dao.DriverShiftsDAO;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.EmergencyLeaveRequestsDAO;
+import com.example.backend.dao.MileageLogsDAO;
 import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dto.request.AttendanceRecordDTO;
 import com.example.backend.entity.AttendanceRecordsEntity;
@@ -39,17 +42,26 @@ public class AttendanceService {
     private final DriverShiftsDAO driverShiftsDAO;
     private final ScheduleMonthsDAO scheduleMonthsDAO;
     private final DriversDAO driversDAO;
+    private final MileageLogsDAO mileageLogsDAO;
+    private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
+    private final WarehouseProximityService warehouseProximityService;
 
     public AttendanceService(
             AttendanceRecordsDAO attendanceRecordsDAO,
             DriverShiftsDAO driverShiftsDAO,
             ScheduleMonthsDAO scheduleMonthsDAO,
-            DriversDAO driversDAO
+            DriversDAO driversDAO,
+            MileageLogsDAO mileageLogsDAO,
+            EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO,
+            WarehouseProximityService warehouseProximityService
     ) {
         this.attendanceRecordsDAO = attendanceRecordsDAO;
         this.driverShiftsDAO = driverShiftsDAO;
         this.scheduleMonthsDAO = scheduleMonthsDAO;
         this.driversDAO = driversDAO;
+        this.mileageLogsDAO = mileageLogsDAO;
+        this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
+        this.warehouseProximityService = warehouseProximityService;
     }
 
     public AttendanceRecordDTO clockIn(Long driverId) {
@@ -102,10 +114,26 @@ public class AttendanceService {
             throw new IllegalArgumentException("今天已經打過下班卡");
         }
 
+        var mileage = mileageLogsDAO.findForUpdate(driverId, now.toLocalDate())
+                .orElseThrow(() -> new IllegalArgumentException("今天尚未開始里程，不能打下班卡"));
+        if (mileage.getEndTime() == null) {
+            throw new IllegalArgumentException("請先按結束里程，完成收車紀錄後才能打下班卡");
+        }
+        warehouseProximityService.requireWithinWarehouseRadius(driverId, mileage.getRouteId(), now);
+
         attendance.setClockOutAt(now);
         attendance.setStatus(AttendanceStatus.CLOCKED_OUT);
         updateWorkTimeFields(attendance, now);
-        return toDTO(attendanceRecordsDAO.save(attendance), now);
+        AttendanceRecordDTO result = toDTO(attendanceRecordsDAO.save(attendance), now);
+        emergencyLeaveRequestsDAO
+                .findFirstByDriverIdAndWorkDateAndStatusOrderByRequestedAtDesc(
+                        driverId, now.toLocalDate(), EmergencyLeaveStatus.APPROVED)
+                .filter(request -> request.getClockedOutAt() == null)
+                .ifPresent(request -> {
+                    request.setClockedOutAt(now);
+                    emergencyLeaveRequestsDAO.save(request);
+                });
+        return result;
     }
 
     public Optional<AttendanceRecordDTO> findToday(Long driverId) {

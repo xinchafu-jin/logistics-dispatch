@@ -16,7 +16,11 @@ public interface EmergencyLeaveRequestsDAO extends JpaRepository<EmergencyLeaveR
     List<EmergencyLeaveRequestsEntity> findByDriverIdOrderByRequestedAtDesc(Long driverId);
     List<EmergencyLeaveRequestsEntity> findByStatusOrderByRequestedAtAsc(EmergencyLeaveStatus status);
     boolean existsByDriverIdAndWorkDateAndStatus(Long driverId, LocalDate workDate, EmergencyLeaveStatus status);
+    boolean existsByDriverIdAndWorkDateAndRouteIdAndStatus(
+            Long driverId, LocalDate workDate, Long routeId, EmergencyLeaveStatus status);
     boolean existsByRouteIdAndStatus(Long routeId, EmergencyLeaveStatus status);
+    Optional<EmergencyLeaveRequestsEntity> findFirstByDriverIdAndWorkDateAndStatusOrderByRequestedAtDesc(
+            Long driverId, LocalDate workDate, EmergencyLeaveStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select request from EmergencyLeaveRequestsEntity request where request.id = :id")

@@ -21,11 +21,13 @@ import {
   DriverDto,
   DriverShiftDto,
   DriverTakenDto,
+  FuelPriceDto,
   GpsPingDto,
   OrderDto,
   OrderStatus,
   ReassignRequest,
   RouteStatus,
+  RouteMetricsDto,
   RouteStopDto,
   ShiftType,
   StoreDto,
@@ -173,6 +175,10 @@ interface DashboardAlert {
 })
 export class DispatchDashboard implements OnInit {
   readonly routes = signal<BoardRoute[]>([]);
+  readonly latestFuelPrice = signal<FuelPriceDto | null>(null);
+  readonly selectedRouteMetrics = signal<RouteMetricsDto | null>(null);
+  readonly routeMetricsLoading = signal(false);
+  readonly routeMetricsError = signal('');
   readonly unassigned = signal<BoardCard[]>([]);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
@@ -479,8 +485,38 @@ export class DispatchDashboard implements OnInit {
 
   ngOnInit(): void {
     this.loadDashboard();
+    this.loadFuelPrice();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
+  }
+
+  viewRouteMetrics(route: BoardRoute): void {
+    if (!route.routeId || this.routeMetricsLoading()) {
+      return;
+    }
+    this.routeMetricsLoading.set(true);
+    this.routeMetricsError.set('');
+    this.api.getRouteMetrics(route.routeId).subscribe({
+      next: (metrics) => {
+        this.selectedRouteMetrics.set(metrics);
+        this.routeMetricsLoading.set(false);
+      },
+      error: (error: unknown) => {
+        this.routeMetricsError.set(describeError(error));
+        this.routeMetricsLoading.set(false);
+      },
+    });
+  }
+
+  syncFuelPrice(): void {
+    this.api.syncFuelPrice().subscribe({
+      next: (price) => this.latestFuelPrice.set(price),
+      error: (error: unknown) => this.routeMetricsError.set(`油價同步失敗：${describeError(error)}`),
+    });
+  }
+
+  formatMetric(value: number | null, fractionDigits = 1): string {
+    return value === null || value === undefined ? '--' : value.toFixed(fractionDigits);
   }
 
   onDateChange(event: Event): void {
@@ -533,6 +569,14 @@ export class DispatchDashboard implements OnInit {
         this.errorMessage.set('無法取得後台總覽資料，請確認後端服務與登入狀態。');
         this.loading.set(false);
       },
+    });
+  }
+
+  private loadFuelPrice(): void {
+    this.api.getLatestFuelPrice().subscribe({
+      next: (price) => this.latestFuelPrice.set(price),
+      // 油價尚未同步時不應影響排車與調度看板。
+      error: () => this.latestFuelPrice.set(null),
     });
   }
 

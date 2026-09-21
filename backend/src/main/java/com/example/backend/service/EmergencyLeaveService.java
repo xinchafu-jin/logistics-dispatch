@@ -174,8 +174,8 @@ public class EmergencyLeaveService {
         if (!request.getAttendanceRecordId().equals(attendance.getId())) {
             throw new IllegalArgumentException("原司機出勤紀錄已異動");
         }
-        if (attendance.getClockOutAt() == null) {
-            attendance = attendanceService.clockOut(request.getDriverId());
+        if (attendance.getClockOutAt() != null) {
+            throw new IllegalArgumentException("原司機已經下班，不能再核准路線交接");
         }
 
         LocalDateTime now = LocalDateTime.now(TAIPEI);
@@ -185,7 +185,6 @@ public class EmergencyLeaveService {
         request.setReviewedBy(reviewedBy);
         request.setReviewedAt(now);
         request.setRouteReassignedAt(now);
-        request.setClockedOutAt(attendance.getClockOutAt());
         return toResponse(requestsDAO.saveAndFlush(request));
     }
 
