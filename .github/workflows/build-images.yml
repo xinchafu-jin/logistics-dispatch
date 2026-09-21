@@ -63,3 +63,32 @@ jobs:
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}:${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  # 映像推上 ghcr 後，SSH 進 VM 拉新版並重啟。
+  # VM 上已經用唯讀 PAT 登入過 ghcr（認證存在 ~/.docker/config.json），
+  # 所以這裡不需要再登入。那組 PAT 到期時要重新 docker login，否則 pull 會失敗。
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VM_SSH_KEY }}
+
+      - name: Pull and restart on VM
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new jin@${{ secrets.VM_HOST }} '
+            set -e
+            cd ~/deploy
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml up -d
+            docker image prune -f
+          '
+
+      # 後端啟動要 20-40 秒，沒有這段會在它還沒好的時候就判定佈署成功
+      - name: Wait for health
+        run: |
+          curl --retry 12 --retry-delay 5 --retry-all-errors \
+               -fsS https://dispatch.xinchafujin.com/actuator/health
+          echo

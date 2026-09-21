@@ -458,6 +458,44 @@ Angular 的 AOT 編譯器單一 worker 就要 2GB 以上。兩件事：
 > 流程必須是「本機或 GitHub Actions 建好映像 → 推 registry → VM 只 pull」，
 > 不能在 VM 上跑 `docker compose up --build`。
 
+## 同源也會被 CORS 擋（最不直覺的一個）
+
+症狀：頁面載得出來，**一登入就 403 `Invalid CORS request`**。
+
+原因：瀏覽器對 **POST 一律送出 `Origin` 標頭，即使前後端同源**。
+Spring Security 的 CORS 過濾器不區分同源與跨源，只要看到 `Origin`
+就比對 `allowedOrigins`，比對不到就回 403。
+
+所以 GET（載入頁面、靜態檔）正常，POST（登入、建單）全滅。
+
+> 「走 Nginx 同源所以不用管 CORS」是錯的。
+> 同源指的是**瀏覽器不強制執行** CORS 檢查，
+> 但**伺服器端的過濾器照樣會處理** `Origin` 標頭——兩者是不同層次。
+
+解法：把白名單改成可設定，正式環境用環境變數帶入實際網域。
+
+```java
+@Bean
+public CorsConfigurationSource corsConfigurationSource(
+        @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+    configuration.setAllowedOrigins(allowedOrigins);
+```
+
+```yaml
+# docker-compose.yml，逗號之間不能有空格
+CORS_ALLOWED_ORIGINS: https://dispatch.xinchafujin.com,https://driver.xinchafujin.com,https://xinchafujin.com
+```
+
+驗證方式（帶 Origin 才測得出來）：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://driver.xinchafujin.com/api/auth/driver/login \
+  -H "Content-Type: application/json" -H "Origin: https://driver.xinchafujin.com" \
+  -d '{"account":"x","password":"x"}'
+```
+
+400（帳密錯誤）= 正常；403 = CORS 沒過。**不帶 Origin 測會看到 400 而誤判成沒問題。**
+
 ## MySQL 8.4 的 Public Key Retrieval
 
 ```
