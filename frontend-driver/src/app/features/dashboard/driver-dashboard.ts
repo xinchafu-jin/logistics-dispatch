@@ -51,26 +51,7 @@ type MapPosition = [lng: number, lat: number];
 const DRIVER_ROUTE_SOURCE_ID = 'driver-navigation-route';
 const DRIVER_ROUTE_LAYER_ID = 'driver-navigation-route-line';
 const DRIVER_MAP_DEFAULT_CENTER: MapPosition = [120.3014, 22.6273];
-const OPEN_STREET_MAP_STYLE = {
-  version: 8 as const,
-  sources: {
-    openStreetMap: {
-      type: 'raster' as const,
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-      tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    },
-  },
-  layers: [
-    {
-      id: 'open-street-map-base',
-      type: 'raster' as const,
-      source: 'openStreetMap',
-      minzoom: 0,
-      maxzoom: 19,
-    },
-  ],
-};
+const OPEN_FREE_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 // 找出路線上離 here 最近的點，回傳距離（公尺）與索引。
 export function findNearest(
@@ -1252,7 +1233,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       touchPitch: false,
       pitchWithRotate: false,
       attributionControl: {},
-      style: OPEN_STREET_MAP_STYLE,
+      style: OPEN_FREE_MAP_STYLE,
     });
     this.driverMap.addControl(
       new maplibregl.NavigationControl({showCompass: true, showZoom: false, visualizePitch: false}),
