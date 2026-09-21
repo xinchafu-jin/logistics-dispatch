@@ -109,17 +109,19 @@ public class SecurityConfig {
         return authenticationConverter;
     }
 
+    /**
+     * 允許的來源由 app.cors.allowed-origins 設定，正式環境用環境變數覆寫。
+     *
+     * <p>注意：即使前後端同源（走 Nginx 反向代理），瀏覽器對 POST 仍會送出 Origin 標頭，
+     * 而這個過濾器不區分同源與跨源，比對不到白名單就回 403 "Invalid CORS request"。
+     * 所以正式環境的網域一定要列進來，否則會出現「頁面載得出來、一登入就 403」的狀況。</p>
+     */
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins}") List<String> allowedOrigins
+    ) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:4200",
-                "http://127.0.0.1:4200",
-                "http://localhost:4001",
-                "http://127.0.0.1:4001",
-                "http://localhost:4204",
-                "http://127.0.0.1:4204"
-        ));
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
 
