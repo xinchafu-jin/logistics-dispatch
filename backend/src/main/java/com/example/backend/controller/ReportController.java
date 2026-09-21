@@ -130,7 +130,7 @@ public class ReportController {
     private ReportService.Range range(ReportPeriod period, LocalDate date, LocalDate from, LocalDate to) {
         if (date != null) {
             if (period != null || from != null || to != null) {
-                throw new IllegalArgumentException("date  不能與 period 或 from/to 同時使用");
+                throw new IllegalArgumentException("date 不能與 period 或 from/to 同時使用");
             }
             return new ReportService.Range(date, date);
         }
