@@ -7,8 +7,6 @@ import {
   DeliverRequest,
   DeliveryRecordResponse,
   DriverExceptionRequest,
-  DriverAccountApplicationRequest,
-  DriverAccountApplicationResponse,
   DriverProfileDto,
   DriverTasksResponse,
   DriverShiftDto,
@@ -49,12 +47,6 @@ export class DriverOperationsService {
 
   getProfile(): Observable<DriverProfileDto> {
     return this.http.get<DriverProfileDto>('/api/driver/profile');
-  }
-
-  submitAccountApplication(
-    request: DriverAccountApplicationRequest,
-  ): Observable<DriverAccountApplicationResponse> {
-    return this.http.post<DriverAccountApplicationResponse>('/api/driver-account-applications', request);
   }
 
   uploadProfilePhoto(file: File): Observable<DriverProfileDto> {

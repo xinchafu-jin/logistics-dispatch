@@ -140,35 +140,6 @@ input:disabled {
   line-height: 1.5;
 }
 
-.help-text {
-  margin: 18px 2px 0;
-  color: #718079;
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.application-toggle {
-  width: 100%;
-  margin-top: 16px;
-  border-color: #b9d2c9;
-  color: #176857;
-  background: transparent;
-}
-
-.application-form {
-  margin-top: 10px;
-}
-
-.application-message {
-  margin: 10px 2px 0;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.application-message.is-success {
-  color: #087663;
-}
-
 @media (min-width: 760px) {
   .topbar,
   .login-shell {

@@ -52,21 +52,6 @@ export interface DriverProfileDto {
   isActive: boolean;
 }
 
-export interface DriverAccountApplicationRequest {
-  account: string;
-  name: string;
-  phone: string;
-  nationalId: string;
-}
-
-export interface DriverAccountApplicationResponse {
-  id: number;
-  account: string;
-  name: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  appliedAt: string;
-}
-
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface EmergencyLeaveRequest {
