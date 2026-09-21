@@ -6,8 +6,7 @@ import {
   AttendanceRecordDto,
   DeliverRequest,
   DeliveryRecordResponse,
-  DriverAccountApplicationRequest,
-  DriverAccountApplicationResponse,
+  DriverProfileDto,
   DriverTasksResponse,
   DriverShiftDto,
   GpsPingRequest,
@@ -44,10 +43,14 @@ export class DriverOperationsService {
     return this.http.post<void>('/api/driver/gps', position);
   }
 
-  submitAccountApplication(
-    request: DriverAccountApplicationRequest,
-  ): Observable<DriverAccountApplicationResponse> {
-    return this.http.post<DriverAccountApplicationResponse>('/api/driver-account-applications', request);
+  getProfile(): Observable<DriverProfileDto> {
+    return this.http.get<DriverProfileDto>('/api/driver/profile');
+  }
+
+  uploadProfilePhoto(file: File): Observable<DriverProfileDto> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<DriverProfileDto>('/api/driver/profile/photo', formData);
   }
 
   getPublishedShifts(from: string, to: string): Observable<DriverShiftDto[]> {

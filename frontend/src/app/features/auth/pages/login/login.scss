@@ -4,7 +4,7 @@
   min-height: 100dvh;
   position: relative;
   overflow: hidden;
-  background: #000;
+  background: #07100f;
 }
 
 .brand-panel {
@@ -17,15 +17,17 @@
   inset: 0;
   isolation: isolate;
   overflow: hidden;
-  background: #000;
+  background: #0a1513;
 }
 
-.brand-panel::after {
+.brand-panel::before {
   position: absolute;
-  z-index: 1;
-  inset: 0;
+  top: 0;
+  right: 50%;
+  bottom: 0;
+  width: 1px;
   content: '';
-  background: var(--brand-overlay);
+  background: rgb(151 210 202 / 14%);
   pointer-events: none;
 }
 
@@ -47,7 +49,6 @@
   font-size: 2.25rem;
   font-weight: 600;
   line-height: 1.15;
-  text-shadow: 0 2px 18px var(--brand-shadow);
 }
 
 .brand-description {
@@ -63,8 +64,19 @@
   z-index: 2;
   margin: auto 0 0;
   color: var(--brand-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 0.875rem;
-  text-shadow: 0 2px 12px var(--brand-shadow);
+}
+
+.system-status::before {
+  width: 7px;
+  height: 7px;
+  content: '';
+  background: var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgb(99 209 198 / 9%);
 }
 
 .login-panel {
@@ -78,7 +90,9 @@
   overflow: hidden;
   min-height: 100dvh;
   padding: 64px 48px;
-  background: transparent;
+  background: #0b1312;
+  border-left: 1px solid rgb(151 210 202 / 12%);
+  box-shadow: -24px 0 48px rgb(0 0 0 / 18%);
 }
 
 .login-content {
@@ -491,7 +505,7 @@
     background: var(--panel);
   }
 
-  .brand-panel::after {
+  .brand-panel::before {
     display: none;
   }
 
@@ -513,6 +527,6 @@
     width: 100%;
     min-height: auto;
     padding: 72px 28px 48px;
-    background: var(--app-bg);
+    background: #0b1312;
   }
 }

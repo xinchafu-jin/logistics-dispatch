@@ -2,26 +2,30 @@
   <section class="page-intro" aria-label="人車資源">
     <div>
       <p class="page-eyebrow">人車資源</p>
-      <p>管理車輛、店家與倉庫資源；司機帳號改由本人申請，主管簽核後啟用。</p>
+      <p>管理司機、車輛、店家與倉庫資源；司機帳號由主管建立與啟用。</p>
     </div>
 
     <div class="page-actions">
       <p class="updated-at">資料更新於 {{ updatedAt() }}</p>
       <div class="action-buttons">
         <button type="button" class="secondary-action" (click)="openCreateAdmin()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增管理員
         </button>
+        <button type="button" class="secondary-action" (click)="openCreateDriver()">
+          <mat-icon aria-hidden="true">add</mat-icon>
+          新增司機
+        </button>
         <button type="button" class="secondary-action" (click)="openCreateVehicle()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增車輛
         </button>
         <button type="button" class="secondary-action" (click)="openCreateStore()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增店家
         </button>
         <button type="button" class="secondary-action" (click)="openCreateWarehouse()">
-          <svg lucidePlus aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">add</mat-icon>
           新增倉庫
         </button>
       </div>
@@ -97,7 +101,7 @@
         </div>
 
         <label class="search-field">
-          <svg lucideSearch aria-hidden="true"></svg>
+          <mat-icon aria-hidden="true">search</mat-icon>
           <span class="sr-only">搜尋人員或車輛</span>
           <input
             type="search"
@@ -125,7 +129,7 @@
           @for (vehicle of visibleVehicles(); track vehicle.backendId ?? vehicle.id) {
             <article class="resource-row">
               <div class="resource-person vehicle-identity">
-                <span class="vehicle-badge"><svg lucideTruck aria-hidden="true"></svg></span>
+                <span class="vehicle-badge"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
                 <div>
                   <strong>{{ vehicle.id }}</strong>
                   <span>{{ vehicle.type }} · {{ vehicle.capacity }}</span>
@@ -150,7 +154,7 @@
                   [attr.aria-label]="'編輯車輛 ' + vehicle.id"
                   (click)="openEditVehicle(vehicle)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -159,7 +163,7 @@
                   [attr.aria-label]="'刪除車輛 ' + vehicle.id"
                   (click)="requestDeleteVehicle(vehicle)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -220,7 +224,7 @@
                   [attr.aria-label]="'編輯店家 ' + store.name"
                   (click)="openEditStore(store)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -229,7 +233,7 @@
                   [attr.aria-label]="'刪除店家 ' + store.name"
                   (click)="requestDeleteStore(store)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -275,7 +279,7 @@
                   [attr.aria-label]="'編輯倉庫 ' + warehouse.name"
                   (click)="openEditWarehouse(warehouse)"
                 >
-                  <svg lucidePencil aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 <button
                   type="button"
@@ -284,7 +288,7 @@
                   [attr.aria-label]="'刪除倉庫 ' + warehouse.name"
                   (click)="requestDeleteWarehouse(warehouse)"
                 >
-                  <svg lucideTrash2 aria-hidden="true"></svg>
+                  <mat-icon aria-hidden="true">delete</mat-icon>
                 </button>
               </div>
             </article>
@@ -301,15 +305,15 @@
           <p class="section-eyebrow">資源同步</p>
           <h3 id="assignment-title">後端資源狀態</h3>
         </div>
-        <span>帳號簽核</span>
+        <span>帳號建立</span>
       </header>
 
       <p class="empty-state">
-        司機帳號改由司機端提交申請；主管待辦、核准與拒絕操作位於右上角通知鈴鐺。
+        司機帳號由主管建立；帳號啟用後，司機登入才會取得對應權限。
       </p>
 
       <section class="resource-alert" aria-label="資源提醒">
-        <svg lucideTriangleAlert aria-hidden="true"></svg>
+        <mat-icon aria-hidden="true">warning_amber</mat-icon>
         <div>
           <strong>後端資源資料已同步</strong>
           <span>配送路線與即時定位會依已登入司機與後端 GPS 資料顯示。</span>
@@ -327,7 +331,9 @@
         [attr.aria-labelledby]="
           formType === 'admin'
             ? 'admin-form-title'
-            : formType === 'vehicle' || formType === 'edit-vehicle'
+            : formType === 'driver'
+              ? 'driver-form-title'
+              : formType === 'vehicle' || formType === 'edit-vehicle'
               ? 'vehicle-form-title'
               : formType === 'store' || formType === 'edit-store'
                 ? 'store-form-title'
@@ -342,7 +348,9 @@
               [id]="
                 formType === 'admin'
                   ? 'admin-form-title'
-                  : formType === 'vehicle' || formType === 'edit-vehicle'
+                  : formType === 'driver'
+                    ? 'driver-form-title'
+                    : formType === 'vehicle' || formType === 'edit-vehicle'
                     ? 'vehicle-form-title'
                     : formType === 'store' || formType === 'edit-store'
                       ? 'store-form-title'
@@ -352,7 +360,9 @@
               {{
                 formType === 'admin'
                   ? '新增管理員'
-                  : formType === 'vehicle'
+                  : formType === 'driver'
+                    ? '新增司機'
+                    : formType === 'vehicle'
                     ? '新增車輛'
                     : formType === 'edit-vehicle'
                       ? '編輯車輛'
@@ -373,7 +383,7 @@
             aria-label="關閉"
             (click)="closeForm()"
           >
-            <svg lucideX aria-hidden="true"></svg>
+            <mat-icon aria-hidden="true">close</mat-icon>
           </button>
         </header>
 
@@ -431,6 +441,63 @@
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
                 {{ isSaving() ? '建立中...' : '建立管理員帳號' }}
+              </button>
+            </div>
+          </form>
+        } @else if (formType === 'driver') {
+          <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
+            <div class="form-grid">
+              <label class="form-field">
+                <span>司機姓名</span>
+                <input
+                  type="text"
+                  required
+                  [value]="driverForm().name"
+                  (input)="updateDriverText('name', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>手機號碼</span>
+                <input
+                  type="tel"
+                  required
+                  inputmode="numeric"
+                  maxlength="10"
+                  placeholder="0912345678"
+                  [value]="driverForm().phone"
+                  (input)="updateDriverText('phone', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>登入帳號</span>
+                <input
+                  type="text"
+                  required
+                  autocomplete="username"
+                  [value]="driverForm().account"
+                  (input)="updateDriverText('account', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>系統產生的初始密碼</span>
+                <input
+                  type="text"
+                  required
+                  readonly
+                  autocomplete="off"
+                  [value]="driverForm().password"
+                />
+              </label>
+            </div>
+
+            @if (formError()) {
+              <p class="form-error">{{ formError() }}</p>
+            }
+
+            <div class="modal-actions">
+              <button type="button" class="plain-button" (click)="closeForm()">取消</button>
+              <button type="submit" class="primary-action" [disabled]="isSaving()">
+                {{ isSaving() ? '建立中...' : '建立司機帳號' }}
               </button>
             </div>
           </form>

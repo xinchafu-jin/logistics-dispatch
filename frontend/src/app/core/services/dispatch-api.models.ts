@@ -23,7 +23,7 @@ export type ExceptionType =
   | 'PHONE_HANDLED';
 export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
 /** 後端隔日送審的配送異常案件。 */
 export interface ExceptionCaseDto {
@@ -82,18 +82,15 @@ export interface AdminUserDto {
   phone: string;
 }
 
-/** 自己的 AI API Key 設定狀態。後端只回遮罩，完整的 Key 拿不到也不該拿。 */
+/** 後端只回傳遮罩後的 API Key，完整內容不會再次傳回前端。 */
 export interface AiApiKeyStatusDto {
   configured: boolean;
-  /** 遮罩後的 Key，例如 ****4g86；未設定為 null */
   maskedKey: string | null;
-  /** 最後一次設定的時間，ISO 字串；未設定為 null */
   updatedAt: string | null;
 }
 
-/** 送往 PUT /api/admin-users/me/ai-api-key 的資料。 */
+/** 只在儲存時送出，不寫入瀏覽器儲存空間。 */
 export interface AiApiKeyRequest {
-  /** 完整的 Key，只在送出這一次使用，不要留在 localStorage */
   apiKey: string;
 }
 

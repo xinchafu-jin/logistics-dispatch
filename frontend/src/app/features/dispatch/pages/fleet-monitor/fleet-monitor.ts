@@ -1,5 +1,5 @@
 import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
-import { LucideMapPinned, LucideRefreshCw, LucideTriangleAlert, LucideUserRound } from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { catchError, forkJoin, of } from 'rxjs';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import { DriverDto, GpsPingDto } from '../../../../core/services/dispatch-api.models';
@@ -25,7 +25,7 @@ function toDateTimeInputValue(date: Date): string {
 
 @Component({
   selector: 'app-fleet-monitor',
-  imports: [LiveFleetMap, LucideMapPinned, LucideRefreshCw, LucideTriangleAlert, LucideUserRound],
+  imports: [MatIconModule, LiveFleetMap],
   templateUrl: './fleet-monitor.html',
   styleUrl: './fleet-monitor.scss',
 })

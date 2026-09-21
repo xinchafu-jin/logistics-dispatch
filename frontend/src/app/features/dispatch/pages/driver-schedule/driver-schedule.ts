@@ -1,18 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { from, mergeMap, toArray } from 'rxjs';
-import {
-  LucideCalendarDays,
-  LucideChevronLeft,
-  LucideChevronRight,
-  LucideCircleCheck,
-  LucideFileClock,
-  LucideRefreshCw,
-  LucideSave,
-  LucideSend,
-  LucideTriangleAlert,
-  LucideUserRound,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   DriverDto,
@@ -73,16 +62,7 @@ interface BatchDriverOption {
 @Component({
   selector: 'app-driver-schedule',
   imports: [
-    LucideCalendarDays,
-    LucideChevronLeft,
-    LucideChevronRight,
-    LucideCircleCheck,
-    LucideFileClock,
-    LucideRefreshCw,
-    LucideSave,
-    LucideSend,
-    LucideTriangleAlert,
-    LucideUserRound,
+    MatIconModule,
   ],
   templateUrl: './driver-schedule.html',
   styleUrl: './driver-schedule.scss',

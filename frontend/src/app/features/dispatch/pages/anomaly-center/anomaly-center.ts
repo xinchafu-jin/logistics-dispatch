@@ -1,10 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import {
-  LucideCircleCheck,
-  LucideRefreshCw,
-  LucideTriangleAlert,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   ExceptionCaseDto,
@@ -15,7 +11,7 @@ type ExceptionFilter = 'ALL' | 'NO_SIGNATURE' | 'GOODS_ISSUE';
 
 @Component({
   selector: 'app-anomaly-center',
-  imports: [LucideCircleCheck, LucideRefreshCw, LucideTriangleAlert],
+  imports: [MatIconModule, ],
   templateUrl: './anomaly-center.html',
   styleUrl: './anomaly-center.scss',
 })

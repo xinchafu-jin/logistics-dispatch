@@ -1,4 +1,4 @@
-@import 'leaflet/dist/leaflet.css';
+@import 'maplibre-gl/dist/maplibre-gl.css';
 
 * {
   box-sizing: border-box;
@@ -22,7 +22,6 @@ input {
 .driver-location-marker,
 .driver-destination-marker {
   display: grid;
-  margin: 0 !important;
   place-items: center;
   border-radius: 50%;
   font-family: Inter, 'Noto Sans TC', 'Segoe UI', sans-serif;
@@ -31,8 +30,8 @@ input {
 }
 
 .driver-location-marker {
-  width: 28px !important;
-  height: 28px !important;
+  width: 28px;
+  height: 28px;
   border: 2px solid #ffffff;
   color: #08231f;
   background: #70d5ba;
@@ -40,15 +39,15 @@ input {
 }
 
 .driver-destination-marker {
-  width: 34px !important;
-  height: 34px !important;
+  width: 34px;
+  height: 34px;
   border: 3px solid #ffffff;
   color: #ffffff;
   background: #317dcb;
   font-size: 13px;
 }
 
-.driver-destination-tooltip {
+.driver-destination-tooltip .maplibregl-popup-content {
   padding: 4px 7px;
   border: 0;
   border-radius: 4px;
@@ -58,6 +57,6 @@ input {
   font: 800 11px/1.2 Inter, 'Noto Sans TC', 'Segoe UI', sans-serif;
 }
 
-.driver-destination-tooltip.leaflet-tooltip-top::before {
+.driver-destination-tooltip .maplibregl-popup-tip {
   border-top-color: #1d67ad;
 }

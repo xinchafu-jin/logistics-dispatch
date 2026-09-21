@@ -106,6 +106,8 @@ app-brand-logo {
 }
 
 .sidebar-nav {
+  position: relative;
+  z-index: 1;
   display: grid;
   width: 56px;
   gap: 6px;
@@ -144,6 +146,8 @@ app-brand-logo {
 }
 
 .nav-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,6 +161,7 @@ app-brand-logo {
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
+  pointer-events: auto;
   transition: background-color 180ms ease,
   border-color 180ms ease,
   color 180ms ease,
@@ -173,11 +178,11 @@ app-brand-logo {
   padding: 0 11px;
 }
 
-.nav-item svg {
+.nav-item mat-icon {
   flex: 0 0 auto;
   width: 22px;
   height: 22px;
-  stroke-width: 1.7;
+  font-size: 22px;
 }
 
 .nav-item span {
@@ -214,7 +219,7 @@ app-brand-logo {
   box-shadow: none;
 }
 
-.nav-item.is-active svg {
+.nav-item.is-active mat-icon {
   color: var(--accent);
 }
 
@@ -304,6 +309,7 @@ app-brand-logo {
 
 .application-notification,
 .theme-toggle,
+.profile-link,
 .logout-button {
   display: grid;
   width: 34px;
@@ -317,6 +323,7 @@ app-brand-logo {
 }
 
 .theme-toggle:hover,
+.profile-link:hover,
 .logout-button:hover {
   color: var(--text);
   background: rgb(255 255 255 / 8%);
@@ -328,11 +335,14 @@ app-brand-logo {
   opacity: 0.62;
 }
 
-.application-notification svg,
-.theme-toggle svg,
-.logout-button svg {
+.application-notification mat-icon,
+.theme-toggle mat-icon,
+.profile-link mat-icon,
+.logout-button mat-icon {
   width: 16px;
   height: 16px;
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .application-notification {
@@ -616,11 +626,13 @@ app-brand-logo {
 
   .application-notification,
   .theme-toggle,
+  .profile-link,
   .logout-button {
     background: rgb(8 124 107 / 4%);
   }
 
   .theme-toggle:hover,
+  .profile-link:hover,
   .logout-button:hover {
     background: rgb(8 124 107 / 9%);
     border-color: rgb(8 124 107 / 28%);
@@ -803,8 +815,8 @@ app-brand-logo {
   gap: 4px;
 }
 
-// 外觀交給 matIconButton，這裡只控制 lucide 圖示大小
-.chat-panel__icon-button svg {
+// 外觀交給 matIconButton，這裡只控制 Material 圖示大小
+.chat-panel__icon-button mat-icon {
   width: 16px;
   height: 16px;
 }

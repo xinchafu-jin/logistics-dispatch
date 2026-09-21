@@ -5,8 +5,10 @@
 
 .live-fleet-map {
   position: relative;
+  display: grid;
+  grid-template-rows: 430px auto;
   min-width: 0;
-  min-height: 540px;
+  min-height: 0;
   overflow: hidden;
   isolation: isolate;
   background: #0b0e0f;
@@ -17,11 +19,20 @@
     0 28px 48px rgb(0 0 0 / 24%);
 }
 
+.fleet-map-stage {
+  position: relative;
+  min-width: 0;
+  min-height: 430px;
+  overflow: hidden;
+}
+
 .fleet-map-canvas {
   position: relative;
   z-index: 0;
+  width: 100%;
+  height: 100%;
   min-width: 0;
-  min-height: 540px;
+  min-height: 0;
   isolation: isolate;
   background: #0b0e0f;
 }
@@ -44,7 +55,6 @@
 }
 
 .fleet-map-header,
-.fleet-tracking-panel,
 .fleet-map-notice,
 .fleet-map-attribution {
   position: absolute;
@@ -98,14 +108,13 @@
 }
 
 .fleet-tracking-panel {
-  top: 104px;
-  right: 24px;
-  width: min(286px, calc(100% - 48px));
-  padding: 14px;
-  background: rgb(8 17 20 / 94%);
-  border: 1px solid rgb(126 221 210 / 18%);
-  border-radius: 8px;
-  box-shadow: 0 16px 34px rgb(0 0 0 / 26%);
+  position: relative;
+  z-index: 1;
+  grid-row: 2;
+  width: auto;
+  padding: 16px 24px 18px;
+  background: var(--panel);
+  border-top: 1px solid var(--metal-edge);
 }
 
 .fleet-tracking-panel > p:not(.fleet-map-eyebrow),
@@ -113,7 +122,7 @@
 .tracking-empty {
   display: block;
   margin: 10px 0 0;
-  color: #a8bdb9;
+  color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.5;
 }
@@ -176,13 +185,17 @@
 }
 
 .tracking-driver strong {
-  color: #edf8f5;
+  color: var(--text);
   font-size: 0.78rem;
 }
 
 .tracking-driver small {
-  color: #91aaa5;
+  color: var(--muted);
   font-size: 0.67rem;
+}
+
+:host-context(.dispatch-layout.is-light-theme) .fleet-tracking-panel > small {
+  color: #8a5726;
 }
 
 .fleet-map-notice {
@@ -215,8 +228,8 @@
 
 @media (max-width: 680px) {
   .live-fleet-map,
-  .fleet-map-canvas {
-    min-height: 620px;
+  .fleet-map-stage {
+    min-height: 430px;
   }
 
   .fleet-map-header {
@@ -233,10 +246,6 @@
   }
 
   .fleet-tracking-panel {
-    top: auto;
-    right: 14px;
-    bottom: 58px;
-    left: 14px;
-    width: auto;
+    padding: 14px 18px 16px;
   }
 }

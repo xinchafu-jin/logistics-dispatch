@@ -1,4 +1,4 @@
-export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'CLOCKED_OUT';
+export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
 export interface AttendanceRecordDto {
   id: number;
@@ -39,27 +39,17 @@ export interface GpsPingRequest {
   lng: number;
 }
 
-export interface DriverAccountApplicationRequest {
-  account: string;
-  name: string;
-  phone: string;
-  nationalId: string;
-}
-
-export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-export interface DriverAccountApplicationResponse {
+export interface DriverProfileDto {
   id: number;
   account: string;
   name: string;
-  phone: string;
-  nationalIdMasked: string;
-  status: DriverApplicationStatus;
-  appliedAt: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  approvedDriverId: number | null;
+  phone: string | null;
+  profilePhotoUrl: string | null;
+  workStart: string;
+  workEnd: string;
+  restDuration: number;
+  maxOvertimeMinutes: number | null;
+  isActive: boolean;
 }
 
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -100,7 +90,7 @@ export interface GpsRouteRequest {
 }
 
 export interface GpsRouteResponse {
-  /** 每個點依 Leaflet 順序提供：[緯度, 經度]。 */
+  /** 後端每個點固定提供：[緯度, 經度]；MapLibre 顯示前會由前端轉成 [經度, 緯度]。 */
   path: [number, number][];
   distance: number;
   duration: number;
@@ -113,13 +103,11 @@ export interface ArriveRequest {
 export interface DeliverRequest {
   orderId: number;
   boxCount: number;
-  photo: string;
   notes?: string;
 }
 
 export interface NoSignatureRequest {
   orderId: number;
-  photo: string;
   notes?: string;
 }
 

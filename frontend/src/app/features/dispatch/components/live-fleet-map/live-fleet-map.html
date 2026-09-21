@@ -1,13 +1,23 @@
 <section class="live-fleet-map" aria-labelledby="fleet-map-title">
-  <header class="fleet-map-header">
-    <div>
-      <p class="fleet-map-eyebrow">車隊監控</p>
-      <h3 id="fleet-map-title">高雄配送區域地圖</h3>
-    </div>
-    <span class="fleet-map-count">{{ activeDriverCount() }} 位可排班司機</span>
-  </header>
+  <div class="fleet-map-stage">
+    <header class="fleet-map-header">
+      <div>
+        <p class="fleet-map-eyebrow">車隊監控</p>
+        <h3 id="fleet-map-title">高雄配送區域地圖</h3>
+      </div>
+      <span class="fleet-map-count">{{ activeDriverCount() }} 位可排班司機</span>
+    </header>
 
-  <div #mapCanvas class="fleet-map-canvas" aria-label="高雄配送區域地圖"></div>
+    <div #mapCanvas class="fleet-map-canvas" aria-label="高雄配送區域地圖"></div>
+
+    <p class="fleet-map-notice">僅顯示正在上班且後端回傳有效定位的司機。</p>
+    <p class="fleet-map-attribution">
+      &copy;
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
+        >OpenStreetMap</a
+      >
+    </p>
+  </div>
 
   <aside class="fleet-tracking-panel" aria-label="司機定位狀態">
     <p class="fleet-map-eyebrow">定位狀態</p>
@@ -47,12 +57,4 @@
       }
     </div>
   </aside>
-
-  <p class="fleet-map-notice">僅顯示正在上班且後端回傳有效定位的司機。</p>
-  <p class="fleet-map-attribution">
-    &copy;
-    <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
-      >OpenStreetMap</a
-    >
-  </p>
 </section>

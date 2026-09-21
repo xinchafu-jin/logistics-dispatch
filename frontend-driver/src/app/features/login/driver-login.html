@@ -1,22 +1,9 @@
-<main class="login-page" [class.is-dark-theme]="isDarkTheme()">
+<main class="login-page">
   <header class="topbar">
     <div class="brand">
       <app-brand-logo></app-brand-logo>
       <strong>司機工作台</strong>
     </div>
-    <button
-      type="button"
-      class="theme-toggle"
-      (click)="toggleTheme()"
-      [title]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
-      [attr.aria-label]="isDarkTheme() ? '切換為淺色模式' : '切換為深色模式'"
-    >
-      @if (isDarkTheme()) {
-        <svg lucideSun aria-hidden="true"></svg>
-      } @else {
-        <svg lucideMoon aria-hidden="true"></svg>
-      }
-    </button>
   </header>
 
   <section class="login-shell" aria-labelledby="login-title">
@@ -60,95 +47,6 @@
       }
     </form>
 
-    <div class="account-help">
-      <p class="help-text">帳號無法登入時，請聯絡物流後台管理員確認帳號狀態。</p>
-      <button type="button" class="account-application-button" (click)="openAccountApplication()">
-        <svg lucideUserRoundPlus aria-hidden="true"></svg>
-        申請司機帳號
-      </button>
-    </div>
-
-    @if (isAccountApplicationOpen()) {
-      <section class="account-application" aria-labelledby="account-application-title">
-        <header>
-          <div>
-            <p class="eyebrow">帳號申請</p>
-            <h2 id="account-application-title">申請司機帳號</h2>
-          </div>
-          <button
-            type="button"
-            class="application-close"
-            title="關閉申請說明"
-            aria-label="關閉申請說明"
-            (click)="closeAccountApplication()"
-          >
-            <svg lucideX aria-hidden="true"></svg>
-          </button>
-        </header>
-        <p>送出後由主管簽核；身分證字號只作為初始密碼，不會在申請紀錄中顯示。</p>
-        <form class="account-application-form" (submit)="submitAccountApplication($event)" novalidate>
-          <label for="application-account">登入帳號</label>
-          <input
-            #applicationAccountInput
-            id="application-account"
-            type="text"
-            autocomplete="username"
-            maxlength="50"
-            [value]="applicationAccount()"
-            [disabled]="isApplicationSubmitting()"
-            (input)="applicationAccount.set(applicationAccountInput.value)"
-          />
-
-          <label for="application-name">姓名</label>
-          <input
-            #applicationNameInput
-            id="application-name"
-            type="text"
-            autocomplete="name"
-            maxlength="30"
-            [value]="applicationName()"
-            [disabled]="isApplicationSubmitting()"
-            (input)="applicationName.set(applicationNameInput.value)"
-          />
-
-          <label for="application-phone">手機號碼</label>
-          <input
-            #applicationPhoneInput
-            id="application-phone"
-            type="tel"
-            autocomplete="tel"
-            inputmode="numeric"
-            maxlength="10"
-            placeholder="0912345678"
-            [value]="applicationPhone()"
-            [disabled]="isApplicationSubmitting()"
-            (input)="applicationPhone.set(applicationPhoneInput.value)"
-          />
-
-          <label for="application-national-id">身分證字號（初始密碼）</label>
-          <input
-            #applicationNationalIdInput
-            id="application-national-id"
-            type="password"
-            autocomplete="off"
-            maxlength="10"
-            [value]="applicationNationalId()"
-            [disabled]="isApplicationSubmitting()"
-            (input)="applicationNationalId.set(applicationNationalIdInput.value)"
-          />
-
-          @if (applicationError()) {
-            <p class="application-feedback is-error" role="alert">{{ applicationError() }}</p>
-          }
-          @if (applicationMessage()) {
-            <p class="application-feedback is-success">{{ applicationMessage() }}</p>
-          }
-
-          <button type="submit" [disabled]="isApplicationSubmitting()">
-            {{ isApplicationSubmitting() ? '送出中...' : '送出申請' }}
-          </button>
-        </form>
-      </section>
-    }
+    <p class="help-text">司機帳號由物流後台管理員建立與啟用。</p>
   </section>
 </main>

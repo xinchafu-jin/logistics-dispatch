@@ -1,6 +1,6 @@
-import {Component, inject, signal} from '@angular/core';
 import {DatePipe} from '@angular/common';
 import {HttpErrorResponse} from '@angular/common/http';
+import {Component, inject, signal} from '@angular/core';
 import {FormControl, ReactiveFormsModule, Validators} from '@angular/forms';
 import {MatButtonModule} from '@angular/material/button';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -12,12 +12,12 @@ import {DispatchApiService} from '../../../../core/services/dispatch-api.service
 @Component({
   selector: 'app-personal-profile',
   imports: [
-    MatFormFieldModule,
-    MatInputModule,
+    DatePipe,
     MatButtonModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
     ReactiveFormsModule,
-    DatePipe
   ],
   templateUrl: './personal-profile.html',
   styleUrl: './personal-profile.scss',
@@ -25,13 +25,13 @@ import {DispatchApiService} from '../../../../core/services/dispatch-api.service
 export class PersonalProfile {
   private readonly api = inject(DispatchApiService);
 
-  //後端回傳的金鑰狀態；只有遮罩後的末 4 碼，拿不到完整金鑰
   protected readonly status = signal<AiApiKeyStatusDto | null>(null);
+  protected readonly isLoading = signal(true);
+  protected readonly isSaving = signal(false);
+  protected readonly isRemoving = signal(false);
+  protected readonly hideKey = signal(true);
+  protected readonly feedback = signal('');
   protected readonly errorMessage = signal('');
-
-  hide = signal(true);
-
-
   protected readonly apiKeyControl = new FormControl('', {
     nonNullable: true,
     validators: [Validators.required, Validators.minLength(8), Validators.maxLength(200)],
@@ -41,50 +41,66 @@ export class PersonalProfile {
     this.loadStatus();
   }
 
-  clickEvent(event: MouseEvent) {
-    this.hide.set(!this.hide());
-    event.stopPropagation();
+  protected toggleKeyVisibility(): void {
+    this.hideKey.update((hidden) => !hidden);
   }
 
-   //新增與更新共用同一支 PUT：一人只有一把金鑰，兩者都是覆蓋舊的
   protected saveApiKey(): void {
-    if (this.apiKeyControl.invalid || this.apiKeyControl.disabled) {
+    if (this.apiKeyControl.invalid || this.isSaving()) {
       this.apiKeyControl.markAsTouched();
       return;
     }
 
+    this.feedback.set('');
     this.errorMessage.set('');
-    // 送出期間鎖住欄位，避免連點送出兩次
-    this.apiKeyControl.disable();
+    this.isSaving.set(true);
     this.api.saveAiApiKey({apiKey: this.apiKeyControl.value.trim()}).subscribe({
       next: (status) => {
-        // 狀態一律以後端回傳的為準，末 4 碼怎麼算不在前端再寫一份
         this.status.set(status);
         this.apiKeyControl.reset();
-        this.apiKeyControl.enable();
-        this.hide.set(true);
+        this.hideKey.set(true);
+        this.feedback.set('AI API Key 已儲存。');
+        this.isSaving.set(false);
       },
       error: (error: HttpErrorResponse) => {
-        this.errorMessage.set(error.error?.message ?? '儲存失敗，請稍後再試');
-        this.apiKeyControl.enable();
+        this.errorMessage.set(error.error?.message ?? '無法儲存 AI API Key，請稍後再試。');
+        this.isSaving.set(false);
       },
     });
   }
 
-  //移除後 AI 助理會擋下對話，提示回來設定金鑰
   protected removeApiKey(): void {
+    if (this.isRemoving()) {
+      return;
+    }
+
+    this.feedback.set('');
     this.errorMessage.set('');
+    this.isRemoving.set(true);
     this.api.removeAiApiKey().subscribe({
-      next: () => this.loadStatus(),
-      error: (error: HttpErrorResponse) =>
-        this.errorMessage.set(error.error?.message ?? '移除失敗，請稍後再試'),
+      next: () => {
+        this.status.set({configured: false, maskedKey: null, updatedAt: null});
+        this.feedback.set('AI API Key 已移除。');
+        this.isRemoving.set(false);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.errorMessage.set(error.error?.message ?? '無法移除 AI API Key，請稍後再試。');
+        this.isRemoving.set(false);
+      },
     });
   }
 
   private loadStatus(): void {
+    this.isLoading.set(true);
     this.api.getAiApiKeyStatus().subscribe({
-      next: (status) => this.status.set(status),
-      error: () => this.errorMessage.set('讀取設定狀態失敗'),
+      next: (status) => {
+        this.status.set(status);
+        this.isLoading.set(false);
+      },
+      error: () => {
+        this.errorMessage.set('目前無法取得 AI API Key 設定狀態。');
+        this.isLoading.set(false);
+      },
     });
   }
 }

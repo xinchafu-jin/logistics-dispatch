@@ -115,14 +115,14 @@
   border: 1px solid var(--border);
 }
 
-.icon-button svg,
-.primary-action svg,
-.secondary-action svg,
-.leave-action svg,
-.feedback svg,
-.schedule-status svg,
-.empty-state > svg,
-.editor-placeholder svg {
+.icon-button mat-icon,
+.primary-action mat-icon,
+.secondary-action mat-icon,
+.leave-action mat-icon,
+.feedback mat-icon,
+.schedule-status mat-icon,
+.empty-state > mat-icon,
+.editor-placeholder mat-icon {
   width: 17px;
   height: 17px;
 }
@@ -212,8 +212,8 @@ select:disabled {
   border-radius: 8px;
 }
 
-.empty-state > svg,
-.editor-placeholder > svg {
+.empty-state > mat-icon,
+.editor-placeholder > mat-icon {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
@@ -250,11 +250,11 @@ select:disabled {
   gap: 10px;
 }
 
-.schedule-status svg {
+.schedule-status mat-icon {
   color: #f0c07a;
 }
 
-.schedule-status.is-published svg {
+.schedule-status.is-published mat-icon {
   color: var(--accent);
 }
 
@@ -777,7 +777,7 @@ thead th.is-weekend {
     border-color: #e2c28d;
   }
 
-  .schedule-status svg {
+  .schedule-status mat-icon {
     color: #895a14;
   }
 

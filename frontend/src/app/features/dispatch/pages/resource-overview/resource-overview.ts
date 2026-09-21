@@ -1,18 +1,11 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin, Observable } from 'rxjs';
-import {
-  LucidePlus,
-  LucidePencil,
-  LucideSearch,
-  LucideTrash2,
-  LucideTriangleAlert,
-  LucideTruck,
-  LucideX,
-} from '@lucide/angular';
+import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   AdminUserCreateRequest,
   AdminUserDto,
+  DriverDto,
   StoreDto,
   StoreStatus,
   VehicleDto,
@@ -25,6 +18,7 @@ type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
   | 'admin'
+  | 'driver'
   | 'vehicle'
   | 'edit-vehicle'
   | 'store'
@@ -46,6 +40,9 @@ const deleteTargetLabels: Record<DeleteTargetKind, string> = {
   store: '店家',
   warehouse: '倉庫',
 };
+
+const DRIVER_INITIAL_PASSWORD_LENGTH = 12;
+const DRIVER_PASSWORD_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
 interface StoreResource {
   backendId?: number;
@@ -77,6 +74,35 @@ function emptyAdminUser(): AdminUserCreateRequest {
     name: '',
     phone: '',
   };
+}
+
+function emptyDriver(): DriverDto {
+  return {
+    account: '',
+    password: generateDriverInitialPassword(),
+    name: '',
+    phone: '',
+    workStart: '08:00',
+    workEnd: '17:00',
+    restDuration: 60,
+    maxOvertimeMinutes: 0,
+    isActive: true,
+  };
+}
+
+function generateDriverInitialPassword(): string {
+  const characters = DRIVER_PASSWORD_CHARACTERS;
+  const values = new Uint8Array(DRIVER_INITIAL_PASSWORD_LENGTH);
+
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(values);
+  } else {
+    for (let index = 0; index < values.length; index += 1) {
+      values[index] = Math.floor(Math.random() * 256);
+    }
+  }
+
+  return Array.from(values, (value) => characters[value % characters.length]).join('');
 }
 
 function emptyStore(): StoreDto {
@@ -132,13 +158,7 @@ interface VehicleResource {
 @Component({
   selector: 'app-resource-overview',
   imports: [
-    LucidePlus,
-    LucidePencil,
-    LucideSearch,
-    LucideTrash2,
-    LucideTriangleAlert,
-    LucideTruck,
-    LucideX,
+    MatIconModule,
   ],
   templateUrl: './resource-overview.html',
   styleUrl: './resource-overview.scss',
@@ -157,6 +177,7 @@ export class ResourceOverview implements OnInit {
   readonly updatedAt = signal('--:--');
   readonly activeForm = signal<ResourceForm>(null);
   readonly adminForm = signal<AdminUserCreateRequest>(emptyAdminUser());
+  readonly driverForm = signal<DriverDto>(emptyDriver());
   readonly storeForm = signal<StoreDto>(emptyStore());
   readonly warehouseForm = signal<WarehouseDto>(emptyWarehouse());
   readonly vehicleForm = signal<VehicleDto>(emptyVehicle());
@@ -256,6 +277,12 @@ export class ResourceOverview implements OnInit {
     this.adminForm.set(emptyAdminUser());
     this.formError.set('');
     this.activeForm.set('admin');
+  }
+
+  openCreateDriver(): void {
+    this.driverForm.set(emptyDriver());
+    this.formError.set('');
+    this.activeForm.set('driver');
   }
 
   openCreateStore(): void {
@@ -358,6 +385,11 @@ export class ResourceOverview implements OnInit {
     this.adminForm.update((form) => ({ ...form, [field]: value }));
   }
 
+  updateDriverText(field: 'account' | 'name' | 'phone', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.driverForm.update((form) => ({...form, [field]: value}));
+  }
+
   updateVehicleText(field: 'plateNumber' | 'vehicleType', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.vehicleForm.update((form) => ({ ...form, [field]: value }));
@@ -443,6 +475,37 @@ export class ResourceOverview implements OnInit {
       () => {
         this.updatedAt.set(this.formatCurrentTime());
       },
+    );
+  }
+
+  submitDriver(): void {
+    const driver = this.driverForm();
+    const password = driver.password?.trim() ?? '';
+
+    if (!driver.account.trim() || !driver.name.trim() || !driver.phone?.trim()) {
+      this.formError.set('請填寫司機姓名、手機號碼與登入帳號。');
+      return;
+    }
+
+    if (!/^09\d{8}$/.test(driver.phone.trim())) {
+      this.formError.set('請輸入 09 開頭的 10 位數手機號碼。');
+      return;
+    }
+
+    if (password.length < 8 || password.length > 12) {
+      this.formError.set('系統產生的初始密碼不符合規則，請重新開啟新增司機表單。');
+      return;
+    }
+
+    this.saveResource(
+      this.api.createDriver({
+        ...driver,
+        account: driver.account.trim(),
+        name: driver.name.trim(),
+        phone: driver.phone.trim(),
+        password,
+      }),
+      () => this.updatedAt.set(this.formatCurrentTime()),
     );
   }
 
@@ -760,7 +823,7 @@ export class ResourceOverview implements OnInit {
     }).format(new Date());
   }
 
-  private saveResource<T extends AdminUserDto | VehicleDto | StoreDto | WarehouseDto>(
+  private saveResource<T extends AdminUserDto | DriverDto | VehicleDto | StoreDto | WarehouseDto>(
     request: Observable<T>,
     onSuccess: (value: T) => void,
   ): void {
