@@ -2,7 +2,12 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
-import { OrderDto, StoreDto } from '../../../../core/services/dispatch-api.models';
+import {
+  OrderDto,
+  ReportCollectionDto,
+  ReportSummaryDto,
+  StoreDto,
+} from '../../../../core/services/dispatch-api.models';
 
 type ReportPeriod = 'week' | 'month';
 
@@ -62,6 +67,8 @@ export class OperationReport implements OnInit {
   readonly activePeriod = signal<ReportPeriod>('week');
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
+  readonly backendSummary = signal<ReportSummaryDto | null>(null);
+  readonly backendExceptions = signal<ReportCollectionDto | null>(null);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
 
@@ -71,6 +78,22 @@ export class OperationReport implements OnInit {
   ];
 
   readonly report = computed<ReportMetrics>(() => {
+    const summary = this.backendSummary();
+    if (summary) {
+      const completionRate = summary.completionRatePercent ?? 0;
+      return {
+        range: `${summary.from.replaceAll('-', '/')} - ${summary.to.replaceAll('-', '/')}`,
+        healthScore: Math.round(completionRate),
+        healthLabel: summary.totalOrders ? (completionRate >= 95 ? '資料穩定' : '需要關注') : '尚無資料',
+        healthNote: '完成率、配送量與待處理狀態均由後端營運報表計算。',
+        completion: `${completionRate.toFixed(1)}%`,
+        onTime: '--',
+        deliveryTime: '--',
+        exceptionRate: this.exceptionRateLabel(),
+        total: String(summary.totalOrders),
+        trend: `${summary.dailyTrend.length} 日趨勢`,
+      };
+    }
     const periodOrders = this.ordersInPeriod();
     const total = periodOrders.length;
     const completed = periodOrders.filter((order) => order.status === 'COMPLETED').length;
@@ -92,10 +115,23 @@ export class OperationReport implements OnInit {
     };
   });
 
-  readonly chartData = computed(() => this.buildChartData(this.ordersInPeriod()));
+  readonly chartData = computed(() => {
+    const dailyTrend = this.backendSummary()?.dailyTrend;
+    return dailyTrend?.length ? this.buildBackendChartData(dailyTrend) : this.buildChartData(this.ordersInPeriod());
+  });
   readonly areas = computed(() => this.buildAreas(this.ordersInPeriod(), this.stores()));
 
   readonly statusBreakdown = computed(() => {
+    const summary = this.backendSummary();
+    if (summary) {
+      const total = summary.totalOrders || 1;
+      return [
+        {label: '已完成', detail: '正常簽收結案', tone: 'complete', percentage: this.percentage(summary.completedOrders, total)},
+        {label: '配送中', detail: '目前正在配送', tone: 'followup', percentage: this.percentage(summary.inDeliveryOrders, total)},
+        {label: '配送失敗', detail: '需要異常處理', tone: 'exception', percentage: this.percentage(summary.failedOrders, total)},
+        {label: '待排車', detail: '等待調度安排', tone: 'pending', percentage: this.percentage(summary.confirmedUnassignedOrders, total)},
+      ];
+    }
     const orders = this.ordersInPeriod();
     const total = orders.length || 1;
     const statuses: { status: OrderDto['status']; label: string; detail: string; tone: string }[] =
@@ -115,6 +151,17 @@ export class OperationReport implements OnInit {
   });
 
   readonly exceptionSources = computed<ExceptionSource[]>(() => {
+    const exceptions = this.backendExceptions();
+    if (exceptions) {
+      const recorded = typeof exceptions['recordedCases'] === 'number' ? exceptions['recordedCases'] : 0;
+      const open = typeof exceptions['openCases'] === 'number' ? exceptions['openCases'] : 0;
+      return [{
+        label: '配送異常',
+        count: String(recorded),
+        detail: open ? `${open} 筆尚未結案` : '目前沒有未結案異常',
+        tone: open ? 'warning' : 'success',
+      }];
+    }
     return [
       {
         label: '異常案件 API',
@@ -140,10 +187,14 @@ export class OperationReport implements OnInit {
     forkJoin({
       orders: this.api.getOrders(),
       stores: this.api.getStores(),
+      summary: this.api.getReportSummary({period: this.activePeriod() === 'week' ? 'THIS_WEEK' : 'THIS_MONTH'}),
+      exceptions: this.api.getReportExceptions({period: this.activePeriod() === 'week' ? 'THIS_WEEK' : 'THIS_MONTH'}),
     }).subscribe({
-      next: ({ orders, stores }) => {
+      next: ({ orders, stores, summary, exceptions }) => {
         this.orders.set(orders);
         this.stores.set(stores);
+        this.backendSummary.set(summary);
+        this.backendExceptions.set(exceptions);
         this.loading.set(false);
       },
       error: () => {
@@ -183,6 +234,20 @@ export class OperationReport implements OnInit {
       height: (counts[index] / max) * 100,
       onTime: 0,
     }));
+  }
+
+  private buildBackendChartData(dailyTrend: ReportSummaryDto['dailyTrend']): DailyDelivery[] {
+    const max = Math.max(...dailyTrend.map((item) => item.completedOrders), 1);
+    return dailyTrend.map((item) => {
+      const date = this.parseDate(item.date);
+      return {
+        day: this.activePeriod() === 'week' ? this.weekdayLabel(date) : `${date.getMonth() + 1}/${date.getDate()}`,
+        date: item.date.replaceAll('-', '/'),
+        count: item.completedOrders,
+        height: (item.completedOrders / max) * 100,
+        onTime: 0,
+      };
+    });
   }
 
   private buildAreas(orders: OrderDto[], stores: StoreDto[]): AreaPerformance[] {
@@ -243,5 +308,18 @@ export class OperationReport implements OnInit {
 
   private extractArea(address: string): string {
     return address.match(/高雄市([^\s]+區)/)?.[1] ?? '未提供區域';
+  }
+
+  private percentage(value: number, total: number): string {
+    return `${((value / total) * 100).toFixed(1)}%`;
+  }
+
+  private exceptionRateLabel(): string {
+    const exceptions = this.backendExceptions();
+    const total = this.backendSummary()?.totalOrders ?? 0;
+    const recorded = exceptions && typeof exceptions['recordedCases'] === 'number'
+      ? exceptions['recordedCases']
+      : null;
+    return recorded === null || total === 0 ? '--' : this.percentage(recorded, total);
   }
 }

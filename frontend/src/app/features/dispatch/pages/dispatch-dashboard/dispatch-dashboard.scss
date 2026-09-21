@@ -126,40 +126,46 @@
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 34px;
+  gap: 0;
+  margin-top: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(16 21 24 / 58%);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 14px 28px rgb(0 0 0 / 14%);
+  backdrop-filter: blur(18px) saturate(120%);
 }
 
 .summary-card {
   position: relative;
-  min-height: 148px;
-  padding: 20px;
-  overflow: hidden;
-  background: rgb(16 21 24 / 58%);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 18px 36px rgb(0 0 0 / 18%);
-  backdrop-filter: blur(18px) saturate(120%);
+  min-height: 104px;
+  padding: 16px 18px 14px;
+  border-left: 1px solid rgb(255 255 255 / 12%);
+}
+
+.summary-card:first-child {
+  border-left: 0;
 }
 
 .summary-card::before {
   position: absolute;
-  top: 0;
-  right: 18px;
-  left: 18px;
-  height: 1px;
-  background: rgb(255 255 255 / 11%);
+  top: 17px;
+  left: 0;
+  width: 3px;
+  height: 30px;
+  border-radius: 0 3px 3px 0;
+  background: #78978d;
   content: '';
 }
 
-.summary-card.tone-accent {
-  border-color: rgb(99 209 198 / 27%);
+.summary-card.tone-accent::before {
+  background: var(--accent);
 }
 
-.summary-card.tone-warning {
-  border-color: rgb(228 167 77 / 28%);
+.summary-card.tone-warning::before {
+  background: #e4a74d;
 }
 
 .summary-label {
@@ -171,10 +177,10 @@
 
 .summary-value {
   display: block;
-  margin-top: 24px;
+  margin-top: 10px;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 2.25rem;
+  font-size: 2rem;
   font-weight: 600;
   line-height: 1;
 }
@@ -188,7 +194,7 @@
 }
 
 .summary-detail {
-  margin: 12px 0 0;
+  margin: 7px 0 0;
   color: var(--subtle);
   font-size: 0.75rem;
   line-height: 1.5;
@@ -216,6 +222,74 @@
   padding: 0 2px;
   color: var(--muted);
   font-size: 0.8125rem;
+}
+
+.route-metrics-panel {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  h3,
+  p {
+    margin: 0;
+  }
+
+  header > span,
+  > p {
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  dl > div {
+    padding-left: 0.6rem;
+    border-left: 3px solid var(--accent);
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  dd {
+    margin: 0.2rem 0 0;
+    font-weight: 700;
+  }
+}
+
+.route-metrics-action {
+  margin: 0 0 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .route-metrics-panel dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .operations-panel {
@@ -371,25 +445,29 @@
 // use dark translucent surfaces instead of the shared surface tokens. Keep the
 // map dark, but give the data panels a complete, readable light counterpart.
 :host-context(.dispatch-layout.is-light-theme) {
-  .summary-card {
+  .summary-grid {
     background: var(--panel);
     border-color: var(--border);
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 92%),
-      0 12px 28px rgb(20 52 42 / 10%);
+      0 10px 22px rgb(20 52 42 / 8%);
     backdrop-filter: none;
   }
 
+  .summary-card {
+    border-left-color: var(--border);
+  }
+
   .summary-card::before {
-    background: rgb(8 124 107 / 18%);
+    background: #73958b;
   }
 
-  .summary-card.tone-accent {
-    border-color: rgb(8 124 107 / 32%);
+  .summary-card.tone-accent::before {
+    background: #087c6b;
   }
 
-  .summary-card.tone-warning {
-    border-color: rgb(180 112 20 / 34%);
+  .summary-card.tone-warning::before {
+    background: #b47014;
   }
 
   .tone-warning .summary-value {
@@ -431,6 +509,18 @@
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .summary-card:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .summary-card:nth-child(n + 3) {
+    border-top: 1px solid rgb(255 255 255 / 12%);
+  }
+
+  :host-context(.dispatch-layout.is-light-theme) .summary-card:nth-child(n + 3) {
+    border-top-color: var(--border);
+  }
 }
 
 @media (max-width: 760px) {
@@ -468,17 +558,16 @@
   }
 
   .summary-grid {
-    gap: 10px;
     margin-top: 26px;
   }
 
   .summary-card {
-    min-height: 132px;
-    padding: 16px;
+    min-height: 96px;
+    padding: 14px 16px 12px;
   }
 
   .summary-value {
-    margin-top: 20px;
+    margin-top: 8px;
     font-size: 1.875rem;
   }
 }

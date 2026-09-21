@@ -44,15 +44,31 @@
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
-      <button
-        type="button"
-        class="locate-control"
-        (click)="locateOnMap()"
-        title="取得目前位置"
-        aria-label="取得目前位置"
-      >
-        <mat-icon aria-hidden="true">my_location</mat-icon>
-      </button>
+      <div class="map-quick-actions">
+        <button
+          type="button"
+          matIconButton
+          class="chat-control"
+          (click)="showDriverChatNotice()"
+          title="聊天室"
+          aria-label="聊天室"
+        >
+          <mat-icon aria-hidden="true">forum</mat-icon>
+        </button>
+        <button
+          type="button"
+          matIconButton
+          class="locate-control"
+          (click)="locateOnMap()"
+          title="取得目前位置"
+          aria-label="取得目前位置"
+        >
+          <mat-icon aria-hidden="true">my_location</mat-icon>
+        </button>
+        @if (driverChatNotice()) {
+          <p class="map-chat-notice" role="status">聊天室功能準備中，請先聯絡物流主管。</p>
+        }
+      </div>
 
       <section
         class="attendance-sheet"
@@ -260,6 +276,15 @@
               收車
             </button>
           </div>
+          <button
+            type="button"
+            class="outline-action mileage-recalculate-button"
+            (click)="recalculateMileage()"
+            [disabled]="isMileageSubmitting()"
+          >
+            <mat-icon aria-hidden="true">sync</mat-icon>
+            依 GPS 重新結算
+          </button>
           @if (!canRecordMileage()) {
             <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
           }
@@ -391,6 +416,18 @@
                               (input)="updateDeliveryNotes($event)"
                             ></textarea>
                           </label>
+                          <label class="delivery-photo-input">
+                            <span>交貨照片（選填）</span>
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                              [disabled]="isTaskSubmitting()"
+                              (change)="selectDeliveryPhoto($event)"
+                            />
+                            @if (deliveryPhoto(); as photo) {
+                              <small>已選擇：{{ photo.name }}</small>
+                            }
+                          </label>
                           <div class="delivery-action-buttons">
                             <button
                               type="button"
@@ -412,12 +449,42 @@
                             </button>
                             <button
                               type="button"
+                              class="delivery-exception-button"
+                              (click)="toggleDeliveryException()"
+                              [disabled]="isTaskSubmitting()"
+                            >
+                              <mat-icon aria-hidden="true">report_problem</mat-icon>
+                              貨況異常
+                            </button>
+                            <button
+                              type="button"
                               class="delivery-cancel-button"
                               (click)="closeDeliveryAction()"
                             >
                               取消
                             </button>
                           </div>
+                          @if (deliveryExceptionOpen()) {
+                            <label class="delivery-exception-detail">
+                              <span>異常說明</span>
+                              <textarea
+                                rows="3"
+                                maxlength="1000"
+                                placeholder="例如貨物短少、外箱破損或現場無法交付的原因"
+                                [value]="deliveryExceptionDescription()"
+                                [disabled]="isTaskSubmitting()"
+                                (input)="updateDeliveryExceptionDescription($event)"
+                              ></textarea>
+                              <button
+                                type="button"
+                                class="delivery-exception-button"
+                                (click)="reportDeliveryException(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                送出異常
+                              </button>
+                            </label>
+                          }
                         </section>
                       }
                     </li>
@@ -487,68 +554,6 @@
             <p>主管發布班表後，司機端會在這裡顯示。</p>
           </div>
         }
-      } @else {
-        <div class="panel-heading">
-          <p class="eyebrow">司機</p>
-          <h1>司機資訊</h1>
-        </div>
-        <section class="profile-photo-card" aria-label="司機大頭照">
-          <div class="profile-photo-preview">
-            @if (profilePhotoUrl(); as photoUrl) {
-              <img
-                [src]="photoUrl"
-                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
-                (error)="handleProfilePhotoLoadError()"
-              />
-            } @else {
-              <span aria-hidden="true">{{ profileInitial() }}</span>
-            }
-          </div>
-          <div class="profile-photo-copy">
-            <strong>{{ profile()?.name ?? user()?.name }}</strong>
-            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
-            <label
-              class="profile-photo-action"
-              [class.is-disabled]="isProfilePhotoUploading()"
-            >
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                [disabled]="isProfilePhotoUploading()"
-                (change)="selectProfilePhoto($event)"
-              />
-              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
-            </label>
-          </div>
-        </section>
-        @if (profilePhotoMessage()) {
-          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
-        }
-        @if (profileError()) {
-          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
-        }
-        <dl class="profile-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ profile()?.name ?? user()?.name }}</dd>
-          </div>
-          <div>
-            <dt>帳號</dt>
-            <dd>{{ profile()?.account ?? user()?.account }}</dd>
-          </div>
-          <div>
-            <dt>司機編號</dt>
-            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
-          </div>
-          <div>
-            <dt>電話</dt>
-            <dd>{{ profile()?.phone || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>登入狀態</dt>
-            <dd>已安全登入</dd>
-          </div>
-        </dl>
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
           <div class="mileage-heading">
             <div>
@@ -622,6 +627,68 @@
             }
           </div>
         </section>
+      } @else {
+        <div class="panel-heading">
+          <p class="eyebrow">司機</p>
+          <h1>司機資訊</h1>
+        </div>
+        <section class="profile-photo-card" aria-label="司機大頭照">
+          <div class="profile-photo-preview">
+            @if (profilePhotoUrl(); as photoUrl) {
+              <img
+                [src]="photoUrl"
+                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                (error)="handleProfilePhotoLoadError()"
+              />
+            } @else {
+              <span aria-hidden="true">{{ profileInitial() }}</span>
+            }
+          </div>
+          <div class="profile-photo-copy">
+            <strong>{{ profile()?.name ?? user()?.name }}</strong>
+            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
+            <label
+              class="profile-photo-action"
+              [class.is-disabled]="isProfilePhotoUploading()"
+            >
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                [disabled]="isProfilePhotoUploading()"
+                (change)="selectProfilePhoto($event)"
+              />
+              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
+            </label>
+          </div>
+        </section>
+        @if (profilePhotoMessage()) {
+          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+        }
+        @if (profileError()) {
+          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+        }
+        <dl class="profile-list">
+          <div>
+            <dt>姓名</dt>
+            <dd>{{ profile()?.name ?? user()?.name }}</dd>
+          </div>
+          <div>
+            <dt>帳號</dt>
+            <dd>{{ profile()?.account ?? user()?.account }}</dd>
+          </div>
+          <div>
+            <dt>司機編號</dt>
+            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>電話</dt>
+            <dd>{{ profile()?.phone || '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>登入狀態</dt>
+            <dd>已安全登入</dd>
+          </div>
+        </dl>
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>

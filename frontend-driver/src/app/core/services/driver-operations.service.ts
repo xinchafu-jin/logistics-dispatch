@@ -6,6 +6,9 @@ import {
   AttendanceRecordDto,
   DeliverRequest,
   DeliveryRecordResponse,
+  DriverExceptionRequest,
+  DriverAccountApplicationRequest,
+  DriverAccountApplicationResponse,
   DriverProfileDto,
   DriverTasksResponse,
   DriverShiftDto,
@@ -17,6 +20,7 @@ import {
   MileageLogResponse,
   MileageRequest,
   NoSignatureRequest,
+  PhotoUploadResponse,
 } from './driver-operations.models';
 
 @Injectable({providedIn: 'root'})
@@ -45,6 +49,12 @@ export class DriverOperationsService {
 
   getProfile(): Observable<DriverProfileDto> {
     return this.http.get<DriverProfileDto>('/api/driver/profile');
+  }
+
+  submitAccountApplication(
+    request: DriverAccountApplicationRequest,
+  ): Observable<DriverAccountApplicationResponse> {
+    return this.http.post<DriverAccountApplicationResponse>('/api/driver-account-applications', request);
   }
 
   uploadProfilePhoto(file: File): Observable<DriverProfileDto> {
@@ -82,12 +92,26 @@ export class DriverOperationsService {
     return this.http.post<DeliveryRecordResponse>('/api/driver/no-signature', request);
   }
 
+  uploadDeliveryPhoto(file: File): Observable<PhotoUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<PhotoUploadResponse>('/api/driver/delivery-photo', formData);
+  }
+
+  reportException(request: DriverExceptionRequest): Observable<DeliveryRecordResponse> {
+    return this.http.post<DeliveryRecordResponse>('/api/driver/exception', request);
+  }
+
   startMileage(request: MileageRequest): Observable<MileageLogResponse> {
     return this.http.post<MileageLogResponse>('/api/driver/mileage/start', request);
   }
 
   endMileage(request: MileageRequest): Observable<MileageLogResponse> {
     return this.http.post<MileageLogResponse>('/api/driver/mileage/end', request);
+  }
+
+  recalculateMileage(): Observable<MileageLogResponse> {
+    return this.http.post<MileageLogResponse>('/api/driver/mileage/recalculate', {});
   }
 
   gpsRoute(request: GpsRouteRequest): Observable<GpsRouteResponse> {

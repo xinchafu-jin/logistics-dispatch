@@ -52,6 +52,21 @@ export interface DriverProfileDto {
   isActive: boolean;
 }
 
+export interface DriverAccountApplicationRequest {
+  account: string;
+  name: string;
+  phone: string;
+  nationalId: string;
+}
+
+export interface DriverAccountApplicationResponse {
+  id: number;
+  account: string;
+  name: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  appliedAt: string;
+}
+
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface EmergencyLeaveRequest {
@@ -103,12 +118,26 @@ export interface ArriveRequest {
 export interface DeliverRequest {
   orderId: number;
   boxCount: number;
+  shortageBoxCount?: number;
+  damagedBoxCount?: number;
+  replacementRequiredBoxCount?: number;
+  photoUrl?: string;
   notes?: string;
 }
 
 export interface NoSignatureRequest {
   orderId: number;
+  photoUrl?: string;
   notes?: string;
+}
+
+export interface DriverExceptionRequest {
+  orderId: number;
+  description: string;
+}
+
+export interface PhotoUploadResponse {
+  url: string;
 }
 
 export interface DeliveryRecordResponse {
@@ -138,6 +167,8 @@ export interface MileageLogResponse {
   endTime: string | null;
   actualDistance: number | null;
   actualDurationMinutes: number | null;
+  gpsDistanceKm?: number | null;
+  mileageSettledAt?: string | null;
 }
 
 export interface DriverTasksResponse {

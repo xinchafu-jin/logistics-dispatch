@@ -47,6 +47,24 @@
       }
     </form>
 
-    <p class="help-text">司機帳號由物流後台管理員建立與啟用。</p>
+    <button type="button" class="application-toggle" (click)="toggleApplication()">
+      {{ applicationOpen() ? '收起帳號申請' : '沒有帳號？申請司機帳號' }}
+    </button>
+
+    @if (applicationOpen()) {
+      <form class="application-form" [formGroup]="applicationForm" (ngSubmit)="submitApplication()">
+        <label>申請帳號<input type="text" formControlName="account" autocomplete="username" /></label>
+        <label>姓名<input type="text" formControlName="name" autocomplete="name" /></label>
+        <label>電話<input type="tel" formControlName="phone" autocomplete="tel" /></label>
+        <label>身分證／識別碼<input type="text" formControlName="nationalId" autocomplete="off" /></label>
+        <button type="submit" [disabled]="applicationSubmitting()">
+          {{ applicationSubmitting() ? '送出中...' : '送出申請' }}
+        </button>
+      </form>
+    }
+    @if (applicationMessage()) { <p class="application-message is-success">{{ applicationMessage() }}</p> }
+    @if (applicationError()) { <p class="application-message error-message">{{ applicationError() }}</p> }
+
+    <p class="help-text">帳號申請會由物流後台主管審核與啟用。</p>
   </section>
 </main>
