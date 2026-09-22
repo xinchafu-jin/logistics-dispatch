@@ -815,10 +815,23 @@ app-brand-logo {
   gap: 4px;
 }
 
-// 外觀交給 matIconButton，這裡只控制 Material 圖示大小
+.chat-panel__icon-button {
+  display: inline-grid;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+}
+
 .chat-panel__icon-button mat-icon {
-  width: 16px;
-  height: 16px;
+  display: block;
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+  font-size: 20px;
+  line-height: 20px;
 }
 
 .chat-panel__body {

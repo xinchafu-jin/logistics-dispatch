@@ -191,7 +191,7 @@ export class FleetMonitor implements OnInit, OnDestroy {
         this.loading.set(false);
       },
       error: () => {
-        this.errorMessage.set('無法取得司機資料，請確認後端服務與登入狀態。');
+        this.errorMessage.set('暫時無法載入司機資料，請稍後再試。');
         this.loading.set(false);
       },
     });
@@ -209,7 +209,7 @@ export class FleetMonitor implements OnInit, OnDestroy {
       },
       error: () => {
         this.livePings.set([]);
-        this.gpsErrorMessage.set('無法取得即時定位，請確認後端服務與登入狀態。');
+        this.gpsErrorMessage.set('暫時無法取得即時定位，請稍後再試。');
         onComplete?.();
       },
     });

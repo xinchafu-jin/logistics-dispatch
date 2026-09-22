@@ -27,101 +27,28 @@
   <!--      </div>-->
   <!--    </div>-->
   <!--  </section>-->
-  <section class="summary-grid" aria-label="今日配送狀態">
-    @for (card of summaryCards(); track card.label) {
-      <article class="summary-card" [class]="'tone-' + card.tone">
-        <p class="summary-label">{{ card.label }}</p>
-        <strong class="summary-value">{{ card.value }}</strong>
-        <p class="summary-detail">{{ card.detail }}</p>
-      </article>
-    }
+  <section class="map-section" aria-label="即時車隊地圖">
+    <app-live-fleet-map
+      [warehousePoint]="mapWarehouse()"
+      [storePoints]="mapStores()"
+      [showPoints]="showMapPoints()"
+      [driverPoints]="mapDrivers()"
+      [showDriverPoints]="showDriverPoints()"
+      [routeLines]="routeLines()"
+      [showRouteLines]="showRouteLines()"
+    />
   </section>
-
-  <div class="dashboard-main">
-    <section class="map-section" aria-label="即時車隊地圖">
-      <app-live-fleet-map
-        [warehousePoint]="mapWarehouse()"
-        [storePoints]="mapStores()"
-        [showPoints]="showMapPoints()"
-        [driverPoints]="mapDrivers()"
-        [showDriverPoints]="showDriverPoints()"
-        [routeLines]="routeLines()"
-        [showRouteLines]="showRouteLines()"
-      />
-    </section>
-
-    <aside class="operations-panel" aria-label="待確認配送與待處理提醒">
-      <section class="orders-section" aria-labelledby="pending-orders-title">
-        <header class="section-heading">
-          <div>
-            <p class="section-eyebrow">待審核清單</p>
-            <h3 id="pending-orders-title">待確認配送</h3>
-          </div>
-
-          <span class="section-count">{{ pendingOrders().length }} / {{ orders().length }} 筆</span>
-        </header>
-
-        <div class="pending-order-list">
-          @for (order of pendingOrders(); track order.id) {
-            <article class="pending-order">
-              <div>
-                <p class="order-id">{{ order.id }}</p>
-                <h4>{{ order.store }}</h4>
-                <p>{{ order.area }} · {{ order.window }}</p>
-              </div>
-              <span class="status-badge">{{ order.status }}</span>
-            </article>
-          } @empty {
-            <p class="dashboard-description">後端目前沒有待確認配送資料。</p>
-          }
-        </div>
-      </section>
-
-      <section class="alerts-section" aria-labelledby="alerts-title">
-        <header class="section-heading">
-          <div>
-            <p class="section-eyebrow">待處理提醒</p>
-            <h3 id="alerts-title">待處理提醒</h3>
-          </div>
-
-          <span class="alert-count">{{ alerts().length }}</span>
-        </header>
-
-        <div class="alert-list">
-          @for (alert of alerts(); track alert.title) {
-            <article class="alert-item" [class]="'tone-' + alert.tone">
-              <span class="alert-indicator" aria-hidden="true"></span>
-              <div>
-                <h4>{{ alert.title }}</h4>
-                <p>{{ alert.detail }}</p>
-              </div>
-            </article>
-          }
-        </div>
-      </section>
-    </aside>
-  </div>
   <section class="map-layer-controls" aria-label="地圖圖層">
-    <mat-slide-toggle
-      [checked]="showMapPoints()"
-      (change)="toggleMapPoints($event.checked)"
-    >
+    <mat-slide-toggle [checked]="showMapPoints()" (change)="toggleMapPoints($event.checked)">
       配送門市
     </mat-slide-toggle>
-    <mat-slide-toggle
-      [checked]="showDriverPoints()"
-      (change)="toggleDriverPoints($event.checked)"
-    >
+    <mat-slide-toggle [checked]="showDriverPoints()" (change)="toggleDriverPoints($event.checked)">
       司機位置
     </mat-slide-toggle>
-    <mat-slide-toggle
-      [checked]="showRouteLines()"
-      (change)="toggleRouteLines($event.checked)"
-    >
+    <mat-slide-toggle [checked]="showRouteLines()" (change)="toggleRouteLines($event.checked)">
       司機路線
     </mat-slide-toggle>
   </section>
-
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
     <div class="tab-strip" role="tablist">
@@ -154,6 +81,71 @@
 
     <!-- 分頁內層：排車條件 + 編成盤面 -->
     <div class="tab-panel">
+      <section class="dispatch-workspace-overview" aria-label="今日調度重點">
+        <div class="summary-grid" aria-label="今日配送狀態">
+          @for (card of summaryCards(); track card.label) {
+            <article class="summary-card" [class]="'tone-' + card.tone">
+              <p class="summary-label">{{ card.label }}</p>
+              <strong class="summary-value">{{ card.value }}</strong>
+              <p class="summary-detail">{{ card.detail }}</p>
+            </article>
+          }
+        </div>
+
+        <div class="workspace-status-grid" aria-label="待確認配送與待處理提醒">
+          <app-fleet-tracking-panel [driverPoints]="mapDrivers()" />
+
+          <section class="orders-section" aria-labelledby="pending-orders-title">
+            <header class="section-heading">
+              <div>
+                <p class="section-eyebrow">待審核清單</p>
+                <h3 id="pending-orders-title">待確認配送</h3>
+              </div>
+
+              <span class="section-count">{{ pendingOrders().length }} / {{ orders().length }} 筆</span>
+            </header>
+
+            <div class="pending-order-list">
+              @for (order of pendingOrders(); track order.id) {
+                <article class="pending-order">
+                  <div>
+                    <p class="order-id">{{ order.id }}</p>
+                    <h4>{{ order.store }}</h4>
+                    <p>{{ order.area }} · {{ order.window }}</p>
+                  </div>
+                  <span class="status-badge">{{ order.status }}</span>
+                </article>
+              } @empty {
+                <p class="dashboard-description">目前沒有待確認配送資料。</p>
+              }
+            </div>
+          </section>
+
+          <section class="alerts-section" aria-labelledby="alerts-title">
+            <header class="section-heading">
+              <div>
+                <p class="section-eyebrow">待處理提醒</p>
+                <h3 id="alerts-title">待處理提醒</h3>
+              </div>
+
+              <span class="alert-count">{{ alerts().length }}</span>
+            </header>
+
+            <div class="alert-list">
+              @for (alert of alerts(); track alert.title) {
+                <article class="alert-item" [class]="'tone-' + alert.tone">
+                  <span class="alert-indicator" aria-hidden="true"></span>
+                  <div>
+                    <h4>{{ alert.title }}</h4>
+                    <p>{{ alert.detail }}</p>
+                  </div>
+                </article>
+              }
+            </div>
+          </section>
+        </div>
+      </section>
+
       <!-- 加號分頁：盤面已清空，編好之後命名存成編組 -->
       @if (creatingTemplate()) {
         <div class="template-detail">
@@ -295,12 +287,46 @@
           <p class="board-error">{{ boardError() }}</p>
         }
 
+        <section class="driver-assignment" cdkDropListGroup aria-label="司機指派">
+          <div class="driver-pool" cdkDropList [cdkDropListData]="driverPool()" cdkDropListSortingDisabled>
+            <span>可指派司機</span>
+            <div class="driver-chip-list">
+              @for (driver of driverPool(); track driver.id) {
+                <button type="button" class="driver-chip" cdkDrag [cdkDragData]="driver" [disabled]="busy()">
+                  <mat-icon aria-hidden="true">person</mat-icon>
+                  {{ driver.name }}
+                </button>
+              } @empty {
+                <small>沒有可指派司機</small>
+              }
+            </div>
+          </div>
+
+          <div class="driver-targets">
+            @for (route of routes(); track route.vehicleId) {
+              <div
+                class="driver-target"
+                [class.is-maintenance]="route.isMaintenance"
+                cdkDropList
+                [cdkDropListData]="driverPool()"
+                [cdkDropListDisabled]="busy() || route.isMaintenance"
+                cdkDropListSortingDisabled
+                (cdkDropListDropped)="onDriverDrop(route, $event)"
+              >
+                <span>{{ route.plateNumber }}</span>
+                <strong>{{ route.driverId === null ? '拖曳司機到這裡' : driverName(route.driverId) }}</strong>
+              </div>
+            }
+          </div>
+        </section>
+
         @for (route of routes(); track route.vehicleId) {
-          <div class="board-lane" [class.is-overloaded]="isOverloaded(route)">
+          <div class="board-lane" [class.is-overloaded]="isOverloaded(route)" [class.is-maintenance]="route.isMaintenance">
             <h4>
               {{ route.plateNumber }}
               · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
               {{ route.totalDistance / 1000 | number: '1.1-1' }} km
+              @if (route.isMaintenance) { · 維修中 }
             </h4>
             <!--
               選中狀態綁在 option 上而不是 select 的 [value]：
@@ -310,7 +336,7 @@
             <select
               class="board-driver"
               [class.is-unassigned]="!isDriverDispatchable(route.driverId)"
-              [disabled]="busy()"
+              [disabled]="busy() || route.isMaintenance"
               (change)="onDriverChange(route, $event)"
             >
               <option value="" [selected]="!isDriverDispatchable(route.driverId)">
@@ -333,16 +359,18 @@
               class="board-dropzone"
               cdkDropList
               [cdkDropListData]="route.cards"
-              [cdkDropListDisabled]="saving() || route.hasLockedStops"
+              [cdkDropListDisabled]="saving() || route.hasLockedStops || route.isMaintenance"
               (cdkDropListDropped)="onDrop($event)"
             >
               @for (card of route.cards; track card.orderId) {
-                <p class="board-card" cdkDrag>
+                <p class="board-card" cdkDrag [cdkDragDisabled]="route.isMaintenance || route.hasLockedStops">
                   #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
                 </p>
               } @empty {
                 <p class="board-empty">
-                  @if (route.hasLockedStops) {
+                  @if (route.isMaintenance) {
+                    維修中車輛，暫時無法調整
+                  } @else if (route.hasLockedStops) {
                     已完成或已取消訂單不列入調度看板
                   } @else {
                     把訂單拖到這裡
@@ -375,8 +403,9 @@
       </div>
     </div>
   </section>
+
   @if (loading()) {
-    <p class="dashboard-description">正在從後端同步訂單、門市、司機、車輛與倉庫資料...</p>
+    <p class="dashboard-description">正在同步資料...</p>
   } @else if (errorMessage()) {
     <p class="dashboard-description">{{ errorMessage() }}</p>
   }

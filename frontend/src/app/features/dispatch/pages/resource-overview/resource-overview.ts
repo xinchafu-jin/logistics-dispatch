@@ -609,7 +609,7 @@ export class ResourceOverview implements OnInit {
       },
       error: () => {
         input.checked = store.isActive;
-        this.errorMessage.set('店家狀態更新失敗，請確認後端服務。');
+        this.errorMessage.set('店家狀態更新失敗，請稍後再試。');
         this.changingStoreStatusId.set(null);
       },
     });
@@ -687,7 +687,7 @@ export class ResourceOverview implements OnInit {
         this.isDeleting.set(false);
       },
       error: () => {
-        this.errorMessage.set(`刪除${this.deleteTargetLabel(target)}失敗，請確認後端資料。`);
+        this.errorMessage.set(`刪除${this.deleteTargetLabel(target)}失敗，請稍後再試。`);
         this.isDeleting.set(false);
       },
     });
@@ -726,7 +726,7 @@ export class ResourceOverview implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.errorMessage.set('無法取得資源資料，請確認後端服務是否正在執行。');
+        this.errorMessage.set('暫時無法載入資源資料，請稍後再試。');
         this.loading.set(false);
       },
     });
@@ -840,7 +840,7 @@ export class ResourceOverview implements OnInit {
         this.editingWarehouseId.set(null);
       },
       error: () => {
-        this.formError.set('儲存失敗，請確認欄位內容與後端服務。');
+        this.formError.set('儲存失敗，請確認欄位內容後再試。');
         this.isSaving.set(false);
       },
     });

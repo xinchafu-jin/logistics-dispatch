@@ -5,8 +5,6 @@
 
 .live-fleet-map {
   position: relative;
-  display: grid;
-  grid-template-rows: 430px auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -22,6 +20,7 @@
 .fleet-map-stage {
   position: relative;
   min-width: 0;
+  height: 430px;
   min-height: 430px;
   overflow: hidden;
 }
@@ -90,8 +89,7 @@
   letter-spacing: 0;
 }
 
-.fleet-map-header h3,
-.fleet-tracking-panel strong {
+.fleet-map-header h3 {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
@@ -114,97 +112,6 @@
   font-size: 0.6875rem;
   white-space: nowrap;
   backdrop-filter: blur(8px);
-}
-
-.fleet-tracking-panel {
-  position: relative;
-  z-index: 1;
-  grid-row: 2;
-  width: auto;
-  padding: 16px 24px 18px;
-  background: var(--panel);
-  border-top: 1px solid var(--metal-edge);
-}
-
-.fleet-tracking-panel > p:not(.fleet-map-eyebrow),
-.fleet-tracking-panel > small,
-.tracking-empty {
-  display: block;
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.5;
-}
-
-.fleet-tracking-panel > small {
-  color: #e0ad76;
-}
-
-.tracking-driver-list {
-  display: grid;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.tracking-driver {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 9px;
-  padding: 8px;
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.tracking-driver:hover,
-.tracking-driver.is-selected {
-  border-color: rgb(99 209 198 / 32%);
-  background: rgb(99 209 198 / 8%);
-}
-
-.tracking-driver i {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  background: #c7834d;
-  border-radius: 50%;
-  box-shadow: 0 0 0 4px rgb(199 131 77 / 10%);
-}
-
-.tracking-driver i.is-active {
-  background: var(--accent);
-  box-shadow: 0 0 0 4px rgb(99 209 198 / 10%);
-}
-
-.tracking-driver span {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.tracking-driver strong,
-.tracking-driver small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tracking-driver strong {
-  color: var(--text);
-  font-size: 0.78rem;
-}
-
-.tracking-driver small {
-  color: var(--muted);
-  font-size: 0.67rem;
-}
-
-:host-context(.dispatch-layout.is-light-theme) .fleet-tracking-panel > small {
-  color: #8a5726;
 }
 
 .fleet-map-notice {
@@ -254,7 +161,4 @@
     text-align: right;
   }
 
-  .fleet-tracking-panel {
-    padding: 14px 18px 16px;
-  }
 }

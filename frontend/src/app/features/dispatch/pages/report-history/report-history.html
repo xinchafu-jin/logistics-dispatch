@@ -1,0 +1,65 @@
+<main class="report-history-page">
+  <section class="page-intro">
+    <div>
+      <p class="page-eyebrow">歷史報表查詢中心</p>
+      <h2>訂單歷史紀錄</h2>
+      <p>依配送日期查看訂單進度與完成結果。</p>
+    </div>
+
+    <form class="date-range" (submit)="$event.preventDefault(); applyRange()">
+      <label>
+        <span>起始日期</span>
+        <input type="date" [value]="from()" (change)="updateFrom($event)" />
+      </label>
+      <label>
+        <span>結束日期</span>
+        <input type="date" [value]="to()" (change)="updateTo($event)" />
+      </label>
+      <button type="submit">查詢</button>
+    </form>
+  </section>
+
+  @if (errorMessage()) {
+    <p class="feedback"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
+  }
+
+  <section class="history-summary" aria-label="訂單查詢摘要">
+    <article><span>查詢訂單</span><strong>{{ records().length }}<small>筆</small></strong></article>
+    <article><span>已完成</span><strong>{{ completedCount() }}<small>筆</small></strong></article>
+    <article><span>配送中</span><strong>{{ activeCount() }}<small>筆</small></strong></article>
+    <article><span>配送失敗</span><strong>{{ exceptionCount() }}<small>筆</small></strong></article>
+  </section>
+
+  <section class="history-panel" aria-labelledby="history-records-title">
+    <header>
+      <div>
+        <p class="section-eyebrow">訂單明細</p>
+        <h3 id="history-records-title">{{ from() }} 至 {{ to() }}</h3>
+      </div>
+      <span>{{ records().length }} 筆</span>
+    </header>
+
+    @if (loading()) {
+      <p class="empty-state">正在讀取訂單歷史...</p>
+    } @else {
+      <div class="history-table" role="table" aria-label="訂單歷史紀錄">
+        <div class="history-row history-head" role="row">
+          <span role="columnheader">配送日期</span>
+          <span role="columnheader">訂單</span>
+          <span role="columnheader">門市</span>
+          <span role="columnheader">配送狀態</span>
+        </div>
+        @for (record of records(); track record.order.id ?? record.order.orderNumber) {
+          <article class="history-row" role="row">
+            <span>{{ record.order.deliveryDate }}</span>
+            <span><strong>{{ record.order.orderNumber }}</strong><small>{{ record.order.boxCount }} 箱</small></span>
+            <span>{{ record.store?.name ?? ('門市 #' + record.order.storeId) }}</span>
+            <span class="status" [class]="'status-' + record.order.status.toLowerCase()">{{ statusLabel(record.order.status) }}</span>
+          </article>
+        } @empty {
+          <p class="empty-state">這個日期範圍沒有訂單紀錄。</p>
+        }
+      </div>
+    }
+  </section>
+</main>

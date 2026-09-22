@@ -337,7 +337,7 @@ export class DispatchShell implements OnInit {
         this.isLoadingNotifications.set(false);
       },
       error: () => {
-        this.notificationError.set('暫時無法取得主管待辦，請確認後端服務後重新整理。');
+        this.notificationError.set('暫時無法取得主管待辦，請重新整理後再試。');
         this.isLoadingNotifications.set(false);
       },
     });
@@ -356,7 +356,7 @@ export class DispatchShell implements OnInit {
         this.notificationAction.set(null);
       },
       error: () => {
-        this.notificationError.set('操作未完成，請確認資料與後端狀態後再試。');
+        this.notificationError.set('操作未完成，請確認資料後再試。');
         this.notificationAction.set(null);
       },
     });
