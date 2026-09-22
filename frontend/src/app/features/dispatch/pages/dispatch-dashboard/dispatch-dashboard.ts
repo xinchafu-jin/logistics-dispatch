@@ -21,13 +21,11 @@ import {
   DriverDto,
   DriverShiftDto,
   DriverTakenDto,
-  FuelPriceDto,
   GpsPingDto,
   OrderDto,
   OrderStatus,
   ReassignRequest,
   RouteStatus,
-  RouteMetricsDto,
   RouteStopDto,
   ShiftType,
   StoreDto,
@@ -35,17 +33,9 @@ import {
   TemplateRouteRequest,
   UnassignedOrderDto,
   VehicleDto,
-  VehicleStatus,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
-
-/** 車輛狀態顯示用的中文，灰掉的槽位要說明為什麼不能用 */
-const VEHICLE_STATUS_LABEL: Record<VehicleStatus, string> = {
-  AVAILABLE: '可派車',
-  MAINTENANCE: '維修中',
-  RETIRED: '已報廢',
-};
 
 /** 後端錯誤統一是 { message }，取得到就用它的文字，否則給個能辨識的替代。 */
 function describeError(error: unknown): string {
@@ -110,8 +100,6 @@ interface BoardRoute {
   plateNumber: string;
   vehicleType: string | null;
   capacity: number;
-  /** 維修／報廢的車不能排入，畫面上要灰掉並標出狀態 */
-  status: VehicleStatus;
   /** 指派的司機，未指派為 null。發布前必須指派，否則司機端查不到任務 */
   driverId: number | null;
   /** 上一次由後端算出的里程；拖曳後會失準，要等 reassign 重算 */
@@ -140,8 +128,6 @@ interface DriverOption {
   name: string;
   /** 不是 null 就代表當天已排在別處，選單要 disabled 並顯示這句原因 */
   takenNote: string | null;
-  /** 當日班表不符合出車資格時，保留司機並標示原因，避免看起來像資料消失。 */
-  scheduleNote: string | null;
 }
 
 interface SummaryCard {
@@ -175,10 +161,6 @@ interface DashboardAlert {
 })
 export class DispatchDashboard implements OnInit {
   readonly routes = signal<BoardRoute[]>([]);
-  readonly latestFuelPrice = signal<FuelPriceDto | null>(null);
-  readonly selectedRouteMetrics = signal<RouteMetricsDto | null>(null);
-  readonly routeMetricsLoading = signal(false);
-  readonly routeMetricsError = signal('');
   readonly unassigned = signal<BoardCard[]>([]);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
@@ -225,10 +207,6 @@ export class DispatchDashboard implements OnInit {
   readonly published = computed(() =>
     this.routes().some((route) => route.routeStatus === 'PUBLISHED'),
   );
-
-  statusLabel(status: VehicleStatus): string {
-    return VEHICLE_STATUS_LABEL[status];
-  }
 
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
@@ -485,38 +463,8 @@ export class DispatchDashboard implements OnInit {
 
   ngOnInit(): void {
     this.loadDashboard();
-    this.loadFuelPrice();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
-  }
-
-  viewRouteMetrics(route: BoardRoute): void {
-    if (!route.routeId || this.routeMetricsLoading()) {
-      return;
-    }
-    this.routeMetricsLoading.set(true);
-    this.routeMetricsError.set('');
-    this.api.getRouteMetrics(route.routeId).subscribe({
-      next: (metrics) => {
-        this.selectedRouteMetrics.set(metrics);
-        this.routeMetricsLoading.set(false);
-      },
-      error: (error: unknown) => {
-        this.routeMetricsError.set(describeError(error));
-        this.routeMetricsLoading.set(false);
-      },
-    });
-  }
-
-  syncFuelPrice(): void {
-    this.api.syncFuelPrice().subscribe({
-      next: (price) => this.latestFuelPrice.set(price),
-      error: (error: unknown) => this.routeMetricsError.set(`油價同步失敗：${describeError(error)}`),
-    });
-  }
-
-  formatMetric(value: number | null, fractionDigits = 1): string {
-    return value === null || value === undefined ? '--' : value.toFixed(fractionDigits);
   }
 
   onDateChange(event: Event): void {
@@ -569,14 +517,6 @@ export class DispatchDashboard implements OnInit {
         this.errorMessage.set('無法取得後台總覽資料，請確認後端服務與登入狀態。');
         this.loading.set(false);
       },
-    });
-  }
-
-  private loadFuelPrice(): void {
-    this.api.getLatestFuelPrice().subscribe({
-      next: (price) => this.latestFuelPrice.set(price),
-      // 油價尚未同步時不應影響排車與調度看板。
-      error: () => this.latestFuelPrice.set(null),
     });
   }
 
@@ -699,8 +639,7 @@ export class DispatchDashboard implements OnInit {
    * 佔用有兩種來源：同一個倉的其他車道（看板上看得到），以及當天其他倉
    * （看板看不到，要靠後端的 driversTakenElsewhere 補）。
    *
-   * 自己這條已指派的司機永遠可選，否則 select 找不到對應 option，
-   * 畫面會退回第一個選項（看起來像沒指派）。
+   * 停用或當日無法排班的司機不會出現在今日調度，避免被重新指派。
    */
   driverOptions(route: BoardRoute): DriverOption[] {
     const takenHere = new Map<number, string>();
@@ -716,10 +655,9 @@ export class DispatchDashboard implements OnInit {
     }
 
     return this.drivers()
-      // 已儲存的舊路線即使指到停職司機也要保留在選單裡，否則 select 會誤顯示成未指派。
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && (driver.isActive || driver.id === route.driverId),
+          driver.id != null && this.isDriverDispatchable(driver.id),
       )
       .map((driver) => ({
         id: driver.id,
@@ -728,8 +666,12 @@ export class DispatchDashboard implements OnInit {
           driver.id === route.driverId
             ? null
             : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
-        scheduleNote: this.driverScheduleNote(driver.id),
       }));
+  }
+
+  /** 僅限啟用且當天有 WORK 班次的司機能出現在今日調度。 */
+  isDriverDispatchable(driverId: number | null): boolean {
+    return driverId !== null && this.driverScheduleNote(driverId) === null;
   }
 
   /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
@@ -1277,42 +1219,51 @@ export class DispatchDashboard implements OnInit {
     // 原始結果留著不動，之後要做「調整前後差異」時當作比較基準
     this.dispatchResult.set(result);
 
-    // 車輛＝固定槽位：這個倉的每台車都給一格，後端有回路線的就填進去。
-    // 維修／報廢的車也畫出來（灰掉），讓調度員知道為什麼少了一台可用車。
+    // 車輛＝固定槽位：只為這個倉可派車的車輛建立一格，後端有回路線的就填進去。
     const routeByVehicle = new Map(result.routes.map((route) => [route.vehicleId, route]));
     const dispatchableOrderIds = new Set(
       this.orders()
         .filter((order) => order.status === 'CONFIRMED')
         .map((order) => order.id),
     );
+    const boardVehicles = this.vehicles().filter(
+      (vehicle): vehicle is VehicleDto & {id: number} =>
+        vehicle.id != null &&
+        vehicle.warehouseId === this.warehouseId() &&
+        vehicle.status === 'AVAILABLE',
+    );
+    const boardVehicleIds = new Set(boardVehicles.map((vehicle) => vehicle.id));
     this.routes.set(
-      this.vehicles()
-        .filter((vehicle) => vehicle.id != null && vehicle.warehouseId === this.warehouseId())
-        .map((vehicle) => {
-          const route = routeByVehicle.get(vehicle.id!);
-          const routeStops = route?.stops ?? [];
-          return {
-            routeId: route?.routeId ?? 0,
-            vehicleId: vehicle.id!,
-            plateNumber: vehicle.plateNumber,
-            vehicleType: vehicle.vehicleType ?? null,
-            capacity: vehicle.capacity,
-            status: vehicle.status,
-            driverId: route?.driverId ?? null,
-            totalDistance: route?.totalDistance ?? 0,
-            routeStatus: route?.status ?? 'DRAFT',
-            hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
-            cards: routeStops
-              .filter((stop) => dispatchableOrderIds.has(stop.orderId))
-              .map(toBoardCard),
-          };
-        }),
+      boardVehicles.map((vehicle) => {
+        const route = routeByVehicle.get(vehicle.id);
+        const routeStops = route?.stops ?? [];
+        return {
+          routeId: route?.routeId ?? 0,
+          vehicleId: vehicle.id,
+          plateNumber: vehicle.plateNumber,
+          vehicleType: vehicle.vehicleType ?? null,
+          capacity: vehicle.capacity,
+          driverId: route?.driverId ?? null,
+          totalDistance: route?.totalDistance ?? 0,
+          routeStatus: route?.status ?? 'DRAFT',
+          hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
+          cards: routeStops
+            .filter((stop) => dispatchableOrderIds.has(stop.orderId))
+            .map(toBoardCard),
+        };
+      }),
     );
-    this.unassigned.set(
-      result.unassignedOrders
+    // 維修或報廢車的草稿不畫成車道，但其中仍待排的訂單必須保留給其他可派車輛。
+    const strandedOrders = result.routes
+      .filter((route) => !boardVehicleIds.has(route.vehicleId))
+      .flatMap((route) => route.stops)
+      .filter((stop) => dispatchableOrderIds.has(stop.orderId));
+    const unassignedByOrderId = new Map(
+      [...result.unassignedOrders, ...strandedOrders]
         .filter((order) => dispatchableOrderIds.has(order.orderId))
-        .map(toBoardCard),
+        .map((order) => [order.orderId, order]),
     );
+    this.unassigned.set([...unassignedByOrderId.values()].map(toBoardCard));
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
   }
 }

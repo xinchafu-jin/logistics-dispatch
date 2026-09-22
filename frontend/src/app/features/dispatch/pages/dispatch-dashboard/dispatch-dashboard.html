@@ -122,35 +122,6 @@
     </mat-slide-toggle>
   </section>
 
-  <section class="route-metrics-panel" aria-label="路線成本與里程預估">
-    <header>
-      <div>
-        <p class="section-eyebrow">行車估算</p>
-        <h3>路線里程與油耗</h3>
-      </div>
-      @if (latestFuelPrice(); as fuelPrice) {
-        <span>柴油 {{ formatMetric(fuelPrice.pricePerLiter, 2) }} 元／L</span>
-      } @else {
-        <span>尚未取得柴油牌價</span>
-      }
-      <button type="button" class="template-secondary" (click)="syncFuelPrice()">同步油價</button>
-    </header>
-    @if (routeMetricsLoading()) {
-      <p>正在計算路線資料...</p>
-    } @else if (selectedRouteMetrics(); as metrics) {
-      <dl>
-        <div><dt>規劃里程</dt><dd>{{ formatMetric(metrics.plannedKm) }} km</dd></div>
-        <div><dt>GPS 預估</dt><dd>{{ formatMetric(metrics.gpsEstimatedKm) }} km</dd></div>
-        <div><dt>預估油費</dt><dd>NT$ {{ formatMetric(metrics.plannedFuelCost, 0) }}</dd></div>
-        <div><dt>剩餘行程</dt><dd>{{ formatMetric(metrics.remainingKm) }} km</dd></div>
-      </dl>
-    } @else {
-      <p>在下方任一路線按「查看行車預估」，可取得 OSRM 距離、GPS 估算與油耗。</p>
-    }
-    @if (routeMetricsError()) { <p class="board-error">{{ routeMetricsError() }}</p> }
-  </section>
-
-
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
     <div class="tab-strip" role="tablist">
@@ -325,26 +296,12 @@
         }
 
         @for (route of routes(); track route.vehicleId) {
-          <div
-            class="board-lane"
-            [class.is-overloaded]="isOverloaded(route)"
-            [class.is-unavailable]="route.status !== 'AVAILABLE'"
-          >
+          <div class="board-lane" [class.is-overloaded]="isOverloaded(route)">
             <h4>
               {{ route.plateNumber }}
-              @if (route.status !== 'AVAILABLE') {
-                <span class="lane-status">{{ statusLabel(route.status) }}</span>
-              } @else {
-                · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
-                {{ route.totalDistance / 1000 | number: '1.1-1' }} km
-              }
+              · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+              {{ route.totalDistance / 1000 | number: '1.1-1' }} km
             </h4>
-            @if (route.routeId) {
-              <button type="button" class="route-metrics-action" (click)="viewRouteMetrics(route)">
-                查看行車預估
-              </button>
-            }
-
             <!--
               選中狀態綁在 option 上而不是 select 的 [value]：
               Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
@@ -352,20 +309,20 @@
             -->
             <select
               class="board-driver"
-              [class.is-unassigned]="route.driverId === null"
-              [disabled]="busy() || route.status !== 'AVAILABLE'"
+              [class.is-unassigned]="!isDriverDispatchable(route.driverId)"
+              [disabled]="busy()"
               (change)="onDriverChange(route, $event)"
             >
-              <option value="" [selected]="route.driverId === null">未指派司機</option>
+              <option value="" [selected]="!isDriverDispatchable(route.driverId)">
+                未指派司機
+              </option>
               @for (option of driverOptions(route); track option.id) {
                 <option
                   [value]="option.id"
                   [selected]="option.id === route.driverId"
-                  [disabled]="option.takenNote !== null || option.scheduleNote !== null"
+                  [disabled]="option.takenNote !== null"
                 >
-                  {{ option.name }}@if (option.scheduleNote) {
-                  · {{ option.scheduleNote }}
-                } @else if (option.takenNote) {
+                  {{ option.name }}@if (option.takenNote) {
                   · {{ option.takenNote }}
                 }
                 </option>
@@ -376,7 +333,7 @@
               class="board-dropzone"
               cdkDropList
               [cdkDropListData]="route.cards"
-              [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE' || route.hasLockedStops"
+              [cdkDropListDisabled]="saving() || route.hasLockedStops"
               (cdkDropListDropped)="onDrop($event)"
             >
               @for (card of route.cards; track card.orderId) {
@@ -385,9 +342,7 @@
                 </p>
               } @empty {
                 <p class="board-empty">
-                  @if (route.status !== 'AVAILABLE') {
-                    {{ statusLabel(route.status) }}，無法排入
-                  } @else if (route.hasLockedStops) {
+                  @if (route.hasLockedStops) {
                     已完成或已取消訂單不列入調度看板
                   } @else {
                     把訂單拖到這裡
