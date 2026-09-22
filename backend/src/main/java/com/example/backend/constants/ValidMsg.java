@@ -115,4 +115,8 @@ public final class ValidMsg {
     public static final String WAREHOUSE_LAT_REQUIRED = "倉庫緯度不能為空";
     public static final String WAREHOUSE_LNG_REQUIRED = "倉庫經度不能為空";
     public static final String WAREHOUSE_PHONE_MAX_LENGTH = "電話長度不能超過 30 字元";
+
+    // Driver message（司機聊天室）
+    public static final String DRIVER_MESSAGE_CONTENT_REQUIRED = "訊息不能是空白";
+    public static final String DRIVER_MESSAGE_CONTENT_MAX_LENGTH = "訊息不能超過 1000 字";
 }

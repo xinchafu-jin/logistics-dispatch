@@ -4,6 +4,43 @@
 
 系統定位：**決策輔助系統**，排車演算法／AI 只產出建議，最終排定與發布權在後台人員。
 
+## 線上 Demo
+
+| | 網址 | 測試帳號 |
+|---|---|---|
+| 後台（調度） | https://dispatch.xinchafujin.com | `admin` / `Dispatch2026` |
+| 司機端（PWA） | https://driver.xinchafujin.com | `D001` / `driver123` |
+
+司機端支援「加到主畫面」，安裝後以全螢幕 PWA 執行，並可離線開啟。
+
+> 公開的 demo 環境，帳密為測試用途，資料會定期重置。
+
+## 部署
+
+單台 GCE VM（e2-medium / Debian 12），Docker Compose 編排四個服務，
+Nginx 以同源反向代理串接前後端，兩個子網域各自服務後台與司機端：
+
+```
+瀏覽器 ─HTTPS→ Nginx ─┬─ dispatch.  → 後台（Angular）
+                      ├─ driver.    → 司機端（Angular PWA）
+                      └─ /api/      → Spring Boot ─┬─ MySQL（Flyway 管 schema）
+                                                   └─ OSRM（全台路網，MLD）
+```
+
+CI/CD：push 到 `main` → GitHub Actions 建置 `linux/amd64` 映像推上 ghcr.io
+→ SSH 進 VM 拉取並重啟 → 健康檢查。前端映像**必須在 CI 建置**，
+Angular 的 AOT 編譯器單一 worker 就需要 2GB 以上記憶體，4GB 的 VM 會 OOM。
+
+完整步驟、決策理由與踩過的坑（Spring Boot 4 的 Flyway 模組拆分、
+同源仍會被 CORS 擋、MySQL 8.4 的 Public Key Retrieval 等）
+見 [docs/deployment.md](docs/deployment.md)。
+
+### 本機開發
+
+後端用 IDE 啟動、前端用 `ng serve`、OSRM 用 Docker 單獨跑。
+`deploy/docker-compose.yml` 是**正式環境**用的，本機直接 `up` 會因為
+缺少 Let's Encrypt 憑證而導致 web 容器啟動失敗，這是預期行為。
+
 ## 技術棧
 
 | 層                 | 選擇                        |

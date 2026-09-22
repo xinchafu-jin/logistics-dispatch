@@ -45,12 +45,16 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     // 資料驗證
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    //websocket
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // OR-Tools 依賴
     implementation 'com.google.ortools:ortools-java:9.12.4544'
     // spring ai 依賴
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    //
+
 
 }
 

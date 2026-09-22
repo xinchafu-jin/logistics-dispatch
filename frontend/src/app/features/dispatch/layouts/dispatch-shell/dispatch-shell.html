@@ -427,9 +427,51 @@
                   </button>
                 </form>
               } @else {
-                <!-- 司機：後端還沒有司機聊天 API，先顯示提示 -->
+                <!-- 司機對話：資料來自後端 driver_messages，換人時由 loadDriverConversation 重新載入 -->
                 <h3 class="chat-panel__title">{{ contact.name }}</h3>
-                <p class="chat-panel__placeholder">尚未開放與 {{ contact.name }} 的聊天</p>
+                <div class="chat-messages">
+                  <!-- track 用 message.id：之後推播和送出會把新訊息合併進來，用 id 才認得出是同一則 -->
+                  @for (message of driverMessages(); track message.id) {
+                    <!-- 調度中心（我們這邊）發的靠右，司機發的靠左，沿用 AI 對話的 is-user 樣式 -->
+                    <p class="chat-message" [class.is-user]="message.senderType === 'ADMIN'">
+                      {{ message.content }}
+                      <small>{{ formatNotificationTime(message.createdAt) }}</small>
+                    </p>
+                  } @empty {
+                    <p class="chat-panel__placeholder">還沒有和 {{ contact.name }} 的對話</p>
+                  }
+                </div>
+
+                @if (driverChatError()) {
+                  <p class="chat-panel__contacts-error" role="alert">{{ driverChatError() }}</p>
+                }
+
+                <!-- 跟 AI 的輸入框分開：各自綁自己的 signal，換對象時字不會跟著跑 -->
+                <form class="chat-composer" (ngSubmit)="sendDriverMessage()">
+                  <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                    <!-- maxlength 跟後端的 1000 字上限一致，超過就打不進去，不用等送出才被擋 -->
+                    <textarea
+                      matInput
+                      cdkTextareaAutosize
+                      cdkAutosizeMinRows="1"
+                      cdkAutosizeMaxRows="5"
+                      maxlength="1000"
+                      [placeholder]="'回覆 ' + contact.name"
+                      name="driverChatInput"
+                      [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
+                      [(ngModel)]="driverChatInput"
+                    ></textarea>
+                  </mat-form-field>
+                  <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+                  <button
+                    type="submit"
+                    matIconButton
+                    aria-label="送出"
+                    [disabled]="isSendingDriverMessage() || !driverChatInput().trim()"
+                  >
+                    <mat-icon aria-hidden="true">send</mat-icon>
+                  </button>
+                </form>
               }
             }
           </div>

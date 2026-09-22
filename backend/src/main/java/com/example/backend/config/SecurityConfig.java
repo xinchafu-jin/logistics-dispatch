@@ -56,6 +56,9 @@ public class SecurityConfig {
                                 "/api/auth/driver/forgot-password/reset"
                         ).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // WebSocket 握手：瀏覽器帶不了 Authorization 標頭，這裡先放行，
+                        // 改由 WebSocketAuthInterceptor 在 STOMP 的 CONNECT 驗 JWT
+                        .requestMatchers("/api/ws/**").permitAll()
                         .requestMatchers("/api/driver/**")
                         .hasRole(AuthService.ROLE_DRIVER)
                         .requestMatchers("/api/driver-schedules/**", "/api/fleet/**")
@@ -129,13 +132,14 @@ public class SecurityConfig {
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
+
     // api key
     @Bean
     public TextEncryptor aiApiKeyEncryptor(
 
-            @Value("${app.crypto.password}")String password,
-            @Value("${app.crypto.salt}")String salt
-    ){
+            @Value("${app.crypto.password}") String password,
+            @Value("${app.crypto.salt}") String salt
+    ) {
         if (password.length() < 32) {
             throw new IllegalStateException("APP_CRYPTO_PASSWORD 必須至少 32 字元");
         }

@@ -180,6 +180,13 @@ h2 {
   right: 0;
 }
 
+// 客服按鈕：外觀沿用 .icon-button（含淺色主題），位置接在定位鈕下方：22px + 按鈕高 38px + 間距 8px
+.support-control {
+  position: absolute;
+  top: 68px;
+  right: 0;
+}
+
 .attendance-sheet {
   position: absolute;
   right: 0;

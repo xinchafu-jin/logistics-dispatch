@@ -494,3 +494,51 @@ export interface AiPendingActionDto {
   /** 只有 MOVE_ORDER 有值 */
   orderId: number | null;
 }
+
+// ── 司機聊天室 ─────────────────────────────────────────
+
+/** 對應後端 MessageSender：訊息是誰發的。ADMIN 代表「調度中心」，不分是哪一位管理員 */
+export type MessageSender = 'DRIVER' | 'ADMIN';
+
+/** 一則聊天訊息。對應後端 DriverMessageResponse */
+export interface DriverMessageDto {
+  /** 最後一則的 id 當下一次查詢的 afterId；前端合併清單時也用它去重 */
+  id: number;
+  /** 屬於哪位司機的對話串，不是寄件人 */
+  driverId: number;
+  senderType: MessageSender;
+  content: string;
+  createdAt: string;
+  /** 對方讀到的時間；null 或沒有這個欄位都代表還沒讀 */
+  readAt?: string | null;
+}
+
+/** POST /api/drivers/{driverId}/messages 的請求本體。對話屬於誰、誰發的、時間都由後端決定，只送內容 */
+export interface DriverMessageRequest {
+  content: string;
+}
+
+/** 紅點：某位司機有幾則還沒被管理員讀的訊息。對應後端 DriverMessageSummaryResponse */
+export interface DriverMessageSummaryDto {
+  driverId: number;
+  unreadCount: number;
+}
+
+/** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */
+export type DriverMessagePushType = 'MESSAGE' | 'READ';
+
+/**
+ * WebSocket 推播的內容。對應後端 DriverMessagePushResponse。
+ * 管理員頻道 /topic/admin/driver-messages 會收到所有司機的 MESSAGE 與 READ。
+ */
+export interface DriverMessagePushDto {
+  type: DriverMessagePushType;
+  /** 哪位司機的對話串；兩種 type 都有 */
+  driverId: number;
+  /** 新訊息本體；只有 MESSAGE 有 */
+  message?: DriverMessageDto | null;
+  /** 被讀的是哪一方發的訊息；只有 READ 有。DRIVER＝管理員讀了司機的訊息，ADMIN＝司機讀了調度中心的回覆 */
+  readSenderType?: MessageSender | null;
+  /** 標已讀的時間；只有 READ 有 */
+  readAt?: string | null;
+}

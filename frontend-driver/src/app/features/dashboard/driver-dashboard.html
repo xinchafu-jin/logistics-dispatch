@@ -54,6 +54,17 @@
         <mat-icon aria-hidden="true">my_location</mat-icon>
       </button>
 
+      <!-- 聯絡調度中心（客服）：疊在定位鈕正下方，跟它同一欄，不擋地圖中間也不壓到下方出勤面板。
+           點擊後開聊天的功能之後再接 -->
+      <button
+        type="button"
+        class="icon-button support-control"
+        title="聯絡調度中心"
+        aria-label="聯絡調度中心"
+      >
+        <mat-icon aria-hidden="true">support_agent</mat-icon>
+      </button>
+
       <section
         class="attendance-sheet"
         [class.is-expanded]="isAttendanceSheetExpanded()"

@@ -2,6 +2,7 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
+import com.example.backend.dto.respones.DriverMessageResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
@@ -38,6 +39,7 @@ public class DriverPortalController {
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
     private final GPSRouteService gpsRouteService;
+    private final DriverMessagesService driverMessagesService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -46,7 +48,8 @@ public class DriverPortalController {
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
-            GPSRouteService gpsRouteService
+            GPSRouteService gpsRouteService,
+            DriverMessagesService driverMessagesService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -55,6 +58,7 @@ public class DriverPortalController {
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
         this.gpsRouteService = gpsRouteService;
+        this.driverMessagesService = driverMessagesService;
     }
 
     /** 查詢今天的打卡、休息及 GPS 上傳狀態。 */
@@ -153,6 +157,39 @@ public class DriverPortalController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody MileageRequestDTO request) {
         return mileageLogsService.end(driverId(jwt), request);
+    }
+
+    /**
+     * 取得自己與調度中心的對話。afterId 省略時回最近 50 則；帶了只回比它新的（輪詢、重連補抓用）。
+     * 只能看自己的：driverId 從 JWT 取，前端沒有地方可以指定別人。
+     */
+    @GetMapping("/messages")
+    public List<DriverMessageResponse> findMessages(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) Long afterId
+    ) {
+        return driverMessagesService.findMessages(driverId(jwt), afterId);
+    }
+
+    /**
+     * 司機發訊息給調度中心。只收內容：對話屬於誰、誰發的、時間都由後端決定。
+     * 回傳存好的那一則（含 id），前端直接放進清單，並用 id 跟之後的輪詢結果去重。
+     */
+    @PostMapping("/messages")
+    public DriverMessageResponse sendMessage(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverMessageRequestDTO request
+    ) {
+        return driverMessagesService.sendFromDriver(driverId(jwt), request.getContent());
+    }
+
+    /**
+     * 把調度中心的回覆標成已讀，回傳這次標了幾筆。
+     * 只在司機停在聊天分頁時呼叫；在別的分頁輪詢未讀數時不要呼叫，否則紅點永遠看不到。
+     */
+    @PostMapping("/messages/read")
+    public int markMessagesRead(@AuthenticationPrincipal Jwt jwt) {
+        return driverMessagesService.markReadByDriver(driverId(jwt));
     }
 
     /** 從登入 Token 取得資料庫中的司機 ID。 */

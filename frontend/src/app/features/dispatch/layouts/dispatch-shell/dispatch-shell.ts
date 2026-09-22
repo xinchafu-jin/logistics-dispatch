@@ -1,5 +1,6 @@
-import {Component, OnInit, TemplateRef, computed, inject, signal, output, viewChild} from '@angular/core';
-import {toSignal} from '@angular/core/rxjs-interop';
+import {Component, DestroyRef, OnInit, TemplateRef, computed, inject, signal, output, viewChild} from '@angular/core';
+import {HttpErrorResponse} from '@angular/common/http';
+import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import {MatListModule} from '@angular/material/list';
 import {
   ActivatedRouteSnapshot,
@@ -23,11 +24,12 @@ import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
 import {AuthService} from '../../../../core/auth/auth.service';
 import {
   AiPendingActionDto,
-  DriverAccountApplicationDto, DriverDto,
+  DriverAccountApplicationDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
 } from '../../../../core/services/dispatch-api.models';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
 
@@ -103,6 +105,14 @@ export class DispatchShell implements OnInit {
   protected readonly chatWaiting = false;
   // 任務開關
   readonly panelOpenState = signal(false);
+  //司機訊息
+  readonly driverMessages = signal<DriverMessageDto[]>([]);
+  // 司機對話的輸入框；跟 AI 的 chatInput 分開，換對象時打到一半的字才不會被送給別人
+  protected readonly driverChatInput = signal('');
+  // 送出中：鎖住送出鈕，避免連按送出兩則一樣的訊息
+  protected readonly isSendingDriverMessage = signal(false);
+  // 司機對話的錯誤訊息，空字串代表沒有錯誤
+  protected readonly driverChatError = signal('');
 
 
   protected readonly notificationCount = computed(
@@ -115,6 +125,8 @@ export class DispatchShell implements OnInit {
   private readonly api = inject(DispatchApiService);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
+  private readonly chatSocket = inject(DriverChatSocketService);
+  private readonly destroyRef = inject(DestroyRef);
   // 確認執行視窗的內容，寫在 dispatch-shell.html 最下面的 <ng-template #confirmPlanDialog>
   private readonly confirmPlanDialog = viewChild.required<TemplateRef<unknown>>('confirmPlanDialog');
 
@@ -136,6 +148,7 @@ export class DispatchShell implements OnInit {
 
   ngOnInit(): void {
     this.loadPendingNotifications();
+    this.connectChatSocket();
   }
 
   signOut(): void {
@@ -418,6 +431,9 @@ export class DispatchShell implements OnInit {
   // 只負責換選中的人；窄版展開改由 expandChatIfNarrow 處理，因為點已選中的人不會進到這裡
   protected selectChatContact(contact: ChatContact): void {
     this.selectedChatContact.set(contact);
+    if (contact.kind === 'driver') {
+      this.loadDriverConversation(contact.driverId);
+    }
   }
 
   protected isSelectedChatContact(contact: ChatContact): boolean {
@@ -490,4 +506,150 @@ export class DispatchShell implements OnInit {
     });
   }
 
+  //拿司機id訊息
+  protected loadDriverConversation(driverId: number): void {
+    this.driverMessages.set([]);
+    // 換人時輸入框一起清空：打給 A 的字留在框裡，按下送出就會送給 B
+    this.driverChatInput.set('');
+    this.driverChatError.set('');
+    this.api.getDriverMessages(driverId).subscribe({
+      next: (message) => {
+        if (!this.isOpenDriver(driverId)) {
+          return
+        }
+        this.driverMessages.set(message);
+      },
+      error: () => {
+        if (this.isOpenDriver(driverId)) {
+          this.driverChatError.set('無法取得對話，請稍後再試。');
+        }
+      },
+    })
+  }
+
+  /**
+   * 回覆目前開著的司機。
+   *
+   * 成功：把後端存好的那一則（有 id）合併進清單、清空輸入框。
+   * 失敗：保留輸入框的字，讓調度員修改或再按一次；錯誤訊息優先用後端回的（例如超過 1000 字）。
+   */
+  protected sendDriverMessage(): void {
+    const contact = this.selectedChatContact();
+    const content = this.driverChatInput().trim();
+    // 送出中再按一次（Enter 連按、手滑雙擊）直接忽略，不然會送出兩則一樣的
+    if (contact.kind !== 'driver' || !content || this.isSendingDriverMessage()) {
+      return;
+    }
+
+    const driverId = contact.driverId;
+    this.isSendingDriverMessage.set(true);
+    this.driverChatError.set('');
+    this.api.sendDriverMessage(driverId, content).subscribe({
+      next: (saved) => {
+        this.isSendingDriverMessage.set(false);
+        // 送出途中換了人：訊息已經存進資料庫，換回來時會重新載到，這裡不能塞進別人的視窗
+        if (!this.isOpenDriver(driverId)) {
+          return;
+        }
+        this.driverChatInput.set('');
+        this.mergeDriverMessages([saved]);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isSendingDriverMessage.set(false);
+        if (this.isOpenDriver(driverId)) {
+          // 後端的錯誤格式是 ApiResponse.failure(message)，有訊息就直接顯示
+          this.driverChatError.set(error.error?.message ?? '訊息沒有送出，請稍後再試。');
+        }
+      },
+    });
+  }
+
+  /**
+   * 把新訊息合併進目前的對話：用 id 去重、依 id 由舊到新排序。
+   *
+   * 不能直接 push：之後接上 WebSocket，自己送出的訊息會「POST 回應」和「推播」各收到一次，
+   * 用 id 當 key 才不會出現兩則一樣的。
+   */
+  private mergeDriverMessages(incoming: DriverMessageDto[]): void {
+    this.driverMessages.update((current) => {
+      const byId = new Map<number, DriverMessageDto>();
+      for (const message of current) {
+        byId.set(message.id, message);
+      }
+      for (const message of incoming) {
+        byId.set(message.id, message);
+      }
+      return [...byId.values()].sort((a, b) => a.id - b.id);
+    });
+  }
+
+  private isOpenDriver(driverId: number): boolean {
+    const contact = this.selectedChatContact();
+    return contact.kind === 'driver' && contact.driverId === driverId;
+
+  }
+
+  // -------------------------------- 聊天室即時推播（WebSocket）--------------------------------
+
+  /**
+   * 登入後就連線，不等打開聊天室：之後的紅點要在聊天室關著時也能更新。
+   * dispatch-shell 銷毀（登出離開後台）時斷線，不然登出後還會一直用舊 token 重撥。
+   */
+  private connectChatSocket(): void {
+    this.chatSocket.pushes$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((push) => this.handleChatPush(push));
+    this.chatSocket.connected$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.catchUpOpenConversation());
+
+    this.chatSocket.connect();
+    this.destroyRef.onDestroy(() => this.chatSocket.disconnect());
+  }
+
+  /** 收到推播：只處理「畫面上開著的那位司機」；其他司機的紅點，等紅點功能做好再接 */
+  private handleChatPush(push: DriverMessagePushDto): void {
+    if (!this.isOpenDriver(push.driverId)) {
+      return;
+    }
+
+    if (push.type === 'MESSAGE' && push.message) {
+      // 自己剛送出的那則也會推回來一次，mergeDriverMessages 用 id 去重，不會出現兩則
+      this.mergeDriverMessages([push.message]);
+    } else if (push.type === 'READ' && push.readSenderType) {
+      // 把這一方發的、還沒讀的訊息，在畫面上標成已讀（不用再打一次 API）
+      const readAt = push.readAt ?? null;
+      this.driverMessages.update((messages) =>
+        messages.map((message) =>
+          message.senderType === push.readSenderType && !message.readAt ? {...message, readAt} : message,
+        ),
+      );
+    }
+  }
+
+  /**
+   * 連上時（包含斷線重連）補抓：WebSocket 斷線期間的推播不會補發，只能用 afterId 自己問回來。
+   * 清單是空的就整串重載；有東西就只問「比最後一則新的」，接在後面。
+   */
+  private catchUpOpenConversation(): void {
+    const contact = this.selectedChatContact();
+    if (contact.kind !== 'driver') {
+      return;
+    }
+
+    const driverId = contact.driverId;
+    const lastId = this.driverMessages().at(-1)?.id;
+    if (lastId === undefined) {
+      this.loadDriverConversation(driverId);
+      return;
+    }
+
+    this.api.getDriverMessages(driverId, lastId).subscribe({
+      next: (newer) => {
+        if (this.isOpenDriver(driverId)) {
+          this.mergeDriverMessages(newer);
+        }
+      },
+    });
+  }
 }

@@ -12,6 +12,9 @@ import {
   DispatchResultDto,
   DriverAccountApplicationDto,
   DriverDto,
+  DriverMessageDto,
+  DriverMessageRequest,
+  DriverMessageSummaryDto,
   DriverShiftDto,
   DriverShiftUpdateRequest,
   DriverStatusPayload,
@@ -445,5 +448,36 @@ export class DispatchApiService {
    */
   removeAiPlanAction(id: string): Observable<AiPendingActionDto[]> {
     return this.http.delete<AiPendingActionDto[]>(`${API_ROOT}/ai/plan/${id}`);
+  }
+
+  // ── 司機聊天室 ─────────────────────────────────────────
+
+  /**
+   * 讀取某位司機的對話，一律由舊到新。
+   * 不帶 afterId：最近 50 則，打開對話時用；帶 afterId：只回比它新的，重連補抓用。
+   */
+  getDriverMessages(driverId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    // 沒有 afterId 就不能帶這個參數，帶成 "undefined" 字串後端會回 400
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`${API_ROOT}/drivers/${driverId}/messages`, {params});
+  }
+
+  /** 回覆某位司機。回傳存好的那一則（含 id），直接放進清單，之後推播收到同一則時用 id 去重 */
+  sendDriverMessage(driverId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`${API_ROOT}/drivers/${driverId}/messages`, request);
+  }
+
+  /** 把這位司機發的未讀訊息標成已讀，回傳這次標了幾筆。已讀是所有管理員共用的 */
+  markDriverMessagesRead(driverId: number): Observable<number> {
+    return this.http.post<number>(`${API_ROOT}/drivers/${driverId}/messages/read`, {});
+  }
+
+  /** 紅點：每位司機有幾則未讀。只列有未讀的司機，用 driverId 對到司機名單 */
+  getDriverMessageSummary(): Observable<DriverMessageSummaryDto[]> {
+    return this.http.get<DriverMessageSummaryDto[]>(`${API_ROOT}/drivers/messages/summary`);
   }
 }
