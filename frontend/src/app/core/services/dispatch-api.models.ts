@@ -187,6 +187,87 @@ export interface DriverShiftUpdateRequest {
 /** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
 export interface LeaveRequest {
   reason: string;
+  version?: number | null;
+}
+
+export interface FuelPriceDto {
+  id: number;
+  fuelType: 'DIESEL' | string;
+  pricePerLiter: number;
+  effectiveFrom: string;
+  fetchedAt: string;
+}
+
+export interface RouteMetricsDto {
+  routeId: number;
+  date: string;
+  plannedKm: number | null;
+  plannedDriveMinutes: number | null;
+  plannedTotalMinutes: number | null;
+  plannedFuelLiters: number | null;
+  plannedFuelCost: number | null;
+  gpsEstimatedKm: number | null;
+  gpsEstimatedFuelLiters: number | null;
+  gpsEstimatedFuelCost: number | null;
+  remainingKm: number | null;
+  remainingDriveMinutes: number | null;
+  estimatedNextArrivalAt: string | null;
+  estimatedReturnAt: string | null;
+  mileageStatus: string | null;
+  fuelStatus: string | null;
+}
+
+export type BackendReportPeriod = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
+
+export interface ReportQuery {
+  period?: BackendReportPeriod;
+  date?: string;
+  from?: string;
+  to?: string;
+  warehouseId?: number;
+  driverId?: number;
+  vehicleId?: number;
+  storeId?: number;
+  routeId?: number;
+}
+
+export interface ReportDailySummaryDto {
+  date: string;
+  totalOrders: number;
+  totalBoxes: number;
+  completedOrders: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+}
+
+export interface ReportSummaryDto {
+  from: string;
+  to: string;
+  totalOrders: number;
+  totalBoxes: number;
+  distinctStores: number;
+  pendingConfirmationOrders: number;
+  confirmedUnassignedOrders: number;
+  assignedOrders: number;
+  inDeliveryOrders: number;
+  completedOrders: number;
+  failedOrders: number;
+  cancelledOrders: number;
+  publishedRoutes: number;
+  dispatchedDrivers: number;
+  dispatchedVehicles: number;
+  unassignedOrders: number;
+  unassignedBoxes: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+  dailyTrend: ReportDailySummaryDto[];
+}
+
+/** 其餘報表 API 的共同範圍欄位；各資料列由後端依端點回傳。 */
+export interface ReportCollectionDto<T = Record<string, unknown>> {
+  from: string;
+  to: string;
+  [key: string]: string | number | boolean | null | T[];
 }
 
 export interface VehicleDto {

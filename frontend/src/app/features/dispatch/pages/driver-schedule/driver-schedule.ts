@@ -1,6 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { from, mergeMap, toArray } from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
@@ -373,7 +372,7 @@ export class DriverSchedule implements OnInit {
     this.saving.set(true);
     this.errorMessage.set('');
     this.actionMessage.set('');
-    this.api.markDriverShiftLeave(shift.id, { reason }).subscribe({
+    this.api.markDriverShiftLeave(shift.id, { reason, version: shift.version }).subscribe({
       next: (updatedShift) => {
         this.replaceShift(updatedShift);
         this.actionMessage.set('已登記請假。');
@@ -521,16 +520,12 @@ export class DriverSchedule implements OnInit {
     this.errorMessage.set('');
     this.actionMessage.set('');
 
-    // 後端目前只有單筆更新 API；限制為同時最多 6 筆，避免大量司機時塞爆資料庫連線池。
-    from(targets)
-      .pipe(
-        mergeMap(
-          ({ shiftId, request }) => this.api.updateDriverShift(shiftId, request),
-          6,
-        ),
-        toArray(),
-      )
-      .subscribe({
+    const updates = targets.map(({shiftId, request}) => {
+      const current = this.shifts().find((shift) => shift.id === shiftId)!;
+      return {...current, ...request};
+    });
+
+    this.api.updateDriverShiftsBatch(month.id, updates).subscribe({
         next: (updatedShifts) => {
           const updatedById = new Map(updatedShifts.map((shift) => [shift.id, shift]));
           this.shifts.update((shifts) =>
@@ -543,7 +538,7 @@ export class DriverSchedule implements OnInit {
         error: (error: unknown) => {
           this.errorMessage.set(this.readError(error, '批次更新班次失敗，已重新讀取班表。'));
           this.resetSelection();
-          // 單筆 API 可能已成功部分資料；重讀後端資料，避免畫面保留半套舊狀態。
+          // 後端批次 API 會整批回滾；仍重讀資料以處理其他人同時修改的情況。
           this.loadShifts(month.id);
         },
       });

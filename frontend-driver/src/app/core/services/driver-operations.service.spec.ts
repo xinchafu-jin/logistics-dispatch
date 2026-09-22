@@ -116,6 +116,9 @@ describe('DriverOperationsService', () => {
     }).subscribe();
     service.startMileage({ odometer: 18_400 }).subscribe();
     service.endMileage({ odometer: 18_438 }).subscribe();
+    service.recalculateMileage().subscribe();
+    service.reportException({orderId: 41, description: '外箱破損，已拍照存證。'}).subscribe();
+    service.uploadDeliveryPhoto(new File(['proof'], 'proof.jpg', {type: 'image/jpeg'})).subscribe();
 
     const arrive = httpTesting.expectOne('/api/driver/arrive');
     expect(arrive.request.body).toEqual({ orderId: 41 });
@@ -145,5 +148,19 @@ describe('DriverOperationsService', () => {
       expect(request.request.body).toEqual({ odometer });
       request.flush({});
     }
+
+    const recalculate = httpTesting.expectOne('/api/driver/mileage/recalculate');
+    expect(recalculate.request.method).toBe('POST');
+    expect(recalculate.request.body).toEqual({});
+    recalculate.flush({});
+
+    const exception = httpTesting.expectOne('/api/driver/exception');
+    expect(exception.request.body).toEqual({orderId: 41, description: '外箱破損，已拍照存證。'});
+    exception.flush({});
+
+    const photo = httpTesting.expectOne('/api/driver/delivery-photo');
+    expect(photo.request.method).toBe('POST');
+    expect(photo.request.body).toBeInstanceOf(FormData);
+    photo.flush({url: '/uploads/delivery-photos/proof.jpg'});
   });
 });

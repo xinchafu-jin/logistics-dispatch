@@ -118,7 +118,8 @@
 }
 
 .icon-button,
-.locate-control {
+.locate-control,
+.chat-control {
   display: grid;
   width: 38px;
   height: 38px;
@@ -133,6 +134,7 @@
 
 .icon-button mat-icon,
 .locate-control mat-icon,
+.chat-control mat-icon,
 .gps-status mat-icon,
 .primary-action mat-icon,
 .outline-action mat-icon,
@@ -174,10 +176,45 @@ h2 {
   font-size: 21px;
 }
 
-.locate-control {
+.map-quick-actions {
   position: absolute;
   top: 22px;
   right: 0;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.locate-control,
+.chat-control {
+  position: static;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-content: center;
+}
+
+.map-quick-actions .locate-control mat-icon,
+.map-quick-actions .chat-control mat-icon {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  font-size: 22px;
+  line-height: 22px;
+}
+
+.map-chat-notice {
+  width: min(218px, calc(100vw - 56px));
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgb(182 218 207 / 42%);
+  border-radius: 6px;
+  color: #dff4ec;
+  background: rgb(8 25 25 / 92%);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 // 客服按鈕：外觀沿用 .icon-button（含淺色主題），位置接在定位鈕下方：22px + 按鈕高 38px + 間距 8px
@@ -214,6 +251,12 @@ h2 {
 
 .attendance-sheet.is-dragging {
   transition: none;
+}
+
+/* 收合時只保留摘要列，避免內容透過底部導覽列顯示或被誤觸。 */
+.attendance-sheet:not(.is-expanded) .attendance-drawer-content {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .attendance-drawer-handle {
@@ -801,8 +844,21 @@ h2 {
 
 .delivery-action-buttons {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+.delivery-photo-input small,
+.delivery-exception-detail small {
+  color: #9eb8af;
+  font-size: 11px;
+}
+
+.delivery-exception-detail {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgb(158 184 175 / 24%);
 }
 
 .delivery-complete-button,
@@ -938,6 +994,12 @@ h2 {
   color: #9eb8af;
   font-size: 11px;
   line-height: 1.4;
+}
+
+.mileage-recalculate-button {
+  justify-self: start;
+  min-height: 36px;
+  margin-top: 2px;
 }
 
 .month-selector {
@@ -1183,7 +1245,7 @@ dd {
 
 .bottom-navigation {
   position: fixed;
-  z-index: 600;
+  z-index: 700;
   right: 0;
   bottom: max(12px, env(safe-area-inset-bottom));
   left: 0;
@@ -1193,7 +1255,7 @@ dd {
   padding: 7px;
   border: 1px solid rgb(120 185 167 / 34%);
   border-radius: 8px;
-  background: rgb(9 24 25 / 94%);
+  background: #091819;
   box-shadow: 0 10px 26px rgb(0 0 0 / 30%);
 }
 
@@ -1249,6 +1311,7 @@ dd {
 
 .driver-app .icon-button,
 .driver-app .locate-control,
+.driver-app .chat-control,
 .driver-app .attendance-sheet,
 .driver-app .empty-state,
 .driver-app .profile-list,
@@ -1258,12 +1321,19 @@ dd {
 .driver-app .month-selector,
 .driver-app .bottom-navigation {
   border-color: #c8dad3;
-  background: rgb(249 253 251 / 94%);
+  background: #f9fdfb;
 }
 
 .driver-app .icon-button,
-.driver-app .locate-control {
+.driver-app .locate-control,
+.driver-app .chat-control {
   color: #174c40;
+}
+
+.driver-app .map-chat-notice {
+  border-color: #c8dad3;
+  color: #31584d;
+  background: rgb(249 253 251 / 96%);
 }
 
 .driver-app .attendance-drawer-handle {
@@ -1434,6 +1504,11 @@ dd {
 .driver-app .delivery-action-panel label > span,
 .driver-app .mileage-form-row label > span {
   color: #42635a;
+}
+
+.driver-app .delivery-photo-input small,
+.driver-app .delivery-exception-detail small {
+  color: #617b72;
 }
 
 .driver-app .delivery-action-panel input,

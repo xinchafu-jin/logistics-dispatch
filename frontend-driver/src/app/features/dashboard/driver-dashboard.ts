@@ -10,9 +10,10 @@ import {
   signal,
 } from '@angular/core';
 import {Router} from '@angular/router';
+import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import type * as maplibregl from 'maplibre-gl';
-import {Observable, single} from 'rxjs';
+import {Observable, of, single, switchMap} from 'rxjs';
 import {DriverAuthService} from '../../core/auth/driver-auth.service';
 import {
   clearStoredMapLocation,
@@ -49,6 +50,27 @@ interface DriverTaskSelection {
 type MapPosition = [lng: number, lat: number];
 const DRIVER_ROUTE_SOURCE_ID = 'driver-navigation-route';
 const DRIVER_ROUTE_LAYER_ID = 'driver-navigation-route-line';
+const DRIVER_MAP_DEFAULT_CENTER: MapPosition = [120.3014, 22.6273];
+const OPEN_STREET_MAP_STYLE = {
+  version: 8 as const,
+  sources: {
+    openStreetMap: {
+      type: 'raster' as const,
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    },
+  },
+  layers: [
+    {
+      id: 'open-street-map-base',
+      type: 'raster' as const,
+      source: 'openStreetMap',
+      minzoom: 0,
+      maxzoom: 19,
+    },
+  ],
+};
 
 // 找出路線上離 here 最近的點，回傳距離（公尺）與索引。
 export function findNearest(
@@ -98,15 +120,26 @@ function distanceInMeters(from: MapPosition, to: MapPosition): number {
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc));
 }
 
-//todo 之後看是否加進階選項參數化
+function bearingInDegrees(from: MapPosition, to: MapPosition): number {
+  const longitudeDelta = (to[0] - from[0]) * (Math.PI / 180);
+  const fromLatitude = from[1] * (Math.PI / 180);
+  const toLatitude = to[1] * (Math.PI / 180);
+  const y = Math.sin(longitudeDelta) * Math.cos(toLatitude);
+  const x =
+    Math.cos(fromLatitude) * Math.sin(toLatitude) -
+    Math.sin(fromLatitude) * Math.cos(toLatitude) * Math.cos(longitudeDelta);
+
+  return (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
+}
+
 const OFF_ROUTE_METERS = 70;
 const OFF_ROUTE_STREAK = 3;
-// cd
 const RECALC_COOLDOWN_MS = 15_000;
 
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
+    MatButtonModule,
     MatIconModule,
     BrandLogo,
   ],
@@ -139,6 +172,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
   protected readonly activeDeliveryOrderId = signal<number | null>(null);
   protected readonly deliveryNotes = signal('');
+  protected readonly deliveryPhoto = signal<File | null>(null);
+  protected readonly deliveryExceptionOpen = signal(false);
+  protected readonly deliveryExceptionDescription = signal('');
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
@@ -167,6 +203,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isAttendanceSheetExpanded = signal(false);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
+  protected readonly driverChatNotice = signal(false);
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -179,6 +216,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private maplibre: typeof import('maplibre-gl') | null = null;
   private driverMap: maplibregl.Map | null = null;
   private currentMapLocation: MapPosition | null = null;
+  private lastMovementLocation: MapPosition | null = null;
+  private lastMovementHeading: number | null = null;
   private currentLocationMarker: maplibregl.Marker | null = null;
   private destinationMarker: maplibregl.Marker | null = null;
   private destinationPopup: maplibregl.Popup | null = null;
@@ -236,6 +275,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected refreshAttendance(): void {
     this.loadAttendance();
+  }
+
+  protected showDriverChatNotice(): void {
+    this.driverChatNotice.update((isOpen) => !isOpen);
   }
 
   protected profilePhotoUrl(): string | null {
@@ -428,6 +471,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     this.activeDeliveryOrderId.set(stop.orderId);
     this.deliveryNotes.set('');
+    this.deliveryPhoto.set(null);
+    this.deliveryExceptionOpen.set(false);
+    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
   }
@@ -435,11 +481,36 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected closeDeliveryAction(): void {
     this.activeDeliveryOrderId.set(null);
     this.deliveryNotes.set('');
+    this.deliveryPhoto.set(null);
+    this.deliveryExceptionOpen.set(false);
+    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
   }
 
   protected updateDeliveryNotes(event: Event): void {
     this.deliveryNotes.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected selectDeliveryPhoto(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.item(0) ?? null;
+    if (!file) {
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      this.taskActionError.set('請選擇 5 MB 以下的 JPG、PNG 或 WebP 圖片。');
+      return;
+    }
+    this.deliveryPhoto.set(file);
+    this.taskActionError.set(null);
+  }
+
+  protected toggleDeliveryException(): void {
+    this.deliveryExceptionOpen.update((open) => !open);
+    this.deliveryExceptionDescription.set('');
+  }
+
+  protected updateDeliveryExceptionDescription(event: Event): void {
+    this.deliveryExceptionDescription.set((event.target as HTMLTextAreaElement).value);
   }
 
   protected arriveAtStop(stop: DriverTaskStop): void {
@@ -471,10 +542,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     this.submitDeliveryResult(
-      () =>
+      (photoUrl) =>
         this.operations.deliver({
           orderId: stop.orderId,
           boxCount: stop.expectedBoxCount,
+          photoUrl,
           notes: this.optionalDeliveryNotes(),
         }),
       '交貨已完成。',
@@ -487,13 +559,37 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     this.submitDeliveryResult(
-      () =>
+      (photoUrl) =>
         this.operations.noSignature({
           orderId: stop.orderId,
+          photoUrl,
           notes: this.optionalDeliveryNotes(),
         }),
       '已登記無人簽收，後端已建立待處理異常。',
     );
+  }
+
+  protected reportDeliveryException(stop: DriverTaskStop): void {
+    const description = this.deliveryExceptionDescription().trim();
+    if (!description || this.isTaskSubmitting()) {
+      this.taskActionError.set('請填寫異常說明後再送出。');
+      return;
+    }
+
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.operations.reportException({orderId: stop.orderId, description}).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeDeliveryAction();
+        this.taskActionMessage.set('異常已送出，主管可在異常中心處理。');
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.taskActionError.set(this.getErrorMessage(error, '無法送出配送異常。'));
+        this.isTaskSubmitting.set(false);
+      },
+    });
   }
 
   protected updateStartMileage(event: Event): void {
@@ -549,6 +645,30 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       },
       error: (error: unknown) => {
         this.mileageError.set(this.getErrorMessage(error, '無法記錄收車里程。'));
+        this.isMileageSubmitting.set(false);
+      },
+    });
+  }
+
+  protected recalculateMileage(): void {
+    if (this.isMileageSubmitting()) {
+      return;
+    }
+    this.isMileageSubmitting.set(true);
+    this.mileageError.set(null);
+    this.mileageMessage.set(null);
+    this.operations.recalculateMileage().subscribe({
+      next: (mileageLog) => {
+        const gpsDistance = mileageLog.gpsDistanceKm;
+        this.mileageMessage.set(
+          gpsDistance === null || gpsDistance === undefined
+            ? '里程已重新結算。'
+            : `里程已依 GPS 軌跡重新結算：${gpsDistance.toFixed(1)} km。`,
+        );
+        this.isMileageSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.mileageError.set(this.getErrorMessage(error, '目前無法重新結算里程。'));
         this.isMileageSubmitting.set(false);
       },
     });
@@ -729,13 +849,28 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private applyMapPosition(position: GeolocationPosition, animate: boolean): void {
     const location: MapPosition = [position.coords.longitude, position.coords.latitude];
+    const heading = this.resolveMovementHeading(position.coords.heading, location);
     if (this.isNavigating()) {
-      this.applyNavigationPosition(location);
+      this.applyNavigationPosition(location, heading);
     } else {
-      this.showMapLocation(location, animate);
+      this.showMapLocation(location, animate, heading);
     }
+    this.lastMovementLocation = location;
     this.saveMapLocation(location);
     this.mapLocationStatus.set('已定位至目前位置');
+  }
+
+  private resolveMovementHeading(gpsHeading: number | null, location: MapPosition): number | null {
+    if (typeof gpsHeading === 'number' && Number.isFinite(gpsHeading) && gpsHeading >= 0) {
+      this.lastMovementHeading = gpsHeading;
+      return gpsHeading;
+    }
+
+    if (this.lastMovementLocation && distanceInMeters(this.lastMovementLocation, location) >= 4) {
+      this.lastMovementHeading = bearingInDegrees(this.lastMovementLocation, location);
+    }
+
+    return this.lastMovementHeading;
   }
 
   protected statusLabel(): string {
@@ -946,14 +1081,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private submitDeliveryResult(
-    action: () => Observable<DeliveryRecordResponse>,
+    action: (photoUrl?: string) => Observable<DeliveryRecordResponse>,
     successMessage: string,
   ): void {
     this.isTaskSubmitting.set(true);
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
 
-    action().subscribe({
+    this.uploadSelectedDeliveryPhoto().pipe(switchMap((photoUrl) => action(photoUrl))).subscribe({
       next: (response) => {
         this.applyDeliveryResponse(response);
         this.closeDeliveryAction();
@@ -990,6 +1125,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private optionalDeliveryNotes(): string | undefined {
     const notes = this.deliveryNotes().trim();
     return notes || undefined;
+  }
+
+  private uploadSelectedDeliveryPhoto(): Observable<string | undefined> {
+    const file = this.deliveryPhoto();
+    return file ? this.operations.uploadDeliveryPhoto(file).pipe(switchMap((response) => of(response.url))) : of(undefined);
   }
 
   private readOdometer(value: string): number | null {
@@ -1103,29 +1243,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.maplibre = maplibregl;
     this.driverMap = new maplibregl.Map({
       container: mapElement,
-      center: [120.3014, 22.6273],
+      center: DRIVER_MAP_DEFAULT_CENTER,
       zoom: 12,
       maxZoom: 19,
+      maxPitch: 0,
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: false,
+      pitchWithRotate: false,
       attributionControl: {},
-      style: {
-        version: 8,
-        sources: {
-          openStreetMap: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
-          },
-        },
-        layers: [
-          {
-            id: 'openStreetMap',
-            type: 'raster',
-            source: 'openStreetMap',
-          },
-        ],
-      },
+      style: OPEN_STREET_MAP_STYLE,
     });
+    this.driverMap.addControl(
+      new maplibregl.NavigationControl({showCompass: true, showZoom: false, visualizePitch: false}),
+      'top-left',
+    );
 
     this.driverMap.once('load', () => {
       this.restoreMapLocation();
@@ -1144,7 +1276,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.mapLocationStatus.set('已顯示上次定位，正在更新...');
   }
 
-  private showMapLocation(location: MapPosition, animate: boolean): void {
+
+  private showMapLocation(
+    location: MapPosition,
+    animate: boolean,
+    heading: number | null = this.lastMovementHeading,
+  ): void {
     const maplibregl = this.maplibre;
     if (!maplibregl || !this.driverMap) {
       return;
@@ -1156,11 +1293,23 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.currentLocationMarker.setLngLat(location);
     } else {
       this.currentLocationMarker = new maplibregl.Marker({
-        element: this.createMapMarkerElement('driver-location-marker', 'A'),
+        element: this.createDriverMarkerElement(),
         anchor: 'center',
+        rotationAlignment: 'viewport',
       })
         .setLngLat(location)
         .addTo(this.driverMap);
+    }
+
+    this.currentLocationMarker.setRotation(this.isNavigating() ? 0 : (heading ?? 0));
+
+    if (this.isNavigating() && heading !== null) {
+      this.driverMap.easeTo({
+        center: location,
+        bearing: heading,
+        zoom: Math.max(this.driverMap.getZoom(), 16),
+        duration: animate ? 500 : 0,
+      });
     }
 
     this.renderNavigationMap(animate);
@@ -1230,6 +1379,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
+    if (this.isNavigating()) {
+      if (this.routeLatLng.length > 0) {
+        this.setNavigationRoute(this.routeLatLng);
+      }
+
+      // 導航中只跟著司機位置移動；即使道路路線還沒回傳，也不可縮放到 A/B 全覽。
+      this.driverMap.easeTo({center: this.currentMapLocation, duration: 0});
+      return;
+    }
+
     if (this.routeLatLng.length === 0) {
       this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
         padding: {top: 94, right: 24, bottom: 310, left: 24},
@@ -1239,17 +1398,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
     this.setNavigationRoute(this.routeLatLng);
-    if (this.isNavigating()) {
-      // 導航中：鏡頭平移跟著司機，不改縮放，避免畫面一直跳
-      this.driverMap.easeTo({center: this.currentMapLocation, duration: 0});
-    } else {
-      // 預覽中：框住整條路線給司機看全貌
-      this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
-        padding: {top: 94, right: 24, bottom: 310, left: 24},
-        duration: animate ? 500 : 0,
-        maxZoom: 15,
-      });
-    }
+    // 預覽中：框住整條路線給司機看全貌。
+    this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
+      padding: {top: 94, right: 24, bottom: 310, left: 24},
+      duration: animate ? 500 : 0,
+      maxZoom: 15,
+    });
   }
 
   private destinationLocation(): MapPosition | null {
@@ -1266,6 +1420,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     element.className = className;
     element.textContent = label;
     element.setAttribute('aria-hidden', 'true');
+    return element;
+  }
+
+  private createDriverMarkerElement(): HTMLDivElement {
+    const element = document.createElement('div');
+    element.className = 'driver-location-marker';
+    element.setAttribute('aria-label', '目前位置');
     return element;
   }
 
@@ -1432,8 +1593,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.attendanceSheetDragOffset.set(0);
     this.isNavigating.set(true);
     this.offRouteStreak = 0;
+    if (this.currentMapLocation) {
+      this.showMapLocation(this.currentMapLocation, true, this.lastMovementHeading);
+    } else {
+      this.focusNavigationOrigin();
+    }
     this.renderNavigationMap(false);
-    this.focusNavigationOrigin();
     void this.requestWakeLock();
   }
 
@@ -1456,9 +1621,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private applyNavigationPosition(here: MapPosition): void {
+  private applyNavigationPosition(here: MapPosition, heading: number | null): void {
     if (this.routeLatLng.length === 0) {
-      this.showMapLocation(here, false);
+      this.showMapLocation(here, false, heading);
       return;
     }
     const {distance, index} = findNearest(here, this.routeLatLng);
@@ -1469,7 +1634,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.routeLatLng = this.routeLatLng.slice(index);
       this.updateRemainingRouteMetrics(here);
     }
-    this.showMapLocation(here, false);
+    this.showMapLocation(here, false, heading);
 
     if (
       this.offRouteStreak >= OFF_ROUTE_STREAK && Date.now() - this.lastRecalcAt > RECALC_COOLDOWN_MS

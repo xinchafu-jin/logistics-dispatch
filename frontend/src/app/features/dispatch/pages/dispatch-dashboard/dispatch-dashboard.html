@@ -122,7 +122,6 @@
     </mat-slide-toggle>
   </section>
 
-
   <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
     <div class="tab-strip" role="tablist">
@@ -297,21 +296,12 @@
         }
 
         @for (route of routes(); track route.vehicleId) {
-          <div
-            class="board-lane"
-            [class.is-overloaded]="isOverloaded(route)"
-            [class.is-unavailable]="route.status !== 'AVAILABLE'"
-          >
+          <div class="board-lane" [class.is-overloaded]="isOverloaded(route)">
             <h4>
               {{ route.plateNumber }}
-              @if (route.status !== 'AVAILABLE') {
-                <span class="lane-status">{{ statusLabel(route.status) }}</span>
-              } @else {
-                · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
-                {{ route.totalDistance / 1000 | number: '1.1-1' }} km
-              }
+              · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+              {{ route.totalDistance / 1000 | number: '1.1-1' }} km
             </h4>
-
             <!--
               選中狀態綁在 option 上而不是 select 的 [value]：
               Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
@@ -319,20 +309,20 @@
             -->
             <select
               class="board-driver"
-              [class.is-unassigned]="route.driverId === null"
-              [disabled]="busy() || route.status !== 'AVAILABLE'"
+              [class.is-unassigned]="!isDriverDispatchable(route.driverId)"
+              [disabled]="busy()"
               (change)="onDriverChange(route, $event)"
             >
-              <option value="" [selected]="route.driverId === null">未指派司機</option>
+              <option value="" [selected]="!isDriverDispatchable(route.driverId)">
+                未指派司機
+              </option>
               @for (option of driverOptions(route); track option.id) {
                 <option
                   [value]="option.id"
                   [selected]="option.id === route.driverId"
-                  [disabled]="option.takenNote !== null || option.scheduleNote !== null"
+                  [disabled]="option.takenNote !== null"
                 >
-                  {{ option.name }}@if (option.scheduleNote) {
-                  · {{ option.scheduleNote }}
-                } @else if (option.takenNote) {
+                  {{ option.name }}@if (option.takenNote) {
                   · {{ option.takenNote }}
                 }
                 </option>
@@ -343,7 +333,7 @@
               class="board-dropzone"
               cdkDropList
               [cdkDropListData]="route.cards"
-              [cdkDropListDisabled]="saving() || route.status !== 'AVAILABLE' || route.hasLockedStops"
+              [cdkDropListDisabled]="saving() || route.hasLockedStops"
               (cdkDropListDropped)="onDrop($event)"
             >
               @for (card of route.cards; track card.orderId) {
@@ -352,9 +342,7 @@
                 </p>
               } @empty {
                 <p class="board-empty">
-                  @if (route.status !== 'AVAILABLE') {
-                    {{ statusLabel(route.status) }}，無法排入
-                  } @else if (route.hasLockedStops) {
+                  @if (route.hasLockedStops) {
                     已完成或已取消訂單不列入調度看板
                   } @else {
                     把訂單拖到這裡
