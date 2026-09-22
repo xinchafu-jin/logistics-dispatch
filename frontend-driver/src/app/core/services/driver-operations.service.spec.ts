@@ -163,4 +163,36 @@ describe('DriverOperationsService', () => {
     expect(photo.request.body).toBeInstanceOf(FormData);
     photo.flush({url: '/uploads/delivery-photos/proof.jpg'});
   });
+
+  it('uses the driver chat endpoints without sending a driver id', () => {
+    service.getMessages().subscribe();
+    service.getMessages(42).subscribe();
+    service.sendMessage('國道塞車，晚 20 分鐘').subscribe();
+    service.markMessagesRead().subscribe();
+
+    // 第一次打開：不能帶 afterId，帶成 "undefined" 後端會回 400
+    const firstLoad = httpTesting.expectOne(
+      (request) =>
+        request.method === 'GET' && request.url === '/api/driver/messages' && !request.params.has('afterId'),
+    );
+    expect(firstLoad.request.method).toBe('GET');
+    firstLoad.flush([]);
+
+    const catchUp = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/messages' && request.params.get('afterId') === '42',
+    );
+    expect(catchUp.request.method).toBe('GET');
+    catchUp.flush([]);
+
+    const send = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/messages' && request.method === 'POST',
+    );
+    // 只送內容：driverId、寄件人、時間都由後端決定
+    expect(send.request.body).toEqual({content: '國道塞車，晚 20 分鐘'});
+    send.flush({});
+
+    const read = httpTesting.expectOne('/api/driver/messages/read');
+    expect(read.request.method).toBe('POST');
+    read.flush(1);
+  });
 });

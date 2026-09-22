@@ -187,7 +187,9 @@ h2 {
 
 .locate-control,
 .chat-control {
-  position: static;
+  // 必須是 relative，不能是 static：Material 按鈕裡的波紋、焦點框、觸控區是 absolute，會貼滿「最近有定位的祖先」。
+  // static 時它們會往上貼滿整個 .map-quick-actions，排在後面的定位鈕就蓋住聊天鈕，點聊天其實點到定位
+  position: relative;
   width: 44px;
   min-width: 44px;
   height: 44px;
@@ -205,24 +207,6 @@ h2 {
   line-height: 22px;
 }
 
-.map-chat-notice {
-  width: min(218px, calc(100vw - 56px));
-  margin: 0;
-  padding: 8px 10px;
-  border: 1px solid rgb(182 218 207 / 42%);
-  border-radius: 6px;
-  color: #dff4ec;
-  background: rgb(8 25 25 / 92%);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-// 客服按鈕：外觀沿用 .icon-button（含淺色主題），位置接在定位鈕下方：22px + 按鈕高 38px + 間距 8px
-.support-control {
-  position: absolute;
-  top: 68px;
-  right: 0;
-}
 
 .attendance-sheet {
   position: absolute;
@@ -1330,11 +1314,6 @@ dd {
   color: #174c40;
 }
 
-.driver-app .map-chat-notice {
-  border-color: #c8dad3;
-  color: #31584d;
-  background: rgb(249 253 251 / 96%);
-}
 
 .driver-app .attendance-drawer-handle {
   border-color: #c8dad3;
@@ -1568,4 +1547,35 @@ dd {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+// ── 聊天 Bottom Sheet 的內容 ──────────────────────────────
+// 外框（背景、圓角）在 styles.scss：sheet 掛在 body 底下的 overlay，元件樣式碰不到外框；
+// 裡面的內容來自這個元件的 <ng-template>，所以寫在這裡照樣吃得到
+.driver-chat-sheet {
+  display: grid;
+  // 撐滿全螢幕的 sheet：標題固定在上面，第二列（之後的對話列表）吃掉剩下的高度
+  height: 100%;
+  grid-template-rows: auto 1fr;
+  align-content: start;
+  gap: 12px;
+  padding: 4px 0 calc(12px + env(safe-area-inset-bottom));
+}
+
+.driver-chat-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.driver-chat-sheet__header h2 {
+  margin: 0;
+  color: #173129;
+  font-size: 17px;
+}
+
+.driver-chat-sheet__placeholder {
+  margin: 0;
+  color: #31584d;
+  font-size: 14px;
 }

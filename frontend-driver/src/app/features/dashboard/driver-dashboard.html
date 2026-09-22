@@ -49,7 +49,7 @@
           type="button"
           matIconButton
           class="chat-control"
-          (click)="showDriverChatNotice()"
+          (click)="openDriverChat()"
           title="聊天室"
           aria-label="聊天室"
         >
@@ -65,21 +65,7 @@
         >
           <mat-icon aria-hidden="true">my_location</mat-icon>
         </button>
-        @if (driverChatNotice()) {
-          <p class="map-chat-notice" role="status">聊天室功能準備中，請先聯絡物流主管。</p>
-        }
       </div>
-
-      <!-- 聯絡調度中心（客服）：疊在定位鈕正下方，跟它同一欄，不擋地圖中間也不壓到下方出勤面板。
-           點擊後開聊天的功能之後再接 -->
-      <button
-        type="button"
-        class="icon-button support-control"
-        title="聯絡調度中心"
-        aria-label="聯絡調度中心"
-      >
-        <mat-icon aria-hidden="true">support_agent</mat-icon>
-      </button>
 
       <section
         class="attendance-sheet"
@@ -736,3 +722,18 @@
     </button>
   </nav>
 </main>
+
+<!-- 與調度中心的聊天：交給 MatBottomSheet 開啟（openDriverChat），不另外開元件。
+     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到 -->
+<ng-template #driverChatSheet>
+  <section class="driver-chat-sheet" aria-labelledby="driver-chat-title">
+    <header class="driver-chat-sheet__header">
+      <h2 id="driver-chat-title">調度中心</h2>
+      <button type="button" matIconButton aria-label="關閉" (click)="closeDriverChat()">
+        <mat-icon aria-hidden="true">close</mat-icon>
+      </button>
+    </header>
+    <!-- 對話列表與輸入框之後接在這裡 -->
+    <p class="driver-chat-sheet__placeholder">聊天室功能準備中，請先聯絡物流主管。</p>
+  </section>
+</ng-template>

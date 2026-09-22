@@ -221,3 +221,44 @@ export type DriverTaskOrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
+
+// ── 司機聊天室（對應後端 DriverPortalController 的 /api/driver/messages）──────────
+
+/** 對應後端 MessageSender：訊息是誰發的。ADMIN 代表「調度中心」，不分是哪一位管理員 */
+export type MessageSender = 'DRIVER' | 'ADMIN';
+
+/** 一則聊天訊息。對應後端 DriverMessageResponse */
+export interface DriverMessageDto {
+  /** 最後一則的 id 當下一次查詢的 afterId；合併清單時也用它去重 */
+  id: number;
+  /** 對話串屬於哪位司機；司機端永遠是自己 */
+  driverId: number;
+  senderType: MessageSender;
+  content: string;
+  createdAt: string;
+  /** 對方讀到的時間；null 或沒有這個欄位都代表還沒讀 */
+  readAt?: string | null;
+}
+
+/** POST /api/driver/messages 的請求本體。對話屬於誰、誰發的、時間都由後端決定，只送內容 */
+export interface DriverMessageRequest {
+  content: string;
+}
+
+/** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */
+export type DriverMessagePushType = 'MESSAGE' | 'READ';
+
+/**
+ * WebSocket 推播的內容，從私人頻道 /user/queue/messages 收到。對應後端 DriverMessagePushResponse。
+ * 只會收到自己對話串的推播：後端依連線時的名牌（DRIVER:自己的 id）只送給本人。
+ */
+export interface DriverMessagePushDto {
+  type: DriverMessagePushType;
+  driverId: number;
+  /** 新訊息本體；只有 MESSAGE 有 */
+  message?: DriverMessageDto | null;
+  /** 被讀的是哪一方發的訊息；只有 READ 有。DRIVER＝調度中心讀了你的訊息，ADMIN＝你在別的裝置讀了回覆 */
+  readSenderType?: MessageSender | null;
+  /** 標已讀的時間；只有 READ 有 */
+  readAt?: string | null;
+}

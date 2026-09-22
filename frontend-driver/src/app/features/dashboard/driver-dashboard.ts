@@ -4,12 +4,15 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  TemplateRef,
   ViewChild,
   computed,
   inject,
   signal,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Router} from '@angular/router';
+import {MatBottomSheet, MatBottomSheetModule, MatBottomSheetRef} from '@angular/material/bottom-sheet';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import type * as maplibregl from 'maplibre-gl';
@@ -20,6 +23,7 @@ import {
   readStoredMapLocation,
   saveStoredMapLocation,
 } from '../../core/location/driver-map-location.storage';
+import {DriverChatSocketService} from '../../core/services/driver-chat-socket.service';
 import {DriverGpsTrackingService} from '../../core/services/driver-gps-tracking.service';
 import {
   AttendanceRecordDto,
@@ -139,6 +143,7 @@ const RECALC_COOLDOWN_MS = 15_000;
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
+    MatBottomSheetModule,
     MatButtonModule,
     MatIconModule,
     BrandLogo,
@@ -148,6 +153,8 @@ const RECALC_COOLDOWN_MS = 15_000;
 })
 export class DriverDashboard implements AfterViewInit, OnDestroy {
   @ViewChild('driverMap') private driverMapElement?: ElementRef<HTMLElement>;
+  // 聊天 Bottom Sheet 的內容，寫在 driver-dashboard.html 最下面的 <ng-template #driverChatSheet>
+  @ViewChild('driverChatSheet') private driverChatSheet?: TemplateRef<unknown>;
 
   protected readonly user = inject(DriverAuthService).user;
   protected readonly weather = signal<DriverWeather | null>(null);
@@ -203,7 +210,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isAttendanceSheetExpanded = signal(false);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
-  protected readonly driverChatNotice = signal(false);
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -211,6 +217,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly operations = inject(DriverOperationsService);
   private readonly weatherService = inject(DriverWeatherService);
   private readonly router = inject(Router);
+  private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly chatSocket = inject(DriverChatSocketService);
+  // 目前開著的聊天 Bottom Sheet；null 代表沒開，用來避免連點開出兩層
+  private driverChatSheetRef: MatBottomSheetRef | null = null;
   private breakTimer: ReturnType<typeof setInterval> | null = null;
   private attendanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private maplibre: typeof import('maplibre-gl') | null = null;
@@ -242,6 +252,24 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadPublishedShifts();
     this.loadTodayTasks();
     this.loadProfile();
+    this.connectChatSocket();
+  }
+
+  /**
+   * 聊天室的即時推播：進工作台就連線，不等打開聊天卡片，之後紅點才能在卡片關著時也更新。
+   * 斷線寫在 ngOnDestroy 與 signOut，不寫在 DriverAuthService.logout()：
+   * 連線 service 本身要向 DriverAuthService 拿 token，反過來注入會變成互相依賴，Angular 會直接報錯。
+   *
+   * 目前只接上連線：收到的推播先印在 Console，之後做聊天卡片時改成合併進訊息清單。
+   */
+  private connectChatSocket(): void {
+    this.chatSocket.pushes$
+      .pipe(takeUntilDestroyed())
+      .subscribe((push) => console.info('[聊天室] 收到推播', push));
+    this.chatSocket.connected$
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => console.info('[聊天室] WebSocket 已連上'));
+    this.chatSocket.connect();
   }
 
   ngAfterViewInit(): void {
@@ -249,6 +277,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // 登出離開工作台時，sheet 還掛在 body 上的 overlay 裡，要一起關掉
+    this.driverChatSheetRef?.dismiss();
+    this.chatSocket.disconnect();
     this.stopNavigation();
     this.clearBreakTimer();
     this.clearAttendanceRefreshTimer();
@@ -277,8 +308,31 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadAttendance();
   }
 
-  protected showDriverChatNotice(): void {
-    this.driverChatNotice.update((isOpen) => !isOpen);
+  /**
+   * 打開與調度中心的聊天（Material Bottom Sheet，從底部滑上來）。
+   *
+   * 內容用 <ng-template>，不另開元件：跟後台確認視窗（MatDialog）同一種寫法，一頁看得到全部。
+   * 之後的對話內容與 WebSocket 連線要放在這個元件的 signal／service，不能放在 sheet 裡：
+   * sheet 關掉時裡面的畫面會整個銷毀，放在裡面的話，關著時收不到訊息、重開要整串重載。
+   */
+  protected openDriverChat(): void {
+    if (!this.driverChatSheet || this.driverChatSheetRef) {
+      return;
+    }
+    this.driverChatSheetRef = this.bottomSheet.open(this.driverChatSheet, {
+      ariaLabel: '與調度中心的對話',
+      // 全螢幕：尺寸寫在 styles.scss 的 .driver-chat-sheet-panel。
+      // 只設 height 不夠，Material 自己的 CSS 還限制了 max-height: 80vh 和寬螢幕下的寬度
+      panelClass: 'driver-chat-sheet-panel',
+    });
+    // 點背景、按 Esc、下滑關閉都會走到這裡，統一在這裡清掉，下次才開得起來
+    this.driverChatSheetRef.afterDismissed().subscribe(() => {
+      this.driverChatSheetRef = null;
+    });
+  }
+
+  protected closeDriverChat(): void {
+    this.driverChatSheetRef?.dismiss();
   }
 
   protected profilePhotoUrl(): string | null {
@@ -333,6 +387,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected signOut(): void {
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    // 在清掉 token 之前先斷線：不然 5 秒後會用已經失效的 token 重撥
+    this.chatSocket.disconnect();
     this.stopMapLocationWatch();
     clearStoredMapLocation();
     this.authService.logout();
