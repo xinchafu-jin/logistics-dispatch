@@ -98,6 +98,7 @@ export class OperationReport implements OnInit {
   });
 
   readonly failedOrders = computed(() => this.ordersInPeriod().filter((order) => order.status === 'FAILED'));
+  readonly failedChartData = computed(() => this.buildChartData(this.failedOrders()));
 
   ngOnInit(): void {
     this.loadReport();

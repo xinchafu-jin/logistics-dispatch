@@ -73,7 +73,8 @@ export class DriverSchedule implements OnInit {
   readonly scheduleMonth = signal<ScheduleMonthDto | null>(null);
   readonly shifts = signal<DriverShiftDto[]>([]);
   readonly drivers = signal<DriverDto[]>([]);
-  readonly selectedShiftId = signal<number | null>(null);
+  readonly selectedShiftIds = signal<number[]>([]);
+  readonly pendingShiftUpdates = signal<ReadonlyMap<number, DriverShiftUpdateRequest>>(new Map());
   readonly editorForm = signal<ShiftEditorForm | null>(null);
   readonly loading = signal(true);
   readonly saving = signal(false);
@@ -88,12 +89,18 @@ export class DriverSchedule implements OnInit {
   readonly days = computed(() => this.buildMonthDays(this.selectedMonth()));
   readonly isDraft = computed(() => this.scheduleMonth()?.status === 'DRAFT');
   readonly isPublished = computed(() => this.scheduleMonth()?.status === 'PUBLISHED');
-  readonly selectedShift = computed(() => {
-    const selectedId = this.selectedShiftId();
-    return selectedId === null
-      ? null
-      : (this.shifts().find((shift) => shift.id === selectedId) ?? null);
+  readonly selectedShifts = computed(() => {
+    const shiftsById = new Map(this.shifts().map((shift) => [shift.id, shift]));
+    return this.selectedShiftIds().flatMap((id) => {
+      const shift = shiftsById.get(id);
+      return shift ? [shift] : [];
+    });
   });
+  readonly selectedShift = computed(() => {
+    return this.selectedShifts()[0] ?? null;
+  });
+  readonly selectedShiftCount = computed(() => this.selectedShifts().length);
+  readonly pendingShiftCount = computed(() => this.pendingShiftUpdates().size);
   readonly selectedDriver = computed(() => {
     const driverId = this.selectedShift()?.driverId;
     return driverId === undefined
@@ -292,8 +299,27 @@ export class DriverSchedule implements OnInit {
   }
 
   protected selectShift(shift: DriverShiftDto): void {
-    this.selectedShiftId.set(shift.id);
-    this.editorForm.set(this.toEditorForm(shift));
+    if (this.saving()) {
+      return;
+    }
+
+    if (this.isPublished()) {
+      this.selectedShiftIds.set([shift.id]);
+      this.editorForm.set(this.toEditorForm(shift));
+    } else {
+      const selected = this.selectedShiftIds();
+      if (selected.includes(shift.id)) {
+        const remainingIds = selected.filter((id) => id !== shift.id);
+        this.selectedShiftIds.set(remainingIds);
+        const remainingShift = this.shifts().find((item) => item.id === remainingIds[0]);
+        this.editorForm.set(remainingShift ? this.toEditorForm(remainingShift) : null);
+      } else {
+        this.selectedShiftIds.set([...selected, shift.id]);
+        if (selected.length === 0) {
+          this.editorForm.set(this.toEditorForm(shift));
+        }
+      }
+    }
     this.errorMessage.set('');
     this.actionMessage.set('');
   }
@@ -323,15 +349,10 @@ export class DriverSchedule implements OnInit {
     this.editorForm.update((form) => (form ? { ...form, changeReason } : form));
   }
 
-  protected saveShift(): void {
-    const shift = this.selectedShift();
+  protected stageSelectedShifts(): void {
+    const shifts = this.selectedShifts();
     const form = this.editorForm();
-    if (!shift || !form || !this.isDraft() || this.saving()) {
-      return;
-    }
-
-    if (form.shiftType === 'LEAVE') {
-      this.markLeave();
+    if (shifts.length === 0 || !form || !this.isDraft() || this.saving()) {
       return;
     }
 
@@ -340,26 +361,17 @@ export class DriverSchedule implements OnInit {
       return;
     }
 
-    this.saving.set(true);
+    this.stageShiftUpdates(shifts, request);
+    this.actionMessage.set(
+      `已套用到 ${shifts.length} 個班次，尚未儲存到後端。`,
+    );
     this.errorMessage.set('');
-    this.actionMessage.set('');
-    this.api.updateDriverShift(shift.id, request).subscribe({
-      next: (updatedShift) => {
-        this.replaceShift(updatedShift);
-        this.actionMessage.set(`${this.shiftLabel(updatedShift.shiftType)}班次已儲存。`);
-        this.saving.set(false);
-      },
-      error: (error: unknown) => {
-        this.errorMessage.set(this.readError(error, '無法儲存班次。'));
-        this.saving.set(false);
-      },
-    });
   }
 
   protected markLeave(): void {
     const shift = this.selectedShift();
     const form = this.editorForm();
-    if (!shift || !form || !this.canMarkLeave() || this.saving()) {
+    if (!shift || !form || this.selectedShiftCount() !== 1 || !this.canMarkLeave() || this.saving()) {
       return;
     }
 
@@ -440,6 +452,15 @@ export class DriverSchedule implements OnInit {
     }[shiftType];
   }
 
+  protected shiftIcon(shiftType: ShiftType): string {
+    return {
+      UNASSIGNED: 'remove_circle_outline',
+      WORK: 'work',
+      DAY_OFF: 'weekend',
+      LEAVE: 'event_busy',
+    }[shiftType];
+  }
+
   protected scheduleStatusLabel(): string {
     return this.isPublished() ? '已發布' : '草稿中';
   }
@@ -450,7 +471,11 @@ export class DriverSchedule implements OnInit {
   }
 
   protected isSelected(shift: DriverShiftDto): boolean {
-    return this.selectedShiftId() === shift.id;
+    return this.selectedShiftIds().includes(shift.id);
+  }
+
+  protected isPending(shift: DriverShiftDto): boolean {
+    return this.pendingShiftUpdates().has(shift.id);
   }
 
   protected canMarkLeave(): boolean {
@@ -489,7 +514,7 @@ export class DriverSchedule implements OnInit {
       }
     }
 
-    const targets: { shiftId: number; request: DriverShiftUpdateRequest }[] = [];
+    const targets: { shift: DriverShiftDto; request: DriverShiftUpdateRequest }[] = [];
     for (const shift of this.shifts()) {
       const shiftType = weekdayByDate.get(shift.workDate);
       const targetType = shiftType === undefined ? undefined : targetTypeByWeekday.get(shiftType);
@@ -507,7 +532,7 @@ export class DriverSchedule implements OnInit {
       if (!request) {
         return;
       }
-      targets.push({ shiftId: shift.id, request });
+      targets.push({ shift, request });
     }
 
     if (targets.length === 0) {
@@ -516,32 +541,54 @@ export class DriverSchedule implements OnInit {
       return;
     }
 
+    this.stageShiftUpdates(
+      targets.map(({ shift }) => shift),
+      new Map(targets.map(({ shift, request }) => [shift.id, request])),
+    );
+    this.actionMessage.set(`${successMessage} 已先更新畫面，共 ${targets.length} 個班次尚未儲存。`);
+    this.errorMessage.set('');
+  }
+
+  protected savePendingChanges(): void {
+    const month = this.scheduleMonth();
+    const pending = this.pendingShiftUpdates();
+    if (!month || !this.isDraft() || this.saving() || pending.size === 0) {
+      return;
+    }
+
+    const updates = this.shifts().filter((shift) => pending.has(shift.id));
     this.saving.set(true);
     this.errorMessage.set('');
     this.actionMessage.set('');
-
-    const updates = targets.map(({shiftId, request}) => {
-      const current = this.shifts().find((shift) => shift.id === shiftId)!;
-      return {...current, ...request};
-    });
-
     this.api.updateDriverShiftsBatch(month.id, updates).subscribe({
-        next: (updatedShifts) => {
-          const updatedById = new Map(updatedShifts.map((shift) => [shift.id, shift]));
-          this.shifts.update((shifts) =>
-            shifts.map((shift) => updatedById.get(shift.id) ?? shift),
-          );
-          this.resetSelection();
-          this.actionMessage.set(`${successMessage} 共更新 ${updatedShifts.length} 個班次。`);
-          this.saving.set(false);
-        },
-        error: (error: unknown) => {
-          this.errorMessage.set(this.readError(error, '批次更新班次失敗，已重新讀取班表。'));
-          this.resetSelection();
-          // 後端批次 API 會整批回滾；仍重讀資料以處理其他人同時修改的情況。
-          this.loadShifts(month.id);
-        },
-      });
+      next: (updatedShifts) => {
+        const updatedById = new Map(updatedShifts.map((shift) => [shift.id, shift]));
+        this.shifts.update((shifts) =>
+          shifts.map((shift) => updatedById.get(shift.id) ?? shift),
+        );
+        this.pendingShiftUpdates.set(new Map());
+        this.resetSelection();
+        this.actionMessage.set(`已儲存 ${updatedShifts.length} 個班次。`);
+        this.saving.set(false);
+      },
+      error: (error: unknown) => {
+        this.errorMessage.set(this.readError(error, '儲存班次失敗，已重新讀取班表。'));
+        this.resetSelection();
+        this.loadShifts(month.id);
+      },
+    });
+  }
+
+  protected discardPendingChanges(): void {
+    const month = this.scheduleMonth();
+    if (!month || this.saving() || this.pendingShiftCount() === 0) {
+      return;
+    }
+
+    this.pendingShiftUpdates.set(new Map());
+    this.resetSelection();
+    this.actionMessage.set('已捨棄尚未儲存的班次變更。');
+    this.loadShifts(month.id);
   }
 
   private toBatchUpdateRequest(
@@ -577,6 +624,32 @@ export class DriverSchedule implements OnInit {
     };
   }
 
+  /** 先更新畫面與暫存異動，按下儲存前不會呼叫後端。 */
+  private stageShiftUpdates(
+    targets: readonly DriverShiftDto[],
+    requestOrRequests: DriverShiftUpdateRequest | ReadonlyMap<number, DriverShiftUpdateRequest>,
+  ): void {
+    const requests = requestOrRequests instanceof Map
+      ? requestOrRequests
+      : new Map(targets.map((shift) => [shift.id, requestOrRequests]));
+    const updates = new Map(this.pendingShiftUpdates());
+
+    for (const shift of targets) {
+      const request = requests.get(shift.id);
+      if (request) {
+        updates.set(shift.id, request);
+      }
+    }
+
+    this.pendingShiftUpdates.set(updates);
+    this.shifts.update((shifts) =>
+      shifts.map((shift) => {
+        const request = requests.get(shift.id);
+        return request ? { ...shift, ...request } : shift;
+      }),
+    );
+  }
+
   private loadDrivers(): void {
     this.api.getDrivers().subscribe({
       next: (drivers) => {
@@ -600,6 +673,7 @@ export class DriverSchedule implements OnInit {
     this.scheduleMissing.set(false);
     this.scheduleMonth.set(null);
     this.shifts.set([]);
+    this.pendingShiftUpdates.set(new Map());
 
     this.api.getScheduleMonth(this.selectedMonth()).subscribe({
       next: (month) => {
@@ -621,6 +695,7 @@ export class DriverSchedule implements OnInit {
     this.api.getScheduleMonthShifts(scheduleMonthId).subscribe({
       next: (shifts) => {
         this.shifts.set(shifts);
+        this.pendingShiftUpdates.set(new Map());
         this.loading.set(false);
         this.saving.set(false);
       },
@@ -657,6 +732,11 @@ export class DriverSchedule implements OnInit {
       };
     }
 
+    if (form.shiftType === 'LEAVE' && !reason) {
+      this.errorMessage.set('請填寫請假原因。');
+      return null;
+    }
+
     return {
       shiftType: form.shiftType,
       workStart: null,
@@ -670,7 +750,7 @@ export class DriverSchedule implements OnInit {
     this.shifts.update((shifts) =>
       shifts.map((shift) => (shift.id === updatedShift.id ? updatedShift : shift)),
     );
-    this.selectedShiftId.set(updatedShift.id);
+    this.selectedShiftIds.set([updatedShift.id]);
     this.editorForm.set(this.toEditorForm(updatedShift));
   }
 
@@ -685,7 +765,7 @@ export class DriverSchedule implements OnInit {
   }
 
   private resetSelection(): void {
-    this.selectedShiftId.set(null);
+    this.selectedShiftIds.set([]);
     this.editorForm.set(null);
   }
 

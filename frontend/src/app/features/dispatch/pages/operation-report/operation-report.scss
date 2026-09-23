@@ -637,6 +637,123 @@
   color: #e8bb69;
 }
 
+.exception-chart {
+  display: grid;
+  grid-template-columns: repeat(var(--exception-chart-columns, 7), minmax(42px, 1fr));
+  align-items: end;
+  min-height: 186px;
+  gap: 12px;
+  padding: 20px 22px 16px;
+}
+
+.exception-chart-column {
+  display: grid;
+  grid-template-rows: 18px 1fr 18px 14px;
+  align-items: end;
+  height: 150px;
+  gap: 5px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: center;
+}
+
+.exception-chart-column > span,
+.exception-chart-column strong,
+.exception-chart-column small {
+  font-size: 0.625rem;
+}
+
+.exception-chart-column > span {
+  color: #efbb67;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.exception-chart-column > i {
+  display: flex;
+  align-items: end;
+  height: 100%;
+  padding: 0 3px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
+}
+
+.exception-chart-column b {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  background: #e8bb69;
+  border: 1px solid rgb(255 218 159 / 42%);
+  border-radius: 4px 4px 1px 1px;
+  box-shadow: 0 0 16px rgb(232 187 105 / 14%);
+}
+
+.exception-chart-column:hover b,
+.exception-chart-column:focus-visible b {
+  background: #ffe0a4;
+  box-shadow: 0 0 20px rgb(232 187 105 / 36%);
+}
+
+.exception-chart-column:focus-visible {
+  outline: 2px solid #efbb67;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.exception-chart-column strong { color: var(--field-label); }
+
+.exception-chart-column small {
+  color: var(--subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.5625rem;
+}
+
+.exception-chart-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 20px;
+  padding-top: 13px;
+  color: var(--muted);
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  font-size: 0.6875rem;
+}
+
+.exception-chart-note mat-icon {
+  width: 15px;
+  height: 15px;
+  color: #e8bb69;
+  font-size: 15px;
+}
+
+.exception-healthy-state {
+  display: grid;
+  min-height: 186px;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 22px;
+  text-align: center;
+}
+
+.exception-healthy-icon {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  color: var(--accent);
+  background: rgb(99 209 198 / 10%);
+  border: 1px solid rgb(99 209 198 / 24%);
+  border-radius: 50%;
+  box-shadow: 0 0 24px rgb(99 209 198 / 12%);
+}
+
+.exception-healthy-icon mat-icon { width: 28px; height: 28px; font-size: 28px; }
+.exception-healthy-state strong { color: var(--text); font-size: 0.875rem; }
+.exception-healthy-state p { margin: 0; color: var(--muted); font-size: 0.75rem; }
+
 :host-context(.dispatch-layout.is-light-theme) {
   .report-period,
   .health-instrument,

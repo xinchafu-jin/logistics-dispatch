@@ -9,7 +9,7 @@
 .export-button:disabled, .preview-button:disabled { opacity: .65; cursor: wait; }
 .export-button mat-icon, .preview-button mat-icon { width: 18px; height: 18px; font-size: 18px; }
 .query-panel { justify-content: space-between; gap: 18px; margin-top: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.query-fields { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 10px; flex: 1; }
+.query-fields { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; flex: 1; }
 .query-fields label { display: grid; gap: 5px; min-width: 0; color: var(--subtle); font-size: .6875rem; }
 .query-fields input, .query-fields select { min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 5px; padding: 0 9px; color: var(--text); background: var(--panel); font: inherit; }
 .feedback { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; color: #e4a74d; }
@@ -37,6 +37,10 @@
 .route-table .table-row { display: grid; grid-template-columns: 110px 80px 130px 110px repeat(5, 100px); }
 .attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 90px repeat(5, 150px); }
 .vehicle-table .table-row, .warehouse-table .table-row, .store-table .table-row { display: grid; grid-template-columns: 160px repeat(8, 110px); }
+.vehicle-table .table-row { min-height: 52px; color: var(--text); font-family: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif; font-size: .875rem; font-weight: 500; }
+.vehicle-table .table-head { min-height: 40px; color: var(--field-label); font-size: .8125rem; font-weight: 700; }
+.vehicle-table .table-row > span { padding: 12px 14px; }
+.vehicle-table .mileage-status { color: var(--accent); font-weight: 700; }
 .exception-table .table-row { display: grid; grid-template-columns: 155px 120px 160px 90px 80px 220px 220px 110px; }
 .exception-summary { gap: 22px; margin-bottom: 14px; color: var(--muted); font-size: .8125rem; }
 .exception-summary span { padding-left: 10px; border-left: 2px solid var(--accent); }

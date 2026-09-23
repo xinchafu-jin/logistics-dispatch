@@ -19,6 +19,7 @@
       <label><span>出貨倉庫</span><select [value]="warehouseId() ?? ''" (change)="updateFilter('warehouse', $event)"><option value="">全部倉庫</option>@for (warehouse of warehouses(); track warehouse.id) { <option [value]="warehouse.id">{{ warehouse.name }}</option> }</select></label>
       <label><span>配送門市</span><select [value]="storeId() ?? ''" (change)="updateFilter('store', $event)"><option value="">全部門市</option>@for (store of stores(); track store.id) { <option [value]="store.id">{{ store.name }}</option> }</select></label>
       <label><span>司機</span><select [value]="driverId() ?? ''" (change)="updateFilter('driver', $event)"><option value="">全部司機</option>@for (driver of drivers(); track driver.id) { <option [value]="driver.id">{{ driver.name }}</option> }</select></label>
+      <label><span>車輛</span><select [value]="vehicleId() ?? ''" (change)="updateFilter('vehicle', $event)"><option value="">全部車輛</option>@for (vehicle of vehicles(); track vehicle.id) { <option [value]="vehicle.id">{{ vehicle.plateNumber }} · {{ vehicle.vehicleType || '未設定車型' }}</option> }</select></label>
     </div>
     <button class="preview-button" type="button" (click)="createPreview()" [disabled]="loading()">
       <mat-icon aria-hidden="true">visibility</mat-icon>{{ loading() ? '正在產生預覽' : '預覽匯出內容' }}
@@ -76,7 +77,7 @@
           }
           @case ('vehicles') {
             <div class="preview-table vehicle-table"><div class="table-row table-head"><span>車牌</span><span>路線</span><span>訂單</span><span>箱數</span><span>門市</span><span>平均裝載率</span><span>預估公里</span><span>實際公里</span><span>里程狀態</span></div>
-              @for (row of rows(report.vehicles, 'vehicles'); track row.vehicleId) { <div class="table-row"><span>{{ value(row.plateNumber) }}</span><span>{{ value(row.assignedRoutes) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.distinctStores) }}</span><span>{{ percent(row.averageLoadRatePercent) }}</span><span>{{ value(row.publishedPlannedKm) }}</span><span>{{ value(row.actualKm) }}</span><span>{{ value(row.actualMileageStatus) }}</span></div> }
+              @for (row of rows(report.vehicles, 'vehicles'); track row.vehicleId) { <div class="table-row"><span>{{ value(row.plateNumber) }}</span><span>{{ value(row.assignedRoutes) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.distinctStores) }}</span><span>{{ percent(row.averageLoadRatePercent) }}</span><span>{{ value(row.publishedPlannedKm) }}</span><span>{{ value(row.actualKm) }}</span><span class="mileage-status">{{ mileageStatusLabel(row.actualMileageStatus) }}</span></div> }
             </div>
           }
           @case ('warehouses') {

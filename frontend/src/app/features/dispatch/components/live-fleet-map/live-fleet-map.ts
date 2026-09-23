@@ -29,6 +29,18 @@ function badgeIcon(kind: 'warehouse' | 'store', size: number): L.DivIcon {
   });
 }
 
+function driverIcon(heading?: number): L.DivIcon {
+  const direction = Number.isFinite(heading) ? heading : 0;
+
+  return L.divIcon({
+    className: '',
+    html: `<span class="map-driver-marker" style="--driver-heading:${direction}deg" aria-hidden="true"><i></i></span>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    tooltipAnchor: [0, -17],
+  });
+}
+
 /** 地圖上的一個點。倉庫與門市共用同一個型別，差別只在畫出來的樣式 */
 export interface MapPoint {
   id: number;
@@ -38,6 +50,8 @@ export interface MapPoint {
   details?: string[];
   lat: number;
   lng: number;
+  /** 指向下一個配送點的角度，0 度為正北。 */
+  heading?: number;
 }
 
 /** 一位司機當天的配送路線，倉庫出發依派車順序連到各門市 */
@@ -86,6 +100,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
    * 混在一起的話點一更新（司機位置每 30 秒一次）就會把線一併清掉。
    */
   private lineLayer?: L.LayerGroup;
+  private routeSvgRenderer?: L.SVG;
   /**
    * 地圖是否已建立。用 signal 而不是判斷 this.map，是因為 effect 會早於
    * ngAfterViewInit 執行：那時直接 return 掉之後 input 沒再變動，effect 就不會再跑，
@@ -196,18 +211,18 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       }
     }
 
-    // 司機維持 circleMarker：位置每 30 秒重畫一次，向量圈畫在 canvas 上比較省，
-    // 而且一個小圓點在圖示之間反而好認。顏色只能寫死，canvas 碰不到 CSS 變數。
+    // 司機點改成 divIcon，才可以顯示朝下一站前進的箭頭與脈衝效果。
     if (driversVisible) {
       for (const driver of driverPoints) {
-        L.circleMarker([driver.lat, driver.lng], {
-          radius: 7,
-          weight: 3,
-          color: '#7ee787',
-          fillColor: '#0b0e0f',
-          fillOpacity: 0.85,
+        L.marker([driver.lat, driver.lng], {
+          icon: driverIcon(driver.heading),
+          keyboard: false,
         })
-          .bindTooltip(`司機｜${this.tooltipContent(driver)}`, {direction: 'top'})
+          .bindTooltip(this.driverTooltipContent(driver), {
+            className: 'driver-map-tooltip',
+            direction: 'top',
+            opacity: 1,
+          })
           .addTo(this.markerLayer);
       }
     }
@@ -224,6 +239,11 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       .filter(Boolean)
       .map((value) => this.escapeTooltip(value))
       .join('<br>');
+  }
+
+  private driverTooltipContent(point: MapPoint): string {
+    const [task = point.detail, ...details] = point.details ?? [point.detail];
+    return `<div class="driver-map-tooltip__content"><strong>${this.escapeTooltip(point.label)}</strong><span>${this.escapeTooltip(task)}</span>${details.map((detail) => `<small>${this.escapeTooltip(detail)}</small>`).join('')}</div>`;
   }
 
   private escapeTooltip(value: string): string {
@@ -249,6 +269,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     this.lineLayer ??= L.layerGroup().addTo(map);
+    this.routeSvgRenderer ??= L.svg().addTo(map);
     this.lineLayer.clearLayers();
     if (!visible) {
       return;
@@ -262,8 +283,10 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
 
       L.polyline(line.points, {
         color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length],
+        className: 'route-flow-line',
         weight: 3,
         opacity: 0.85,
+        renderer: this.routeSvgRenderer,
       })
         .bindTooltip(line.label, {sticky: true})
         .addTo(this.lineLayer!);
