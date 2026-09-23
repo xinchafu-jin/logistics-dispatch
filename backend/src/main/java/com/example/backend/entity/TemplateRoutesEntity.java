@@ -19,6 +19,9 @@ public class TemplateRoutesEntity {
     @Column(nullable = false)
     private Long vehicleId;
 
+    // 預設司機，套用編組時帶入；null 表示這條線沒有固定司機
+    private Long driverId;
+
     public Long getId() {
         return id;
     }
@@ -49,5 +52,13 @@ public class TemplateRoutesEntity {
 
     public void setVehicleId(Long vehicleId) {
         this.vehicleId = vehicleId;
+    }
+
+    public Long getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(Long driverId) {
+        this.driverId = driverId;
     }
 }

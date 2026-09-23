@@ -153,13 +153,19 @@ CREATE TABLE template_routes (
   -- 不存的話那條線只會靜默消失（門市的訂單屬於舊倉，撈不到）
   warehouse_id BIGINT NOT NULL,
   vehicle_id   BIGINT NOT NULL,
+  -- 預設司機，套用編組時帶入；NULL 表示這條線沒有固定司機
+  driver_id    BIGINT DEFAULT NULL,
   PRIMARY KEY (id),
   -- 同一個編組裡一台車只出現一次
   UNIQUE KEY uk_tpl_routes_tpl_vehicle (template_id, vehicle_id),
+  -- 同一個編組裡一位司機只當一條線的預設：編組套用到同一天，一位司機一天只開一條線
+  UNIQUE KEY uk_tpl_routes_tpl_driver (template_id, driver_id),
   -- 編組刪除時路線一併刪除（沒有獨立存在的意義）
   CONSTRAINT fk_tpl_routes_template  FOREIGN KEY (template_id)  REFERENCES dispatch_templates (id) ON DELETE CASCADE,
   CONSTRAINT fk_tpl_routes_warehouse FOREIGN KEY (warehouse_id) REFERENCES warehouses (id),
-  CONSTRAINT fk_tpl_routes_vehicle   FOREIGN KEY (vehicle_id)   REFERENCES vehicles (id)
+  CONSTRAINT fk_tpl_routes_vehicle   FOREIGN KEY (vehicle_id)   REFERENCES vehicles (id),
+  -- 刪除司機不該被編組擋住，預設司機只是偏好，清成 NULL 即可
+  CONSTRAINT fk_tpl_routes_driver    FOREIGN KEY (driver_id)    REFERENCES drivers (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
