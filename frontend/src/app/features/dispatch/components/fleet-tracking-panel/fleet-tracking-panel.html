@@ -1,0 +1,38 @@
+<section class="fleet-tracking-panel" aria-label="司機定位狀態">
+  <p class="section-eyebrow">定位狀態</p>
+  <strong>{{ driverPoints().length ? '定位回傳中' : '尚未取得定位資料' }}</strong>
+  @if (selectedDriverPoint(); as point) {
+    <p>{{ point.label }}</p>
+    <div class="tracking-details">
+      @for (detail of point.details ?? [point.detail]; track detail) {
+        <small>{{ detail }}</small>
+      }
+    </div>
+  } @else {
+    <p>目前沒有配送中的司機定位。</p>
+  }
+  @if (driverPoints().length) {
+    <small>僅顯示仍在有效時間內的工作中司機。</small>
+  } @else {
+    <small>目前沒有有效定位資料。</small>
+  }
+
+  <div class="tracking-driver-list">
+    @for (point of driverPoints(); track point.id) {
+      <button
+        type="button"
+        class="tracking-driver"
+        [class.is-selected]="selectedDriverPoint()?.id === point.id"
+        (click)="selectDriver(point.id)"
+      >
+        <i class="is-active" aria-hidden="true"></i>
+        <span>
+          <strong>{{ point.label }}</strong>
+          <small>{{ point.details?.[0] ?? point.detail }}</small>
+        </span>
+      </button>
+    } @empty {
+      <p class="tracking-empty">目前沒有配送中的司機定位。</p>
+    }
+  </div>
+</section>

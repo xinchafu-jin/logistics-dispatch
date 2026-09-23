@@ -32,13 +32,13 @@ class AiAssistantServiceUnassignTest {
 
     private final ToolContext toolContext = new ToolContext(Map.of("conversationId", CONVERSATION_ID));
 
-    private DispatchService dispatchService;
+    private DispatchWorkflowService dispatchWorkflowService;
     private DriversService driversService;
     private AiAssistantService service;
 
     @BeforeEach
     void setUp() {
-        dispatchService = mock(DispatchService.class);
+        dispatchWorkflowService = mock(DispatchWorkflowService.class);
         driversService = mock(DriversService.class);
         WarehousesService warehousesService = mock(WarehousesService.class);
 
@@ -49,7 +49,7 @@ class AiAssistantServiceUnassignTest {
 
         // 加入清單用不到模型、主管 Key、班表與訂單，給 null 即可
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                dispatchService, driversService, warehousesService);
+                dispatchWorkflowService, driversService, warehousesService);
     }
 
     @Test
@@ -129,7 +129,7 @@ class AiAssistantServiceUnassignTest {
         board.setDate(LocalDate.parse(DATE));
         board.setWarehouse(warehouse);
         board.setRoutes(List.of(route));
-        when(dispatchService.getBoard(LocalDate.parse(DATE), WAREHOUSE_ID)).thenReturn(board);
+        when(dispatchWorkflowService.getBoard(LocalDate.parse(DATE), WAREHOUSE_ID)).thenReturn(board);
     }
 
     private void givenActiveDriver(Long id, String account, String name) {

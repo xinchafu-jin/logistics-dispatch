@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.AdminUsersDAO;
+import com.example.backend.dto.request.AdminPasswordChangeDTO;
 import com.example.backend.dto.request.AdminPasswordResetDTO;
 import com.example.backend.dto.request.AdminPasswordResetVerificationDTO;
 import com.example.backend.dto.request.AdminUsersDTO;
@@ -65,6 +66,27 @@ public class AdminUsersService {
         }
         validatePassword(dto.getNewPassword());
         AdminUsersEntity entity = findAdminForPasswordReset(dto.getAccount(), dto.getPhone());
+        entity.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        adminUsersDAO.save(entity);
+    }
+
+    /** 已登入主管使用原密碼修改自己的密碼。主管身分由 JWT 的 userId 決定。 */
+    public void changePassword(Long userId, AdminPasswordChangeDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("密碼資料不可空白");
+        }
+
+        validateRequired(dto.getCurrentPassword(), "原密碼不可空白");
+        validatePassword(dto.getNewPassword());
+
+        AdminUsersEntity entity = findAdmin(userId);
+        if (!passwordEncoder.matches(dto.getCurrentPassword(), entity.getPassword())) {
+            throw new IllegalArgumentException("原密碼不正確");
+        }
+        if (passwordEncoder.matches(dto.getNewPassword(), entity.getPassword())) {
+            throw new IllegalArgumentException("新密碼不可與原密碼相同");
+        }
+
         entity.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         adminUsersDAO.save(entity);
     }

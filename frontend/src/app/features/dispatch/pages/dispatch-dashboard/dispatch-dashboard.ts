@@ -11,8 +11,8 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
-import {Component, computed, inject, OnInit, signal} from '@angular/core';
-import {toObservable, toSignal} from '@angular/core/rxjs-interop';
+import {Component, computed, DestroyRef, inject, OnInit, signal} from '@angular/core';
+import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
@@ -25,6 +25,7 @@ import {
   OrderDto,
   OrderStatus,
   ReassignRequest,
+  RouteMetricsDto,
   RouteStatus,
   RouteStopDto,
   ShiftType,
@@ -36,12 +37,13 @@ import {
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
+import {MatIconModule} from '@angular/material/icon';
 
 /** 後端錯誤統一是 { message }，取得到就用它的文字，否則給個能辨識的替代。 */
 function describeError(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
     const message = (error.error as { message?: string } | null)?.message;
-    return message || `後端回應 ${error.status}`;
+    return message || `操作未完成（代碼 ${error.status}）`;
   }
 
   return '未知錯誤';
@@ -106,8 +108,10 @@ interface BoardRoute {
   totalDistance: number;
   /** 空槽沒有路線，一律當作草稿 */
   routeStatus: RouteStatus;
-  /** 含有已完成、已取消等不能重新排程的訂單時，整條既有路線僅供檢視。 */
+  /** 含有配送中、不能重新排程的訂單時，整條既有路線僅供檢視。 */
   hasLockedStops: boolean;
+  /** 維修車保留在看板供辨識，但不可改派或拖曳。 */
+  isMaintenance: boolean;
   cards: BoardCard[];
 }
 
@@ -130,32 +134,19 @@ interface DriverOption {
   takenNote: string | null;
 }
 
-interface SummaryCard {
+type TaskboardColumnId = 'pending' | 'confirmed' | 'delivering' | 'completed' | 'failed' | 'cancelled';
+
+interface TaskboardColumn {
+  id: TaskboardColumnId;
   label: string;
-  value: string;
   detail: string;
-  tone: string;
-}
-
-interface PendingOrder {
-  id: string;
-  store: string;
-  area: string;
-  window: string;
-  cargo: string;
-  status: string;
-  priority: string;
-}
-
-interface DashboardAlert {
-  title: string;
-  detail: string;
-  tone: string;
+  status: OrderStatus;
+  count: number;
 }
 
 @Component({
   selector: 'app-dispatch-dashboard',
-  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule],
+  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule, MatIconModule],
   templateUrl: './dispatch-dashboard.html',
   styleUrl: './dispatch-dashboard.scss',
 })
@@ -164,6 +155,7 @@ export class DispatchDashboard implements OnInit {
   readonly unassigned = signal<BoardCard[]>([]);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
+  private readonly routeMetricsByRouteId = signal<ReadonlyMap<number, RouteMetricsDto>>(new Map());
   /** 改派送出中，此時鎖住看板避免兩個請求互相覆蓋 */
   readonly saving = signal(false);
   readonly boardError = signal('');
@@ -173,6 +165,7 @@ export class DispatchDashboard implements OnInit {
   readonly warehouseId = signal(0);
   readonly optimizing = signal(false);
   private readonly api = inject(DispatchApiService);
+  private readonly destroyRef = inject(DestroyRef);
   readonly dispatchResult = signal<DispatchResultDto | null>(null);
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
@@ -183,11 +176,13 @@ export class DispatchDashboard implements OnInit {
   readonly shiftsByDriverId = signal<ReadonlyMap<number, DriverShiftDto>>(new Map());
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
-  readonly pendingOrders = signal<PendingOrder[]>([]);
-  readonly alerts = signal<DashboardAlert[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
   readonly updatedAt = signal('--:--');
+  /** 即時看板只同步訂單，避免背景更新干擾調度員正在拖曳的排車草稿。 */
+  readonly taskboardSyncing = signal(false);
+  readonly taskboardSyncError = signal('');
+  readonly taskboardLastSyncedAt = signal('--:--');
 
   // ── 常配編組 ──────────────────────────────────────────
   readonly templates = signal<TemplateDto[]>([]);
@@ -220,46 +215,46 @@ export class DispatchDashboard implements OnInit {
 
     return [
       `今日配送需求 ${orders.length} 筆`,
-      `${waitingSchedule} 筆待排車，資料來自 OrderController`,
+      `${waitingSchedule} 筆待排車，等待安排車輛`,
       `${delivering} 筆配送中，可開啟地圖的司機位置查看有效 GPS 回傳`,
       `已同步 ${this.drivers().length} 位司機與 ${this.vehicles().length} 台車輛`,
       `目前 ${this.warehouseName()} 已納入首頁資料來源`,
     ];
   });
 
-  readonly summaryCards = computed<SummaryCard[]>(() => {
-    const orders = this.orders();
-    const pendingConfirm = orders.filter((order) => order.status === 'PENDING_CONFIRM').length;
-    const waitingSchedule = orders.filter((order) => order.status === 'CONFIRMED').length;
-    const delivering = orders.filter((order) => order.status === 'IN_DELIVERY').length;
-
-    return [
-      {
-        label: '待總部確認',
-        value: String(pendingConfirm),
-        detail: '來自後端 PENDING_CONFIRM',
-        tone: 'accent',
-      },
-      {
-        label: '待排車',
-        value: String(waitingSchedule),
-        detail: '來自後端 CONFIRMED',
-        tone: 'default',
-      },
-      {
-        label: '配送中',
-        value: String(delivering),
-        detail: '來自後端 IN_DELIVERY',
-        tone: 'default',
-      },
-      {
-        label: '資源提醒',
-        value: String(this.alerts().length),
-        detail: '由司機與車輛狀態計算',
-        tone: 'warning',
-      },
+  /** 今日訂單的追蹤看板。六欄直接對應後端訂單狀態，只供主管查看。 */
+  readonly taskboardColumns = computed<TaskboardColumn[]>(() => {
+    const publishedOrderIds = new Set(
+      this.routes()
+        .filter((route) => route.routeStatus === 'PUBLISHED')
+        .flatMap((route) => route.cards.map((card) => card.orderId)),
+    );
+    const orders = this.orders()
+      .filter((order) =>
+        order.deliveryDate === this.dispatchDate() && order.id != null && publishedOrderIds.has(order.id),
+      )
+      .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER));
+    const columns: Array<Omit<TaskboardColumn, 'count'> & {matches: (order: OrderDto) => boolean}> = [
+      {id: 'pending', label: '待確認', detail: '等待總部確認', status: 'PENDING_CONFIRM', matches: (order) => order.status === 'PENDING_CONFIRM'},
+      {id: 'confirmed', label: '待調度', detail: '已確認等待出發', status: 'CONFIRMED', matches: (order) => order.status === 'CONFIRMED'},
+      {id: 'delivering', label: '配送中', detail: '正在配送', status: 'IN_DELIVERY', matches: (order) => order.status === 'IN_DELIVERY'},
+      {id: 'completed', label: '已完成', detail: '今日已簽收', status: 'COMPLETED', matches: (order) => order.status === 'COMPLETED'},
+      {id: 'failed', label: '配送失敗', detail: '需要處理', status: 'FAILED', matches: (order) => order.status === 'FAILED'},
+      {id: 'cancelled', label: '已取消', detail: '不再配送', status: 'CANCELLED', matches: (order) => order.status === 'CANCELLED'},
     ];
+
+    return columns.map(({matches, ...column}) => ({
+      ...column,
+      count: orders.filter(matches).length,
+    }));
   });
+
+  /** 已派出的任務才進追蹤看板，草稿排車不會提前出現在主管畫面。 */
+  readonly publishedTaskboardRoutes = computed(() =>
+    this.routes().filter((route) => route.routeStatus === 'PUBLISHED' && route.cards.length > 0),
+  );
+
+  readonly publishedTemplateName = computed(() => this.activeTemplate()?.name ?? '今日手動排車');
 
   /** 這個倉庫今天能出的車。排車不給勾選，這裡只是讓調度員知道手上有什麼 */
   readonly availableVehicles = computed(() =>
@@ -384,7 +379,7 @@ export class DispatchDashboard implements OnInit {
 
     const lines: RouteLine[] = [];
     for (const route of this.routes()) {
-      if (route.driverId === null || route.cards.length === 0) {
+      if (route.routeStatus !== 'PUBLISHED' || route.driverId === null || route.cards.length === 0) {
         continue;
       }
 
@@ -452,25 +447,92 @@ export class DispatchDashboard implements OnInit {
         .map((driver) => [driver.id!, driver.name]),
     );
 
-    return this.livePings().map((ping) => ({
-      id: ping.driverId,
-      label: nameById.get(ping.driverId) ?? `司機 #${ping.driverId}`,
-      detail: `${minutesAgo(ping.timestamp)} 分鐘前回報`,
-      lat: ping.lat,
-      lng: ping.lng,
-    }));
+    const storesById = new Map(
+      this.stores().filter((store) => store.id != null).map((store) => [store.id!, store]),
+    );
+    const publishedDriverIds = new Set(
+      this.routes()
+        .filter((route) => route.routeStatus === 'PUBLISHED' && route.driverId !== null && !route.isMaintenance)
+        .map((route) => route.driverId!),
+    );
+    const activeOrdersByDriver = new Map<number, OrderDto>();
+    this.orders()
+      .filter((order) =>
+        order.deliveryDate === this.dispatchDate()
+        && order.assignedDriverId != null
+        && publishedDriverIds.has(order.assignedDriverId)
+        && (order.status === 'CONFIRMED' || order.status === 'IN_DELIVERY'),
+      )
+      .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER))
+      .forEach((order) => {
+        if (!activeOrdersByDriver.has(order.assignedDriverId!)) {
+          activeOrdersByDriver.set(order.assignedDriverId!, order);
+        }
+      });
+    const routeByDriver = new Map(
+      this.routes()
+        .filter((route) => route.routeStatus === 'PUBLISHED' && route.driverId !== null && !route.isMaintenance)
+        .map((route) => [route.driverId!, route]),
+    );
+    const metricsByRoute = this.routeMetricsByRouteId();
+
+    return this.livePings()
+      .filter((ping) => activeOrdersByDriver.has(ping.driverId))
+      .map((ping) => {
+        const order = activeOrdersByDriver.get(ping.driverId)!;
+        const route = routeByDriver.get(ping.driverId);
+        const metrics = route ? metricsByRoute.get(route.routeId) : undefined;
+        const details = [
+          `訂單 ${order.orderNumber}`,
+          `預估抵達 ${this.formatEstimatedArrival(metrics?.estimatedNextArrivalAt)}`,
+          `預估里程 ${this.formatKm(metrics?.remainingKm)}`,
+          `預估油耗 ${this.formatFuel(metrics?.gpsEstimatedFuelLiters)}`,
+          `${storesById.get(order.storeId)?.name ?? `門市 #${order.storeId}`} · ${minutesAgo(ping.timestamp)} 分鐘前回報`,
+        ];
+        return {
+          id: ping.driverId,
+          label: nameById.get(ping.driverId) ?? `司機 #${ping.driverId}`,
+          detail: details[0],
+          details,
+          lat: ping.lat,
+          lng: ping.lng,
+        };
+      });
   });
 
   ngOnInit(): void {
     this.loadDashboard();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
+    timer(15_000, 15_000)
+      .pipe(
+        switchMap(() => this.api.getOrders().pipe(catchError(() => of<OrderDto[] | null>(null)))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((orders) => {
+        if (orders) {
+          this.applyTaskboardOrders(orders);
+        }
+      });
   }
 
-  onDateChange(event: Event): void {
-    this.dispatchDate.set((event.target as HTMLInputElement).value);
-    this.loadScheduleEligibility();
-    this.reloadBoard();
+  refreshTaskboard(): void {
+    if (this.taskboardSyncing()) {
+      return;
+    }
+
+    this.taskboardSyncing.set(true);
+    this.taskboardSyncError.set('');
+    this.api.getOrders().subscribe({
+      next: (orders) => {
+        this.applyTaskboardOrders(orders);
+        this.taskboardSyncing.set(false);
+      },
+      error: () => {
+        this.taskboardSyncError.set('暫時無法同步訂單狀態。');
+        this.taskboardSyncing.set(false);
+      },
+    });
   }
 
   onWarehouseChange(event: Event): void {
@@ -495,8 +557,6 @@ export class DispatchDashboard implements OnInit {
         this.drivers.set(drivers);
         this.vehicles.set(vehicles);
         this.warehouses.set(warehouses);
-        this.pendingOrders.set(this.toPendingOrders(orders, stores));
-        this.alerts.set(this.toAlerts(drivers, vehicles));
         this.warehouseName.set(
           warehouses.find((warehouse) => warehouse.isActive)?.name ?? '高雄配送區',
         );
@@ -514,80 +574,17 @@ export class DispatchDashboard implements OnInit {
         }
       },
       error: () => {
-        this.errorMessage.set('無法取得後台總覽資料，請確認後端服務與登入狀態。');
+        this.errorMessage.set('暫時無法載入總覽資料，請稍後再試。');
         this.loading.set(false);
       },
     });
   }
 
-  private toPendingOrders(orders: OrderDto[], stores: StoreDto[]): PendingOrder[] {
-    return orders
-      .filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED')
-      .slice(0, 3)
-      .map((order) => {
-        const store = stores.find((item) => item.id === order.storeId);
-        const address = store?.address || '';
-        return {
-          id: order.orderNumber,
-          store: store?.name ?? `門市 #${order.storeId}`,
-          area: this.extractArea(address),
-          window: store
-            ? `${this.formatTime(store.receivingStart)} - ${this.formatTime(store.receivingEnd)}`
-            : '尚未提供收貨時段',
-          cargo: `${order.boxCount} 箱`,
-          status: this.orderStatusLabel(order.status),
-          priority: order.status === 'PENDING_CONFIRM' ? '待確認' : '一般',
-        };
-      });
-  }
-
-  private toAlerts(drivers: DriverDto[], vehicles: VehicleDto[]): DashboardAlert[] {
-    const alerts: DashboardAlert[] = [];
-    const inactiveDrivers = drivers.filter((driver) => !driver.isActive);
-    const maintenanceVehicles = vehicles.filter((vehicle) => vehicle.status === 'MAINTENANCE');
-
-    if (inactiveDrivers.length > 0) {
-      alerts.push({
-        title: '司機狀態提醒',
-        detail: `${inactiveDrivers.length} 位司機目前標記為停職。`,
-        tone: 'warning',
-      });
-    }
-    if (maintenanceVehicles.length > 0) {
-      alerts.push({
-        title: '車輛保養提醒',
-        detail: `${maintenanceVehicles.length} 台車輛目前標記為保養。`,
-        tone: 'critical',
-      });
-    }
-    if (alerts.length === 0) {
-      alerts.push({
-        title: '目前沒有資源提醒',
-        detail: '目前沒有資源異常；異常案件 API 尚未完成 Service 串接。',
-        tone: 'normal',
-      });
-    }
-    return alerts;
-  }
-
-  private orderStatusLabel(status: OrderStatus): string {
-    const labels: Record<OrderStatus, string> = {
-      PENDING_CONFIRM: '待總部確認',
-      CONFIRMED: '待排車',
-      IN_DELIVERY: '配送中',
-      COMPLETED: '已完成',
-      CANCELLED: '已取消',
-      FAILED: '配送失敗',
-    };
-    return labels[status];
-  }
-
-  private extractArea(address: string): string {
-    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '高雄配送區';
-  }
-
-  private formatTime(value: string): string {
-    return value?.slice(0, 5) || '--:--';
+  private applyTaskboardOrders(orders: OrderDto[]): void {
+    this.orders.set(orders);
+    const syncedAt = this.formatCurrentTime();
+    this.taskboardLastSyncedAt.set(syncedAt);
+    this.updatedAt.set(syncedAt);
   }
 
   private formatCurrentTime(): string {
@@ -616,7 +613,7 @@ export class DispatchDashboard implements OnInit {
       },
       error: (err) => {
         console.error(err);
-        this.boardError.set(err?.error?.message ?? '排車失敗，請確認後端與 OSRM 服務。');
+        this.boardError.set(err?.error?.message ?? '排車失敗，請稍後再試。');
         this.optimizing.set(false);
       },
     });
@@ -630,6 +627,80 @@ export class DispatchDashboard implements OnInit {
   /** 超過車輛容量，畫面上要標出來 */
   isOverloaded(route: BoardRoute): boolean {
     return this.loadedBoxes(route) > route.capacity;
+  }
+
+  boardCardStatus(card: BoardCard): OrderStatus {
+    return this.orders().find((order) => order.id === card.orderId)?.status ?? 'CONFIRMED';
+  }
+
+  boardCardStatusLabel(card: BoardCard): string {
+    return this.orderStatusLabel(this.boardCardStatus(card));
+  }
+
+  boardCardDeliveryWindow(card: BoardCard): string {
+    const store = this.stores().find((item) => item.id === card.storeId);
+    if (!store?.receivingStart || !store.receivingEnd) {
+      return '收貨時間未設定';
+    }
+
+    return `${store.receivingStart.slice(0, 5)} - ${store.receivingEnd.slice(0, 5)}`;
+  }
+
+  boardCardDescription(card: BoardCard): string {
+    const order = this.orders().find((item) => item.id === card.orderId);
+    return order?.itemDescription || order?.notes || '未填寫品項或備註';
+  }
+
+  routeDriverStatus(route: BoardRoute): string {
+    if (route.isMaintenance) {
+      return '車輛維修中';
+    }
+    if (route.driverId === null) {
+      return '待指派司機';
+    }
+
+    const statuses = route.cards.map((card) => this.boardCardStatus(card));
+    if (statuses.includes('IN_DELIVERY')) {
+      return '配送中';
+    }
+    if (statuses.includes('CONFIRMED')) {
+      return '待出發';
+    }
+    if (statuses.includes('COMPLETED')) {
+      return '已完成';
+    }
+
+    return '尚無訂單';
+  }
+
+  taskboardRouteProgress(route: BoardRoute): string {
+    const completed = route.cards.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
+    return `${completed}/${route.cards.length} 已完成`;
+  }
+
+  taskboardEstimatedArrival(route: BoardRoute): string {
+    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
+  }
+
+  taskboardRemainingKm(route: BoardRoute): string {
+    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
+  private orderStatusLabel(status: OrderStatus): string {
+    switch (status) {
+      case 'PENDING_CONFIRM':
+        return '待確認';
+      case 'CONFIRMED':
+        return '待調度';
+      case 'IN_DELIVERY':
+        return '配送中';
+      case 'COMPLETED':
+        return '已完成';
+      case 'FAILED':
+        return '配送失敗';
+      case 'CANCELLED':
+        return '已取消';
+    }
   }
 
   /**
@@ -795,6 +866,11 @@ export class DispatchDashboard implements OnInit {
    */
   publish(): void {
     if (this.publishing() || this.busy()) {
+      return;
+    }
+
+    if (this.dispatchDate() !== todayLocalDate()) {
+      this.publishError.set('只能發布今天的配送任務。');
       return;
     }
 
@@ -1198,7 +1274,7 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  private driverName(driverId: number): string {
+  protected driverName(driverId: number): string {
     return this.drivers().find((driver) => driver.id === driverId)?.name ?? `司機 #${driverId}`;
   }
 
@@ -1230,7 +1306,7 @@ export class DispatchDashboard implements OnInit {
       (vehicle): vehicle is VehicleDto & {id: number} =>
         vehicle.id != null &&
         vehicle.warehouseId === this.warehouseId() &&
-        vehicle.status === 'AVAILABLE',
+        vehicle.status !== 'RETIRED',
     );
     const boardVehicleIds = new Set(boardVehicles.map((vehicle) => vehicle.id));
     this.routes.set(
@@ -1247,13 +1323,15 @@ export class DispatchDashboard implements OnInit {
           totalDistance: route?.totalDistance ?? 0,
           routeStatus: route?.status ?? 'DRAFT',
           hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
-          cards: routeStops
-            .filter((stop) => dispatchableOrderIds.has(stop.orderId))
+          isMaintenance: vehicle.status === 'MAINTENANCE',
+          cards: (vehicle.status === 'MAINTENANCE'
+            ? routeStops
+            : routeStops.filter((stop) => dispatchableOrderIds.has(stop.orderId)))
             .map(toBoardCard),
         };
       }),
     );
-    // 維修或報廢車的草稿不畫成車道，但其中仍待排的訂單必須保留給其他可派車輛。
+    // 報廢車不畫成車道，但其中仍待排的訂單必須保留給其他可派車輛。
     const strandedOrders = result.routes
       .filter((route) => !boardVehicleIds.has(route.vehicleId))
       .flatMap((route) => route.stops)
@@ -1265,5 +1343,46 @@ export class DispatchDashboard implements OnInit {
     );
     this.unassigned.set([...unassignedByOrderId.values()].map(toBoardCard));
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
+    this.loadRouteMetrics(this.routes());
+  }
+
+  private loadRouteMetrics(routes: readonly BoardRoute[]): void {
+    const routeIds = [...new Set(routes
+      .filter((route) => route.routeId > 0 && route.driverId !== null && !route.isMaintenance)
+      .map((route) => route.routeId))];
+    if (routeIds.length === 0) {
+      this.routeMetricsByRouteId.set(new Map());
+      return;
+    }
+
+    forkJoin(routeIds.map((routeId) => this.api.getRouteMetrics(routeId).pipe(catchError(() => of(null))))).subscribe(
+      (metrics) => {
+        const next = new Map<number, RouteMetricsDto>();
+        metrics.forEach((metric) => {
+          if (metric) {
+            next.set(metric.routeId, metric);
+          }
+        });
+        this.routeMetricsByRouteId.set(next);
+      },
+    );
+  }
+
+  private formatEstimatedArrival(value: string | null | undefined): string {
+    if (!value) {
+      return '資料同步中';
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : new Intl.DateTimeFormat('zh-TW', {hour: '2-digit', minute: '2-digit', hour12: false}).format(date);
+  }
+
+  private formatKm(value: number | null | undefined): string {
+    return value == null ? '資料同步中' : `${value.toFixed(1)} km`;
+  }
+
+  private formatFuel(value: number | null | undefined): string {
+    return value == null ? '資料同步中' : `${value.toFixed(1)} L`;
   }
 }

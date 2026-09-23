@@ -84,7 +84,7 @@ export class DriverLogin {
       return error.message;
     }
 
-    return '無法登入，請確認後端服務與帳密後再試。';
+    return '無法登入，請確認帳號密碼後再試。';
   }
 
 }

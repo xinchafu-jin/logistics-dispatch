@@ -36,20 +36,21 @@
                 "output": "maplibre"
               }
             ],
-            "styles": ["src/styles.scss"]
+            "styles": ["src/styles.scss"],
+            "allowedCommonJsDependencies": ["@stomp/stompjs"]
           },
           "configurations": {
             "production": {
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "550kB",
-                  "maximumError": "700kB"
+                  "maximumWarning": "650kB",
+                  "maximumError": "750kB"
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "22kB",
-                  "maximumError": "24kB"
+                  "maximumWarning": "24kB",
+                  "maximumError": "26kB"
                 }
               ],
               "outputHashing": "all",

@@ -19,7 +19,7 @@ import static org.mockito.Mockito.*;
 /**
  * 確認時多個倉的送出順序。
  *
- * <p>reassign 用 mock 模擬 DispatchService 的跨倉檢查：同一天一位司機只能在一個倉的路線上，
+ * <p>reassign 用 mock 模擬排車的跨倉檢查（實際在 DispatchService.reassign，經 DispatchWorkflowService 呼叫）：同一天一位司機只能在一個倉的路線上，
  * 送出時司機還掛在別倉就丟例外。台北倉 ABC-001 是王小明（D003），桃園倉 XYZ-001 是李大華（D004）。</p>
  */
 class AiAssistantServiceConfirmPlanTest {
@@ -32,12 +32,12 @@ class AiAssistantServiceConfirmPlanTest {
     // 模擬資料庫現況：「日期#司機 ID」→ 司機目前所在的倉
     private final Map<String, Long> driverWarehouse = new HashMap<>();
 
-    private DispatchService dispatchService;
+    private DispatchWorkflowService dispatchWorkflowService;
     private AiAssistantService service;
 
     @BeforeEach
     void setUp() {
-        dispatchService = mock(DispatchService.class);
+        dispatchWorkflowService = mock(DispatchWorkflowService.class);
         DriversService driversService = mock(DriversService.class);
         WarehousesService warehousesService = mock(WarehousesService.class);
 
@@ -45,7 +45,7 @@ class AiAssistantServiceConfirmPlanTest {
         when(driversService.findByAccount("D003")).thenReturn(driver(3L, "D003", "王小明"));
         when(driversService.findByAccount("D004")).thenReturn(driver(4L, "D004", "李大華"));
 
-        when(dispatchService.reassign(any())).thenAnswer(invocation -> {
+        when(dispatchWorkflowService.reassign(any())).thenAnswer(invocation -> {
             ReassignDTO dto = invocation.getArgument(0);
             for (ReassignDTO.RouteAssignment route : dto.getRoutes()) {
                 Long heldBy = driverWarehouse.get(dto.getDate() + "#" + route.getDriverId());
@@ -66,7 +66,7 @@ class AiAssistantServiceConfirmPlanTest {
         });
 
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                dispatchService, driversService, warehousesService);
+                dispatchWorkflowService, driversService, warehousesService);
     }
 
     @Test
@@ -103,7 +103,7 @@ class AiAssistantServiceConfirmPlanTest {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> service.confirmPlan(CONVERSATION_ID));
         assertTrue(e.getMessage().contains("互換"), e.getMessage());
-        verify(dispatchService, never()).reassign(any());
+        verify(dispatchWorkflowService, never()).reassign(any());
         // 沒執行成功，清單要留著讓調度員調整
         assertEquals(2, service.getPlan(CONVERSATION_ID).size());
     }
@@ -119,7 +119,7 @@ class AiAssistantServiceConfirmPlanTest {
         service.proposeAssignDriver(TUESDAY, "桃園倉", "XYZ-001", "D003", toolContext);
 
         assertDoesNotThrow(() -> service.confirmPlan(CONVERSATION_ID));
-        verify(dispatchService, times(2)).reassign(any());
+        verify(dispatchWorkflowService, times(2)).reassign(any());
     }
 
     /** 某天某倉的看板只有一條路線，同時記進模擬的資料庫現況 */
@@ -141,7 +141,7 @@ class AiAssistantServiceConfirmPlanTest {
         board.setDate(LocalDate.parse(date));
         board.setWarehouse(warehouse);
         board.setRoutes(List.of(route));
-        when(dispatchService.getBoard(LocalDate.parse(date), warehouseId)).thenReturn(board);
+        when(dispatchWorkflowService.getBoard(LocalDate.parse(date), warehouseId)).thenReturn(board);
 
         driverWarehouse.put(LocalDate.parse(date) + "#" + driverId, warehouseId);
     }

@@ -63,7 +63,7 @@ export class PersonalProfile {
 
     // The backend currently has no personal-profile update endpoint. Do not
     // present a successful save for data that has not been persisted.
-    this.profileFeedback.set('個人資料更新 API 尚未提供，變更尚未送出。');
+    this.profileFeedback.set('個人資料目前無法更新，請稍後再試。');
   }
 
   protected toggleKeyVisibility(): void {

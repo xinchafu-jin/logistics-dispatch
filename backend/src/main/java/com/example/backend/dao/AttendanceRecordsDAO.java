@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -24,4 +25,9 @@ public interface AttendanceRecordsDAO extends JpaRepository<AttendanceRecordsEnt
             @Param("driverId") Long driverId,
             @Param("workDate") LocalDate workDate
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select a from AttendanceRecordsEntity a "
+            + "where a.clockOutAt is null and a.workDate = :workDate")
+    List<AttendanceRecordsEntity> findOpenForUpdate(@Param("workDate") LocalDate workDate);
 }

@@ -8,6 +8,7 @@ import {
   provideZoneChangeDetection,
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
+import {provideAnimationsAsync} from '@angular/platform-browser/animations/async';
 import { firstValueFrom } from 'rxjs';
 
 import { routes } from './app.routes';
@@ -19,6 +20,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZoneChangeDetection({ eventCoalescing: true }),
+    provideAnimationsAsync(),
     provideHttpClient(withInterceptors([driverAuthInterceptor])),
     provideRouter(routes),
     provideAppInitializer(() => firstValueFrom(inject(DriverAuthService).restoreSession())),

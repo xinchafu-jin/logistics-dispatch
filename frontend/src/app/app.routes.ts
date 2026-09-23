@@ -65,6 +65,14 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'history',
+        data: { title: '歷史報表查詢中心' },
+        loadComponent: () =>
+          import('./features/dispatch/pages/report-history/report-history').then(
+            (component) => component.ReportHistory,
+          ),
+      },
+      {
         path: 'profile',
         data: { title: '個人設定' },
         loadComponent: () =>

@@ -228,17 +228,7 @@
         <span>今日調度</span>
       </a>
 
-      <p class="nav-group-title">管理與監控</p>
-
-      <a mat-list-item class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">fact_check</mat-icon>
-        <span>訂單審核</span>
-      </a>
-
-      <a mat-list-item class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">local_shipping</mat-icon>
-        <span>人車資源</span>
-      </a>
+      <p class="nav-group-title">資源準備</p>
 
       <a
         mat-list-item
@@ -252,6 +242,20 @@
         <span>司機班表</span>
       </a>
 
+      <a mat-list-item class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">local_shipping</mat-icon>
+        <span>人車資源</span>
+      </a>
+
+      <p class="nav-group-title">配送管理</p>
+
+      <a mat-list-item class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">fact_check</mat-icon>
+        <span>訂單審核</span>
+      </a>
+
+      <p class="nav-group-title">追蹤與分析</p>
+
       <a mat-list-item class="nav-item" routerLink="/dispatch/anomalies" routerLinkActive="is-active">
         <mat-icon matListItemIcon aria-hidden="true">warning_amber</mat-icon>
         <span>異常中心</span>
@@ -260,6 +264,11 @@
       <a mat-list-item class="nav-item" routerLink="/dispatch/reports" routerLinkActive="is-active">
         <mat-icon matListItemIcon aria-hidden="true">bar_chart</mat-icon>
         <span>營運報表</span>
+      </a>
+
+      <a mat-list-item class="nav-item" routerLink="/dispatch/history" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">history</mat-icon>
+        <span>歷史報表查詢中心</span>
       </a>
     </mat-nav-list>
   </aside>

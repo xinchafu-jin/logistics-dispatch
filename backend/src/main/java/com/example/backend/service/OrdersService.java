@@ -1,6 +1,11 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.OrdersDAO;
+import com.example.backend.dao.StoresDAO;
+import com.example.backend.dao.WarehousesDAO;
+import com.example.backend.constants.OrderReviewAction;
+import com.example.backend.constants.OrderStatus;
+import com.example.backend.dto.request.OrderReviewRequestDTO;
 import com.example.backend.dto.request.OrdersDTO;
 import com.example.backend.entity.OrdersEntity;
 import jakarta.persistence.EntityNotFoundException;
@@ -18,9 +23,17 @@ import java.util.Set;
 public class OrdersService {
 
     private final OrdersDAO ordersDAO;
+    private final StoresDAO storesDAO;
+    private final WarehousesDAO warehousesDAO;
 
-    public OrdersService(OrdersDAO ordersDAO) {
+    public OrdersService(
+            OrdersDAO ordersDAO,
+            StoresDAO storesDAO,
+            WarehousesDAO warehousesDAO
+    ) {
         this.ordersDAO = ordersDAO;
+        this.storesDAO = storesDAO;
+        this.warehousesDAO = warehousesDAO;
     }
 
     @Transactional(readOnly = true)
@@ -39,6 +52,7 @@ public class OrdersService {
         }
         OrdersEntity entity = new OrdersEntity();
         apply(dto, entity);
+        entity.setStatus(OrderStatus.PENDING_CONFIRM);
         return toDTO(ordersDAO.save(entity));
     }
 
@@ -59,6 +73,7 @@ public class OrdersService {
             }
             OrdersEntity entity = new OrdersEntity();
             apply(dto, entity);
+            entity.setStatus(OrderStatus.PENDING_CONFIRM);
             return entity;
         }).toList();
         return ordersDAO.saveAll(entities).stream().map(this::toDTO).toList();
@@ -66,6 +81,10 @@ public class OrdersService {
 
     public OrdersDTO update(Long id, OrdersDTO dto) {
         OrdersEntity entity = findEntity(id);
+        if (entity.getRouteId() != null) {
+            throw new IllegalArgumentException("訂單已排入路線，請先撤回並解除編組後再修改");
+        }
+        validateStatusTransition(entity.getStatus(), dto.getStatus());
         if (!entity.getOrderNumber().equals(dto.getOrderNumber()) && ordersDAO.existsByOrderNumber(dto.getOrderNumber())) {
             throw new IllegalArgumentException("訂單編號已存在：" + dto.getOrderNumber());
         }
@@ -74,7 +93,42 @@ public class OrdersService {
     }
 
     public void delete(Long id) {
-        ordersDAO.delete(findEntity(id));
+        OrdersEntity entity = findEntity(id);
+        if (entity.getRouteId() != null) {
+            throw new IllegalArgumentException("訂單已排入路線，不能刪除");
+        }
+        if (entity.getStatus() != OrderStatus.PENDING_CONFIRM
+                && entity.getStatus() != OrderStatus.CANCELLED) {
+            throw new IllegalArgumentException("只有待確認或已取消訂單可以刪除");
+        }
+        ordersDAO.delete(entity);
+    }
+
+    public OrdersDTO review(Long id, OrderReviewRequestDTO request) {
+        OrdersEntity entity = ordersDAO.findForUpdate(id)
+                .orElseThrow(() -> new EntityNotFoundException("找不到訂單，ID：" + id));
+        if (request.getAction() == OrderReviewAction.CONFIRM) {
+            if (entity.getStatus() != OrderStatus.PENDING_CONFIRM) {
+                throw new IllegalArgumentException("只有待確認訂單可以確認");
+            }
+            applyReviewFields(request, entity);
+            entity.setStatus(OrderStatus.CONFIRMED);
+        } else if (request.getAction() == OrderReviewAction.UPDATE) {
+            requireEditable(entity);
+            applyReviewFields(request, entity);
+        } else if (request.getAction() == OrderReviewAction.REJECT
+                || request.getAction() == OrderReviewAction.CANCEL) {
+            requireEditable(entity);
+            if (request.getReason() == null || request.getReason().isBlank()) {
+                throw new IllegalArgumentException("拒絕或取消訂單時必須填寫原因");
+            }
+            String prefix = request.getAction() == OrderReviewAction.REJECT ? "拒絕原因：" : "取消原因：";
+            entity.setNotes(appendNote(entity.getNotes(), prefix + request.getReason().trim()));
+            entity.setStatus(OrderStatus.CANCELLED);
+        } else {
+            throw new IllegalArgumentException("不支援的訂單操作");
+        }
+        return toDTO(ordersDAO.save(entity));
     }
 
     private OrdersEntity findEntity(Long id) {
@@ -96,6 +150,69 @@ public class OrdersService {
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
+    }
+
+    private void applyReviewFields(OrderReviewRequestDTO request, OrdersEntity entity) {
+        if (request.getStoreId() != null) {
+            if (!storesDAO.existsById(request.getStoreId())) {
+                throw new IllegalArgumentException("門市不存在，ID：" + request.getStoreId());
+            }
+            entity.setStoreId(request.getStoreId());
+        }
+        if (request.getWarehouseId() != null) {
+            if (!warehousesDAO.existsById(request.getWarehouseId())) {
+                throw new IllegalArgumentException("倉庫不存在，ID：" + request.getWarehouseId());
+            }
+            entity.setWarehouseId(request.getWarehouseId());
+        }
+        if (request.getBoxCount() != null) {
+            entity.setBoxCount(request.getBoxCount());
+        }
+        if (request.getDeliveryDate() != null) {
+            entity.setDeliveryDate(request.getDeliveryDate());
+        }
+        if (request.getSourceVendor() != null) {
+            entity.setSourceVendor(request.getSourceVendor().trim());
+        }
+        if (request.getItemDescription() != null) {
+            entity.setItemDescription(request.getItemDescription().trim());
+        }
+        if (request.getNotes() != null) {
+            entity.setNotes(request.getNotes().trim());
+        }
+    }
+
+    private void requireEditable(OrdersEntity entity) {
+        if (entity.getRouteId() != null) {
+            throw new IllegalArgumentException("訂單已排入路線，請先撤回並解除編組後再修改");
+        }
+        if (entity.getStatus() != OrderStatus.PENDING_CONFIRM
+                && entity.getStatus() != OrderStatus.CONFIRMED) {
+            throw new IllegalArgumentException("目前訂單狀態不能修改或取消：" + entity.getStatus());
+        }
+    }
+
+    private void validateStatusTransition(OrderStatus current, OrderStatus requested) {
+        if (requested == null || requested == current) {
+            return;
+        }
+        if (current == OrderStatus.PENDING_CONFIRM
+                && (requested == OrderStatus.CONFIRMED || requested == OrderStatus.CANCELLED)) {
+            return;
+        }
+        if (current == OrderStatus.CONFIRMED && requested == OrderStatus.CANCELLED) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "訂單狀態不可由 " + current + " 直接改為 " + requested);
+    }
+
+    private String appendNote(String original, String addition) {
+        if (original == null || original.isBlank()) {
+            return addition;
+        }
+        String combined = original + "；" + addition;
+        return combined.length() <= 500 ? combined : combined.substring(0, 500);
     }
 
     private OrdersDTO toDTO(OrdersEntity entity) {

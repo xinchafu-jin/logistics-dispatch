@@ -372,7 +372,7 @@
                           [title]="
                             canNavigate(stop)
                               ? '在地圖顯示並開始導航'
-                              : '後端尚未提供這個站點的座標'
+                              : '此站點尚未設定座標'
                           "
                         >
                           <mat-icon aria-hidden="true">near_me</mat-icon>
@@ -728,12 +728,35 @@
 <ng-template #driverChatSheet>
   <section class="driver-chat-sheet" aria-labelledby="driver-chat-title">
     <header class="driver-chat-sheet__header">
-      <h2 id="driver-chat-title">調度中心</h2>
+      <div>
+        <p class="driver-chat-sheet__eyebrow">配送支援</p>
+        <h2 id="driver-chat-title">調度中心</h2>
+      </div>
       <button type="button" matIconButton aria-label="關閉" (click)="closeDriverChat()">
         <mat-icon aria-hidden="true">close</mat-icon>
       </button>
     </header>
-    <!-- 對話列表與輸入框之後接在這裡 -->
-    <p class="driver-chat-sheet__placeholder">聊天室功能準備中，請先聯絡物流主管。</p>
+    <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
+      @if (chatViewState() === 'loading') {
+        <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+      } @else if (chatViewState() === 'error') {
+        <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
+      } @else if (chatViewState() === 'empty') {
+        <div class="driver-chat-empty">
+          <mat-icon aria-hidden="true">forum</mat-icon>
+          <strong>目前還沒有對話</strong>
+          <span>調度中心有新訊息時會顯示在這裡</span>
+        </div>
+      } @else {
+        @for (message of chatMessages(); track message.id) {
+          <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+            <p>{{ message.content }}</p>
+            <small>
+              {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+            </small>
+          </article>
+        }
+      }
+    </section>
   </section>
 </ng-template>

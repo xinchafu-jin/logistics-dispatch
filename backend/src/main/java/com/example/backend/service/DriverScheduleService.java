@@ -2,9 +2,11 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.constants.ShiftType;
+import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.AttendanceRecordsDAO;
 import com.example.backend.dao.DriverShiftsDAO;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dto.request.DriverShiftDTO;
 import com.example.backend.dto.request.ScheduleMonthDTO;
@@ -17,9 +19,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 @Service
 @Transactional
@@ -31,17 +36,20 @@ public class DriverScheduleService {
     private final DriverShiftsDAO driverShiftsDAO;
     private final DriversDAO driversDAO;
     private final AttendanceRecordsDAO attendanceRecordsDAO;
+    private final RoutesDAO routesDAO;
 
     public DriverScheduleService(
             ScheduleMonthsDAO scheduleMonthsDAO,
             DriverShiftsDAO driverShiftsDAO,
             DriversDAO driversDAO,
-            AttendanceRecordsDAO attendanceRecordsDAO
+            AttendanceRecordsDAO attendanceRecordsDAO,
+            RoutesDAO routesDAO
     ) {
         this.scheduleMonthsDAO = scheduleMonthsDAO;
         this.driverShiftsDAO = driverShiftsDAO;
         this.driversDAO = driversDAO;
         this.attendanceRecordsDAO = attendanceRecordsDAO;
+        this.routesDAO = routesDAO;
     }
 
     /**
@@ -87,9 +95,14 @@ public class DriverScheduleService {
         if (dto == null) {
             throw new IllegalArgumentException("班次資料不能為空");
         }
+        if (dto.requestedLegacyOvertimeMinutes() != null
+                && dto.requestedLegacyOvertimeMinutes() != 0) {
+            throw new IllegalArgumentException("已取消預排加班；加班改依實際下班打卡時間每滿 30 分鐘計算");
+        }
 
         DriverShiftsEntity shift = findShiftEntity(shiftId);
-        ScheduleMonthsEntity month = findMonthEntity(shift.getScheduleMonthId());
+        requireCurrentVersion(shift, dto.getVersion());
+        ScheduleMonthsEntity month = findMonthForUpdate(shift.getScheduleMonthId());
         ensureDraft(month);
 
         ShiftType shiftType = dto.getShiftType();
@@ -102,11 +115,10 @@ public class DriverScheduleService {
 
         shift.setShiftType(shiftType);
         if (shiftType == ShiftType.WORK) {
-            applyWorkingShift(dto, shift, driver);
+            applyWorkingShift(dto, shift);
         } else if (shiftType == ShiftType.DAY_OFF || shiftType == ShiftType.LEAVE) {
             shift.setWorkStart(null);
             shift.setWorkEnd(null);
-            shift.setOvertimeMinutes(0);
             if (shiftType == ShiftType.LEAVE) {
                 shift.setChangeReason(requireReason(dto.getChangeReason()));
             } else {
@@ -115,11 +127,30 @@ public class DriverScheduleService {
         } else {
             shift.setWorkStart(driver.getWorkStart());
             shift.setWorkEnd(driver.getWorkEnd());
-            shift.setOvertimeMinutes(0);
             shift.setChangeReason("尚未安排");
         }
 
-        return toShiftDTO(driverShiftsDAO.save(shift));
+        return toShiftDTO(driverShiftsDAO.saveAndFlush(shift));
+    }
+
+    /** 一鍵排班必須整批成功；任一班次驗證失敗時回滾全部修改。 */
+    public List<DriverShiftDTO> updateShiftsBatch(Long scheduleMonthId, List<DriverShiftDTO> updates) {
+        ScheduleMonthsEntity month = findMonthForUpdate(scheduleMonthId);
+        ensureDraft(month);
+        if (updates == null || updates.isEmpty()) {
+            throw new IllegalArgumentException("批次排班不能為空");
+        }
+        Set<Long> seenIds = new HashSet<>();
+        for (DriverShiftDTO update : updates) {
+            if (update == null || update.getId() == null || !seenIds.add(update.getId())) {
+                throw new IllegalArgumentException("批次排班包含空白或重複的班次 ID");
+            }
+            DriverShiftsEntity shift = findShiftEntity(update.getId());
+            if (!scheduleMonthId.equals(shift.getScheduleMonthId())) {
+                throw new IllegalArgumentException("批次排班包含其他月份的班次");
+            }
+        }
+        return updates.stream().map(update -> updateShift(update.getId(), update)).toList();
     }
 
     /**
@@ -127,18 +158,20 @@ public class DriverScheduleService {
      * 已發布班表不自動插入新司機，避免司機看到未經主管確認的班次。
      */
     public List<DriverShiftDTO> syncActiveDrivers(Long scheduleMonthId) {
-        ScheduleMonthsEntity month = findMonthEntity(scheduleMonthId);
+        ScheduleMonthsEntity month = findMonthForUpdate(scheduleMonthId);
         ensureDraft(month);
         YearMonth targetMonth = YearMonth.from(month.getScheduleMonth());
 
         List<DriverShiftsEntity> newShifts = driversDAO.findAllByIsActiveTrueOrderByIdAsc().stream()
-                .filter(driver -> !driverShiftsDAO.existsByScheduleMonthIdAndDriverId(
-                        scheduleMonthId,
-                        driver.getId()
-                ))
-                .flatMap(driver -> targetMonth.atDay(1).datesUntil(targetMonth.atEndOfMonth().plusDays(1))
-                        .map(date -> newUnassignedShift(scheduleMonthId, driver, date)))
-                .toList();
+                .flatMap(driver -> {
+                    Set<LocalDate> existingDates = new HashSet<>();
+                    driverShiftsDAO.findAllByDriverIdAndWorkDateBetweenOrderByWorkDateAsc(
+                            driver.getId(), targetMonth.atDay(1), targetMonth.atEndOfMonth())
+                            .forEach(shift -> existingDates.add(shift.getWorkDate()));
+                    return targetMonth.atDay(1).datesUntil(targetMonth.atEndOfMonth().plusDays(1))
+                            .filter(date -> !existingDates.contains(date))
+                            .map(date -> newUnassignedShift(scheduleMonthId, driver, date));
+                }).toList();
         if (!newShifts.isEmpty()) {
             driverShiftsDAO.saveAll(newShifts);
         }
@@ -146,13 +179,32 @@ public class DriverScheduleService {
         return findMonthShifts(scheduleMonthId);
     }
 
+    /** 新司機核准後，自生效日起補入所有已存在月份的班表。 */
+    public void synchronizeDriverAvailability(DriversEntity driver, LocalDate effectiveFrom) {
+        if (driver == null || driver.getId() == null || effectiveFrom == null
+                || !Boolean.TRUE.equals(driver.getIsActive())) {
+            return;
+        }
+
+        for (ScheduleMonthsEntity month : scheduleMonthsDAO.findAll()) {
+            LocalDate monthStart = month.getScheduleMonth();
+            LocalDate monthEnd = YearMonth.from(monthStart).atEndOfMonth();
+            if (monthEnd.isBefore(effectiveFrom)) {
+                continue;
+            }
+
+            addMissingDriverShifts(month, driver, latest(monthStart, effectiveFrom));
+        }
+    }
+
     /**
      * 主管將今天或未來的班次改為臨時請假；草稿及已發布班表都可使用。
      * 若司機已打過上班卡，應保留原班次並以實際下班時間記錄提早離開。
      */
-    public DriverShiftDTO markLeave(Long shiftId, String reason) {
+    public DriverShiftDTO markLeave(Long shiftId, String reason, Long version) {
         DriverShiftsEntity shift = findShiftEntity(shiftId);
-        findMonthEntity(shift.getScheduleMonthId());
+        requireCurrentVersion(shift, version);
+        ScheduleMonthsEntity month = findMonthForUpdate(shift.getScheduleMonthId());
 
         if (shift.getWorkDate().isBefore(LocalDate.now(TAIPEI))) {
             throw new IllegalArgumentException("不能把過去的班次改為請假");
@@ -160,18 +212,24 @@ public class DriverScheduleService {
         if (attendanceRecordsDAO.existsByDriverShiftId(shiftId)) {
             throw new IllegalArgumentException("司機已打過上班卡，請保留班次並記錄實際下班時間");
         }
+        if (month.getStatus() == ScheduleStatus.PUBLISHED && shift.getShiftType() != ShiftType.WORK) {
+            throw new IllegalArgumentException("已發布班表只能將上班班次改為請假");
+        }
+        if (routesDAO.existsByDateAndDriverIdAndStatus(
+                shift.getWorkDate(), shift.getDriverId(), RouteStatus.PUBLISHED)) {
+            throw new IllegalArgumentException("司機已有已發布路線，請先改派或撤回路線，再登記請假");
+        }
 
         shift.setShiftType(ShiftType.LEAVE);
         shift.setWorkStart(null);
         shift.setWorkEnd(null);
-        shift.setOvertimeMinutes(0);
         shift.setChangeReason(requireReason(reason));
-        return toShiftDTO(driverShiftsDAO.save(shift));
+        return toShiftDTO(driverShiftsDAO.saveAndFlush(shift));
     }
 
     /** 發布前要求每一位司機每天都已被標示為上班或休假。 */
     public ScheduleMonthDTO publish(Long scheduleMonthId) {
-        ScheduleMonthsEntity month = findMonthEntity(scheduleMonthId);
+        ScheduleMonthsEntity month = findMonthForUpdate(scheduleMonthId);
         ensureDraft(month);
 
         List<DriverShiftsEntity> shifts =
@@ -189,6 +247,19 @@ public class DriverScheduleService {
                     "班表尚未排完：司機 ID " + unassigned.getDriverId()
                             + " 在 " + unassigned.getWorkDate() + " 尚未安排"
             );
+        }
+
+        Set<String> scheduledDays = new HashSet<>();
+        shifts.forEach(shift -> scheduledDays.add(shift.getDriverId() + ":" + shift.getWorkDate()));
+        YearMonth targetMonth = YearMonth.from(month.getScheduleMonth());
+        for (DriversEntity driver : driversDAO.findAllByIsActiveTrueOrderByIdAsc()) {
+            for (LocalDate date = targetMonth.atDay(1); !date.isAfter(targetMonth.atEndOfMonth());
+                 date = date.plusDays(1)) {
+                if (!scheduledDays.contains(driver.getId() + ":" + date)) {
+                    throw new IllegalArgumentException("班表缺少司機 " + driver.getName()
+                            + " 在 " + date + " 的班次，請先同步新司機");
+                }
+            }
         }
 
         month.setStatus(ScheduleStatus.PUBLISHED);
@@ -241,12 +312,53 @@ public class DriverScheduleService {
         shift.setShiftType(ShiftType.UNASSIGNED);
         shift.setWorkStart(driver.getWorkStart());
         shift.setWorkEnd(driver.getWorkEnd());
-        shift.setOvertimeMinutes(0);
         shift.setChangeReason("系統建立班表");
         return shift;
     }
 
-    private void applyWorkingShift(DriverShiftDTO dto, DriverShiftsEntity shift, DriversEntity driver) {
+    private DriverShiftsEntity newWorkingShift(Long monthId, DriversEntity driver, LocalDate date) {
+        DriverShiftsEntity shift = new DriverShiftsEntity();
+        shift.setScheduleMonthId(monthId);
+        shift.setDriverId(driver.getId());
+        shift.setWorkDate(date);
+        shift.setShiftType(ShiftType.WORK);
+        shift.setWorkStart(driver.getWorkStart());
+        shift.setWorkEnd(driver.getWorkEnd());
+        shift.setChangeReason("新到職，系統預設上班");
+        return shift;
+    }
+
+    private void addMissingDriverShifts(
+            ScheduleMonthsEntity month,
+            DriversEntity driver,
+            LocalDate addFrom
+    ) {
+        LocalDate monthEnd = YearMonth.from(month.getScheduleMonth()).atEndOfMonth();
+        if (addFrom.isAfter(monthEnd)) {
+            return;
+        }
+
+        Set<LocalDate> existingDates = new HashSet<>();
+        for (DriverShiftsEntity shift :
+                driverShiftsDAO.findAllByDriverIdAndWorkDateBetweenOrderByWorkDateAsc(
+                        driver.getId(), addFrom, monthEnd)) {
+            existingDates.add(shift.getWorkDate());
+        }
+
+        List<DriverShiftsEntity> newShifts = addFrom.datesUntil(monthEnd.plusDays(1))
+                .filter(date -> !existingDates.contains(date))
+                .map(date -> newWorkingShift(month.getId(), driver, date))
+                .toList();
+        if (!newShifts.isEmpty()) {
+            driverShiftsDAO.saveAll(newShifts);
+        }
+    }
+
+    private LocalDate latest(LocalDate first, LocalDate second) {
+        return first.isAfter(second) ? first : second;
+    }
+
+    private void applyWorkingShift(DriverShiftDTO dto, DriverShiftsEntity shift) {
         LocalTime workStart = dto.getWorkStart();
         LocalTime workEnd = dto.getWorkEnd();
         if (workStart == null || workEnd == null) {
@@ -256,18 +368,8 @@ public class DriverScheduleService {
             throw new IllegalArgumentException("下班時間必須晚於上班時間");
         }
 
-        int overtimeMinutes = dto.getOvertimeMinutes() == null ? 0 : dto.getOvertimeMinutes();
-        if (overtimeMinutes < 0) {
-            throw new IllegalArgumentException("加班分鐘數不能小於 0");
-        }
-        int maxOvertime = driver.getMaxOvertimeMinutes() == null ? 0 : driver.getMaxOvertimeMinutes();
-        if (overtimeMinutes > maxOvertime) {
-            throw new IllegalArgumentException("加班分鐘數超過司機上限：" + maxOvertime + " 分鐘");
-        }
-
         shift.setWorkStart(workStart);
         shift.setWorkEnd(workEnd);
-        shift.setOvertimeMinutes(overtimeMinutes);
         shift.setChangeReason(normalizeReason(dto.getChangeReason(), "主管安排上班"));
     }
 
@@ -299,6 +401,13 @@ public class DriverScheduleService {
         }
     }
 
+    private void requireCurrentVersion(DriverShiftsEntity shift, Long submittedVersion) {
+        // 舊版後台未送 version；有送的用戶端才執行畫面版本比對。
+        if (submittedVersion != null && !Objects.equals(shift.getVersion(), submittedVersion)) {
+            throw new IllegalArgumentException("班次已由其他人修改，請重新整理後再儲存");
+        }
+    }
+
     private void validateDateRange(LocalDate from, LocalDate to) {
         if (from == null || to == null) {
             throw new IllegalArgumentException("班表起訖日期不能為空");
@@ -310,6 +419,11 @@ public class DriverScheduleService {
 
     private ScheduleMonthsEntity findMonthEntity(Long id) {
         return scheduleMonthsDAO.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("找不到班表，ID：" + id));
+    }
+
+    private ScheduleMonthsEntity findMonthForUpdate(Long id) {
+        return scheduleMonthsDAO.findForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("找不到班表，ID：" + id));
     }
 
@@ -337,7 +451,6 @@ public class DriverScheduleService {
         dto.setShiftType(entity.getShiftType());
         dto.setWorkStart(entity.getWorkStart());
         dto.setWorkEnd(entity.getWorkEnd());
-        dto.setOvertimeMinutes(entity.getOvertimeMinutes());
         dto.setChangeReason(entity.getChangeReason());
         dto.setLastModifiedAt(entity.getLastModifiedAt());
         dto.setVersion(entity.getVersion());

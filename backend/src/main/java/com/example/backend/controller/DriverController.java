@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -52,5 +53,14 @@ public class DriverController {
         return ResponseEntity.ok(
                 driversService.updateStatus(id, dto.getIsActive())
         );
+    }
+
+    /** 管理員上傳或更換司機大頭照。 */
+    @PostMapping(value = "/{id}/photo", consumes = "multipart/form-data")
+    public ResponseEntity<DriversDTO> uploadProfilePhoto(
+            @PathVariable Long id,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return ResponseEntity.ok(driversService.updateProfilePhoto(id, file));
     }
 }

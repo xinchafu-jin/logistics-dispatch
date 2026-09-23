@@ -32,6 +32,8 @@ import {
   DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
+  DriverMessageDto,
+  DriverMessagePushDto,
   DriverTaskStop,
   DriverTaskOrderStatus,
   DriverTasksResponse,
@@ -45,6 +47,7 @@ type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
 type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
 type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
 type NavigationRouteState = 'idle' | 'loading' | 'ready' | 'error';
+type ChatViewState = 'loading' | 'ready' | 'empty' | 'error';
 
 interface DriverTaskSelection {
   route: DriverRouteTask;
@@ -191,6 +194,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isAttendanceSheetExpanded = signal(false);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
+  protected readonly chatMessages = signal<DriverMessageDto[]>([]);
+  protected readonly chatViewState = signal<ChatViewState>('loading');
+  protected readonly chatError = signal<string | null>(null);
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -202,6 +208,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly chatSocket = inject(DriverChatSocketService);
   // 目前開著的聊天 Bottom Sheet；null 代表沒開，用來避免連點開出兩層
   private driverChatSheetRef: MatBottomSheetRef | null = null;
+  private hasLoadedChatMessages = false;
   private breakTimer: ReturnType<typeof setInterval> | null = null;
   private attendanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private maplibre: typeof import('maplibre-gl') | null = null;
@@ -241,15 +248,19 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
    * 斷線寫在 ngOnDestroy 與 signOut，不寫在 DriverAuthService.logout()：
    * 連線 service 本身要向 DriverAuthService 拿 token，反過來注入會變成互相依賴，Angular 會直接報錯。
    *
-   * 目前只接上連線：收到的推播先印在 Console，之後做聊天卡片時改成合併進訊息清單。
+   * 收到的推播合併到對話清單；斷線重連後才補抓，避免每次工作台初始化都多打一支聊天室請求。
    */
   private connectChatSocket(): void {
     this.chatSocket.pushes$
       .pipe(takeUntilDestroyed())
-      .subscribe((push) => console.info('[聊天室] 收到推播', push));
+      .subscribe((push) => this.handleChatPush(push));
     this.chatSocket.connected$
       .pipe(takeUntilDestroyed())
-      .subscribe(() => console.info('[聊天室] WebSocket 已連上'));
+      .subscribe(() => {
+        if (this.hasLoadedChatMessages) {
+          this.loadChatMessages();
+        }
+      });
     this.chatSocket.connect();
   }
 
@@ -310,10 +321,84 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.driverChatSheetRef.afterDismissed().subscribe(() => {
       this.driverChatSheetRef = null;
     });
+    this.loadChatMessages();
   }
 
   protected closeDriverChat(): void {
     this.driverChatSheetRef?.dismiss();
+  }
+
+  protected isOwnChatMessage(message: DriverMessageDto): boolean {
+    return message.senderType === 'DRIVER';
+  }
+
+  protected formatChatTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    return new Intl.DateTimeFormat('zh-TW', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  private loadChatMessages(): void {
+    this.chatViewState.set('loading');
+    this.chatError.set(null);
+    this.operations.getMessages().subscribe({
+      next: (messages) => {
+        this.hasLoadedChatMessages = true;
+        this.chatMessages.set(this.mergeChatMessages(messages));
+        this.chatViewState.set(this.chatMessages().length ? 'ready' : 'empty');
+        this.markChatMessagesRead();
+      },
+      error: () => {
+        this.chatViewState.set('error');
+        this.chatError.set('目前無法取得對話內容。');
+      },
+    });
+  }
+
+  private handleChatPush(push: DriverMessagePushDto): void {
+    if (push.type === 'MESSAGE' && push.message) {
+      this.chatMessages.set(this.mergeChatMessages([push.message]));
+      this.chatViewState.set('ready');
+      if (this.driverChatSheetRef && push.message.senderType === 'ADMIN') {
+        this.markChatMessagesRead();
+      }
+      return;
+    }
+
+    if (push.type === 'READ' && push.readSenderType === 'DRIVER' && push.readAt) {
+      this.chatMessages.update((messages) =>
+        messages.map((message) =>
+          message.senderType === 'DRIVER' && !message.readAt ? {...message, readAt: push.readAt} : message,
+        ),
+      );
+    }
+  }
+
+  private mergeChatMessages(incoming: DriverMessageDto[]): DriverMessageDto[] {
+    const merged = new Map(this.chatMessages().map((message) => [message.id, message]));
+    incoming.forEach((message) => merged.set(message.id, message));
+    return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+  }
+
+  private markChatMessagesRead(): void {
+    if (!this.chatMessages().some((message) => message.senderType === 'ADMIN' && !message.readAt)) {
+      return;
+    }
+    this.operations.markMessagesRead().subscribe({
+      next: () => {
+        const readAt = new Date().toISOString();
+        this.chatMessages.update((messages) =>
+          messages.map((message) =>
+            message.senderType === 'ADMIN' && !message.readAt ? {...message, readAt} : message,
+          ),
+        );
+      },
+    });
   }
 
   protected profilePhotoUrl(): string | null {
@@ -602,7 +687,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
           photoUrl,
           notes: this.optionalDeliveryNotes(),
         }),
-      '已登記無人簽收，後端已建立待處理異常。',
+      '已登記無人簽收，已建立待處理異常。',
     );
   }
 

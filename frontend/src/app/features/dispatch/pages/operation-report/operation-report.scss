@@ -397,7 +397,24 @@
   align-items: end;
   height: 270px;
   gap: 5px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
   text-align: center;
+}
+
+.chart-column:hover .chart-bar,
+.chart-column:focus-visible .chart-bar {
+  background: #b9fff8;
+  box-shadow: 0 0 22px rgb(99 209 198 / 38%);
+}
+
+.chart-column:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
 }
 
 .chart-value,
