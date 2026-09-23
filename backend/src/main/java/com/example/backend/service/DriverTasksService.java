@@ -80,7 +80,12 @@ public class DriverTasksService {
             vehicleIds.add(route.getVehicleId());
         }
 
-        List<OrdersEntity> orders = ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds));
+        List<OrdersEntity> orders = new ArrayList<>(
+                ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds)).stream()
+                        .filter(order -> order.getStatus() == OrderStatus.CONFIRMED
+                                || order.getStatus() == OrderStatus.IN_DELIVERY)
+                        .toList()
+        );
         orders.sort(Comparator
                 .comparing(OrdersEntity::getRouteId)
                 .thenComparing(OrdersEntity::getSequence,
@@ -127,6 +132,9 @@ public class DriverTasksService {
                 }
                 stops.add(toStop(order, store));
                 totalBoxes += order.getBoxCount();
+            }
+            if (stops.isEmpty()) {
+                continue;
             }
 
             routeTasks.add(new DriverTasksResponse.RouteTask(

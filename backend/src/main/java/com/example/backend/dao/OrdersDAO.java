@@ -38,6 +38,12 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
 
     List<OrdersEntity> findByRouteIdOrderBySequence(Long routeId);
 
+    /** 看板與司機任務只取仍需處理的訂單，結案訂單保留路線關聯但不再顯示。 */
+    List<OrdersEntity> findByRouteIdAndStatusInOrderBySequence(
+            Long routeId,
+            Collection<OrderStatus> statuses
+    );
+
     List<OrdersEntity> findByDeliveryDateAndWarehouseIdAndRouteIdIsNull(LocalDate date, Long warehouseId);
 
     /**

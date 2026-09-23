@@ -109,7 +109,7 @@ interface BoardRoute {
   totalDistance: number;
   /** 空槽沒有路線，一律當作草稿 */
   routeStatus: RouteStatus;
-  /** 含有已完成、已取消等不能重新排程的訂單時，整條既有路線僅供檢視。 */
+  /** 含有配送中、不能重新排程的訂單時，整條既有路線僅供檢視。 */
   hasLockedStops: boolean;
   /** 維修車保留在看板供辨識，但不可改派或拖曳。 */
   isMaintenance: boolean;
