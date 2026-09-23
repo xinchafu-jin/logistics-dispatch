@@ -5,7 +5,6 @@ import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -44,14 +43,6 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
 
     boolean existsByDateAndDriverIdAndStatus(
             LocalDate date, Long driverId, RouteStatus status);
-
-    /**
-     * 草稿路線重排前，先移除其車輛路段，避免 route_vehicle_segments 的外鍵
-     * 阻擋 routes 刪除。
-     */
-    @Modifying
-    @Query(value = "delete from route_vehicle_segments where route_id in (:routeIds)", nativeQuery = true)
-    void deleteVehicleSegmentsByRouteIdIn(@Param("routeIds") List<Long> routeIds);
 
 }
 

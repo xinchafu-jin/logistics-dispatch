@@ -65,7 +65,6 @@ public class DispatchDraftService {
                 .filter(routeId -> !retainedRouteIds.contains(routeId))
                 .toList();
         if (!deletableRouteIds.isEmpty()) {
-            routesDAO.deleteVehicleSegmentsByRouteIdIn(deletableRouteIds);
             routesDAO.deleteAllById(deletableRouteIds);
             routesDAO.flush();
         }
