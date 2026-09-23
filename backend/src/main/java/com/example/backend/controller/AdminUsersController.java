@@ -1,5 +1,6 @@
 package com.example.backend.controller;
 
+import com.example.backend.dto.request.AdminPasswordChangeDTO;
 import com.example.backend.dto.request.AdminUsersDTO;
 import com.example.backend.dto.request.AiApiKeyDTO;
 import com.example.backend.dto.respones.AiApiKeyStatusResponse;
@@ -31,6 +32,15 @@ public class AdminUsersController {
     public ResponseEntity<AdminUsersDTO> create(@Valid @RequestBody AdminUsersDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(adminUsersService.create(dto));
+    }
+
+    /** 已登入主管輸入原密碼後，修改自己的登入密碼。 */
+    @PutMapping("/me/password")
+    public ResponseEntity<Void> changePassword(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody AdminPasswordChangeDTO dto) {
+        adminUsersService.changePassword(adminId(jwt), dto);
+        return ResponseEntity.noContent().build();
     }
 
     /** 查詢自己的 AI API Key 設定狀態。 */
