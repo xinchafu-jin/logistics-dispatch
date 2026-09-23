@@ -21,6 +21,22 @@ public class ExceptionCasesEntity {
     @Column
     private Long orderId;
 
+    /** 發生異常的配送紀錄。 */
+    @Column
+    private Long deliveryRecordId;
+
+    /** 因這次異常建立的後續訂單。 */
+    @Column
+    private Long followUpOrderId;
+
+    /** 隔日主管最早可處理的時間。 */
+    @Column
+    private LocalDateTime reviewAvailableAt;
+
+    /** 異常進入待確認佇列的時間。 */
+    @Column
+    private LocalDateTime queuedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private ExceptionType type;
@@ -63,6 +79,38 @@ public class ExceptionCasesEntity {
 
     public void setOrderId(Long orderId) {
         this.orderId = orderId;
+    }
+
+    public Long getDeliveryRecordId() {
+        return deliveryRecordId;
+    }
+
+    public void setDeliveryRecordId(Long deliveryRecordId) {
+        this.deliveryRecordId = deliveryRecordId;
+    }
+
+    public Long getFollowUpOrderId() {
+        return followUpOrderId;
+    }
+
+    public void setFollowUpOrderId(Long followUpOrderId) {
+        this.followUpOrderId = followUpOrderId;
+    }
+
+    public LocalDateTime getReviewAvailableAt() {
+        return reviewAvailableAt;
+    }
+
+    public void setReviewAvailableAt(LocalDateTime reviewAvailableAt) {
+        this.reviewAvailableAt = reviewAvailableAt;
+    }
+
+    public LocalDateTime getQueuedAt() {
+        return queuedAt;
+    }
+
+    public void setQueuedAt(LocalDateTime queuedAt) {
+        this.queuedAt = queuedAt;
     }
 
     public ExceptionType getType() {

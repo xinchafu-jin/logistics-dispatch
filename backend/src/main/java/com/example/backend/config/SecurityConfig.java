@@ -63,6 +63,8 @@ public class SecurityConfig {
                         .hasRole(AuthService.ROLE_DRIVER)
                         .requestMatchers("/api/driver-schedules/**", "/api/fleet/**")
                         .hasRole(AuthService.ROLE_ADMIN)
+                        .requestMatchers("/api/reports/**")
+                        .hasRole(AuthService.ROLE_ADMIN)
                         .requestMatchers("/api/admin-users/**", "/api/drivers/**", "/api/warehouses/**", "/api/stores/**",
                                 "/api/vehicles/**", "/api/orders/**", "/api/dispatch/**", "/api/fuel-prices/**", "/api/ai/**")
                         .hasRole(AuthService.ROLE_ADMIN)
