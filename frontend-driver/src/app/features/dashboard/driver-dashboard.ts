@@ -54,6 +54,14 @@ interface DriverTaskSelection {
   stop: DriverTaskStop;
 }
 
+interface ScheduleCalendarDay {
+  isoDate: string;
+  dayNumber: number;
+  inCurrentMonth: boolean;
+  isToday: boolean;
+  shift: DriverShiftDto | null;
+}
+
 type MapPosition = [lng: number, lat: number];
 const DRIVER_ROUTE_SOURCE_ID = 'driver-navigation-route';
 const DRIVER_ROUTE_LAYER_ID = 'driver-navigation-route-line';
@@ -156,6 +164,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     new Intl.DateTimeFormat('zh-TW', {year: 'numeric', month: 'long'}).format(
       this.scheduleMonth(),
     ),
+  );
+  protected readonly scheduleCalendarDays = computed(() =>
+    this.buildScheduleCalendar(this.scheduleMonth(), this.publishedShifts()),
   );
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
   protected readonly taskViewState = signal<TaskViewState>('loading');
@@ -1128,6 +1139,36 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return `is-${shiftType.toLowerCase()}`;
   }
 
+  protected shiftIcon(shiftType: DriverShiftDto['shiftType']): string {
+    return {
+      UNASSIGNED: 'remove_circle_outline',
+      WORK: 'work',
+      DAY_OFF: 'weekend',
+      LEAVE: 'event_busy',
+    }[shiftType];
+  }
+
+  protected scheduleDayLabel(day: ScheduleCalendarDay): string {
+    if (!day.inCurrentMonth) {
+      return '';
+    }
+
+    const dateLabel = `${this.scheduleMonth().getMonth() + 1} 月 ${day.dayNumber} 日`;
+    if (!day.shift) {
+      return `${dateLabel}，尚未發布班表`;
+    }
+
+    const shiftLabel = this.formatShiftType(day.shift.shiftType);
+    const workTime = day.shift.shiftType === 'WORK'
+      ? `，${this.formatTime(day.shift.workStart)} 到 ${this.formatTime(day.shift.workEnd)}`
+      : '';
+    const overtime = day.shift.overtimeMinutes > 0
+      ? `，加班 ${day.shift.overtimeMinutes} 分鐘`
+      : '';
+    const reason = day.shift.changeReason ? `，${day.shift.changeReason}` : '';
+    return `${dateLabel}，${shiftLabel}${workTime}${overtime}${reason}`;
+  }
+
   private loadProfile(): void {
     this.profileError.set(null);
     this.operations.getProfile().subscribe({
@@ -1425,7 +1466,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       touchZoomRotate: true,
       touchPitch: false,
       pitchWithRotate: false,
-      attributionControl: {},
+      attributionControl: false,
       style: OPEN_FREE_MAP_STYLE,
     });
     this.driverMap.addControl(
@@ -1665,6 +1706,42 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const lastDay = new Date(year, monthNumber, 0).getDate();
     const prefix = `${year}-${String(monthNumber).padStart(2, '0')}`;
     return {from: `${prefix}-01`, to: `${prefix}-${String(lastDay).padStart(2, '0')}`};
+  }
+
+  private buildScheduleCalendar(
+    month: Date,
+    shifts: DriverShiftDto[],
+  ): ScheduleCalendarDay[] {
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    const firstDay = new Date(year, monthIndex, 1);
+    const mondayFirstOffset = (firstDay.getDay() + 6) % 7;
+    const numberOfDays = new Date(year, monthIndex + 1, 0).getDate();
+    const calendarCellCount = Math.ceil((mondayFirstOffset + numberOfDays) / 7) * 7;
+    const shiftsByDate = new Map(shifts.map((shift) => [shift.workDate, shift]));
+    const today = new Date();
+    const todayIso = this.toLocalIsoDate(today);
+
+    return Array.from({length: calendarCellCount}, (_, index) => {
+      const date = new Date(year, monthIndex, 1 - mondayFirstOffset + index);
+      const isoDate = this.toLocalIsoDate(date);
+      const inCurrentMonth = date.getFullYear() === year && date.getMonth() === monthIndex;
+
+      return {
+        isoDate,
+        dayNumber: date.getDate(),
+        inCurrentMonth,
+        isToday: isoDate === todayIso,
+        shift: inCurrentMonth ? (shiftsByDate.get(isoDate) ?? null) : null,
+      };
+    });
+  }
+
+  private toLocalIsoDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   private getLocationErrorMessage(error: GeolocationPositionError): string {

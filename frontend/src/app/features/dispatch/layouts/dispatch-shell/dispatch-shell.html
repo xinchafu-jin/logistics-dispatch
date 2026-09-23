@@ -281,7 +281,12 @@
   @if (chatView() !== 'closed') {
     <section class="chat-panel" [class.is-narrow]="chatView() === 'narrow'" aria-label="聊天室">
       <header class="chat-panel__header">
-        <h2>聊天室</h2>
+        <div class="chat-panel__heading">
+          <div>
+            <h2>聊天室</h2>
+            <p>AI 協作與司機聯絡</p>
+          </div>
+        </div>
         <div class="chat-panel__actions">
           <button
             type="button"
@@ -324,8 +329,11 @@
           >
             <!-- [selected] 仍要綁：面板收合時清單會被銷毀，重新打開要照 signal 還原選中狀態 -->
             <mat-list-option [value]="{ kind: 'ai' }" [selected]="isSelectedChatContact({ kind: 'ai' })">
-              <span matListItemAvatar>AI</span>
+              <span matListItemAvatar class="chat-avatar is-ai" aria-hidden="true">
+                <mat-icon>smart_toy</mat-icon>
+              </span>
               <span matListItemTitle>AI 調度助理</span>
+              <span matListItemLine>查詢與調度建議</span>
             </mat-list-option>
 
             <div matSubheader>司機</div>
@@ -334,8 +342,19 @@
                 [value]="{ kind: 'driver', driverId: driver.id!, name: driver.name }"
                 [selected]="isSelectedChatContact({ kind: 'driver', driverId: driver.id!, name: driver.name })"
               >
-                <span matListItemAvatar>{{ driver.name.charAt(0) }}</span>
+                @if (driver.profilePhotoUrl && !failedChatPhotoUrls().has(driver.profilePhotoUrl)) {
+                  <img
+                    matListItemAvatar
+                    class="chat-avatar"
+                    [src]="driver.profilePhotoUrl"
+                    [alt]="driver.name + '的大頭照'"
+                    (error)="markChatPhotoFailed(driver.profilePhotoUrl)"
+                  >
+                } @else {
+                  <span matListItemAvatar class="chat-avatar" aria-hidden="true">{{ driver.name.charAt(0) }}</span>
+                }
                 <span matListItemTitle>{{ driver.name }}</span>
+                <span matListItemLine>司機</span>
               </mat-list-option>
             }
           </mat-selection-list>
@@ -349,15 +368,32 @@
           <div class="chat-panel__conversation">
             @if (selectedChatContact(); as contact) {
               @if (contact.kind === 'ai') {
-
-                <h3 class="chat-panel__title">AI 調度助理</h3>
+                <div class="chat-conversation__header">
+                  <div>
+                    <h3 class="chat-panel__title">AI 調度助理</h3>
+                    <p>可以詢問訂單、車輛、司機與調度狀況</p>
+                  </div>
+                </div>
 
                 <!-- 由上而下：訊息（自己捲動）→ 待執行清單 → 輸入框；清單與輸入框固定在底部，訊息再多也不會把它們擠出面板 -->
                 <div class="chat-messages">
                   @for (message of chatOutput(); track $index) {
                     <p class="chat-message" [class.is-user]="message.role === 'user'">{{ message.text }}</p>
+                  } @empty {
+                    <div class="chat-empty">
+                      <strong>今天想查什麼？</strong>
+                      <br>
+                      <span>輸入問題後，我會協助整理目前的營運與調度資訊。</span>
+                    </div>
+                  }
+                  @if (chatWaiting()) {
+                    <p class="chat-message is-waiting" aria-live="polite">正在整理資料…</p>
                   }
                 </div>
+
+                @if (chatError()) {
+                  <p class="chat-panel__error" role="alert">{{ chatError() }}</p>
+                }
 
                 <!-- 待執行清單：空的時候整塊不顯示。顯示的是後端組好的 summary，不是 AI 的回覆文字 -->
                 @if (aiPendingAction().length > 0) {
@@ -407,38 +443,47 @@
                   </mat-expansion-panel>
                 }
 
-                <!-- 送出邏輯還沒接，先 preventDefault 避免瀏覽器送出表單重新整理頁面 -->
                 <form class="chat-composer" (ngSubmit)="chatSend()">
-                  <!-- outline：面板背景半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
-                  <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
-                    <!-- 自動長高 1～5 行，超過就在框內捲動，不會把訊息列表擠光 -->
-                    <textarea
-                      matInput
-                      cdkTextareaAutosize
-                      cdkAutosizeMinRows="1"
-                      cdkAutosizeMaxRows="5"
-                      placeholder="輸入訊息"
-                      name="chatInput"
-                      aria-label="輸入給 AI 調度助理的訊息"
-                      [(ngModel)]="chatInput"
-                    ></textarea>
-                  </mat-form-field>
-                  <!-- 送出方法還沒寫，先停用；只有圖示所以要 aria-label -->
+                  <div class="chat-composer__input">
+                    <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                      <textarea
+                        matInput
+                        cdkTextareaAutosize
+                        cdkAutosizeMinRows="1"
+                        cdkAutosizeMaxRows="5"
+                        placeholder="輸入訊息"
+                        name="chatInput"
+                        aria-label="輸入給 AI 調度助理的訊息"
+                        [(ngModel)]="chatInput"
+                        (keydown)="handleAiComposerKeydown($event)"
+                      ></textarea>
+                    </mat-form-field>
+                    <span class="chat-composer__hint">Enter 傳送・Shift＋Enter 換行</span>
+                  </div>
                   <button type="submit"
-                          matIconButton aria-label="送出"
+                          matIconButton
+                          class="chat-composer__send"
+                          aria-label="送出"
+                          [disabled]="chatWaiting() || !chatInput().trim()"
                   >
                     <mat-icon aria-hidden="true">send</mat-icon>
                   </button>
                 </form>
               } @else {
                 <!-- 司機對話：資料來自後端 driver_messages，換人時由 loadDriverConversation 重新載入 -->
-                <h3 class="chat-panel__title">{{ contact.name }}</h3>
+                <div class="chat-conversation__header">
+                  <div>
+                    <h3 class="chat-panel__title">{{ contact.name }}</h3>
+                    <p>司機聯絡訊息</p>
+                  </div>
+                </div>
                 <div class="chat-messages">
                   <!-- track 用 message.id：之後推播和送出會把新訊息合併進來，用 id 才認得出是同一則 -->
                   @for (message of driverMessages(); track message.id) {
                     <!-- 調度中心（我們這邊）發的靠右，司機發的靠左，沿用 AI 對話的 is-user 樣式 -->
                     <p class="chat-message" [class.is-user]="message.senderType === 'ADMIN'">
                       {{ message.content }}
+                      <br>
                       <small>{{ formatNotificationTime(message.createdAt) }}</small>
                     </p>
                   } @empty {
@@ -452,24 +497,29 @@
 
                 <!-- 跟 AI 的輸入框分開：各自綁自己的 signal，換對象時字不會跟著跑 -->
                 <form class="chat-composer" (ngSubmit)="sendDriverMessage()">
-                  <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
-                    <!-- maxlength 跟後端的 1000 字上限一致，超過就打不進去，不用等送出才被擋 -->
-                    <textarea
-                      matInput
-                      cdkTextareaAutosize
-                      cdkAutosizeMinRows="1"
-                      cdkAutosizeMaxRows="5"
-                      maxlength="1000"
-                      [placeholder]="'回覆 ' + contact.name"
-                      name="driverChatInput"
-                      [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
-                      [(ngModel)]="driverChatInput"
-                    ></textarea>
-                  </mat-form-field>
+                  <div class="chat-composer__input">
+                    <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                      <!-- maxlength 跟後端的 1000 字上限一致，超過就打不進去，不用等送出才被擋 -->
+                      <textarea
+                        matInput
+                        cdkTextareaAutosize
+                        cdkAutosizeMinRows="1"
+                        cdkAutosizeMaxRows="5"
+                        maxlength="1000"
+                        [placeholder]="'回覆 ' + contact.name"
+                        name="driverChatInput"
+                        [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
+                        [(ngModel)]="driverChatInput"
+                        (keydown)="handleDriverComposerKeydown($event)"
+                      ></textarea>
+                    </mat-form-field>
+                    <span class="chat-composer__hint">Enter 傳送・Shift＋Enter 換行</span>
+                  </div>
                   <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
                   <button
                     type="submit"
                     matIconButton
+                    class="chat-composer__send"
                     aria-label="送出"
                     [disabled]="isSendingDriverMessage() || !driverChatInput().trim()"
                   >
@@ -483,7 +533,10 @@
       </div>
     </section>
   } @else {
-    <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">聊天室</button>
+    <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">
+      <mat-icon aria-hidden="true">chat_bubble_outline</mat-icon>
+      <span>聊天室</span>
+    </button>
   }
 </div>
 

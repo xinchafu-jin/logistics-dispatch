@@ -121,21 +121,6 @@ export class OperationReport implements OnInit {
   }
 
   protected drillInto(bucket: ChartBucket): void {
-    if (this.activePeriod() === 'year') {
-      const date = this.parseDate(bucket.from);
-      this.selectedYear.set(date.getFullYear());
-      this.selectedMonth.set(date.getMonth());
-      this.selectedWeek.set(0);
-      this.activePeriod.set('month');
-      return;
-    }
-
-    if (this.activePeriod() === 'month') {
-      this.selectedWeek.set(this.weekIndexForDate(this.parseDate(bucket.from)));
-      this.activePeriod.set('week');
-      return;
-    }
-
     void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to}});
   }
 
@@ -164,10 +149,10 @@ export class OperationReport implements OnInit {
 
   protected chartFootnote(): string {
     return this.activePeriod() === 'year'
-      ? '點選月份可查看整月訂單。'
+      ? '點選月份可前往歷史查詢，直接查看該月資料。'
       : this.activePeriod() === 'month'
-        ? '點選週次可查看該週每日訂單。'
-        : '點選日期可直接查看該日訂單歷史。';
+        ? '點選週次可前往歷史查詢，直接查看該週資料。'
+        : '點選日期可前往歷史查詢，直接查看該日資料。';
   }
 
   private loadReport(): void {

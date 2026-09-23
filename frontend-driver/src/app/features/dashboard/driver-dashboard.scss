@@ -31,18 +31,6 @@
   inset: 0;
 }
 
-:host ::ng-deep .driver-app .maplibregl-ctrl-attrib {
-  padding: 1px 4px;
-  border-radius: 3px 0 0;
-  color: rgb(42 76 65 / 78%);
-  background: rgb(255 255 255 / 70%);
-  font-size: 9px;
-}
-
-:host ::ng-deep .driver-app .maplibregl-ctrl-attrib a {
-  color: inherit;
-}
-
 .map-surface.is-hidden {
   visibility: hidden;
   pointer-events: none;
@@ -1076,6 +1064,125 @@ h2 {
   cursor: pointer;
 }
 
+.schedule-calendar {
+  overflow: hidden;
+  border: 1px solid #c8dad3;
+  border-radius: 10px;
+  background: #c8dad3;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-weekdays {
+  gap: 1px;
+  color: #547268;
+  background: #c8dad3;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.calendar-weekdays span {
+  padding: 9px 2px;
+  background: #edf5f1;
+}
+
+.calendar-weekdays span:nth-last-child(-n + 2) {
+  color: #8a6747;
+}
+
+.calendar-grid {
+  gap: 1px;
+  background: #c8dad3;
+}
+
+.calendar-day {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 78px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 4px;
+  color: #173129;
+  background: #ffffff;
+}
+
+.calendar-day.is-outside {
+  background: #f3f8f5;
+}
+
+.calendar-day.is-today {
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px #0e8a75;
+}
+
+.calendar-date {
+  align-self: flex-start;
+  min-width: 18px;
+  color: #4f6e64;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.calendar-day.is-today .calendar-date {
+  border-radius: 50%;
+  color: #ffffff;
+  background: #0e8a75;
+}
+
+.calendar-status {
+  display: grid;
+  min-height: 30px;
+  place-items: center;
+}
+
+.calendar-status mat-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+  line-height: 22px;
+}
+
+.calendar-status.is-work {
+  color: #087360;
+}
+
+.calendar-status.is-day_off {
+  color: #405f9b;
+}
+
+.calendar-status.is-leave {
+  color: #8b5c16;
+}
+
+.calendar-status.is-unassigned {
+  color: #9a4c46;
+}
+
+.calendar-empty-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin: 10px 0 0;
+  color: #816b35;
+  font-size: 12px;
+}
+
+.calendar-empty-note mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
 .empty-state,
 .profile-list,
 .shift-list {
@@ -1381,6 +1488,7 @@ dd {
 .driver-app .empty-state,
 .driver-app .profile-list,
 .driver-app .shift-list,
+.driver-app .schedule-calendar,
 .driver-app .task-route-card,
 .driver-app .mileage-panel,
 .driver-app .month-selector,
@@ -1616,6 +1724,11 @@ dd {
 }
 
 @media (max-width: 380px) {
+  .calendar-day {
+    min-height: 72px;
+    padding: 5px 2px;
+  }
+
   .delivery-action-buttons {
     grid-template-columns: 1fr 1fr;
   }

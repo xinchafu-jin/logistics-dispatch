@@ -224,14 +224,16 @@ export class DispatchDashboard implements OnInit {
 
   /** 今日訂單的追蹤看板。六欄直接對應後端訂單狀態，只供主管查看。 */
   readonly taskboardColumns = computed<TaskboardColumn[]>(() => {
-    const publishedOrderIds = new Set(
+    const publishedVehicleIds = new Set(
       this.routes()
         .filter((route) => route.routeStatus === 'PUBLISHED')
-        .flatMap((route) => route.cards.map((card) => card.orderId)),
+        .map((route) => route.vehicleId),
     );
     const orders = this.orders()
       .filter((order) =>
-        order.deliveryDate === this.dispatchDate() && order.id != null && publishedOrderIds.has(order.id),
+        order.deliveryDate === this.dispatchDate()
+        && order.assignedVehicleId != null
+        && publishedVehicleIds.has(order.assignedVehicleId),
       )
       .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER));
     const columns: Array<Omit<TaskboardColumn, 'count'> & {matches: (order: OrderDto) => boolean}> = [
@@ -251,7 +253,9 @@ export class DispatchDashboard implements OnInit {
 
   /** 已派出的任務才進追蹤看板，草稿排車不會提前出現在主管畫面。 */
   readonly publishedTaskboardRoutes = computed(() =>
-    this.routes().filter((route) => route.routeStatus === 'PUBLISHED' && route.cards.length > 0),
+    this.routes().filter(
+      (route) => route.routeStatus === 'PUBLISHED' && this.routeTotalStops(route) > 0,
+    ),
   );
 
   readonly publishedTemplateName = computed(() => this.activeTemplate()?.name ?? '今日手動排車');
@@ -635,7 +639,48 @@ export class DispatchDashboard implements OnInit {
 
   /** 車道目前實際載運的箱數。拖曳後會變動，所以用卡片重算而不是用後端給的值 */
   loadedBoxes(route: BoardRoute): number {
+    const assignedOrders = this.ordersForRoute(route);
+    if (assignedOrders.length > 0) {
+      return assignedOrders
+        .filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED')
+        .reduce((sum, order) => sum + order.boxCount, 0);
+    }
+
     return route.cards.reduce((sum, card) => sum + card.boxCount, 0);
+  }
+
+  routeTotalStops(route: BoardRoute): number {
+    const assignedOrders = this.ordersForRoute(route);
+    return assignedOrders.length > 0 ? assignedOrders.length : route.cards.length;
+  }
+
+  routeCompletedStops(route: BoardRoute): number {
+    const assignedOrders = this.ordersForRoute(route);
+    if (assignedOrders.length > 0) {
+      return assignedOrders.filter((order) => order.status === 'COMPLETED').length;
+    }
+
+    return route.cards.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
+  }
+
+  routeProgressPercent(route: BoardRoute): number {
+    const total = this.routeTotalStops(route);
+    return total > 0 ? Math.min(100, (this.routeCompletedStops(route) / total) * 100) : 0;
+  }
+
+  capacityUsagePercent(route: BoardRoute): number {
+    return route.capacity > 0 ? Math.min(100, (this.loadedBoxes(route) / route.capacity) * 100) : 0;
+  }
+
+  visibleRouteCards(route: BoardRoute): BoardCard[] {
+    if (route.routeStatus !== 'PUBLISHED') {
+      return route.cards;
+    }
+
+    return route.cards.filter((card) => {
+      const status = this.boardCardStatus(card);
+      return status === 'CONFIRMED' || status === 'IN_DELIVERY';
+    });
   }
 
   /** 超過車輛容量，畫面上要標出來 */
@@ -673,14 +718,18 @@ export class DispatchDashboard implements OnInit {
       return '待指派司機';
     }
 
-    const statuses = route.cards.map((card) => this.boardCardStatus(card));
+    const routeOrders = this.ordersForRoute(route);
+    const statuses = routeOrders.length > 0
+      ? routeOrders.map((order) => order.status)
+      : route.cards.map((card) => this.boardCardStatus(card));
     if (statuses.includes('IN_DELIVERY')) {
       return '配送中';
     }
     if (statuses.includes('CONFIRMED')) {
       return '待出發';
     }
-    if (statuses.includes('COMPLETED')) {
+    if (this.routeTotalStops(route) > 0
+      && this.routeCompletedStops(route) === this.routeTotalStops(route)) {
       return '已完成';
     }
 
@@ -688,8 +737,20 @@ export class DispatchDashboard implements OnInit {
   }
 
   taskboardRouteProgress(route: BoardRoute): string {
-    const completed = route.cards.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
-    return `${completed}/${route.cards.length} 已完成`;
+    return `${this.routeCompletedStops(route)}/${this.routeTotalStops(route)} 站`;
+  }
+
+  private ordersForRoute(route: BoardRoute): OrderDto[] {
+    if (route.routeId <= 0) {
+      return [];
+    }
+
+    return this.orders().filter((order) =>
+      order.deliveryDate === this.dispatchDate()
+      && order.warehouseId === this.warehouseId()
+      && order.assignedVehicleId === route.vehicleId
+      && order.status !== 'CANCELLED',
+    );
   }
 
   taskboardEstimatedArrival(route: BoardRoute): string {
@@ -1355,10 +1416,7 @@ export class DispatchDashboard implements OnInit {
           routeStatus: route?.status ?? 'DRAFT',
           hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
           isMaintenance: vehicle.status === 'MAINTENANCE',
-          cards: (vehicle.status === 'MAINTENANCE'
-            ? routeStops
-            : routeStops.filter((stop) => dispatchableOrderIds.has(stop.orderId)))
-            .map(toBoardCard),
+          cards: routeStops.map(toBoardCard),
         };
       }),
     );

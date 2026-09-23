@@ -772,6 +772,8 @@ app-brand-logo {
   right: 24px;
   bottom: 16px;
   z-index: 80;
+  color: var(--button-text) !important;
+  background: var(--accent) !important;
 }
 
 .chat-panel {
@@ -781,15 +783,14 @@ app-brand-logo {
   z-index: 80;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(720px, calc(100vw - 48px));
-  height: min(560px, calc(100dvh - 108px));
+  width: min(780px, calc(100vw - 48px));
+  height: min(610px, calc(100dvh - 108px));
   overflow: hidden;
   color: var(--text);
   background: var(--panel);
   border: 1px solid var(--metal-edge);
   border-bottom: 0;
-  border-radius: 8px 8px 0 0;
-  box-shadow: 0 -12px 40px rgb(0 0 0 / 28%);
+  border-radius: 16px 16px 0 0;
   backdrop-filter: blur(24px) saturate(110%);
   -webkit-backdrop-filter: blur(24px) saturate(110%);
   animation: chat-panel-in 180ms ease-out;
@@ -800,7 +801,7 @@ app-brand-logo {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px 12px 20px;
+  padding: 12px 14px 12px 18px;
   border-bottom: 1px solid var(--metal-edge);
 }
 
@@ -836,14 +837,45 @@ app-brand-logo {
 
 .chat-panel__body {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 230px minmax(0, 1fr);
   min-height: 0;
 }
 
 .chat-panel__contacts {
   overflow-y: auto;
-  padding: 12px;
+  padding: 12px 10px;
   border-right: 1px solid var(--metal-edge);
+}
+
+// Material 的 avatar 只給尺寸，沒有置中規則；明確指定 flex 可避免「AI／姓氏」跑到圓圈外。
+.chat-avatar {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 42px !important;
+  height: 42px !important;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+  object-fit: cover;
+  background: rgb(8 124 107 / 12%);
+  border: 1px solid rgb(8 124 107 / 16%);
+  border-radius: 50%;
+}
+
+.chat-avatar.is-ai {
+  color: var(--button-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chat-avatar mat-icon {
+  width: 21px;
+  height: 21px;
+  font-size: 21px;
+  line-height: 21px;
 }
 
 // 對話區由上而下：標題 → 訊息 → 待執行清單 → 輸入框。
@@ -851,10 +883,16 @@ app-brand-logo {
 .chat-panel__conversation {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
-  padding: 12px 16px 16px;
+  padding: 14px 18px 16px;
   color: var(--muted);
+}
+
+.chat-conversation__header {
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--metal-edge);
 }
 
 .chat-panel__title {
@@ -868,28 +906,55 @@ app-brand-logo {
   margin: auto;
 }
 
+.chat-panel__error,
+.chat-panel__contacts-error {
+  margin: 0;
+  padding: 8px 10px;
+  color: #a33a32;
+  font-size: 0.8rem;
+  background: rgb(190 58 47 / 8%);
+  border: 1px solid rgb(190 58 47 / 18%);
+  border-radius: 8px;
+}
+
 // flex: 1 撐滿剩餘空間；min-height: 0 不能省，flex 子項預設不會縮到比內容小，少了它訊息多時會直接撐破面板而不是捲動
 .chat-messages {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
   overflow-y: auto;
+  padding: 4px 4px 8px;
 }
 
 .chat-message {
   align-self: flex-start;
   max-width: 85%;
   margin: 0;
+  padding: 9px 12px;
   color: var(--text);
+  line-height: 1.55;
+  background: rgb(8 124 107 / 7%);
+  border: 1px solid rgb(8 124 107 / 12%);
+  border-radius: 4px 14px 14px;
   // AI 回覆常帶換行，一般 <p> 會把換行吃掉擠成一行
   white-space: pre-wrap;
 }
 
 .chat-message.is-user {
   align-self: flex-end;
-  color: var(--accent);
+  color: var(--button-text);
+  background: var(--accent);
+  border-color: var(--accent);
+  border-radius: 14px 4px 14px 14px;
+}
+
+.chat-empty {
+  max-width: 310px;
+  margin: auto;
+  color: var(--muted);
+  text-align: center;
 }
 
 // 抽屜：用 Material 提供的 CSS 變數拿掉預設陰影與底色，不必跟它的選擇器比權重
@@ -935,12 +1000,42 @@ app-brand-logo {
 .chat-composer {
   display: flex;
   flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--metal-edge);
+}
+
+.chat-composer__input {
+  flex: 1;
+  min-width: 0;
 }
 
 .chat-composer__field {
-  flex: 1;
+  width: 100%;
+}
+
+.chat-composer__hint {
+  display: block;
+  margin: 5px 4px 0;
+  color: var(--subtle);
+  font-size: 0.68rem;
+}
+
+.chat-composer__send {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 17px;
+  color: var(--button-text);
+  background: var(--accent);
+  border-radius: 13px;
+}
+
+.chat-composer__send:disabled {
+  color: var(--subtle);
+  background: rgb(118 137 128 / 12%);
+  box-shadow: none;
 }
 
 /* 窄版：對話區已移除，聯絡人改成單欄填滿，不然右邊會空一塊 */
@@ -975,7 +1070,7 @@ app-brand-logo {
 
   .chat-panel {
     width: calc(100vw - 32px);
-    height: min(560px, calc(100dvh - 162px));
+    height: min(610px, calc(100dvh - 162px));
   }
 
   .chat-panel__body {
@@ -984,6 +1079,14 @@ app-brand-logo {
 
   .chat-panel.is-narrow {
     width: calc(100vw - 32px);
+  }
+
+  .chat-composer__hint {
+    display: none;
+  }
+
+  .chat-composer__send {
+    margin-bottom: 0;
   }
 }
 

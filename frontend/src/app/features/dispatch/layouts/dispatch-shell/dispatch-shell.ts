@@ -93,6 +93,8 @@ export class DispatchShell implements OnInit {
   protected readonly chatDrivers = signal<DriverDto[]>([]);
   //司機名單載入失敗的訊息，空字串代表沒有錯誤
   protected readonly chatDriversError = signal('');
+  // 圖片檔不存在或讀取失敗時，改回姓名第一個字；換新網址後仍會重新嘗試載入。
+  protected readonly failedChatPhotoUrls = signal<ReadonlySet<string>>(new Set());
   //聊天室人員選取 預設ai
   protected readonly selectedChatContact = signal<ChatContact>({kind: 'ai'});
   // 用一個狀態而非 isOpen + isNarrow 兩個布林，才不會出現「沒打開卻是窄版」的組合
@@ -101,8 +103,9 @@ export class DispatchShell implements OnInit {
   protected readonly chatOutput = signal<ChatMessage[]>([]);
   //聊天室輸入內容
   protected readonly chatInput = signal("");
-  //等待回復開關
-  protected readonly chatWaiting = false;
+  // 等待 AI 回覆時鎖住送出，避免連按送出重複訊息
+  protected readonly chatWaiting = signal(false);
+  protected readonly chatError = signal('');
   // 任務開關
   readonly panelOpenState = signal(false);
   //司機訊息
@@ -446,19 +449,53 @@ export class DispatchShell implements OnInit {
     return selected.kind === 'driver' && selected.driverId === contact.driverId;
   }
 
+  protected markChatPhotoFailed(photoUrl: string): void {
+    this.failedChatPhotoUrls.update((failedUrls) => new Set(failedUrls).add(photoUrl));
+  }
+
   protected chatSend(): void {
-    const message = this.chatInput();
+    const message = this.chatInput().trim();
+    if (!message || this.chatWaiting()) {
+      return;
+    }
 
     this.chatOutput.update((messages) => [...messages, {role: 'user', text: message}]);
     this.chatInput.set('');
+    this.chatWaiting.set(true);
+    this.chatError.set('');
 
     this.api.chatWithAi(message).subscribe({
       next: (chat) => {
+        this.chatWaiting.set(false);
         this.chatOutput.update((messages) => [...messages, {role: 'assistant', text: chat.reply}]);
         // 回應帶的是整份清單（不是只有這次新增的），直接整包換掉；AI 回覆的文字不能當清單內容
         this.applyPlan(chat.pendingActions);
-      }
+      },
+      error: (error: HttpErrorResponse) => {
+        this.chatWaiting.set(false);
+        this.chatError.set(error.error?.message ?? 'AI 暫時沒有回應，請稍後再試。');
+      },
     });
+  }
+
+  /** Enter 送出；Shift + Enter 保留換行，中文輸入法選字時不攔截 Enter。 */
+  protected handleAiComposerKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    this.chatSend();
+  }
+
+  /** 司機聊天室沿用相同鍵盤操作，避免同一個面板出現兩套使用方式。 */
+  protected handleDriverComposerKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    this.sendDriverMessage();
   }
 
 

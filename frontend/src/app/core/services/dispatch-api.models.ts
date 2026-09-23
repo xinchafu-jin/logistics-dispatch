@@ -60,6 +60,7 @@ export interface DriverDto {
   password?: string;
   name: string;
   phone?: string;
+  profilePhotoUrl?: string | null;
   workStart: string;
   workEnd: string;
   restDuration: number;

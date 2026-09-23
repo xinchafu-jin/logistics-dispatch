@@ -128,12 +128,50 @@
                   </div>
                   <span>{{ taskboardRouteProgress(route) }}</span>
                 </header>
+                <div class="route-progress-stack">
+                  <div class="route-progress-item">
+                    <p>
+                      <span>配送進度</span>
+                      <strong>{{ routeCompletedStops(route) }}/{{ routeTotalStops(route) }} 站</strong>
+                    </p>
+                    <div
+                      class="route-progress-track"
+                      role="progressbar"
+                      aria-label="配送進度"
+                      aria-valuemin="0"
+                      [attr.aria-valuemax]="routeTotalStops(route)"
+                      [attr.aria-valuenow]="routeCompletedStops(route)"
+                    >
+                      <span class="route-progress-value" [style.width.%]="routeProgressPercent(route)"></span>
+                    </div>
+                  </div>
+                  <div class="route-progress-item">
+                    <p>
+                      <span>車輛載貨</span>
+                      <strong>{{ loadedBoxes(route) }}/{{ route.capacity }} 箱</strong>
+                    </p>
+                    <div
+                      class="route-progress-track"
+                      role="progressbar"
+                      aria-label="車輛載貨量"
+                      aria-valuemin="0"
+                      [attr.aria-valuemax]="route.capacity"
+                      [attr.aria-valuenow]="loadedBoxes(route)"
+                    >
+                      <span
+                        class="route-progress-value is-capacity"
+                        [class.is-overloaded]="isOverloaded(route)"
+                        [style.width.%]="capacityUsagePercent(route)"
+                      ></span>
+                    </div>
+                  </div>
+                </div>
                 <div class="taskboard-route-metrics">
                   <span>預估抵達 {{ taskboardEstimatedArrival(route) }}</span>
                   <span>剩餘 {{ taskboardRemainingKm(route) }}</span>
                 </div>
                 <ol>
-                  @for (card of route.cards; track card.orderId) {
+                  @for (card of visibleRouteCards(route); track card.orderId) {
                     <li [class.is-current]="boardCardStatus(card) === 'IN_DELIVERY'">
                       <span>{{ $index + 1 }}</span>
                       <div>
@@ -142,6 +180,8 @@
                       </div>
                       <em>{{ boardCardStatusLabel(card) }}</em>
                     </li>
+                  } @empty {
+                    <li class="taskboard-route-empty">目前沒有待配送站點</li>
                   }
                 </ol>
               </article>
@@ -185,57 +225,70 @@
       <section class="board-toolbar" aria-label="排車條件">
         <div class="toolbar-field toolbar-date">
           <span>配送日期</span>
-          <strong>今天 {{ dispatchDate() }}</strong>
+          <strong><mat-icon aria-hidden="true">calendar_today</mat-icon>今天 {{ dispatchDate() }}</strong>
         </div>
 
-        <label class="toolbar-field">
+        <label class="toolbar-field toolbar-warehouse">
           <span>出貨倉庫</span>
-          <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
-            @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
-              <option [value]="warehouse.id">
-                {{ warehouse.warehouseCode }} · {{ warehouse.name }}
-              </option>
-            }
-          </select>
+          <div class="toolbar-select">
+            <mat-icon aria-hidden="true">warehouse</mat-icon>
+            <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
+              @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+                <option [value]="warehouse.id">
+                  {{ warehouse.warehouseCode }} · {{ warehouse.name }}
+                </option>
+              }
+            </select>
+          </div>
         </label>
 
-        <p class="toolbar-hint">
-          可用車 {{ availableVehicles().length }} 台
-          @if (availableVehicles().length) {
-            （{{ availableVehicleSummary() }}）
+        <div class="toolbar-hint">
+          <span>{{ availableVehicles().length }}</span>
+          <p>
+            <strong>可用車輛</strong>
+            @if (availableVehicles().length) {
+              <small>{{ availableVehicleSummary() }}</small>
+            } @else {
+              <small>目前沒有可派車輛</small>
+            }
+          </p>
+        </div>
+
+        <div class="toolbar-actions">
+          <button
+            type="button"
+            class="toolbar-action is-optimize"
+            (click)="runOptimize()"
+            [disabled]="busy() || published()"
+            [attr.title]="published() ? '目前路線已發布，請先撤回發布再重新編組' : null"
+          >
+            <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+            {{ optimizing() ? '編組中…' : published() ? '請先撤回再編組' : '一鍵編組' }}
+          </button>
+
+          <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->
+          @if (published()) {
+            <button
+              type="button"
+              class="toolbar-action is-withdraw"
+              (click)="withdraw()"
+              [disabled]="publishing() || busy()"
+            >
+              <mat-icon aria-hidden="true">undo</mat-icon>
+              {{ publishing() ? '撤回中…' : '撤回發布' }}
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="toolbar-action is-primary"
+              (click)="publish()"
+              [disabled]="publishing() || busy()"
+            >
+              <mat-icon aria-hidden="true">send</mat-icon>
+              {{ publishing() ? '發布中…' : '發布' }}
+            </button>
           }
-        </p>
-
-        <button
-          type="button"
-          class="toolbar-action"
-          (click)="runOptimize()"
-          [disabled]="busy() || published()"
-          [attr.title]="published() ? '目前路線已發布，請先撤回發布再重新編組' : null"
-        >
-          {{ optimizing() ? '編組中…' : published() ? '請先撤回再編組' : '一鍵編組' }}
-        </button>
-
-        <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->
-        @if (published()) {
-          <button
-            type="button"
-            class="template-secondary"
-            (click)="withdraw()"
-            [disabled]="publishing() || busy()"
-          >
-            {{ publishing() ? '撤回中…' : '撤回發布' }}
-          </button>
-        } @else {
-          <button
-            type="button"
-            class="toolbar-action"
-            (click)="publish()"
-            [disabled]="publishing() || busy()"
-          >
-            {{ publishing() ? '發布中…' : '發布' }}
-          </button>
-        }
+        </div>
       </section>
 
       @if (published()) {
@@ -287,12 +340,15 @@
       }
 
       <div class="board" cdkDropListGroup>
-        <p class="board-status">
-          {{ routes().length }} 條路線
+        <header class="board-heading">
+          <div>
+            <span>今日車輛配置</span>
+            <h3>{{ routes().length }} 條路線</h3>
+          </div>
           @if (saving()) {
-            · 儲存中…
+            <p><mat-icon aria-hidden="true">sync</mat-icon>儲存中…</p>
           }
-        </p>
+        </header>
 
         @if (boardError()) {
           <p class="board-error">{{ boardError() }}</p>
@@ -300,12 +356,56 @@
 
         @for (route of routes(); track route.vehicleId) {
           <div class="board-lane" [class.is-overloaded]="isOverloaded(route)" [class.is-maintenance]="route.isMaintenance">
-            <h4>
-              {{ route.plateNumber }}
-              · {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
-              {{ route.totalDistance / 1000 | number: '1.1-1' }} km
-              @if (route.isMaintenance) { · 維修中 }
-            </h4>
+            <header class="lane-heading">
+              <span class="lane-heading__icon"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
+              <div>
+                <h4>{{ route.plateNumber }}</h4>
+                <p>{{ routeTotalStops(route) }} 站 · {{ route.totalDistance / 1000 | number: '1.1-1' }} km</p>
+              </div>
+              @if (route.isMaintenance) {
+                <span class="lane-heading__badge">維修中</span>
+              }
+            </header>
+            @if (route.routeId > 0 && routeTotalStops(route) > 0) {
+              <div class="lane-progress-stack">
+                <div class="route-progress-item">
+                  <p>
+                    <span>配送進度</span>
+                    <strong>{{ routeCompletedStops(route) }}/{{ routeTotalStops(route) }} 站</strong>
+                  </p>
+                  <div
+                    class="route-progress-track"
+                    role="progressbar"
+                    aria-label="配送進度"
+                    aria-valuemin="0"
+                    [attr.aria-valuemax]="routeTotalStops(route)"
+                    [attr.aria-valuenow]="routeCompletedStops(route)"
+                  >
+                    <span class="route-progress-value" [style.width.%]="routeProgressPercent(route)"></span>
+                  </div>
+                </div>
+                <div class="route-progress-item">
+                  <p>
+                    <span>車輛載貨</span>
+                    <strong>{{ loadedBoxes(route) }}/{{ route.capacity }} 箱</strong>
+                  </p>
+                  <div
+                    class="route-progress-track"
+                    role="progressbar"
+                    aria-label="車輛載貨量"
+                    aria-valuemin="0"
+                    [attr.aria-valuemax]="route.capacity"
+                    [attr.aria-valuenow]="loadedBoxes(route)"
+                  >
+                    <span
+                      class="route-progress-value is-capacity"
+                      [class.is-overloaded]="isOverloaded(route)"
+                      [style.width.%]="capacityUsagePercent(route)"
+                    ></span>
+                  </div>
+                </div>
+              </div>
+            }
             <p class="lane-driver-status">
               <mat-icon aria-hidden="true">person</mat-icon>
               {{ route.driverId === null ? '尚未指派司機' : driverName(route.driverId) }}
@@ -342,11 +442,15 @@
               class="board-dropzone"
               cdkDropList
               [cdkDropListData]="route.cards"
-              [cdkDropListDisabled]="saving() || route.hasLockedStops || route.isMaintenance"
+              [cdkDropListDisabled]="saving() || route.routeStatus === 'PUBLISHED' || route.hasLockedStops || route.isMaintenance"
               (cdkDropListDropped)="onDrop($event)"
             >
-              @for (card of route.cards; track card.orderId) {
-                <article class="board-card" cdkDrag [cdkDragDisabled]="route.isMaintenance || route.hasLockedStops">
+              @for (card of visibleRouteCards(route); track card.orderId) {
+                <article
+                  class="board-card"
+                  cdkDrag
+                  [cdkDragDisabled]="route.routeStatus === 'PUBLISHED' || route.isMaintenance || route.hasLockedStops"
+                >
                   <header>
                     <span>#{{ $index + 1 }}</span>
                     <strong>{{ card.orderNumber }}</strong>
@@ -359,10 +463,19 @@
               } @empty {
                 <p class="board-empty">
                   @if (route.isMaintenance) {
+                    <mat-icon aria-hidden="true">build_circle</mat-icon>
                     維修中車輛，暫時無法調整
+                  } @else if (route.routeStatus === 'PUBLISHED' && routeTotalStops(route) > 0 && routeCompletedStops(route) === routeTotalStops(route)) {
+                    <mat-icon aria-hidden="true">task_alt</mat-icon>
+                    今日任務已全部完成
                   } @else if (route.hasLockedStops) {
+                    <mat-icon aria-hidden="true">lock</mat-icon>
                     此路線含配送中的訂單，暫時無法拖曳調整
+                  } @else if (route.routeStatus === 'PUBLISHED') {
+                    <mat-icon aria-hidden="true">inbox</mat-icon>
+                    目前沒有待配送訂單
                   } @else {
+                    <mat-icon aria-hidden="true">add_circle_outline</mat-icon>
                     把訂單拖到這裡
                   }
                 </p>
@@ -371,8 +484,14 @@
           </div>
         }
 
-        <div class="board-lane">
-          <h4>未排入 {{ unassigned().length }} 筆</h4>
+        <div class="board-lane is-unassigned-pool">
+          <header class="lane-heading">
+            <span class="lane-heading__icon"><mat-icon aria-hidden="true">inventory_2</mat-icon></span>
+            <div>
+              <h4>未排入訂單</h4>
+              <p>{{ unassigned().length }} 筆等待安排</p>
+            </div>
+          </header>
 
           <div
             class="board-dropzone"
@@ -393,7 +512,7 @@
                 <small>{{ boardCardDescription(card) }}</small>
               </article>
             } @empty {
-              <p class="board-empty">沒有未排入的訂單</p>
+              <p class="board-empty"><mat-icon aria-hidden="true">check_circle</mat-icon>所有訂單都已完成安排</p>
             }
           </div>
         </div>

@@ -152,8 +152,10 @@ export class OrderReview implements OnInit {
 
     return this.orders().filter((order) => {
       const matchesFilter = order.status === filter;
+      const matchesCompletedDate =
+        filter !== '已完成' || order.raw.deliveryDate === todayLocalDate();
       const searchSource = `${order.id} ${order.store} ${order.area}`.toLowerCase();
-      return matchesFilter && (!term || searchSource.includes(term));
+      return matchesFilter && matchesCompletedDate && (!term || searchSource.includes(term));
     });
   });
 

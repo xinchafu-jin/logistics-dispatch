@@ -73,14 +73,17 @@ public class DispatchBoardService {
                         date, OrderStatus.CONFIRMED, warehouseId);
 
         Map<Long, List<OrdersEntity>> ordersByRoute = new HashMap<>();
+        Map<Long, List<OrdersEntity>> allOrdersByRoute = new HashMap<>();
         Set<Long> storeIds = new LinkedHashSet<>();
         Set<Long> vehicleIds = new LinkedHashSet<>();
         Set<Long> driverIds = new LinkedHashSet<>();
 
         for (RoutesEntity route : routes) {
-            List<OrdersEntity> visibleOrders =
-                    ordersDAO.findByRouteIdAndStatusInOrderBySequence(
-                            route.getId(), VISIBLE_ROUTE_STATUSES);
+            List<OrdersEntity> allOrders = ordersDAO.findByRouteIdOrderBySequence(route.getId());
+            List<OrdersEntity> visibleOrders = allOrders.stream()
+                    .filter(order -> VISIBLE_ROUTE_STATUSES.contains(order.getStatus()))
+                    .toList();
+            allOrdersByRoute.put(route.getId(), allOrders);
             ordersByRoute.put(route.getId(), visibleOrders);
             for (OrdersEntity order : visibleOrders) {
                 storeIds.add(order.getStoreId());
@@ -107,10 +110,12 @@ public class DispatchBoardService {
             int remainingBoxes = 0;
             for (OrdersEntity order : ordersByRoute.getOrDefault(route.getId(), List.of())) {
                 stops.add(toStop(order, stores.get(order.getStoreId()), route.getStatus()));
-                remainingBoxes += order.getBoxCount();
             }
-            if (stops.isEmpty()) {
-                continue;
+            for (OrdersEntity order : allOrdersByRoute.getOrDefault(route.getId(), List.of())) {
+                if (order.getStatus() != OrderStatus.COMPLETED
+                        && order.getStatus() != OrderStatus.CANCELLED) {
+                    remainingBoxes += order.getBoxCount();
+                }
             }
 
             DispatchResponse.RouteResponse response = new DispatchResponse.RouteResponse();
@@ -134,7 +139,9 @@ public class DispatchBoardService {
             response.setTotalDistance(route.getTotalDistance());
             response.setEstimatedFuelCost(route.getEstimatedFuelCost());
             response.setEstimatedWorkMinutes(route.getEstimatedWorkMinutes());
-            response.setLoadRate(route.getLoadRate());
+            response.setLoadRate(response.getCapacity() != null && response.getCapacity() > 0
+                    ? (double) remainingBoxes / response.getCapacity()
+                    : 0D);
             routeResponses.add(response);
         }
 

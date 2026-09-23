@@ -581,35 +581,49 @@
             <h2>班表暫時無法取得</h2>
             <p>{{ scheduleError() }}</p>
           </div>
-        } @else if (scheduleViewState() === 'ready') {
-          <div class="shift-list">
-            @for (shift of publishedShifts(); track shift.id) {
-              <article class="shift-row">
-                <strong>{{ formatShiftDate(shift.workDate) }}</strong>
-                <span class="shift-type"
-                      [class]="shiftTypeClass(shift.shiftType)">{{
-                  formatShiftType(shift.shiftType)
-                }}</span>
-                <div class="shift-details">
-                  @if (shift.shiftType === 'WORK') {
-                    <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
-                  }
-                  @if (formatOvertime(shift.overtimeMinutes); as overtime) {
-                    <span>{{ overtime }}</span>
-                  }
-                  @if (shift.changeReason) {
-                    <small>{{ shift.changeReason }}</small>
-                  }
-                </div>
-              </article>
-            }
-          </div>
         } @else {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>這個月沒有已發布班表</h2>
-            <p>主管發布班表後，司機端會在這裡顯示。</p>
-          </div>
+          <section class="schedule-calendar" aria-label="{{ scheduleMonthLabel() }}班表月曆">
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>一</span>
+              <span>二</span>
+              <span>三</span>
+              <span>四</span>
+              <span>五</span>
+              <span>六</span>
+              <span>日</span>
+            </div>
+            <div class="calendar-grid">
+              @for (day of scheduleCalendarDays(); track day.isoDate) {
+                <article
+                  class="calendar-day"
+                  [class.is-outside]="!day.inCurrentMonth"
+                  [class.is-today]="day.isToday && day.inCurrentMonth"
+                  [attr.aria-label]="scheduleDayLabel(day) || null"
+                  [attr.aria-hidden]="day.inCurrentMonth ? null : 'true'"
+                  [attr.title]="scheduleDayLabel(day) || null"
+                >
+                  @if (day.inCurrentMonth) {
+                    <span class="calendar-date">{{ day.dayNumber }}</span>
+                    @if (day.shift; as shift) {
+                      <span
+                        class="calendar-status"
+                        [class]="shiftTypeClass(shift.shiftType)"
+                        [attr.aria-label]="formatShiftType(shift.shiftType)"
+                      >
+                        <mat-icon aria-hidden="true">{{ shiftIcon(shift.shiftType) }}</mat-icon>
+                      </span>
+                    }
+                  }
+                </article>
+              }
+            </div>
+          </section>
+          @if (scheduleViewState() === 'empty') {
+            <p class="calendar-empty-note">
+              <mat-icon aria-hidden="true">info</mat-icon>
+              這個月尚未發布班表
+            </p>
+          }
         }
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
           <div class="mileage-heading">
