@@ -49,7 +49,6 @@
       司機路線
     </mat-slide-toggle>
   </section>
-  <!-- 常配編組：分頁是編組，排車條件與看板都是分頁的內容 -->
   <section class="template-tabs" aria-label="常配編組">
     <div class="tab-strip" role="tablist">
       @for (template of templates(); track template.id) {
@@ -79,47 +78,11 @@
       <p class="template-error">{{ templateError() }}</p>
     }
 
-    <!-- 分頁內層：排車條件 + 編成盤面 -->
-    <div class="tab-panel">
-      <section class="dispatch-workspace-overview" aria-label="今日調度重點">
-        <div class="summary-grid" aria-label="今日配送狀態">
-          @for (card of summaryCards(); track card.label) {
-            <article class="summary-card" [class]="'tone-' + card.tone">
-              <p class="summary-label">{{ card.label }}</p>
-              <strong class="summary-value">{{ card.value }}</strong>
-              <p class="summary-detail">{{ card.detail }}</p>
-            </article>
-          }
-        </div>
-
+      <!-- 分頁內層：排車條件 + 編成盤面 -->
+      <div class="tab-panel">
+        <section class="dispatch-workspace-overview" aria-label="今日調度重點">
         <div class="workspace-status-grid" aria-label="待確認配送與待處理提醒">
           <app-fleet-tracking-panel [driverPoints]="mapDrivers()" />
-
-          <section class="orders-section" aria-labelledby="pending-orders-title">
-            <header class="section-heading">
-              <div>
-                <p class="section-eyebrow">待審核清單</p>
-                <h3 id="pending-orders-title">待確認配送</h3>
-              </div>
-
-              <span class="section-count">{{ pendingOrders().length }} / {{ orders().length }} 筆</span>
-            </header>
-
-            <div class="pending-order-list">
-              @for (order of pendingOrders(); track order.id) {
-                <article class="pending-order">
-                  <div>
-                    <p class="order-id">{{ order.id }}</p>
-                    <h4>{{ order.store }}</h4>
-                    <p>{{ order.area }} · {{ order.window }}</p>
-                  </div>
-                  <span class="status-badge">{{ order.status }}</span>
-                </article>
-              } @empty {
-                <p class="dashboard-description">目前沒有待確認配送資料。</p>
-              }
-            </div>
-          </section>
 
           <section class="alerts-section" aria-labelledby="alerts-title">
             <header class="section-heading">
@@ -144,6 +107,43 @@
             </div>
           </section>
         </div>
+
+        <section class="live-taskboard" aria-labelledby="live-taskboard-title">
+          <header class="live-taskboard-header">
+            <div>
+              <p class="section-eyebrow">即時追蹤</p>
+              <h3 id="live-taskboard-title">今日訂單看板</h3>
+              <p>每 15 秒同步一次 · 最近同步 {{ taskboardLastSyncedAt() }}</p>
+            </div>
+            <button
+              type="button"
+              class="taskboard-refresh"
+              (click)="refreshTaskboard()"
+              [disabled]="taskboardSyncing()"
+            >
+              <mat-icon aria-hidden="true">refresh</mat-icon>
+              {{ taskboardSyncing() ? '同步中' : '同步' }}
+            </button>
+          </header>
+
+          @if (taskboardSyncError()) {
+            <p class="taskboard-sync-error">{{ taskboardSyncError() }}</p>
+          }
+
+          <div class="taskboard-columns" aria-label="今日訂單狀態">
+            @for (column of taskboardColumns(); track column.id) {
+              <section class="taskboard-column" [class]="'taskboard-' + column.id">
+                <header>
+                  <div>
+                    <h4>{{ column.label }}</h4>
+                    <p>{{ column.detail }}</p>
+                  </div>
+                  <span>{{ column.count }}</span>
+                </header>
+              </section>
+            }
+          </div>
+        </section>
       </section>
 
       <!-- 加號分頁：盤面已清空，編好之後命名存成編組 -->
@@ -328,6 +328,11 @@
               {{ route.totalDistance / 1000 | number: '1.1-1' }} km
               @if (route.isMaintenance) { · 維修中 }
             </h4>
+            <p class="lane-driver-status">
+              <mat-icon aria-hidden="true">person</mat-icon>
+              {{ route.driverId === null ? '尚未指派司機' : driverName(route.driverId) }}
+              <span>{{ routeDriverStatus(route) }}</span>
+            </p>
             <!--
               選中狀態綁在 option 上而不是 select 的 [value]：
               Angular 更新 select 自身的綁定時，@for 產生的 option 還沒建立，
@@ -363,9 +368,16 @@
               (cdkDropListDropped)="onDrop($event)"
             >
               @for (card of route.cards; track card.orderId) {
-                <p class="board-card" cdkDrag [cdkDragDisabled]="route.isMaintenance || route.hasLockedStops">
-                  #{{ $index + 1 }} {{ card.storeName }} · {{ card.boxCount }} 箱
-                </p>
+                <article class="board-card" cdkDrag [cdkDragDisabled]="route.isMaintenance || route.hasLockedStops">
+                  <header>
+                    <span>#{{ $index + 1 }}</span>
+                    <strong>{{ card.orderNumber }}</strong>
+                    <em>{{ boardCardStatusLabel(card) }}</em>
+                  </header>
+                  <h5>{{ card.storeName }}</h5>
+                  <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                  <small>{{ boardCardDescription(card) }}</small>
+                </article>
               } @empty {
                 <p class="board-empty">
                   @if (route.isMaintenance) {
@@ -392,9 +404,16 @@
             (cdkDropListDropped)="onDrop($event)"
           >
             @for (card of unassigned(); track card.orderId) {
-              <p class="board-card" cdkDrag>
-                {{ card.orderNumber }} · {{ card.storeName }} · {{ card.boxCount }} 箱
-              </p>
+              <article class="board-card" cdkDrag>
+                <header>
+                  <span>未排入</span>
+                  <strong>{{ card.orderNumber }}</strong>
+                  <em>{{ boardCardStatusLabel(card) }}</em>
+                </header>
+                <h5>{{ card.storeName }}</h5>
+                <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                <small>{{ boardCardDescription(card) }}</small>
+              </article>
             } @empty {
               <p class="board-empty">沒有未排入的訂單</p>
             }
