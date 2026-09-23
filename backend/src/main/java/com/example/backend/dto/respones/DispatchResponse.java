@@ -1,5 +1,6 @@
 package com.example.backend.dto.respones;
 
+import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 
 import java.time.LocalDate;
@@ -416,6 +417,18 @@ public class DispatchResponse {
         private String orderNumber;
 
         /**
+         * 訂單目前狀態。看板會回傳 CONFIRMED 與 IN_DELIVERY，
+         * 讓呼叫端能區分尚可調整和已經開始執行的任務。
+         */
+        private OrderStatus orderStatus;
+
+        /**
+         * 後端依路線及訂單狀態算出的可拖曳旗標。
+         * 只有草稿路線內的 CONFIRMED 訂單會是 true。
+         */
+        private Boolean draggable;
+
+        /**
          * 箱數
          */
         private Integer boxCount;
@@ -473,6 +486,22 @@ public class DispatchResponse {
 
         public void setOrderNumber(String orderNumber) {
             this.orderNumber = orderNumber;
+        }
+
+        public OrderStatus getOrderStatus() {
+            return orderStatus;
+        }
+
+        public void setOrderStatus(OrderStatus orderStatus) {
+            this.orderStatus = orderStatus;
+        }
+
+        public Boolean getDraggable() {
+            return draggable;
+        }
+
+        public void setDraggable(Boolean draggable) {
+            this.draggable = draggable;
         }
 
         public Integer getBoxCount() {

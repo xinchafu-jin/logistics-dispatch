@@ -24,26 +24,26 @@ public class GpsPingsService {
     private final DriversDAO driversDAO;
     private final AttendanceService attendanceService;
     private final long freshnessMinutes;
-    private final long retentionDays;
+    private final long retentionYears;
 
     public GpsPingsService(
             GpsPingsDAO gpsPingsDAO,
             DriversDAO driversDAO,
             AttendanceService attendanceService,
             @Value("${app.gps.freshness-minutes:10}") long freshnessMinutes,
-            @Value("${app.gps.retention-days:90}") long retentionDays
+            @Value("${app.gps.retention-years:5}") long retentionYears
     ) {
         if (freshnessMinutes <= 0) {
             throw new IllegalArgumentException("GPS有效分鐘數必須大於 0");
         }
-        if (retentionDays <= 0) {
-            throw new IllegalArgumentException("GPS保存天數必須大於 0");
+        if (retentionYears <= 0) {
+            throw new IllegalArgumentException("GPS保存年數必須大於 0");
         }
         this.gpsPingsDAO = gpsPingsDAO;
         this.driversDAO = driversDAO;
         this.attendanceService = attendanceService;
         this.freshnessMinutes = freshnessMinutes;
-        this.retentionDays = retentionDays;
+        this.retentionYears = retentionYears;
     }
 
     /**
@@ -126,7 +126,7 @@ public class GpsPingsService {
     }
 
     public long purgeExpiredPings() {
-        LocalDateTime cutoff = LocalDateTime.now(TAIPEI).minusDays(retentionDays);
+        LocalDateTime cutoff = LocalDateTime.now(TAIPEI).minusYears(retentionYears);
         return gpsPingsDAO.deleteByTimestampBefore(cutoff);
     }
 

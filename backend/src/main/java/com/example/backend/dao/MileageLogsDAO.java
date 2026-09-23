@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -24,4 +25,26 @@ public interface MileageLogsDAO extends JpaRepository<MileageLogsEntity, Long> {
     Optional<MileageLogsEntity> findForUpdate(
             @Param("driverId") Long driverId,
             @Param("date") LocalDate date);
+
+    Optional<MileageLogsEntity> findByDriverIdAndDate(Long driverId, LocalDate date);
+
+    List<MileageLogsEntity> findAllByRouteIdOrderByStartTimeAsc(Long routeId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select mileage
+            from MileageLogsEntity mileage
+            where mileage.vehicleId = :vehicleId
+              and mileage.date = :date
+              and mileage.endTime is null
+            """)
+    List<MileageLogsEntity> findOpenByVehicleForUpdate(
+            @Param("vehicleId") Long vehicleId,
+            @Param("date") LocalDate date);
+
+    List<MileageLogsEntity> findByMileageSettledAtIsNullAndEndTimeIsNotNull();
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select mileage from MileageLogsEntity mileage where mileage.id = :id")
+    Optional<MileageLogsEntity> findByIdForUpdate(@Param("id") Long id);
 }

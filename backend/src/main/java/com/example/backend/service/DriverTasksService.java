@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.RouteStatus;
+import com.example.backend.constants.OrderStatus;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -80,7 +81,10 @@ public class DriverTasksService {
             vehicleIds.add(route.getVehicleId());
         }
 
-        List<OrdersEntity> orders = ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds));
+        List<OrdersEntity> orders = new ArrayList<>(ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds)).stream()
+                .filter(order -> order.getStatus() == OrderStatus.CONFIRMED
+                        || order.getStatus() == OrderStatus.IN_DELIVERY)
+                .toList());
         orders.sort(Comparator
                 .comparing(OrdersEntity::getRouteId)
                 .thenComparing(OrdersEntity::getSequence,
@@ -127,6 +131,9 @@ public class DriverTasksService {
                 }
                 stops.add(toStop(order, store));
                 totalBoxes += order.getBoxCount();
+            }
+            if (stops.isEmpty()) {
+                continue;
             }
 
             routeTasks.add(new DriverTasksResponse.RouteTask(

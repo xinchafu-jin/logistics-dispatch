@@ -1,6 +1,7 @@
 package com.example.backend.entity;
 
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.OrderType;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -51,6 +52,19 @@ public class OrdersEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private OrderStatus status = OrderStatus.PENDING_CONFIRM;
+
+    /** 一般訂單、補貨單或無人簽收後建立的重送單。 */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private OrderType orderType = OrderType.NORMAL;
+
+    /** 後續訂單所對應的來源訂單。 */
+    @Column
+    private Long parentOrderId;
+
+    /** 從最初訂單起算的重送次數。 */
+    @Column(nullable = false)
+    private Integer retryCount = 0;
 
     /**
      * 所屬配送計畫
@@ -163,6 +177,30 @@ public class OrdersEntity {
 
     public void setStatus(OrderStatus status) {
         this.status = status;
+    }
+
+    public OrderType getOrderType() {
+        return orderType;
+    }
+
+    public void setOrderType(OrderType orderType) {
+        this.orderType = orderType;
+    }
+
+    public Long getParentOrderId() {
+        return parentOrderId;
+    }
+
+    public void setParentOrderId(Long parentOrderId) {
+        this.parentOrderId = parentOrderId;
+    }
+
+    public Integer getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(Integer retryCount) {
+        this.retryCount = retryCount;
     }
 
     public Long getRouteId() {

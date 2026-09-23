@@ -30,7 +30,7 @@ public class ReassignDTO {
      * 少了它 RouteAssignment 裡的標註完全不會執行。</p>
      */
 
-    @NotEmpty(message = REASSIGN_ROUTES_REQUIRED)
+    @NotNull(message = REASSIGN_ROUTES_REQUIRED)
     @Valid
     private List<RouteAssignment> routes;
 

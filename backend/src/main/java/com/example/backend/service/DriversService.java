@@ -9,21 +9,32 @@ import jakarta.persistence.EntityNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.sql.Driver;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 @Transactional
 public class DriversService {
 
+    private static final int[] NATIONAL_ID_LETTER_CODES = {
+            10, 11, 12, 13, 14, 15, 16, 17, 34,
+            18, 19, 20, 21, 22, 35, 23, 24, 25,
+            26, 27, 28, 29, 32, 30, 31, 33
+    };
+
     private final DriversDAO driversDAO;
     private final PasswordEncoder passwordEncoder;
+    private final DriverPhotoStorageService driverPhotoStorageService;
 
-    public DriversService(DriversDAO driversDAO, PasswordEncoder passwordEncoder) {
+    public DriversService(
+            DriversDAO driversDAO,
+            PasswordEncoder passwordEncoder,
+            DriverPhotoStorageService driverPhotoStorageService
+    ) {
         this.driversDAO = driversDAO;
         this.passwordEncoder = passwordEncoder;
+        this.driverPhotoStorageService = driverPhotoStorageService;
     }
 
     @Transactional(readOnly = true)
@@ -40,7 +51,7 @@ public class DriversService {
         if (driversDAO.existsByAccount(dto.getAccount())) {
             throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
         }
-        validatePassword(dto.getPassword(), "新增司機時必須設定密碼");
+        validateInitialNationalIdPassword(dto.getPassword());
         DriversEntity entity = new DriversEntity();
         apply(dto, entity);
         entity.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -52,7 +63,7 @@ public class DriversService {
             if (driversDAO.existsByAccount(dto.getAccount())) {
                 throw new IllegalArgumentException("司機帳號已存在：" + dto.getAccount());
             }
-            validatePassword(dto.getPassword(), "新增司機時必須設定密碼");
+            validateInitialNationalIdPassword(dto.getPassword());
             DriversEntity entity = new DriversEntity();
             apply(dto, entity);
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -106,6 +117,12 @@ public class DriversService {
         return toDTO(driversDAO.save(entity));
     }
 
+    public DriversDTO updateProfilePhoto(Long id, MultipartFile photo) {
+        DriversEntity entity = findEntity(id);
+        entity.setProfilePhotoUrl(driverPhotoStorageService.store(photo));
+        return toDTO(driversDAO.save(entity));
+    }
+
     public void delete(Long id) {
         driversDAO.delete(findEntity(id));
     }
@@ -137,6 +154,24 @@ public class DriversService {
         }
     }
 
+    /** 主管建立帳號時，身分證字號就是司機的初始密碼；資料庫只保存 BCrypt 雜湊。 */
+    private void validateInitialNationalIdPassword(String password) {
+        validatePassword(password, "新增司機時必須以身分證字號設定初始密碼");
+        if (!password.matches("[A-Z][12]\\d{8}")) {
+            throw new IllegalArgumentException("司機初始密碼必須是大寫的台灣身分證字號");
+        }
+
+        int letterCode = NATIONAL_ID_LETTER_CODES[password.charAt(0) - 'A'];
+        int sum = letterCode / 10 + (letterCode % 10) * 9;
+        for (int index = 1; index <= 8; index++) {
+            sum += (password.charAt(index) - '0') * (9 - index);
+        }
+        sum += password.charAt(9) - '0';
+        if (sum % 10 != 0) {
+            throw new IllegalArgumentException("司機初始密碼的身分證檢查碼不正確");
+        }
+    }
+
     private void apply(DriversDTO dto, DriversEntity entity) {
         entity.setAccount(dto.getAccount());
         entity.setName(dto.getName());
@@ -156,6 +191,7 @@ public class DriversService {
         dto.setAccount(entity.getAccount());
         dto.setName(entity.getName());
         dto.setPhone(entity.getPhone());
+        dto.setProfilePhotoUrl(entity.getProfilePhotoUrl());
         dto.setWorkStart(entity.getWorkStart());
         dto.setWorkEnd(entity.getWorkEnd());
         dto.setRestDuration(entity.getRestDuration());

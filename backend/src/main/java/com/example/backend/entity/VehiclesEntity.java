@@ -30,6 +30,12 @@ public class VehiclesEntity {
     @Column
     private Double fuelConsumption;
 
+    /**
+     * 車輛自加入系統後，以每趟 GPS 道路距離結算的永久累積里程（公里）。
+     */
+    @Column(nullable = false)
+    private Double cumulativeMileageKm = 0.0;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private VehicleStatus status = VehicleStatus.AVAILABLE;
@@ -72,6 +78,14 @@ public class VehiclesEntity {
 
     public void setFuelConsumption(Double fuelConsumption) {
         this.fuelConsumption = fuelConsumption;
+    }
+
+    public Double getCumulativeMileageKm() {
+        return cumulativeMileageKm;
+    }
+
+    public void setCumulativeMileageKm(Double cumulativeMileageKm) {
+        this.cumulativeMileageKm = cumulativeMileageKm;
     }
 
     public VehicleStatus getStatus() {

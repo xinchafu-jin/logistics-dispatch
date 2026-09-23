@@ -30,7 +30,8 @@ public class TemplatesService {
     private final VehiclesDAO vehiclesDAO;
     private final StoresDAO storesDAO;
     private final OrdersDAO ordersDAO;
-    private final DispatchService dispatchService;
+    private final RoutesDAO routesDAO;
+    private final DispatchWorkflowService dispatchWorkflowService;
 
 
     public TemplatesService(
@@ -41,7 +42,8 @@ public class TemplatesService {
             VehiclesDAO vehiclesDAO,
             StoresDAO storesDAO,
             OrdersDAO ordersDAO,
-            DispatchService dispatchService
+            RoutesDAO routesDAO,
+            DispatchWorkflowService dispatchWorkflowService
     ) {
         this.dispatchTemplatesDAO = dispatchTemplatesDAO;
         this.templateRoutesDAO = templateRoutesDAO;
@@ -50,7 +52,8 @@ public class TemplatesService {
         this.vehiclesDAO = vehiclesDAO;
         this.storesDAO = storesDAO;
         this.ordersDAO = ordersDAO;
-        this.dispatchService = dispatchService;
+        this.routesDAO = routesDAO;
+        this.dispatchWorkflowService = dispatchWorkflowService;
     }
 
     @Transactional(readOnly = true)
@@ -144,7 +147,7 @@ public class TemplatesService {
      *
      * <p>編組存的是門市不是訂單（訂單綁日期、會取消，不能當樣板內容），
      * 所以每次套用都要現查那天有哪些單。實際建路線交給
-     * {@link DispatchService#reassign} —— 它會清掉當天草稿並整批重建。</p>
+     * {@link DispatchWorkflowService#reassign} —— 它會先檢查狀態，再安全重建草稿。</p>
      *
      * <p>套用後路線的司機是 null（編組不存司機），由調度員指派後才能發布。</p>
      *
@@ -188,9 +191,17 @@ public class TemplatesService {
                 continue;
             }
 
-            List<OrdersEntity> orders =
-                    ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndStoreIdInAndRouteIdIsNull(
-                            date, OrderStatus.CONFIRMED, warehouseId, storeIds);
+            Set<Long> draftRouteIds = routesDAO.findByDateAndWarehouseId(date, warehouseId).stream()
+                    .filter(route -> route.getStatus() == com.example.backend.constants.RouteStatus.DRAFT)
+                    .map(route -> route.getId())
+                    .collect(java.util.stream.Collectors.toSet());
+            List<OrdersEntity> orders = ordersDAO.findByDeliveryDateAndWarehouseId(date, warehouseId)
+                    .stream()
+                    .filter(order -> order.getStatus() == OrderStatus.CONFIRMED)
+                    .filter(order -> storeIds.contains(order.getStoreId()))
+                    .filter(order -> order.getRouteId() == null
+                            || draftRouteIds.contains(order.getRouteId()))
+                    .toList();
 
             // 依門市分組，等一下照 stops 的順序逐站取用
             Map<Long, List<OrdersEntity>> ordersByStore = new HashMap<>();
@@ -235,7 +246,20 @@ public class TemplatesService {
             dto.setDate(date);
             dto.setWarehouseId(warehouseId);
             dto.setRoutes(assignments);
-            boards.add(dispatchService.reassign(dto));
+            dispatchWorkflowService.reassign(dto);
+
+            Set<Long> templateVehicleIds = templateRoutes.stream()
+                    .map(TemplatesDTO.TemplateRouteResponse::getVehicleId)
+                    .collect(java.util.stream.Collectors.toSet());
+            List<com.example.backend.entity.RoutesEntity> appliedRoutes =
+                    routesDAO.findByDateAndWarehouseId(date, warehouseId).stream()
+                            .filter(route -> templateVehicleIds.contains(route.getVehicleId()))
+                            .toList();
+            for (com.example.backend.entity.RoutesEntity route : appliedRoutes) {
+                route.setTemplateId(templateId);
+            }
+            routesDAO.saveAll(appliedRoutes);
+            boards.add(dispatchWorkflowService.getBoard(date, warehouseId));
         }
         return boards;
     }
@@ -282,6 +306,8 @@ public class TemplatesService {
     }
 
     private void validateReferences(TemplatesRequestDTO dto) {
+        Set<Long> usedVehicleIds = new HashSet<>();
+        Set<Long> usedStoreIds = new HashSet<>();
         for (TemplatesRequestDTO.TemplateRouteRequest route : dto.getRoutes()) {
             Long warehouseId = route.getWarehouseId();
             if (!warehousesDAO.existsById(warehouseId)) {
@@ -289,13 +315,23 @@ public class TemplatesService {
             }
 
             Long vehicleId = route.getVehicleId();
+            if (!usedVehicleIds.add(vehicleId)) {
+                throw new IllegalArgumentException("同一編組不能重複使用車輛，ID：" + vehicleId);
+            }
             VehiclesEntity vehicle = vehiclesDAO.findById(vehicleId)
                     .orElseThrow(() -> new IllegalArgumentException("找不到車輛，ID：" + vehicleId));
             if (!warehouseId.equals(vehicle.getWarehouseId())) {
                 throw new IllegalArgumentException("車輛 " + vehicleId + " 不屬於倉庫 " + warehouseId);
             }
 
+            Set<Long> storesInThisRoute = new HashSet<>();
             for (Long storeId : route.getStoreIds()) {
+                if (!storesInThisRoute.add(storeId)) {
+                    throw new IllegalArgumentException("同一路線不能重複出現門市，ID：" + storeId);
+                }
+                if (!usedStoreIds.add(storeId)) {
+                    throw new IllegalArgumentException("同一門市不能同時出現在兩條路線，ID：" + storeId);
+                }
                 if (!storesDAO.existsById(storeId)) {
                     throw new IllegalArgumentException("找不到門市，ID：" + storeId);
                 }
