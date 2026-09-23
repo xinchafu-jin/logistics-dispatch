@@ -58,8 +58,8 @@
           }
           @case ('orders') {
             <div class="preview-table order-table">
-              <div class="table-row table-head"><span>日期</span><span>訂單</span><span>順序</span><span>門市</span><span>箱數</span><span>狀態</span><span>司機</span><span>車牌</span></div>
-              @for (order of orderRows(report); track order.orderNumber) { <div class="table-row"><span>{{ value(order.date) }}</span><span>{{ value(order.orderNumber) }}</span><span>{{ value(order.sequence) }}</span><span>{{ value(order.storeName) }}</span><span>{{ value(order.boxes) }}</span><span>{{ value(order.status) }}</span><span>{{ value(order.driverName) }}</span><span>{{ value(order.plateNumber) }}</span></div> }
+              <div class="table-row table-head"><span>日期</span><span>訂單</span><span>順序</span><span>門市</span><span>箱數</span><span>狀態</span><span>司機</span><span>車牌</span><span>行駛路段</span><span>行駛時間</span><span>實際里程</span><span>計算狀態</span></div>
+              @for (order of orderRows(report); track order.orderNumber) { <div class="table-row"><span>{{ value(order.date) }}</span><span>{{ value(order.orderNumber) }}</span><span>{{ value(order.sequence) }}</span><span>{{ value(order.storeName) }}</span><span>{{ value(order.boxes) }}</span><span>{{ value(order.status) }}</span><span>{{ value(order.driverName) }}</span><span>{{ value(order.plateNumber) }}</span><span>{{ value(order.fromName) }} → {{ value(order.toName) }}</span><span>{{ routeLegTime(order.startedAt, order.endedAt) }}</span><span>{{ routeLegKm(order.systemKm, order.calculationStatus) }}</span><span class="mileage-status">{{ mileageStatusLabel(order.calculationStatus) }}</span></div> }
             </div>
           }
           @case ('routes') {
@@ -68,9 +68,6 @@
             </div>
           }
           @case ('attendance') {
-            <div class="driver-summary">
-              @for (driver of rows(report.drivers, 'drivers'); track driver.driverId) { <article><strong>{{ value(driver.driverName) }}</strong><span>排班 {{ value(driver.scheduledWorkDays) }} 天</span><span>出車 {{ value(driver.startedTrips) }} 趟</span><span>完成 {{ value(driver.completedOrders) }} 筆</span></article> }
-            </div>
             <div class="preview-table attendance-table"><div class="table-row table-head"><span>日期</span><span>司機</span><span>班別</span><span>預定上班</span><span>打卡上班</span><span>預定下班</span><span>打卡下班</span><span>狀態</span></div>
               @for (row of rows(report.attendance, 'shifts'); track row.shiftId) { <div class="table-row"><span>{{ value(row.workDate) }}</span><span>{{ value(row.driverName) }}</span><span>{{ value(row.shiftType) }}</span><span>{{ value(row.scheduledStartAt) }}</span><span>{{ value(row.clockInAt) }}</span><span>{{ value(row.scheduledEndAt) }}</span><span>{{ value(row.clockOutAt) }}</span><span>{{ value(row.dataStatus) }}</span></div> }
             </div>
@@ -92,8 +89,18 @@
           }
           @case ('exceptions') {
             <div class="exception-summary"><span>已記錄 {{ value(report.exceptions['recordedCases']) }} 件</span><span>待處理 {{ value(report.exceptions['openCases']) }} 件</span><span>已結案 {{ value(report.exceptions['closedCases']) }} 件</span></div>
+            @if (focusedException(report); as exception) {
+              <article class="focused-exception" aria-label="指定異常案件詳情">
+                <div><p>異常案件詳情</p><strong>{{ value(exception.orderNumber) }} · {{ value(exception.type) }}</strong></div>
+                <dl><div><dt>建立時間</dt><dd>{{ value(exception.createdAt) }}</dd></div><div><dt>司機</dt><dd>#{{ value(exception.driverId) }}</dd></div><div><dt>路線</dt><dd>#{{ value(exception.routeId) }}</dd></div><div><dt>處理狀態</dt><dd>{{ value(exception.status) }}</dd></div></dl>
+                <p class="focused-exception-reason">{{ value(exception.description) }}</p>
+                <button type="button" (click)="clearExceptionFocus()">查看全部異常案件</button>
+              </article>
+            } @else if (focusedExceptionOrderId() !== null) {
+              <p class="empty-state">此訂單在目前日期內沒有可對應的已保存異常案件。</p>
+            }
             <div class="preview-table exception-table"><div class="table-row table-head"><span>建立時間</span><span>類型</span><span>訂單</span><span>司機</span><span>路線</span><span>異常原因</span><span>處理結果</span><span>狀態</span></div>
-              @for (row of rows(report.exceptions, 'cases'); track row.exceptionId) { <div class="table-row"><span>{{ value(row.createdAt) }}</span><span>{{ value(row.type) }}</span><span>{{ value(row.orderNumber) }}</span><span>#{{ value(row.driverId) }}</span><span>#{{ value(row.routeId) }}</span><span>{{ value(row.description) }}</span><span>{{ value(row.resolution) }}</span><span>{{ value(row.status) }}</span></div> }
+              @for (row of exceptionRows(report); track row.exceptionId) { <div class="table-row"><span>{{ value(row.createdAt) }}</span><span>{{ value(row.type) }}</span><span>{{ value(row.orderNumber) }}</span><span>#{{ value(row.driverId) }}</span><span>#{{ value(row.routeId) }}</span><span>{{ value(row.description) }}</span><span>{{ value(row.resolution) }}</span><span>{{ value(row.status) }}</span></div> }
             </div>
           }
           @case ('notes') {

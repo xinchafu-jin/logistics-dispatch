@@ -239,7 +239,7 @@ export class DispatchDashboard implements OnInit {
       {id: 'confirmed', label: '待調度', detail: '已確認等待出發', status: 'CONFIRMED', matches: (order) => order.status === 'CONFIRMED'},
       {id: 'delivering', label: '配送中', detail: '正在配送', status: 'IN_DELIVERY', matches: (order) => order.status === 'IN_DELIVERY'},
       {id: 'completed', label: '已完成', detail: '今日已簽收', status: 'COMPLETED', matches: (order) => order.status === 'COMPLETED'},
-      {id: 'failed', label: '配送失敗', detail: '需要處理', status: 'FAILED', matches: (order) => order.status === 'FAILED'},
+      {id: 'failed', label: '配送異常', detail: '失敗或無人簽收', status: 'FAILED', matches: (order) => order.status === 'FAILED' || order.status === 'NO_SIGNATURE'},
       {id: 'cancelled', label: '已取消', detail: '不再配送', status: 'CANCELLED', matches: (order) => order.status === 'CANCELLED'},
     ];
 
@@ -714,6 +714,8 @@ export class DispatchDashboard implements OnInit {
         return '已完成';
       case 'FAILED':
         return '配送失敗';
+      case 'NO_SIGNATURE':
+        return '無人簽收';
       case 'CANCELLED':
         return '已取消';
     }

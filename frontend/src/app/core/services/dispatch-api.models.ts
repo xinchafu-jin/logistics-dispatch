@@ -11,6 +11,7 @@ export type OrderStatus =
   | 'IN_DELIVERY'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'NO_SIGNATURE'
   | 'FAILED';
 export type OrderType = 'NORMAL' | 'REPLENISHMENT';
 export type ExceptionStatus = 'OPEN' | 'CLOSED';

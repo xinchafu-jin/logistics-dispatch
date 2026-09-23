@@ -335,6 +335,12 @@
   box-shadow: 0 0 8px rgb(174 184 211 / 54%);
 }
 
+.status-無人簽收::before,
+.status-配送失敗::before {
+  background: #ef6d75;
+  box-shadow: 0 0 8px rgb(239 109 117 / 58%);
+}
+
 .order-detail-panel {
   position: sticky;
   top: 112px;

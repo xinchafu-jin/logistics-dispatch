@@ -18,6 +18,7 @@ interface ReportRow {
   clockOutAt?: unknown;
   clockSpanMinutes?: unknown;
   completedOrders?: unknown;
+  calculationStatus?: unknown;
   damagedBoxes?: unknown;
   createdAt?: unknown;
   damagedRatePercent?: unknown;
@@ -31,6 +32,7 @@ interface ReportRow {
   driverName?: unknown;
   exceptionId?: unknown;
   failedOrders?: unknown;
+  fromName?: unknown;
   mileageComparisonStatus?: unknown;
   noSignatureAttempts?: unknown;
   orderId?: unknown;
@@ -45,8 +47,10 @@ interface ReportRow {
   replacementRequiredBoxes?: unknown;
   resolution?: unknown;
   resolutionMinutes?: unknown;
+  routeLegs?: unknown;
   routeId?: unknown;
   routes?: unknown;
+  startedAt?: unknown;
   scheduledEndAt?: unknown;
   scheduledStartAt?: unknown;
   scheduledWorkDays?: unknown;
@@ -57,6 +61,9 @@ interface ReportRow {
   status?: unknown;
   storeId?: unknown;
   storeName?: unknown;
+  systemKm?: unknown;
+  toName?: unknown;
+  endedAt?: unknown;
   startedTrips?: unknown;
   type?: unknown;
   unassignedConfirmedOrders?: unknown;
@@ -114,6 +121,7 @@ export class ReportHistory implements OnInit {
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly preview = signal<ReportPreview | null>(null);
   readonly selectedSheet = signal<PreviewSheet>('overview');
+  readonly focusedExceptionOrderId = signal<number | null>(null);
   readonly loading = signal(false);
   readonly exporting = signal(false);
   readonly errorMessage = signal('');
@@ -123,6 +131,11 @@ export class ReportHistory implements OnInit {
     this.from.set(query.get('from') ?? this.from());
     this.to.set(query.get('to') ?? this.to());
     this.vehicleId.set(this.queryNumber(query.get('vehicleId')));
+    this.focusedExceptionOrderId.set(this.queryNumber(query.get('orderId')));
+    const requestedSheet = query.get('sheet');
+    if (this.isPreviewSheet(requestedSheet)) {
+      this.selectedSheet.set(requestedSheet);
+    }
     this.loadFilterOptions();
     this.createPreview();
   }
@@ -144,6 +157,25 @@ export class ReportHistory implements OnInit {
 
   protected selectSheet(sheet: PreviewSheet): void {
     this.selectedSheet.set(sheet);
+  }
+
+  protected exceptionRows(report: ReportPreview): ReportRow[] {
+    const rows = this.rows(report.exceptions, 'cases');
+    const orderId = this.focusedExceptionOrderId();
+    return orderId === null ? rows : rows.filter((row) => row.orderId === orderId);
+  }
+
+  protected focusedException(report: ReportPreview): ReportRow | null {
+    return this.focusedExceptionOrderId() === null ? null : this.exceptionRows(report)[0] ?? null;
+  }
+
+  protected clearExceptionFocus(): void {
+    this.focusedExceptionOrderId.set(null);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {orderId: null},
+      queryParamsHandling: 'merge',
+    });
   }
 
   protected createPreview(): void {
@@ -247,6 +279,7 @@ export class ReportHistory implements OnInit {
       .sort((left, right) => left.deliveryDate.localeCompare(right.deliveryDate) || left.orderNumber.localeCompare(right.orderNumber))
       .map((order) => {
         const route = order.id == null ? undefined : routeByOrderId.get(order.id);
+        const leg = this.routeLeg(route, order.sequence);
         return {
           date: order.deliveryDate,
           orderNumber: order.orderNumber,
@@ -258,6 +291,12 @@ export class ReportHistory implements OnInit {
           driverName: route?.driverName,
           plateNumber: route?.plateNumber,
           warehouseName: route?.warehouseName,
+          fromName: leg?.fromName,
+          toName: leg?.toName,
+          startedAt: leg?.startedAt,
+          endedAt: leg?.endedAt,
+          systemKm: this.completedLegKm(leg),
+          calculationStatus: leg?.calculationStatus,
         };
       });
   }
@@ -280,6 +319,7 @@ export class ReportHistory implements OnInit {
       COMPLETE: '里程已完成',
       COMPLETE_ROUTE_HANDOVER_SUMMED: '交接里程已完成',
       GPS_DISTANCE_CALCULATION_FAILED: 'GPS 里程計算失敗',
+      INSUFFICIENT_GPS_POINTS: 'GPS 點不足',
       INCOMPLETE_GPS_MILEAGE: 'GPS 里程尚未完成',
       INCOMPLETE_HANDOVER_MILEAGE_SEGMENT: '交接里程尚未完成',
       INCOMPLETE_MILEAGE_LOG: '里程紀錄尚未完成',
@@ -293,12 +333,23 @@ export class ReportHistory implements OnInit {
       MULTIPLE_ROUTES_FOR_DRIVER_DAY: '同日有多條路線',
       NO_DRIVER: '尚未指派司機',
       NO_GPS_DISTANCE: '尚未取得 GPS 里程',
+      NO_ACCEPTED_GPS_SEGMENTS: '沒有可採用的 GPS 路段',
       NO_MILEAGE_LOG: '尚無里程紀錄',
       READY_INFERRED_DRIVER_DATE: 'GPS 里程已完成',
       READY_ROUTE_HANDOVER_SUMMED: '交接里程已完成',
       READY_ROUTE_LINKED_GPS: 'GPS 里程已完成',
       READY_ROUTE_SEGMENT: 'GPS 里程已完成',
     }[String(value)] ?? '里程資料待確認';
+  }
+
+  /** 路段里程只採後端明確標為 COMPLETE 的 GPS 計算結果，不能以整條路線總里程替代。 */
+  protected routeLegKm(value: unknown, status: unknown): string {
+    return status === 'COMPLETE' && typeof value === 'number' ? `${value.toFixed(1)} km` : '--';
+  }
+
+  protected routeLegTime(startedAt: unknown, endedAt: unknown): string {
+    if (!startedAt || !endedAt) return '--';
+    return `${this.value(startedAt)} 至 ${this.value(endedAt)}`;
   }
 
   protected sheetTitle(): string {
@@ -352,8 +403,16 @@ export class ReportHistory implements OnInit {
   }
 
   private orderExportRows(preview: ReportPreview): unknown[][] {
-    const data = this.orderRows(preview).map((order) => [order.date, order.orderNumber, order.sequence, order.storeName, order.boxes, order.status, order.routeId, order.driverName, order.plateNumber, order.warehouseName]);
-    return [['配送日期', '訂單編號', '順序', '門市', '箱數', '狀態', '路線', '司機', '車牌', '出貨倉庫'], ...data];
+    const data = this.orderRows(preview).map((order) => [
+      order.date, order.orderNumber, order.sequence, order.storeName, order.boxes, order.status,
+      order.routeId, order.driverName, order.plateNumber, order.warehouseName,
+      order.fromName, order.toName, order.startedAt, order.endedAt,
+      order.systemKm, this.mileageStatusLabel(order.calculationStatus),
+    ]);
+    return [[
+      '配送日期', '訂單編號', '順序', '門市', '箱數', '狀態', '路線', '司機', '車牌', '出貨倉庫',
+      '起點', '終點', '路段開始時間', '路段結束時間', '實際分段公里', '分段里程狀態',
+    ], ...data];
   }
 
   private routeExportRows(preview: ReportPreview): unknown[][] {
@@ -386,7 +445,18 @@ export class ReportHistory implements OnInit {
   }
 
   private notesExportRows(): unknown[][] {
-    return [['欄位', '說明'], ['預估公里與油費', '依發布路線的規劃資料計算，沒有資料時留白。'], ['實際公里', '由行車里程紀錄提供，沒有完成紀錄時留白。'], ['完成率', '已完成訂單除以可計算完成率的訂單。'], ['司機與車輛', '只在後端能對應到已發布路線或異常案件時顯示。'], ['異常原因', '依異常案件的描述與處理結果顯示，不會用預設文字代替。']];
+    return [['欄位', '說明'], ['預估公里與油費', '依發布路線的規劃資料計算，沒有資料時留白。'], ['路線實際公里', '由整條行車里程紀錄提供，沒有完成紀錄時留白。'], ['訂單實際分段公里', '依上一站到此門市的 GPS 定位軌跡計算；僅 calculationStatus 為 COMPLETE 時提供。'], ['完成率', '已完成訂單除以可計算完成率的訂單。'], ['司機與車輛', '只在後端能對應到已發布路線或異常案件時顯示。'], ['異常原因', '依異常案件的描述與處理結果顯示，不會用預設文字代替。']];
+  }
+
+  private routeLeg(route: ReportRow | undefined, sequence: number | undefined): ReportRow | undefined {
+    if (!route || sequence == null) return undefined;
+    return this.asRows(route.routeLegs).find((leg) => leg.sequence === sequence);
+  }
+
+  private completedLegKm(leg: ReportRow | undefined): number | null {
+    return leg?.calculationStatus === 'COMPLETE' && typeof leg.systemKm === 'number'
+      ? leg.systemKm
+      : null;
   }
 
   private asRows(value: unknown): ReportRow[] {
@@ -400,6 +470,7 @@ export class ReportHistory implements OnInit {
       IN_DELIVERY: '配送中',
       COMPLETED: '已完成',
       CANCELLED: '已取消',
+      NO_SIGNATURE: '無人簽收',
       FAILED: '配送失敗',
     }[status];
   }
@@ -408,6 +479,10 @@ export class ReportHistory implements OnInit {
   private selectedStoreLabel(): string { return this.stores().find((store) => store.id === this.storeId())?.name ?? '全部門市'; }
   private selectedDriverLabel(): string { return this.drivers().find((driver) => driver.id === this.driverId())?.name ?? '全部司機'; }
   private selectedVehicleLabel(): string { return this.vehicles().find((vehicle) => vehicle.id === this.vehicleId())?.plateNumber ?? '全部車輛'; }
+
+  private isPreviewSheet(value: string | null): value is PreviewSheet {
+    return value !== null && SHEETS.some((sheet) => sheet.id === value);
+  }
   private queryNumber(value: string | null): number | null { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : null; }
   private today(): string { return new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Taipei'}).format(new Date()); }
 }

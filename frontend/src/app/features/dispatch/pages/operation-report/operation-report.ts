@@ -16,6 +16,15 @@ interface ChartBucket {
   to: string;
 }
 
+interface ExceptionChartItem {
+  orderId: number | null;
+  orderNumber: string;
+  status: OrderDto['status'];
+  boxCount: number;
+  height: number;
+  date: string;
+}
+
 interface AreaPerformance {
   area: string;
   completed: number;
@@ -88,6 +97,7 @@ export class OperationReport implements OnInit {
       { status: 'COMPLETED', label: '已完成', detail: '正常簽收結案', tone: 'complete' },
       { status: 'IN_DELIVERY', label: '配送中', detail: '目前正在配送', tone: 'followup' },
       { status: 'FAILED', label: '配送失敗', detail: '需要異常處理', tone: 'exception' },
+      { status: 'NO_SIGNATURE', label: '無人簽收', detail: '需聯繫門市或安排重送', tone: 'exception' },
       { status: 'CONFIRMED', label: '待排車', detail: '等待調度安排', tone: 'pending' },
     ];
 
@@ -97,8 +107,10 @@ export class OperationReport implements OnInit {
     }));
   });
 
-  readonly failedOrders = computed(() => this.ordersInPeriod().filter((order) => order.status === 'FAILED'));
-  readonly failedChartData = computed(() => this.buildChartData(this.failedOrders()));
+  readonly exceptionOrders = computed(() =>
+    this.ordersInPeriod().filter((order) => order.status === 'FAILED' || order.status === 'NO_SIGNATURE'),
+  );
+  readonly exceptionChartData = computed(() => this.buildExceptionChartData(this.exceptionOrders()));
 
   ngOnInit(): void {
     this.loadReport();
@@ -125,6 +137,21 @@ export class OperationReport implements OnInit {
     }
 
     void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to}});
+  }
+
+  protected openExceptionDetail(item: ExceptionChartItem): void {
+    void this.router.navigate(['/dispatch/history'], {
+      queryParams: {
+        from: item.date,
+        to: item.date,
+        orderId: item.orderId,
+        sheet: 'exceptions',
+      },
+    });
+  }
+
+  protected exceptionStatusLabel(status: OrderDto['status']): string {
+    return status === 'NO_SIGNATURE' ? '無人簽收' : '配送失敗';
   }
 
   protected chartHeading(): string {
@@ -214,6 +241,20 @@ export class OperationReport implements OnInit {
       from: this.toDateString(bucket.from),
       to: this.toDateString(bucket.to),
     }));
+  }
+
+  private buildExceptionChartData(orders: OrderDto[]): ExceptionChartItem[] {
+    const maxBoxes = Math.max(...orders.map((order) => order.boxCount), 1);
+    return [...orders]
+      .sort((left, right) => left.deliveryDate.localeCompare(right.deliveryDate) || left.orderNumber.localeCompare(right.orderNumber))
+      .map((order) => ({
+        orderId: order.id ?? null,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        boxCount: order.boxCount,
+        height: (order.boxCount / maxBoxes) * 100,
+        date: order.deliveryDate,
+      }));
   }
 
   private buildAreas(orders: OrderDto[], stores: StoreDto[]): AreaPerformance[] {

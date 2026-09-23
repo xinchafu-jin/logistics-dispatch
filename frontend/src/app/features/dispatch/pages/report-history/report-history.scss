@@ -33,7 +33,8 @@
 .table-row > span { padding: 9px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .table-head { min-height: 36px; color: var(--subtle); background: rgb(99 209 198 / 6%); font-size: .6875rem; font-weight: 700; }
 .wide-table .table-row { display: grid; grid-template-columns: 130px repeat(4, minmax(100px, 1fr)); }
-.order-table .table-row { display: grid; grid-template-columns: 120px 170px 70px 180px repeat(4, 100px); }
+.order-table .table-row { display: grid; grid-template-columns: 120px 170px 70px 180px 80px 100px 110px 110px 220px 280px 110px 150px; }
+.order-table .mileage-status { color: var(--accent); font-weight: 700; }
 .route-table .table-row { display: grid; grid-template-columns: 110px 80px 130px 110px repeat(5, 100px); }
 .attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 90px repeat(5, 150px); }
 .vehicle-table .table-row, .warehouse-table .table-row, .store-table .table-row { display: grid; grid-template-columns: 160px repeat(8, 110px); }
@@ -44,9 +45,15 @@
 .exception-table .table-row { display: grid; grid-template-columns: 155px 120px 160px 90px 80px 220px 220px 110px; }
 .exception-summary { gap: 22px; margin-bottom: 14px; color: var(--muted); font-size: .8125rem; }
 .exception-summary span { padding-left: 10px; border-left: 2px solid var(--accent); }
-.driver-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.driver-summary article { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 11px; color: var(--muted); font-size: .6875rem; }
-.driver-summary strong { grid-column: 1 / -1; color: var(--text); font-size: .8125rem; }
+.focused-exception { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(0, 1.2fr) auto; align-items: start; gap: 16px; margin: 0 0 14px; padding: 16px; border: 1px solid rgb(232 187 105 / 38%); border-left: 3px solid #e8bb69; border-radius: 6px; background: rgb(232 187 105 / 6%); }
+.focused-exception p { margin: 0; color: var(--subtle); font-size: .6875rem; }
+.focused-exception strong { display: block; margin-top: 6px; color: var(--text); font-size: .875rem; }
+.focused-exception dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.focused-exception dt { color: var(--subtle); font-size: .625rem; }
+.focused-exception dd { margin: 4px 0 0; color: var(--field-label); font-size: .75rem; }
+.focused-exception-reason { grid-column: 1 / -1; color: var(--muted) !important; line-height: 1.55; }
+.focused-exception button { align-self: center; padding: 8px 10px; color: var(--field-label); background: transparent; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font: inherit; font-size: .6875rem; white-space: nowrap; }
+.focused-exception button:hover, .focused-exception button:focus-visible { border-color: var(--accent); color: var(--text); outline: none; }
 .notes-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .notes-list article { display: grid; gap: 7px; min-height: 100px; border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
 .notes-list strong { color: var(--text); }
