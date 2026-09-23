@@ -131,6 +131,66 @@ input {
   border-color: var(--accent);
 }
 
+// Leaflet 會在 Angular 元件之外建立司機點與提示框，所以地圖動態樣式必須放全域。
+.map-driver-marker {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: rgb(10 28 26 / 94%);
+  border: 2px solid #7ee787;
+  border-radius: 50%;
+  box-shadow: 0 0 0 5px rgb(126 231 135 / 12%), 0 0 18px rgb(126 231 135 / 58%);
+  animation: map-driver-pulse 1.8s ease-out infinite;
+}
+
+.map-driver-marker i {
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 10px solid #e9fff0;
+  transform: rotate(calc(var(--driver-heading) - 90deg));
+  transform-origin: center;
+}
+
+.driver-map-tooltip.leaflet-tooltip {
+  max-width: 240px;
+  margin-bottom: 8px;
+  padding: 0;
+  color: #dce8e4;
+  background: rgb(9 16 15 / 96%);
+  border: 1px solid rgb(126 231 135 / 40%);
+  border-radius: 6px;
+  box-shadow: 0 14px 28px rgb(0 0 0 / 38%);
+}
+
+.driver-map-tooltip.leaflet-tooltip::before { border-top-color: rgb(126 231 135 / 40%); }
+
+.driver-map-tooltip__content { display: grid; gap: 5px; padding: 10px 12px; }
+.driver-map-tooltip__content strong { color: #f4fff7; font-size: 0.8125rem; }
+.driver-map-tooltip__content span { color: #7ee787; font-size: 0.75rem; font-weight: 700; }
+.driver-map-tooltip__content small { color: #b7c8c2; font-size: 0.6875rem; line-height: 1.35; }
+
+.route-flow-line {
+  stroke-dasharray: 10 12;
+  animation: route-flow 1.35s linear infinite;
+  stroke-linecap: round;
+}
+
+@keyframes map-driver-pulse {
+  0%, 100% { box-shadow: 0 0 0 5px rgb(126 231 135 / 12%), 0 0 18px rgb(126 231 135 / 58%); }
+  50% { box-shadow: 0 0 0 9px rgb(126 231 135 / 3%), 0 0 24px rgb(126 231 135 / 82%); }
+}
+
+@keyframes route-flow { to { stroke-dashoffset: -44; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .map-driver-marker,
+  .route-flow-line { animation: none; }
+}
+
 .dispatch-layout.is-light-theme app-resource-overview {
   .summary-card,
   .resource-list-panel,
