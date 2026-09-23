@@ -13,7 +13,7 @@ import {
 } from '../../../../core/services/dispatch-api.models';
 
 type ResourceView = 'vehicles' | 'stores' | 'warehouses';
-type VehicleResourceStatus = '待派車' | '保養排程' | '已退役';
+type VehicleResourceStatus = '正常使用' | '維修中' | '已報廢';
 type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
@@ -169,6 +169,9 @@ export class ResourceOverview implements OnInit {
   readonly activeView = signal<ResourceView>('vehicles');
   readonly activeFilter = signal('all');
   readonly searchTerm = signal('');
+  readonly vehiclePlateFilter = signal('all');
+  readonly vehicleTypeFilter = signal('all');
+  readonly vehicleCapacityFilter = signal('all');
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
@@ -190,23 +193,41 @@ export class ResourceOverview implements OnInit {
   readonly deleteTarget = signal<DeleteTarget | null>(null);
   readonly isDeleting = signal(false);
 
-  readonly vehicleFilters = ['all', '待派車', '保養排程', '已退役'];
+  readonly vehicleFilters = ['all', '正常使用', '維修中', '已報廢'];
   readonly storeFilters = ['all', '營業中', '暫停營業'];
   readonly warehouseFilters = ['all', '啟用', '停用'];
 
   readonly visibleVehicles = computed<VehicleResource[]>(() => {
     const filter = this.activeFilter();
     const term = this.searchTerm().trim().toLowerCase();
+    const plate = this.vehiclePlateFilter();
+    const type = this.vehicleTypeFilter();
+    const capacity = this.vehicleCapacityFilter();
 
     return this.vehicles()
-      .map((vehicle) => this.toVehicleResource(vehicle))
       .filter((vehicle) => {
-        const matchesFilter = filter === 'all' || vehicle.status === filter;
+        const resource = this.toVehicleResource(vehicle);
+        const matchesFilter = filter === 'all' || resource.status === filter;
+        const matchesPlate = plate === 'all' || vehicle.plateNumber === plate;
+        const vehicleType = vehicle.vehicleType?.trim() || '未設定車型';
+        const matchesType = type === 'all' || vehicleType === type;
+        const matchesCapacity = capacity === 'all' || String(vehicle.capacity) === capacity;
         const source =
-          `${vehicle.id} ${vehicle.type} ${vehicle.driver} ${vehicle.assignment}`.toLowerCase();
-        return matchesFilter && (!term || source.includes(term));
-      });
+          `${vehicle.plateNumber} ${vehicleType} ${resource.driver} ${resource.assignment}`.toLowerCase();
+        return matchesFilter && matchesPlate && matchesType && matchesCapacity && (!term || source.includes(term));
+      })
+      .map((vehicle) => this.toVehicleResource(vehicle));
   });
+
+  readonly vehiclePlateOptions = computed(() =>
+    [...new Set(this.vehicles().map((vehicle) => vehicle.plateNumber).filter(Boolean))].sort(),
+  );
+  readonly vehicleTypeOptions = computed(() =>
+    [...new Set(this.vehicles().map((vehicle) => vehicle.vehicleType?.trim() || '未設定車型'))].sort(),
+  );
+  readonly vehicleCapacityOptions = computed(() =>
+    [...new Set(this.vehicles().map((vehicle) => vehicle.capacity))].sort((left, right) => left - right),
+  );
 
   readonly visibleStores = computed<StoreResource[]>(() => {
     const filter = this.activeFilter();
@@ -271,6 +292,27 @@ export class ResourceOverview implements OnInit {
     this.activeView.set(view);
     this.activeFilter.set('all');
     this.searchTerm.set('');
+    this.resetVehicleQuery();
+  }
+
+  updateVehicleQuery(
+    filter: 'plate' | 'type' | 'capacity',
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLSelectElement).value;
+    if (filter === 'plate') {
+      this.vehiclePlateFilter.set(value);
+    } else if (filter === 'type') {
+      this.vehicleTypeFilter.set(value);
+    } else {
+      this.vehicleCapacityFilter.set(value);
+    }
+  }
+
+  resetVehicleQuery(): void {
+    this.vehiclePlateFilter.set('all');
+    this.vehicleTypeFilter.set('all');
+    this.vehicleCapacityFilter.set('all');
   }
 
   openCreateAdmin(): void {
@@ -803,12 +845,12 @@ export class ResourceOverview implements OnInit {
 
   private toVehicleStatus(status: VehicleDto['status']): VehicleResourceStatus {
     if (status === 'MAINTENANCE') {
-      return '保養排程';
+      return '維修中';
     }
     if (status === 'RETIRED') {
-      return '已退役';
+      return '已報廢';
     }
-    return '待派車';
+    return '正常使用';
   }
 
   private formatTime(value: string): string {

@@ -482,12 +482,14 @@ export class DispatchDashboard implements OnInit {
         const order = activeOrdersByDriver.get(ping.driverId)!;
         const route = routeByDriver.get(ping.driverId);
         const metrics = route ? metricsByRoute.get(route.routeId) : undefined;
+        const nextStore = storesById.get(order.storeId);
         const details = [
-          `訂單 ${order.orderNumber}`,
+          `目前任務 ${nextStore?.name ?? `門市 #${order.storeId}`} · 訂單 ${order.orderNumber}`,
+          `配送狀態 ${this.orderStatusLabel(order.status)}`,
           `預估抵達 ${this.formatEstimatedArrival(metrics?.estimatedNextArrivalAt)}`,
           `預估里程 ${this.formatKm(metrics?.remainingKm)}`,
           `預估油耗 ${this.formatFuel(metrics?.gpsEstimatedFuelLiters)}`,
-          `${storesById.get(order.storeId)?.name ?? `門市 #${order.storeId}`} · ${minutesAgo(ping.timestamp)} 分鐘前回報`,
+          `${minutesAgo(ping.timestamp)} 分鐘前回報 GPS`,
         ];
         return {
           id: ping.driverId,
@@ -496,6 +498,9 @@ export class DispatchDashboard implements OnInit {
           details,
           lat: ping.lat,
           lng: ping.lng,
+          heading: nextStore?.lat != null && nextStore.lng != null
+            ? this.directionTo(ping.lat, ping.lng, nextStore.lat, nextStore.lng)
+            : undefined,
         };
       });
   });
@@ -684,6 +689,17 @@ export class DispatchDashboard implements OnInit {
 
   taskboardRemainingKm(route: BoardRoute): string {
     return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
+  private directionTo(fromLat: number, fromLng: number, toLat: number, toLng: number): number {
+    const radians = (value: number) => value * Math.PI / 180;
+    const longitudeDifference = radians(toLng - fromLng);
+    const fromLatitude = radians(fromLat);
+    const toLatitude = radians(toLat);
+    const y = Math.sin(longitudeDifference) * Math.cos(toLatitude);
+    const x = Math.cos(fromLatitude) * Math.sin(toLatitude)
+      - Math.sin(fromLatitude) * Math.cos(toLatitude) * Math.cos(longitudeDifference);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
   }
 
   private orderStatusLabel(status: OrderStatus): string {
@@ -968,6 +984,7 @@ export class DispatchDashboard implements OnInit {
     if (this.activeTemplateId() === templateId) {
       return;
     }
+
     this.activeTemplateId.set(templateId);
     this.applyActiveTemplate();
   }
@@ -1385,4 +1402,5 @@ export class DispatchDashboard implements OnInit {
   private formatFuel(value: number | null | undefined): string {
     return value == null ? '資料同步中' : `${value.toFixed(1)} L`;
   }
+
 }

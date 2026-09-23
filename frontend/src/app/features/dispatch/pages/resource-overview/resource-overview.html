@@ -105,12 +105,53 @@
           <span class="sr-only">搜尋人員或車輛</span>
           <input
             type="search"
-            placeholder="搜尋姓名、車號或店家"
+            [placeholder]="activeView() === 'vehicles' ? '搜尋車牌或車型' : '搜尋姓名或店家'"
             [value]="searchTerm()"
             (input)="updateSearch($event)"
           />
         </label>
       </div>
+
+      @if (activeView() === 'vehicles') {
+        <div class="vehicle-query-controls" aria-label="車輛查詢條件">
+          <label>
+            <span>特定車牌</span>
+            <select [value]="vehiclePlateFilter()" (change)="updateVehicleQuery('plate', $event)">
+              <option value="all">全部車輛</option>
+              @for (plate of vehiclePlateOptions(); track plate) {
+                <option [value]="plate">{{ plate }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>車型或噸位</span>
+            <select [value]="vehicleTypeFilter()" (change)="updateVehicleQuery('type', $event)">
+              <option value="all">全部車型</option>
+              @for (type of vehicleTypeOptions(); track type) {
+                <option [value]="type">{{ type }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>裝載容量</span>
+            <select [value]="vehicleCapacityFilter()" (change)="updateVehicleQuery('capacity', $event)">
+              <option value="all">全部容量</option>
+              @for (capacity of vehicleCapacityOptions(); track capacity) {
+                <option [value]="capacity">{{ capacity }} 箱</option>
+              }
+            </select>
+          </label>
+          <button
+            type="button"
+            class="clear-vehicle-query"
+            title="清除車輛查詢條件"
+            aria-label="清除車輛查詢條件"
+            (click)="resetVehicleQuery()"
+          >
+            <mat-icon aria-hidden="true">restart_alt</mat-icon>
+          </button>
+        </div>
+      }
 
       @if (loading()) {
         <p class="empty-state">正在載入資源資料...</p>
@@ -132,7 +173,7 @@
                 <span class="vehicle-badge"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
                 <div>
                   <strong>{{ vehicle.id }}</strong>
-                  <span>{{ vehicle.type }} · {{ vehicle.capacity }}</span>
+                <span>{{ vehicle.type }} · {{ vehicle.capacity }}</span>
                 </div>
               </div>
               <span class="status-badge" [class]="'status-' + vehicle.status">{{
@@ -527,7 +568,7 @@
                 />
               </label>
               <label class="form-field">
-                <span>車型</span>
+                <span>車型或噸位</span>
                 <input
                   type="text"
                   [value]="vehicleForm().vehicleType"

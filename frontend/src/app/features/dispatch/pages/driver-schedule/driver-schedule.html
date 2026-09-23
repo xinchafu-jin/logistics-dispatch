@@ -13,12 +13,18 @@
         (click)="moveMonth(-1)"
         title="上一個月"
         aria-label="上一個月"
+        [disabled]="saving() || pendingShiftCount() > 0"
       >
         <mat-icon aria-hidden="true">chevron_left</mat-icon>
       </button>
       <label>
         <span>班表月份</span>
-        <input type="month" [value]="selectedMonth()" (change)="selectMonth($event)" />
+        <input
+          type="month"
+          [value]="selectedMonth()"
+          (change)="selectMonth($event)"
+          [disabled]="saving() || pendingShiftCount() > 0"
+        />
       </label>
       <button
         type="button"
@@ -26,6 +32,7 @@
         (click)="moveMonth(1)"
         title="下一個月"
         aria-label="下一個月"
+        [disabled]="saving() || pendingShiftCount() > 0"
       >
         <mat-icon aria-hidden="true">chevron_right</mat-icon>
       </button>
@@ -35,7 +42,7 @@
         (click)="refresh()"
         title="重新整理"
         aria-label="重新整理"
-        [disabled]="saving()"
+        [disabled]="saving() || pendingShiftCount() > 0"
       >
         <mat-icon aria-hidden="true">refresh</mat-icon>
       </button>
@@ -52,7 +59,6 @@
       <mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}
     </p>
   }
-
   @if (loading()) {
     <section class="empty-state" aria-live="polite">
       <mat-icon aria-hidden="true">pending_actions</mat-icon>
@@ -73,7 +79,7 @@
   } @else if (scheduleMonth(); as month) {
     <section class="schedule-summary" aria-label="班表摘要">
       <div class="schedule-status" [class.is-published]="isPublished()">
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
+        <mat-icon class="status-icon" aria-hidden="true">{{ isPublished() ? 'task_alt' : 'edit_calendar' }}</mat-icon>
         <div>
           <span>發布狀態</span>
           <strong>{{ scheduleStatusLabel() }}</strong>
@@ -104,7 +110,7 @@
           (click)="syncDrivers()"
           [disabled]="!isDraft() || saving()"
         >
-          <mat-icon aria-hidden="true">person</mat-icon>
+          <mat-icon aria-hidden="true">group_add</mat-icon>
           同步新司機
         </button>
         <button
@@ -113,7 +119,7 @@
           (click)="publishMonth()"
           [disabled]="!isDraft() || saving()"
         >
-          <mat-icon aria-hidden="true">send</mat-icon>
+          <mat-icon aria-hidden="true">publish</mat-icon>
           發布班表
         </button>
       </div>
@@ -226,6 +232,26 @@
             >
               週一至五上班、週六日休假
             </button>
+            @if (pendingShiftCount() > 0) {
+              <span class="pending-change-count">尚未儲存 {{ pendingShiftCount() }} 個班次</span>
+              <button
+                type="button"
+                class="secondary-action"
+                (click)="discardPendingChanges()"
+                [disabled]="saving()"
+              >
+                捨棄變更
+              </button>
+              <button
+                type="button"
+                class="primary-action"
+                (click)="savePendingChanges()"
+                [disabled]="saving()"
+              >
+                <mat-icon aria-hidden="true">save</mat-icon>
+                儲存本次變更
+              </button>
+            }
           </div>
         </div>
       </section>
@@ -278,10 +304,12 @@
                           [class.is-day-off]="shift.shiftType === 'DAY_OFF'"
                           [class.is-leave]="shift.shiftType === 'LEAVE'"
                           [class.is-unassigned]="shift.shiftType === 'UNASSIGNED'"
+                          [class.has-pending-change]="isPending(shift)"
+                          [attr.aria-pressed]="isSelected(shift)"
                           [title]="shiftLabel(shift.shiftType) + '：' + shift.changeReason"
                           (click)="selectShift(shift)"
                         >
-                          {{ shiftLabel(shift.shiftType) }}
+                          <mat-icon aria-hidden="true">{{ shiftIcon(shift.shiftType) }}</mat-icon>
                         </button>
                       } @else {
                         <span class="missing-shift">--</span>
@@ -307,8 +335,8 @@
             <header>
               <div>
                 <p class="page-eyebrow">班次設定</p>
-                <h3>{{ selectedDriver()?.name ?? '司機 #' + shift.driverId }}</h3>
-                <span>{{ shift.workDate }}</span>
+                <h3>{{ selectedShiftCount() > 1 ? '已選 ' + selectedShiftCount() + ' 個班次' : selectedDriver()?.name ?? '司機 #' + shift.driverId }}</h3>
+                <span>{{ selectedShiftCount() > 1 ? '可一次套用相同班別設定' : shift.workDate }}</span>
               </div>
               <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
             </header>
@@ -386,12 +414,12 @@
                 />
               </label>
 
-              @if (form.shiftType === 'LEAVE') {
+              @if (form.shiftType === 'LEAVE' && isPublished()) {
                 <button
                   type="button"
                   class="leave-action"
                   (click)="markLeave()"
-                  [disabled]="!canMarkLeave() || saving()"
+                  [disabled]="selectedShiftCount() !== 1 || !canMarkLeave() || saving()"
                 >
                   <mat-icon aria-hidden="true">pending_actions</mat-icon>
                   登記請假
@@ -400,11 +428,11 @@
                 <button
                   type="button"
                   class="primary-action save-action"
-                  (click)="saveShift()"
+                  (click)="stageSelectedShifts()"
                   [disabled]="!isDraft() || saving()"
                 >
-                  <mat-icon aria-hidden="true">save</mat-icon>
-                  儲存班次
+                  <mat-icon aria-hidden="true">edit_calendar</mat-icon>
+                  套用至已選 {{ selectedShiftCount() }} 個班次
                 </button>
               }
             </div>
@@ -423,8 +451,8 @@
         } @else {
           <div class="editor-placeholder">
             <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h3>選擇一個班次</h3>
-            <p>點選左側表格中的班次，即可安排上班、休假或請假。</p>
+            <h3>選擇班次</h3>
+            <p>可點選多個日期，再從右側一次套用班別設定。</p>
           </div>
         }
       </aside>

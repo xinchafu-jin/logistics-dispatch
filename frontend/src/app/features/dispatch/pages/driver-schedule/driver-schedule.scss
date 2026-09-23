@@ -55,6 +55,7 @@
 
 .month-controls {
   flex: 0 0 auto;
+  align-items: flex-end;
   gap: 8px;
 }
 
@@ -123,8 +124,11 @@
 .schedule-status mat-icon,
 .empty-state > mat-icon,
 .editor-placeholder mat-icon {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  font-size: 18px;
+  line-height: 18px;
 }
 
 .icon-button:hover:not(:disabled) {
@@ -251,7 +255,15 @@ select:disabled {
 }
 
 .schedule-status mat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   color: #f0c07a;
+  font-size: 28px;
+  line-height: 28px;
 }
 
 .schedule-status.is-published mat-icon {
@@ -496,6 +508,12 @@ select:disabled {
   min-height: 34px;
 }
 
+.pending-change-count {
+  flex: 0 1 auto !important;
+  color: #f0c07a !important;
+  font-weight: 700;
+}
+
 .schedule-workspace {
   align-items: start;
   gap: 20px;
@@ -616,6 +634,10 @@ thead th.is-weekend {
 }
 
 .shift-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   height: 100%;
   min-height: 53px;
@@ -630,6 +652,13 @@ thead th.is-weekend {
   font-weight: 700;
 }
 
+.shift-cell mat-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+  line-height: 22px;
+}
+
 .shift-cell:hover,
 .shift-cell:focus-visible {
   background: rgb(99 209 198 / 8%);
@@ -640,6 +669,18 @@ thead th.is-weekend {
   color: var(--text);
   background: rgb(99 209 198 / 14%);
   border-left-color: var(--accent);
+}
+
+.shift-cell.has-pending-change::after {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f0c07a;
+  box-shadow: 0 0 7px rgb(240 192 122 / 62%);
+  content: '';
 }
 
 .shift-cell.is-work { color: #9ee3cf; }

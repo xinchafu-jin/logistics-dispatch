@@ -132,9 +132,10 @@
               type="button"
               class="chart-column"
               [attr.aria-label]="item.label + ' ' + item.count + ' 筆訂單，點選查看明細'"
+              [attr.title]="item.date + ' 配送量 ' + item.count + ' 筆'"
               (click)="drillInto(item)"
             >
-              <span class="chart-value">{{ item.count }}</span>
+              <span class="chart-value">{{ item.count }} 筆</span>
               <span class="chart-bar-wrap">
                 <span class="chart-bar" [style.height.%]="item.height"></span>
               </span>
@@ -213,26 +214,35 @@
       <header class="panel-header">
         <div>
           <p class="section-eyebrow">異常追蹤</p>
-          <h3 id="exception-source-title">配送失敗訂單</h3>
+          <h3 id="exception-source-title">配送失敗狀況</h3>
         </div>
+        <span>{{ failedOrders().length }} 筆</span>
       </header>
 
-      <div class="source-table">
-        <div class="source-table-head" aria-hidden="true">
-          <span>訂單</span>
-          <span>配送日期</span>
-          <span>狀態</span>
+      @if (failedOrders().length) {
+        <div class="exception-chart" [style.--exception-chart-columns]="failedChartData().length">
+          @for (item of failedChartData(); track item.from) {
+            <button
+              type="button"
+              class="exception-chart-column"
+              [attr.aria-label]="item.label + ' ' + item.count + ' 筆配送失敗訂單，點選查看明細'"
+              (click)="drillInto(item)"
+            >
+              <span>{{ item.count }}</span>
+              <i><b [style.height.%]="item.height"></b></i>
+              <strong>{{ item.label }}</strong>
+              <small>{{ item.date }}</small>
+            </button>
+          }
         </div>
-        @for (order of failedOrders(); track order.id ?? order.orderNumber) {
-          <div class="source-table-row">
-            <span>{{ order.orderNumber }}</span>
-            <strong>{{ order.deliveryDate }}</strong>
-            <span class="source-status tone-warning">配送失敗</span>
-          </div>
-        } @empty {
-          <p class="empty-state">這個期間沒有配送失敗訂單。</p>
-        }
-      </div>
+        <p class="exception-chart-note"><mat-icon aria-hidden="true">bar_chart</mat-icon>{{ chartFootnote() }}</p>
+      } @else {
+        <div class="exception-healthy-state">
+          <span class="exception-healthy-icon"><mat-icon aria-hidden="true">verified</mat-icon></span>
+          <strong>目前沒有配送失敗訂單</strong>
+          <p>這個期間配送狀況正常</p>
+        </div>
+      }
     </section>
   </section>
 </main>

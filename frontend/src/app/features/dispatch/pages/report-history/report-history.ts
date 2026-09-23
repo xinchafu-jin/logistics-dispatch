@@ -3,7 +3,7 @@ import {ActivatedRoute, Router} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, StoreDto, WarehouseDto} from '../../../../core/services/dispatch-api.models';
+import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, StoreDto, VehicleDto, WarehouseDto} from '../../../../core/services/dispatch-api.models';
 
 type PreviewSheet = 'overview' | 'orders' | 'routes' | 'attendance' | 'vehicles' | 'warehouses' | 'stores' | 'exceptions' | 'notes';
 interface ReportRow {
@@ -107,9 +107,11 @@ export class ReportHistory implements OnInit {
   readonly warehouseId = signal<number | null>(null);
   readonly storeId = signal<number | null>(null);
   readonly driverId = signal<number | null>(null);
+  readonly vehicleId = signal<number | null>(null);
   readonly warehouses = signal<WarehouseDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly drivers = signal<DriverDto[]>([]);
+  readonly vehicles = signal<VehicleDto[]>([]);
   readonly preview = signal<ReportPreview | null>(null);
   readonly selectedSheet = signal<PreviewSheet>('overview');
   readonly loading = signal(false);
@@ -120,6 +122,7 @@ export class ReportHistory implements OnInit {
     const query = this.route.snapshot.queryParamMap;
     this.from.set(query.get('from') ?? this.from());
     this.to.set(query.get('to') ?? this.to());
+    this.vehicleId.set(this.queryNumber(query.get('vehicleId')));
     this.loadFilterOptions();
     this.createPreview();
   }
@@ -130,12 +133,13 @@ export class ReportHistory implements OnInit {
     else this.to.set(value);
   }
 
-  protected updateFilter(kind: 'warehouse' | 'store' | 'driver', event: Event): void {
+  protected updateFilter(kind: 'warehouse' | 'store' | 'driver' | 'vehicle', event: Event): void {
     const raw = (event.target as HTMLSelectElement).value;
     const value = raw ? Number(raw) : null;
     if (kind === 'warehouse') this.warehouseId.set(value);
     if (kind === 'store') this.storeId.set(value);
     if (kind === 'driver') this.driverId.set(value);
+    if (kind === 'vehicle') this.vehicleId.set(value);
   }
 
   protected selectSheet(sheet: PreviewSheet): void {
@@ -148,7 +152,11 @@ export class ReportHistory implements OnInit {
     this.loading.set(true);
     this.errorMessage.set('');
     const query = this.reportQuery();
-    void this.router.navigate([], {relativeTo: this.route, queryParams: {from: this.from(), to: this.to()}, queryParamsHandling: 'merge'});
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {from: this.from(), to: this.to(), vehicleId: this.vehicleId() ?? null},
+      queryParamsHandling: 'merge',
+    });
     forkJoin({
       summary: this.api.getReportSummary(query),
       attendance: this.api.getReportAttendance(query),
@@ -188,6 +196,7 @@ export class ReportHistory implements OnInit {
         ['倉庫', this.selectedWarehouseLabel()],
         ['門市', this.selectedStoreLabel()],
         ['司機', this.selectedDriverLabel()],
+        ['車輛', this.selectedVehicleLabel()],
         ['匯出時間', new Intl.DateTimeFormat('zh-TW', {dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Taipei'}).format(new Date())],
       ]);
       this.appendSheet(xlsx, workbook, '營運總覽', this.overviewExportRows(preview.summary));
@@ -264,16 +273,45 @@ export class ReportHistory implements OnInit {
     return typeof value === 'number' ? `${value.toFixed(1)}%` : '--';
   }
 
+  protected mileageStatusLabel(value: unknown): string {
+    if (value === null || value === undefined || value === '') return '--';
+
+    return {
+      COMPLETE: '里程已完成',
+      COMPLETE_ROUTE_HANDOVER_SUMMED: '交接里程已完成',
+      GPS_DISTANCE_CALCULATION_FAILED: 'GPS 里程計算失敗',
+      INCOMPLETE_GPS_MILEAGE: 'GPS 里程尚未完成',
+      INCOMPLETE_HANDOVER_MILEAGE_SEGMENT: '交接里程尚未完成',
+      INCOMPLETE_MILEAGE_LOG: '里程紀錄尚未完成',
+      IN_PROGRESS: '行車中',
+      IN_PROGRESS_ROUTE_HANDOVER_SUMMED: '交接行車中',
+      INVALID_GPS_DISTANCE: 'GPS 里程資料異常',
+      MISSING_ROUTE_OR_VEHICLE: '缺少路線或車輛資料',
+      MISSING_TRIP_BOUNDARY: '缺少出發或結束時間',
+      MULTIPLE_MILEAGE_LOGS: '同日有多筆里程紀錄',
+      MULTIPLE_MILEAGE_LOGS_FOR_DRIVER_DAY: '同日有多筆里程紀錄',
+      MULTIPLE_ROUTES_FOR_DRIVER_DAY: '同日有多條路線',
+      NO_DRIVER: '尚未指派司機',
+      NO_GPS_DISTANCE: '尚未取得 GPS 里程',
+      NO_MILEAGE_LOG: '尚無里程紀錄',
+      READY_INFERRED_DRIVER_DATE: 'GPS 里程已完成',
+      READY_ROUTE_HANDOVER_SUMMED: '交接里程已完成',
+      READY_ROUTE_LINKED_GPS: 'GPS 里程已完成',
+      READY_ROUTE_SEGMENT: 'GPS 里程已完成',
+    }[String(value)] ?? '里程資料待確認';
+  }
+
   protected sheetTitle(): string {
     return this.sheets.find((sheet) => sheet.id === this.selectedSheet())?.label ?? '';
   }
 
   private loadFilterOptions(): void {
-    forkJoin({warehouses: this.api.getWarehouses(), stores: this.api.getStores(), drivers: this.api.getDrivers()}).subscribe({
-      next: ({warehouses, stores, drivers}) => {
+    forkJoin({warehouses: this.api.getWarehouses(), stores: this.api.getStores(), drivers: this.api.getDrivers(), vehicles: this.api.getVehicles()}).subscribe({
+      next: ({warehouses, stores, drivers, vehicles}) => {
         this.warehouses.set(warehouses);
         this.stores.set(stores);
         this.drivers.set(drivers);
+        this.vehicles.set(vehicles);
       },
     });
   }
@@ -292,6 +330,7 @@ export class ReportHistory implements OnInit {
       warehouseId: this.warehouseId() ?? undefined,
       storeId: this.storeId() ?? undefined,
       driverId: this.driverId() ?? undefined,
+      vehicleId: this.vehicleId() ?? undefined,
     };
   }
 
@@ -318,7 +357,7 @@ export class ReportHistory implements OnInit {
   }
 
   private routeExportRows(preview: ReportPreview): unknown[][] {
-    return [['日期', '路線', '倉庫', '司機', '車牌', '門市數', '訂單數', '箱數', '裝載率', '預估公里', '實際公里', '里程差異', '預估油費', '里程狀態'], ...this.rows(preview.routes, 'routes').map((row) => [row.date, row.routeId, row.warehouseName, row.driverName, row.plateNumber, row.distinctStores, row.orders, row.boxes, this.percent(row.plannedLoadRatePercent), row.plannedKm, row.actualKm, row.differenceKm, row.plannedFuelCost, row.mileageComparisonStatus])];
+    return [['日期', '路線', '倉庫', '司機', '車牌', '門市數', '訂單數', '箱數', '裝載率', '預估公里', '實際公里', '里程差異', '預估油費', '里程狀態'], ...this.rows(preview.routes, 'routes').map((row) => [row.date, row.routeId, row.warehouseName, row.driverName, row.plateNumber, row.distinctStores, row.orders, row.boxes, this.percent(row.plannedLoadRatePercent), row.plannedKm, row.actualKm, row.differenceKm, row.plannedFuelCost, this.mileageStatusLabel(row.mileageComparisonStatus)])];
   }
 
   private attendanceExportRows(preview: ReportPreview): unknown[][] {
@@ -333,7 +372,7 @@ export class ReportHistory implements OnInit {
   }
 
   private vehicleExportRows(preview: ReportPreview): unknown[][] {
-    return [['車牌', '倉庫', '出車路線', '已發布路線', '訂單數', '箱數', '門市數', '平均裝載率', '預估公里', '實際公里', '里程狀態'], ...this.rows(preview.vehicles, 'vehicles').map((row) => [row.plateNumber, row.warehouseId, row.assignedRoutes, row.publishedRoutes, row.orders, row.boxes, row.distinctStores, this.percent(row.averageLoadRatePercent), row.publishedPlannedKm, row.actualKm, row.actualMileageStatus])];
+    return [['車牌', '倉庫', '出車路線', '已發布路線', '訂單數', '箱數', '門市數', '平均裝載率', '預估公里', '實際公里', '里程狀態'], ...this.rows(preview.vehicles, 'vehicles').map((row) => [row.plateNumber, row.warehouseId, row.assignedRoutes, row.publishedRoutes, row.orders, row.boxes, row.distinctStores, this.percent(row.averageLoadRatePercent), row.publishedPlannedKm, row.actualKm, this.mileageStatusLabel(row.actualMileageStatus)])];
   }
 
   private warehouseExportRows(preview: ReportPreview): unknown[][] {
@@ -368,5 +407,7 @@ export class ReportHistory implements OnInit {
   private selectedWarehouseLabel(): string { return this.warehouses().find((warehouse) => warehouse.id === this.warehouseId())?.name ?? '全部倉庫'; }
   private selectedStoreLabel(): string { return this.stores().find((store) => store.id === this.storeId())?.name ?? '全部門市'; }
   private selectedDriverLabel(): string { return this.drivers().find((driver) => driver.id === this.driverId())?.name ?? '全部司機'; }
+  private selectedVehicleLabel(): string { return this.vehicles().find((vehicle) => vehicle.id === this.vehicleId())?.plateNumber ?? '全部車輛'; }
+  private queryNumber(value: string | null): number | null { const parsed = Number(value); return Number.isInteger(parsed) && parsed > 0 ? parsed : null; }
   private today(): string { return new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Taipei'}).format(new Date()); }
 }
