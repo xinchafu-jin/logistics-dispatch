@@ -16,7 +16,7 @@ public class TemplateRoutesEntity {
     @Column(nullable = false)
     private Long warehouseId;
 
-    @Column(nullable = false)
+    // 選填：只排人、還沒決定車的格子是 null（V4）
     private Long vehicleId;
 
     // 預設司機，套用編組時帶入；null 表示這條線沒有固定司機

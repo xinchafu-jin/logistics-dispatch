@@ -54,7 +54,6 @@
 }
 
 .fleet-map-header,
-.fleet-map-notice,
 .fleet-map-attribution {
   position: absolute;
   z-index: 2;
@@ -112,22 +111,6 @@
   font-size: 0.6875rem;
   white-space: nowrap;
   backdrop-filter: blur(8px);
-}
-
-.fleet-map-notice {
-  right: 18px;
-  bottom: 16px;
-  left: 18px;
-  margin: 0;
-  padding: 9px 12px;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.5;
-  text-align: center;
-  background: rgb(8 12 13 / 78%);
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 5px;
-  backdrop-filter: blur(14px);
 }
 
 .fleet-map-attribution {

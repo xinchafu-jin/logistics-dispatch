@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -37,6 +38,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse> handleValidationException(MethodArgumentNotValidException e) {
         String defaultMessage = e.getBindingResult().getFieldError().getDefaultMessage();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiResponse.failure(defaultMessage));
+    }
+
+    /**
+     * 處理找不到檔案或路徑，例如大頭照檔案已不在磁碟上。
+     *
+     * <p>沒有這個方法時，這個例外會落到下面的 {@code Exception.class}，
+     * 變成 HTTP 500，看起來像伺服器壞掉。其實只是檔案不存在，應該回 404。</p>
+     *
+     * @param e Spring MVC 找不到對應資源時拋出的例外
+     * @return HTTP 404 Not Found
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse> handleNoResourceFound(NoResourceFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.failure("找不到檔案"));
     }
 
     /**

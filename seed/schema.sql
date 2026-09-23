@@ -152,7 +152,8 @@ CREATE TABLE template_routes (
   -- 車輛調倉後兩者會不一致，套用時據此擋下並提示重新設定，
   -- 不存的話那條線只會靜默消失（門市的訂單屬於舊倉，撈不到）
   warehouse_id BIGINT NOT NULL,
-  vehicle_id   BIGINT NOT NULL,
+  -- 車輛選填：只排人、還沒決定車的格子也要存得下來（V4）
+  vehicle_id   BIGINT DEFAULT NULL,
   -- 預設司機，套用編組時帶入；NULL 表示這條線沒有固定司機
   driver_id    BIGINT DEFAULT NULL,
   PRIMARY KEY (id),

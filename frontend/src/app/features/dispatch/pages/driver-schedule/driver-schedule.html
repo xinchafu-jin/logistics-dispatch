@@ -16,9 +16,21 @@
       >
         <mat-icon aria-hidden="true">chevron_left</mat-icon>
       </button>
+      <!-- Material 日期選擇器從「年」開始選、選到月份就關閉，不進到日；輸入框唯讀，點一下就開月曆 -->
       <label>
         <span>班表月份</span>
-        <input type="month" [value]="selectedMonth()" (change)="selectMonth($event)" />
+        <mat-form-field class="admin-date-field month-field" appearance="outline" subscriptSizing="dynamic">
+          <input
+            matInput
+            readonly
+            aria-label="班表月份"
+            [matDatepicker]="monthPicker"
+            [value]="selectedMonthDate()"
+            (click)="monthPicker.open()"
+          />
+          <mat-datepicker-toggle matIconSuffix [for]="monthPicker" />
+          <mat-datepicker #monthPicker startView="multi-year" (monthSelected)="selectMonth($event, monthPicker)" />
+        </mat-form-field>
       </label>
       <button
         type="button"
@@ -229,12 +241,6 @@
           </div>
         </div>
       </section>
-    }
-
-    @if (isPublished()) {
-      <p class="published-note">
-        已發布班表可處理臨時請假：選取今天或未來、尚未打卡的原定上班班次，改選「請假」並填寫原因即可登記。其他班別與工時調整目前無法在發布後修改。
-      </p>
     }
 
     <div class="schedule-workspace">

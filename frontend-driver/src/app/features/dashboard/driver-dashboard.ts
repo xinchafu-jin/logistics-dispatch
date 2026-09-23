@@ -7,14 +7,22 @@ import {
   TemplateRef,
   ViewChild,
   computed,
+  effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Router} from '@angular/router';
+import {FormsModule} from '@angular/forms';
+import {TextFieldModule} from '@angular/cdk/text-field';
+import {MatBadgeModule} from '@angular/material/badge';
 import {MatBottomSheet, MatBottomSheetModule, MatBottomSheetRef} from '@angular/material/bottom-sheet';
 import {MatButtonModule} from '@angular/material/button';
+import {MatCalendar, MatCalendarCellClassFunction, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
 import type * as maplibregl from 'maplibre-gl';
 import {Observable, of, single, switchMap} from 'rxjs';
 import {DriverAuthService} from '../../core/auth/driver-auth.service';
@@ -127,9 +135,15 @@ const RECALC_COOLDOWN_MS = 15_000;
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
+    MatBadgeModule,
     MatBottomSheetModule,
     MatButtonModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
+    TextFieldModule,
+    FormsModule,
     BrandLogo,
   ],
   templateUrl: './driver-dashboard.html',
@@ -152,11 +166,48 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly scheduleViewState = signal<ScheduleViewState>('loading');
   protected readonly scheduleError = signal<string | null>(null);
   protected readonly scheduleMonth = signal(this.monthStart(new Date()));
-  protected readonly scheduleMonthLabel = computed(() =>
-    new Intl.DateTimeFormat('zh-TW', {year: 'numeric', month: 'long'}).format(
-      this.scheduleMonth(),
-    ),
+  // 班表月曆點選的那一天，下方顯示這天的班次；預設今天
+  protected readonly selectedScheduleDate = signal(new Date());
+  // workDate（YYYY-MM-DD）→ 班次，月曆每一格、下方明細都從這裡查
+  private readonly shiftsByDate = computed(
+    () => new Map(this.publishedShifts().map((shift) => [shift.workDate, shift])),
   );
+  protected readonly selectedShift = computed(
+    () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
+  );
+  private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
+
+  /**
+   * 月曆每一格的 class：依當天班別上色（shift-work／shift-day_off／shift-leave），樣式在 styles.scss。
+   * Material 只在月曆重畫時才呼叫這個函式，所以班表載完要呼叫 updateTodaysDate() 讓它重畫。
+   */
+  protected readonly scheduleDateClass: MatCalendarCellClassFunction<Date> = (date, view) => {
+    if (view !== 'month') {
+      return '';
+    }
+    const shift = this.shiftsByDate().get(this.toIsoDate(date));
+    return shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : '';
+  };
+
+  /**
+   * 月曆標頭的上一月／下一月換月時，跟著載那個月的班表。
+   * MatCalendar 沒有「換月」的 output，只能聽它的 stateChanges（activeDate 變了就會發），自己比對月份。
+   * 月曆只在班表分頁存在，viewChild 會跟著出現、消失，所以用 effect 在它出現時訂閱、消失時退訂。
+   */
+  private readonly followScheduleCalendarMonth = effect((onCleanup) => {
+    const calendar = this.scheduleCalendar();
+    if (!calendar) {
+      return;
+    }
+    const subscription = calendar.stateChanges.subscribe(() => {
+      const month = this.monthStart(calendar.activeDate);
+      if (month.getTime() !== this.scheduleMonth().getTime()) {
+        this.scheduleMonth.set(month);
+        this.loadPublishedShifts();
+      }
+    });
+    onCleanup(() => subscription.unsubscribe());
+  });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
   protected readonly taskViewState = signal<TaskViewState>('loading');
   protected readonly taskError = signal<string | null>(null);
@@ -197,6 +248,41 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly chatMessages = signal<DriverMessageDto[]>([]);
   protected readonly chatViewState = signal<ChatViewState>('loading');
   protected readonly chatError = signal<string | null>(null);
+  // 聊天鈕紅點：調度中心發的、司機還沒讀的則數。只看已載入的清單（最近 50 則＋之後的推播），
+  // 未讀超過 50 則的情況不會發生在一天的配送裡，所以不另外開一支「司機未讀數」API
+  protected readonly unreadChatCount = computed(
+    () => this.chatMessages().filter((message) => message.senderType === 'ADMIN' && !message.readAt).length,
+  );
+  // 輸入框；sheet 關掉再打開，打到一半的字還在
+  protected readonly chatInput = signal('');
+  // 送出中：鎖住送出鈕，避免連按送出兩則一樣的訊息
+  protected readonly isSendingChatMessage = signal(false);
+  // 送出失敗的訊息，空字串代表沒有錯誤；跟 chatError（載入失敗）分開，送不出去不能把整串對話換成錯誤畫面
+  protected readonly chatSendError = signal('');
+  // 聊天 sheet 是否開著；用 signal 而不是只看 driverChatSheetRef，effect 才追蹤得到
+  private readonly isChatOpen = signal(false);
+
+  /**
+   * 司機「看得到對話」而且有未讀，就標已讀。跟後台 dispatch-shell 的 markViewingDriverRead 同一種寫法。
+   *
+   * 會讓司機看到的入口有：打開 sheet、對話載入完成、開著時收到新訊息、重連補抓；
+   * 用 effect 只描述「開著＋有未讀＝標已讀」，不用在每個入口各呼叫一次，漏一個紅點就消不掉。
+   */
+  private readonly markViewingChatRead = effect(() => {
+    if (!this.isChatOpen() || this.unreadChatCount() === 0) {
+      return;
+    }
+
+    // 先在畫面上標掉：不標的話 effect 重跑時還是有未讀，會連續打好幾次 API。
+    // 後端標完會推 READ 回來，但 readAt 已經有值就不會再改，不影響畫面
+    const readAt = new Date().toISOString();
+    this.chatMessages.update((messages) =>
+      messages.map((message) => (message.senderType === 'ADMIN' && !message.readAt ? {...message, readAt} : message)),
+    );
+    // 失敗不重試：重抓會把未讀抓回來又觸發這裡，網路斷著就會一直打。
+    // 資料庫仍是未讀，下次重連或重開 sheet 重新載入時紅點會回來，再標一次
+    this.operations.markMessagesRead().subscribe({error: () => undefined});
+  });
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -208,7 +294,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly chatSocket = inject(DriverChatSocketService);
   // 目前開著的聊天 Bottom Sheet；null 代表沒開，用來避免連點開出兩層
   private driverChatSheetRef: MatBottomSheetRef | null = null;
-  private hasLoadedChatMessages = false;
   private breakTimer: ReturnType<typeof setInterval> | null = null;
   private attendanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private maplibre: typeof import('maplibre-gl') | null = null;
@@ -248,7 +333,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
    * 斷線寫在 ngOnDestroy 與 signOut，不寫在 DriverAuthService.logout()：
    * 連線 service 本身要向 DriverAuthService 拿 token，反過來注入會變成互相依賴，Angular 會直接報錯。
    *
-   * 收到的推播合併到對話清單；斷線重連後才補抓，避免每次工作台初始化都多打一支聊天室請求。
+   * 收到的推播合併到對話清單。第一次連上也要載一次對話：不載的話，
+   * 司機登入前調度中心就發的訊息不會算進紅點，要點開聊天才知道有人找他。
+   * 重連時同樣重載，補回斷線期間漏掉的推播。
    */
   private connectChatSocket(): void {
     this.chatSocket.pushes$
@@ -256,11 +343,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       .subscribe((push) => this.handleChatPush(push));
     this.chatSocket.connected$
       .pipe(takeUntilDestroyed())
-      .subscribe(() => {
-        if (this.hasLoadedChatMessages) {
-          this.loadChatMessages();
-        }
-      });
+      .subscribe(() => this.loadChatMessages());
     this.chatSocket.connect();
   }
 
@@ -318,8 +401,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       panelClass: 'driver-chat-sheet-panel',
     });
     // 點背景、按 Esc、下滑關閉都會走到這裡，統一在這裡清掉，下次才開得起來
+    this.isChatOpen.set(true);
     this.driverChatSheetRef.afterDismissed().subscribe(() => {
       this.driverChatSheetRef = null;
+      this.isChatOpen.set(false);
     });
     this.loadChatMessages();
   }
@@ -348,10 +433,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.chatError.set(null);
     this.operations.getMessages().subscribe({
       next: (messages) => {
-        this.hasLoadedChatMessages = true;
         this.chatMessages.set(this.mergeChatMessages(messages));
+        // 要不要標已讀交給 markViewingChatRead：背景載入（連線、重連）時 sheet 關著，就不會標
         this.chatViewState.set(this.chatMessages().length ? 'ready' : 'empty');
-        this.markChatMessagesRead();
       },
       error: () => {
         this.chatViewState.set('error');
@@ -364,16 +448,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (push.type === 'MESSAGE' && push.message) {
       this.chatMessages.set(this.mergeChatMessages([push.message]));
       this.chatViewState.set('ready');
-      if (this.driverChatSheetRef && push.message.senderType === 'ADMIN') {
-        this.markChatMessagesRead();
-      }
       return;
     }
 
-    if (push.type === 'READ' && push.readSenderType === 'DRIVER' && push.readAt) {
+    // DRIVER：調度中心讀了我的訊息，畫面顯示「已讀」；
+    // ADMIN：自己標已讀後後端也會推回來，可能比 HTTP 回應先到；只補還沒填的，誰先到都一樣
+    if (push.type === 'READ' && push.readSenderType && push.readAt) {
+      const readAt = push.readAt;
       this.chatMessages.update((messages) =>
         messages.map((message) =>
-          message.senderType === 'DRIVER' && !message.readAt ? {...message, readAt: push.readAt} : message,
+          message.senderType === push.readSenderType && !message.readAt ? {...message, readAt} : message,
         ),
       );
     }
@@ -385,18 +469,31 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return Array.from(merged.values()).sort((left, right) => left.id - right.id);
   }
 
-  private markChatMessagesRead(): void {
-    if (!this.chatMessages().some((message) => message.senderType === 'ADMIN' && !message.readAt)) {
+  /**
+   * 發訊息給調度中心。跟後台 dispatch-shell 的 sendDriverMessage 同一種寫法。
+   *
+   * 成功：把後端存好的那一則（有 id）合併進清單、清空輸入框；推播之後會再送來同一則，用 id 去重。
+   * 失敗：保留輸入框的字，讓司機修改或再按一次；錯誤訊息優先用後端回的（例如超過 1000 字）。
+   */
+  protected sendChatMessage(): void {
+    const content = this.chatInput().trim();
+    // 送出中再按一次（Enter 連按、手滑雙擊）直接忽略，不然會送出兩則一樣的
+    if (!content || this.isSendingChatMessage()) {
       return;
     }
-    this.operations.markMessagesRead().subscribe({
-      next: () => {
-        const readAt = new Date().toISOString();
-        this.chatMessages.update((messages) =>
-          messages.map((message) =>
-            message.senderType === 'ADMIN' && !message.readAt ? {...message, readAt} : message,
-          ),
-        );
+
+    this.isSendingChatMessage.set(true);
+    this.chatSendError.set('');
+    this.operations.sendMessage(content).subscribe({
+      next: (saved) => {
+        this.isSendingChatMessage.set(false);
+        this.chatInput.set('');
+        this.chatMessages.set(this.mergeChatMessages([saved]));
+        this.chatViewState.set('ready');
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isSendingChatMessage.set(false);
+        this.chatSendError.set(error.error?.message ?? '訊息沒有送出，請稍後再試。');
       },
     });
   }
@@ -898,13 +995,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return selected.stop.address;
   }
 
-  protected changeScheduleMonth(offset: number): void {
-    const current = this.scheduleMonth();
-    const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
-    this.scheduleMonth.set(next);
-    this.loadPublishedShifts();
-  }
-
   private requestMapLocation(isManualRequest: boolean): void {
     if (!this.driverMap) {
       return;
@@ -1126,9 +1216,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
           [...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)),
         );
         this.scheduleViewState.set(shifts.length ? 'ready' : 'empty');
+        // 月曆不會因為資料變了自己重畫格子的 class，要手動叫它重畫
+        this.scheduleCalendar()?.updateTodaysDate();
       },
       error: (error: unknown) => {
         this.publishedShifts.set([]);
+        this.scheduleCalendar()?.updateTodaysDate();
         this.scheduleViewState.set('error');
         this.scheduleError.set(this.getErrorMessage(error, '無法取得已發布班表。'));
       },
@@ -1602,6 +1695,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     stop: DriverTaskStop,
   ): stop is DriverTaskStop & { lat: number; lng: number } {
     return typeof stop.lat === 'number' && typeof stop.lng === 'number';
+  }
+
+  /** 用本地年月日組 YYYY-MM-DD；toISOString 會先轉 UTC，台灣早上 8 點前會變成前一天 */
+  private toIsoDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private monthStart(date: Date): Date {

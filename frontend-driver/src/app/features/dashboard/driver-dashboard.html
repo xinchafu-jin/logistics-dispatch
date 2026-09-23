@@ -3,6 +3,8 @@
     <div #driverMap class="driver-map"></div>
   </section>
 
+  <!-- 地圖分頁不顯示頂部欄：地圖要滿版當底圖；其他分頁照常顯示品牌與天氣 -->
+  @if (activeTab() !== 'map') {
   <header class="app-topbar">
     <div class="brand">
       <app-brand-logo></app-brand-logo>
@@ -41,6 +43,7 @@
       </span>
     </div>
   </header>
+  }
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
@@ -52,6 +55,10 @@
           (click)="openDriverChat()"
           title="聊天室"
           aria-label="聊天室"
+          [matBadge]="unreadChatCount() > 99 ? '99+' : unreadChatCount()"
+          [matBadgeHidden]="unreadChatCount() === 0"
+          [matBadgeDescription]="unreadChatCount() + ' 則未讀訊息'"
+          matBadgeSize="small"
         >
           <mat-icon aria-hidden="true">forum</mat-icon>
         </button>
@@ -496,38 +503,37 @@
           <p class="eyebrow">班表</p>
           <h1>本月班表</h1>
         </div>
-        <div class="month-selector" aria-label="選擇班表月份">
-          <button
-            type="button"
-            (click)="changeScheduleMonth(-1)"
-            title="上個月"
-            aria-label="上個月"
-          >
-            <mat-icon aria-hidden="true">chevron_left</mat-icon>
-          </button>
-          <strong>{{ scheduleMonthLabel() }}</strong>
-          <button type="button" (click)="changeScheduleMonth(1)" title="下個月" aria-label="下個月">
-            <mat-icon aria-hidden="true">chevron_right</mat-icon>
-          </button>
-        </div>
+        <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
+             每天依班別上色（scheduleDateClass），點某一天看下方明細 -->
+        <section class="schedule-calendar-card" aria-label="班表月曆">
+          <mat-calendar
+            #scheduleCalendar
+            class="driver-schedule-calendar"
+            [startAt]="scheduleMonth()"
+            [selected]="selectedScheduleDate()"
+            [dateClass]="scheduleDateClass"
+            (selectedChange)="selectedScheduleDate.set($event!)"
+          />
+          <div class="schedule-legend" aria-hidden="true">
+            <span class="shift-type is-work">上班</span>
+            <span class="shift-type is-day_off">休假</span>
+            <span class="shift-type is-leave">請假</span>
+          </div>
+        </section>
+
         @if (scheduleViewState() === 'loading') {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>正在取得已發布班表</h2>
-          </div>
+          <p class="schedule-state">正在取得已發布班表...</p>
         } @else if (scheduleViewState() === 'error') {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>班表暫時無法取得</h2>
-            <p>{{ scheduleError() }}</p>
-          </div>
-        } @else if (scheduleViewState() === 'ready') {
+          <p class="schedule-state is-error">{{ scheduleError() }}</p>
+        } @else if (scheduleViewState() === 'empty') {
+          <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
+        } @else {
+          <!-- 點選那天的班次明細；沿用原本清單的一列樣式 -->
           <div class="shift-list">
-            @for (shift of publishedShifts(); track shift.id) {
+            @if (selectedShift(); as shift) {
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
-                <span class="shift-type"
-                      [class]="shiftTypeClass(shift.shiftType)">{{
+                <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{
                   formatShiftType(shift.shiftType)
                 }}</span>
                 <div class="shift-details">
@@ -542,13 +548,9 @@
                   }
                 </div>
               </article>
+            } @else {
+              <p class="schedule-state">這一天沒有已發布的班次。</p>
             }
-          </div>
-        } @else {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>這個月沒有已發布班表</h2>
-            <p>主管發布班表後，司機端會在這裡顯示。</p>
           </div>
         }
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
@@ -745,7 +747,7 @@
         <div class="driver-chat-empty">
           <mat-icon aria-hidden="true">forum</mat-icon>
           <strong>目前還沒有對話</strong>
-          <span>調度中心有新訊息時會顯示在這裡</span>
+          <span>有狀況可以直接在下方留言給調度中心</span>
         </div>
       } @else {
         @for (message of chatMessages(); track message.id) {
@@ -753,10 +755,45 @@
             <p>{{ message.content }}</p>
             <small>
               {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+              @if (isOwnChatMessage(message) && message.readAt) {
+                · 已讀
+              }
             </small>
           </article>
         }
       }
     </section>
+
+    @if (chatSendError()) {
+      <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+    }
+
+    <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
+    <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
+      <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
+      <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+        <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
+        <textarea
+          matInput
+          cdkTextareaAutosize
+          cdkAutosizeMinRows="1"
+          cdkAutosizeMaxRows="4"
+          maxlength="1000"
+          placeholder="留言給調度中心"
+          name="chatInput"
+          aria-label="輸入給調度中心的訊息"
+          [(ngModel)]="chatInput"
+        ></textarea>
+      </mat-form-field>
+      <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+      <button
+        type="submit"
+        matIconButton
+        aria-label="送出"
+        [disabled]="isSendingChatMessage() || !chatInput().trim()"
+      >
+        <mat-icon aria-hidden="true">send</mat-icon>
+      </button>
+    </form>
   </section>
 </ng-template>

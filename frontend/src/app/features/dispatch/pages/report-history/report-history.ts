@@ -1,7 +1,9 @@
-import {Component, inject, OnInit, signal} from '@angular/core';
+import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
 import {forkJoin} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
+import {MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, StoreDto, WarehouseDto} from '../../../../core/services/dispatch-api.models';
 
@@ -92,7 +94,7 @@ const SHEETS: ReadonlyArray<{id: PreviewSheet; label: string; icon: string}> = [
 
 @Component({
   selector: 'app-report-history',
-  imports: [MatIconModule],
+  imports: [MatIconModule, MatDatepickerModule, MatFormFieldModule],
   templateUrl: './report-history.html',
   styleUrl: './report-history.scss',
 })
@@ -104,6 +106,9 @@ export class ReportHistory implements OnInit {
   readonly sheets = SHEETS;
   readonly from = signal(this.today());
   readonly to = signal(this.today());
+  // 日期選擇器吃 Date；查詢、網址參數、Excel 檔名仍用 YYYY-MM-DD 字串，所以只在這裡轉換
+  protected readonly fromDate = computed(() => this.parseIsoDate(this.from()));
+  protected readonly toDate = computed(() => this.parseIsoDate(this.to()));
   readonly warehouseId = signal<number | null>(null);
   readonly storeId = signal<number | null>(null);
   readonly driverId = signal<number | null>(null);
@@ -124,10 +129,22 @@ export class ReportHistory implements OnInit {
     this.createPreview();
   }
 
-  protected updateDate(bound: 'from' | 'to', event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
+  /** 重選起始日時，Material 會先把結束日清成 null，要等使用者點第二下才有值；空字串交給 createPreview 擋下 */
+  protected updateDate(bound: 'from' | 'to', date: Date | null): void {
+    const value = date ? this.toIsoDate(date) : '';
     if (bound === 'from') this.from.set(value);
     else this.to.set(value);
+  }
+
+  /** YYYY-MM-DD 轉成本地時間的 Date；不能用 new Date('2026-09-24')，那會被當成 UTC 午夜 */
+  private parseIsoDate(value: string): Date | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+  }
+
+  /** 用本地年月日組字串；toISOString 會先轉 UTC，台灣早上 8 點前會變成前一天 */
+  private toIsoDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   protected updateFilter(kind: 'warehouse' | 'store' | 'driver', event: Event): void {

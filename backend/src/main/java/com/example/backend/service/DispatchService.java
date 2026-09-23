@@ -55,6 +55,23 @@ public class DispatchService {
     }
 
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds) {
+        return optimize(date, warehouseId, vehicleIds, Map.of(), Map.of(), false);
+    }
+
+    /**
+     * 同上，另外依 driverByVehicle 把司機寫進排出來的路線；沒有對應的車維持未指派。
+     * 司機能不能派（別倉佔用、班表）由呼叫端先處理，這裡只負責寫入。
+     *
+     * <p>pinnedVehicleByOrder（訂單 → 車）是調度員已經放進格子的單：OR-Tools 只能把它排在那台車上，
+     * 而且一定要排（不能丟回待排單），停靠順序照樣由 OR-Tools 決定。
+     * 這些單會先被 clearExistingDraftRoutes 解綁，所以本來就在下面撈的訂單裡，這裡只是加上限制。</p>
+     *
+     * <p>pinnedOnly 為 true 時只排固定的單（「套用門市訂單」），其他待排單留在待排單區，
+     * 這時 OR-Tools 做的事只剩替每台車排出最順的停靠順序。</p>
+     */
+    public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds,
+                                     Map<Long, Long> driverByVehicle, Map<Long, Long> pinnedVehicleByOrder,
+                                     boolean pinnedOnly) {
         WarehousesEntity warehousesEntity =
                 warehousesDAO.findById(warehouseId).
                         orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
@@ -65,6 +82,12 @@ public class DispatchService {
         List<OrdersEntity> orders =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.CONFIRMED, warehouseId);
+        if (pinnedOnly) {
+            orders = orders.stream().filter(order -> pinnedVehicleByOrder.containsKey(order.getId())).toList();
+            if (orders.isEmpty()) {
+                throw new IllegalArgumentException("格子裡的門市今天都沒有待排的訂單");
+            }
+        }
         if (orders.isEmpty()) {
             throw new IllegalArgumentException("當天無已確認的訂單：" + date);
         }
@@ -120,8 +143,10 @@ public class DispatchService {
 
         }
 
+        int[] allowedVehicleByNode = pinOrdersToVehicles(orders, vehicles, pinnedVehicleByOrder);
+
         long[][] matrix = osrmClient.table(locations);
-        RouteResult result = routeOptimizer.solve(matrix, demands, vehicleCapacities, 0);
+        RouteResult result = routeOptimizer.solve(matrix, demands, vehicleCapacities, 0, allowedVehicleByNode);
         if (result == null) {
             throw new IllegalStateException("請檢查車輛容量是否足夠");
         }
@@ -141,7 +166,7 @@ public class DispatchService {
                 route.setWarehouseId(warehouseId);
                 route.setVehicleId(vehicle.getId());
             }
-            route.setDriverId(null);
+            route.setDriverId(driverByVehicle.get(vehicle.getId()));
             route.setTotalDistance(
                     (double) vr.getDistance());
             RoutesEntity saveRoute = routesDAO.save(route);
@@ -621,6 +646,51 @@ public class DispatchService {
             taken.add(item);
         }
         return taken;
+    }
+
+    /**
+     * 把「訂單 → 車 id」轉成 OR-Tools 用的「點 → 車的索引」：第 i 張單是第 i + 1 個點（點 0 是倉庫），
+     * 車的索引是它在 vehicles 裡的位置。沒固定的點是 -1。
+     *
+     * <p>固定的單一定要送，所以先檢查每台車固定的箱數沒有超過容量：
+     * 不擋的話 OR-Tools 找不到解只會回 null，調度員看不出是哪台車裝不下。</p>
+     */
+    private int[] pinOrdersToVehicles(List<OrdersEntity> orders, List<VehiclesEntity> vehicles,
+                                      Map<Long, Long> pinnedVehicleByOrder) {
+        int[] allowedVehicleByNode = new int[orders.size() + 1];
+        Arrays.fill(allowedVehicleByNode, -1);
+        if (pinnedVehicleByOrder.isEmpty()) {
+            return allowedVehicleByNode;
+        }
+
+        Map<Long, Integer> vehicleIndex = new HashMap<>();
+        for (int i = 0; i < vehicles.size(); i++) {
+            vehicleIndex.put(vehicles.get(i).getId(), i);
+        }
+        Map<Long, Integer> pinnedBoxes = new HashMap<>();
+        for (int i = 0; i < orders.size(); i++) {
+            OrdersEntity order = orders.get(i);
+            Long vehicleId = pinnedVehicleByOrder.get(order.getId());
+            if (vehicleId == null) {
+                continue;
+            }
+            Integer index = vehicleIndex.get(vehicleId);
+            if (index == null) {
+                // 呼叫端只會固定到這次有出車的車，走到這裡代表呼叫端漏篩
+                throw new IllegalArgumentException(
+                        "訂單 " + order.getOrderNumber() + " 固定的車 " + plateNumberOf(vehicleId) + " 不在這次排車的車輛裡");
+            }
+            allowedVehicleByNode[i + 1] = index;
+            pinnedBoxes.merge(vehicleId, order.getBoxCount(), Integer::sum);
+        }
+        for (VehiclesEntity vehicle : vehicles) {
+            int boxes = pinnedBoxes.getOrDefault(vehicle.getId(), 0);
+            if (boxes > vehicle.getCapacity()) {
+                throw new IllegalArgumentException("車輛 " + vehicle.getPlateNumber() + " 格子裡已放 " + boxes
+                        + " 箱，超過容量 " + vehicle.getCapacity() + " 箱，請先把部分訂單拖回待排單");
+            }
+        }
+        return allowedVehicleByNode;
     }
 
     private Map<Long, RoutesEntity> clearExistingDraftRoutes(LocalDate date, Long warehouseId) {

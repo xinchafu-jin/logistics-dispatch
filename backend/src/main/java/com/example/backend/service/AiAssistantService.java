@@ -12,6 +12,7 @@ import com.example.backend.dto.respones.PendingActionResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -23,12 +24,17 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.ZoneId;
+import java.time.format.TextStyle;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 public class AiAssistantService {
+    // 伺服器容器的時區不一定是台灣（Docker 預設 UTC），凌晨 0～8 點會差一天，所以明確指定
+    private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
+
     private final ChatMemory chatMemory;
     private final OpenAiChatModel openAiChatModel;
     private final AdminUsersService adminUsersService;
@@ -114,6 +120,7 @@ public class AiAssistantService {
     private ChatClient buildChatClient(OpenAiChatModel chatModel) {
         return ChatClient.builder(chatModel)
                 .defaultSystem("你是物流調度系統的助理，用繁體中文，台灣圈用語簡潔回覆調度員關於班表、訂單、派車的查詢。" +
+                        todayPrompt() +
                         "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。")
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .defaultTools(this)
@@ -127,6 +134,32 @@ public class AiAssistantService {
             return new ArrayList<>();
         }
         return new ArrayList<>(actions);
+    }
+
+    /**
+     * 告訴模型今天是哪天。模型本身不知道日期，調度員說「今天」「明天」「週五」時只能用猜的。
+     *
+     * <p>ChatClient 每句話都重建（見 chatClientFor），所以日期每次都是當下的，跨過午夜也不會停在前一天。</p>
+     */
+    private String todayPrompt() {
+        LocalDate today = LocalDate.now(TAIPEI);
+        return "今天是 " + today + "（" + today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.TAIWAN)
+                + "），調度員說的今天、明天、星期幾都以這天換算成 yyyy-MM-dd 再呼叫工具。";
+    }
+
+    /**
+     * 確認執行後，在對話記憶補一筆紀錄。
+     *
+     * <p>確認是調度員在畫面上按的，不經過對話，模型不知道發生過；不補的話下一句它會以為清單還在等確認，
+     * 或拿確認前的看板來回答。要在交易 commit 之後才呼叫，所以放在 controller 呼叫完 confirmPlan 之後。</p>
+     */
+    public void recordConfirmed(String conversationId, List<PendingActionResponse> confirmed) {
+        StringBuilder note = new StringBuilder("（系統紀錄）調度員已在畫面上確認，以下動作都已寫入資料庫，待執行清單已清空：");
+        for (PendingActionResponse action : confirmed) {
+            note.append("\n- ").append(action.getDate()).append(" ").append(action.getSummary());
+        }
+        note.append("\n之後回答看板狀況請重新呼叫查詢工具，不要依確認前的內容回答。");
+        chatMemory.add(conversationId, new AssistantMessage(note.toString()));
     }
 
     // 調度員反悔時整批清

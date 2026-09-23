@@ -5,6 +5,7 @@ import com.example.backend.constants.RouteStatus;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -44,7 +45,21 @@ public class DispatchResponse {
      */
     private List<DriverTakenResponse> driversTakenElsewhere;
 
+    /**
+     * 這次操作沒有完全照要求完成的地方，例如格子自動配了哪台車、哪位司機沒帶進去、哪台車沒排到訂單。
+     * 讀看板時是空的，只有依格子自動排車會填。
+     */
+    private List<String> notices = new ArrayList<>();
+
     public DispatchResponse() {
+    }
+
+    public List<String> getNotices() {
+        return notices;
+    }
+
+    public void setNotices(List<String> notices) {
+        this.notices = notices;
     }
 
     public LocalDate getDate() {

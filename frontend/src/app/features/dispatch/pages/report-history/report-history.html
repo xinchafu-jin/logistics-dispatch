@@ -14,8 +14,18 @@
 
   <section class="query-panel" aria-label="報表查詢條件">
     <div class="query-fields">
-      <label><span>起始日期</span><input type="date" [value]="from()" (change)="updateDate('from', $event)" /></label>
-      <label><span>結束日期</span><input type="date" [value]="to()" (change)="updateDate('to', $event)" /></label>
+      <!-- 起訖日期合成一個 Material 日期區間：同一個月曆點兩下選完，結束日不會選到起始日之前 -->
+      <label class="date-range-field">
+        <span>查詢期間</span>
+        <mat-form-field class="admin-date-field" appearance="outline" subscriptSizing="dynamic">
+          <mat-date-range-input [rangePicker]="reportRangePicker" aria-label="查詢期間">
+            <input matStartDate placeholder="起始日期" [value]="fromDate()" (dateChange)="updateDate('from', $event.value)" />
+            <input matEndDate placeholder="結束日期" [value]="toDate()" (dateChange)="updateDate('to', $event.value)" />
+          </mat-date-range-input>
+          <mat-datepicker-toggle matIconSuffix [for]="reportRangePicker" />
+          <mat-date-range-picker #reportRangePicker />
+        </mat-form-field>
+      </label>
       <label><span>出貨倉庫</span><select [value]="warehouseId() ?? ''" (change)="updateFilter('warehouse', $event)"><option value="">全部倉庫</option>@for (warehouse of warehouses(); track warehouse.id) { <option [value]="warehouse.id">{{ warehouse.name }}</option> }</select></label>
       <label><span>配送門市</span><select [value]="storeId() ?? ''" (change)="updateFilter('store', $event)"><option value="">全部門市</option>@for (store of stores(); track store.id) { <option [value]="store.id">{{ store.name }}</option> }</select></label>
       <label><span>司機</span><select [value]="driverId() ?? ''" (change)="updateFilter('driver', $event)"><option value="">全部司機</option>@for (driver of drivers(); track driver.id) { <option [value]="driver.id">{{ driver.name }}</option> }</select></label>

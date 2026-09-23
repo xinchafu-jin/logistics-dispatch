@@ -59,6 +59,8 @@ export interface DriverDto {
   password?: string;
   name: string;
   phone?: string;
+  /** 司機在司機端上傳的大頭照，例如 /uploads/driver-photos/xxx.jpg；沒上傳是 null。只讀，更新司機資料時不用帶 */
+  profilePhotoUrl?: string | null;
   workStart: string;
   workEnd: string;
   restDuration: number;
@@ -338,6 +340,8 @@ export interface DispatchResultDto {
   routes: RouteDto[];
   /** 裝不下、沒排進去的訂單，狀態維持 CONFIRMED */
   unassignedOrders: UnassignedOrderDto[];
+  /** 依格子排車時才有：配了哪台車、哪位司機沒帶入、哪台車沒排到訂單 */
+  notices?: string[];
   /**
    * 當天已在「其他倉庫」被指派的司機。
    *
@@ -504,10 +508,12 @@ export interface TemplateStopDto {
   sequence: number;
 }
 
+/** 編組裡的一格：司機、車輛都是選填（至少一個）。stops 是這格固定跑的門市，依 sequence 排 */
 export interface TemplateRouteDto {
   id: number;
   warehouseId: number;
-  vehicleId: number;
+  vehicleId: number | null;
+  driverId: number | null;
   stops: TemplateStopDto[];
 }
 
@@ -527,8 +533,24 @@ export interface TemplateRequest {
 
 export interface TemplateRouteRequest {
   warehouseId: number;
-  vehicleId: number;
+  vehicleId: number | null;
+  driverId: number | null;
+  /** 這格固定跑的門市，陣列順序就是停靠順序；同一間門市不能出現在兩格 */
   storeIds: number[];
+}
+
+/** POST /api/dispatch/optimize/slots：依看板上的格子自動排車 */
+export interface OptimizeSlotsRequest {
+  /** yyyy-MM-dd */
+  date: string;
+  warehouseId: number;
+  /**
+   * 司機、車輛都選填；只填司機的格子由後端配車。
+   * orderIds 是格子裡已經有的訂單，自動排車時固定在這格的車上，只有待排單的訂單交給 OR-Tools 分配
+   */
+  slots: {driverId: number | null; vehicleId: number | null; orderIds: number[]}[];
+  /** true＝「套用門市訂單」：只排 orderIds 裡的單，其他待排單不動，OR-Tools 只負責排停靠順序 */
+  pinnedOnly?: boolean;
 }
 
 /* ── AI 調度助理 ───────────────────────────────────────────────

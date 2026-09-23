@@ -1,4 +1,4 @@
-import {Component, DestroyRef, OnInit, TemplateRef, computed, inject, signal, output, viewChild} from '@angular/core';
+import {Component, DestroyRef, OnInit, TemplateRef, computed, effect, inject, signal, output, viewChild} from '@angular/core';
 import {HttpErrorResponse} from '@angular/common/http';
 import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import {MatListModule} from '@angular/material/list';
@@ -20,6 +20,7 @@ import {TextFieldModule} from '@angular/cdk/text-field';
 import {MatExpansionModule} from '@angular/material/expansion';
 import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 import {MatIconModule} from '@angular/material/icon';
+import {MatBadgeModule} from '@angular/material/badge';
 import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
 import {AuthService} from '../../../../core/auth/auth.service';
 import {
@@ -29,6 +30,8 @@ import {
   EmergencyLeaveReplacementCandidateDto,
 } from '../../../../core/services/dispatch-api.models';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
+import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
@@ -68,6 +71,7 @@ interface ChatMessage {
     FormsModule,
     MatExpansionModule,
     MatDialogModule,
+    MatBadgeModule,
   ],
   templateUrl: './dispatch-shell.html',
   styleUrl: './dispatch-shell.scss',
@@ -77,6 +81,8 @@ export class DispatchShell implements OnInit {
   protected readonly user = inject(AuthService).user;
   protected readonly isSigningOut = signal(false);
   protected readonly isLightTheme = this.theme.isLightTheme;
+  // 頂部欄右側的頁面資訊，由各頁寫入（目前只有今日調度）
+  protected readonly headerMeta = inject(DispatchHeaderService).meta;
   protected readonly isNotificationsOpen = signal(false);
   protected readonly pendingApplicationCount = signal(0);
   protected readonly pendingApplications = signal<DriverAccountApplicationDto[]>([]);
@@ -113,6 +119,44 @@ export class DispatchShell implements OnInit {
   protected readonly isSendingDriverMessage = signal(false);
   // 司機對話的錯誤訊息，空字串代表沒有錯誤
   protected readonly driverChatError = signal('');
+  // 紅點：driverId → 司機發的、還沒被任何管理員讀的則數。沒有未讀的司機不在裡面
+  protected readonly unreadByDriver = signal<Record<number, number>>({});
+  // 大頭照載入失敗的司機；記下來改顯示名字第一個字，不然會一直顯示破圖
+  private readonly failedDriverPhotoIds = signal<ReadonlySet<number>>(new Set());
+  // 聊天室按鈕上的總數
+  protected readonly totalUnread = computed(() =>
+    Object.values(this.unreadByDriver()).reduce((sum, count) => sum + count, 0),
+  );
+
+  /**
+   * 「調度員正看著某位司機的對話」而且有未讀，就標已讀。
+   *
+   * 用 effect 而不是在每個入口各呼叫一次：會讓人「看到」的入口有換司機、對話載入完成、
+   * 開著時收到新訊息、打開聊天室、窄版展開成寬版，漏接任何一個紅點就消不掉；
+   * effect 只描述「看得到＋有未讀＝標已讀」，哪個 signal 變了都會重新判斷。
+   */
+  private readonly markViewingDriverRead = effect(() => {
+    const contact = this.selectedChatContact();
+    // 窄版只剩聯絡人清單、看不到對話內容，不能算讀過
+    if (this.chatView() !== 'wide' || contact.kind !== 'driver') {
+      return;
+    }
+    const driverId = contact.driverId;
+    const hasUnread =
+      (this.unreadByDriver()[driverId] ?? 0) > 0 ||
+      this.driverMessages().some((message) => message.senderType === 'DRIVER' && !message.readAt);
+    if (!hasUnread) {
+      return;
+    }
+
+    // 先在畫面上清掉：不清的話這裡改了 signal，effect 重跑時還是有未讀，會連續打好幾次 API。
+    // 後台畫面不顯示司機訊息的已讀時間，所以先填本機時間就好，只是讓條件不再成立
+    this.setDriverUnread(driverId, 0);
+    this.markDriverMessagesAsRead('DRIVER', new Date().toISOString());
+    // 失敗不重試：重抓紅點會把未讀抓回來又觸發這裡，網路斷著就會一直打。
+    // 資料庫仍是未讀，下次重連（重抓 summary）或重新點開這位司機時會再標一次
+    this.api.markDriverMessagesRead(driverId).subscribe({error: () => undefined});
+  });
 
 
   protected readonly notificationCount = computed(
@@ -123,6 +167,7 @@ export class DispatchShell implements OnInit {
 
   private readonly authService = inject(AuthService);
   private readonly api = inject(DispatchApiService);
+  private readonly boardEvents = inject(DispatchBoardEventsService);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly chatSocket = inject(DriverChatSocketService);
@@ -501,7 +546,11 @@ export class DispatchShell implements OnInit {
         return;
       }
       this.api.confirmAiPlan().subscribe({
-        next: () => this.applyPlan([]),
+        next: () => {
+          this.applyPlan([]);
+          // 看板在另一個元件，資料庫已經被 AI 改過，要它重讀，不然舊畫面一拖曳就會蓋回去
+          this.boardEvents.notifyBoardChanged();
+        },
       });
     });
   }
@@ -599,32 +648,88 @@ export class DispatchShell implements OnInit {
     this.chatSocket.pushes$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((push) => this.handleChatPush(push));
+    // 第一次連上也會觸發：順便載紅點；重連時一起重抓，補回斷線期間漏掉的未讀
     this.chatSocket.connected$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.catchUpOpenConversation());
+      .subscribe(() => {
+        this.loadUnreadSummary();
+        this.catchUpOpenConversation();
+      });
 
     this.chatSocket.connect();
     this.destroyRef.onDestroy(() => this.chatSocket.disconnect());
   }
 
-  /** 收到推播：只處理「畫面上開著的那位司機」；其他司機的紅點，等紅點功能做好再接 */
+  /**
+   * 收到推播。紅點每位司機都要算；對話內容只更新「畫面上開著的那位」。
+   * 開著的那位是否要標已讀，交給 markViewingDriverRead 判斷，這裡只管把數字加上去。
+   */
   private handleChatPush(push: DriverMessagePushDto): void {
-    if (!this.isOpenDriver(push.driverId)) {
+    if (push.type === 'MESSAGE' && push.message) {
+      // 只有司機發的才算未讀；管理員發的（自己或同事）不用提醒
+      if (push.message.senderType === 'DRIVER') {
+        this.setDriverUnread(push.driverId, (this.unreadByDriver()[push.driverId] ?? 0) + 1);
+      }
+      if (this.isOpenDriver(push.driverId)) {
+        // 自己剛送出的那則也會推回來一次，mergeDriverMessages 用 id 去重，不會出現兩則
+        this.mergeDriverMessages([push.message]);
+      }
       return;
     }
 
-    if (push.type === 'MESSAGE' && push.message) {
-      // 自己剛送出的那則也會推回來一次，mergeDriverMessages 用 id 去重，不會出現兩則
-      this.mergeDriverMessages([push.message]);
-    } else if (push.type === 'READ' && push.readSenderType) {
-      // 把這一方發的、還沒讀的訊息，在畫面上標成已讀（不用再打一次 API）
-      const readAt = push.readAt ?? null;
-      this.driverMessages.update((messages) =>
-        messages.map((message) =>
-          message.senderType === push.readSenderType && !message.readAt ? {...message, readAt} : message,
-        ),
-      );
+    if (push.type === 'READ' && push.readSenderType) {
+      // 已讀是所有管理員共用的：同事點開了，自己這邊的紅點也要消
+      if (push.readSenderType === 'DRIVER') {
+        this.setDriverUnread(push.driverId, 0);
+      }
+      if (this.isOpenDriver(push.driverId)) {
+        // 把這一方發的、還沒讀的訊息，在畫面上標成已讀（不用再打一次 API）
+        this.markDriverMessagesAsRead(push.readSenderType, push.readAt ?? null);
+      }
     }
+  }
+
+  private loadUnreadSummary(): void {
+    this.api.getDriverMessageSummary().subscribe({
+      next: (summary) => {
+        const unread: Record<number, number> = {};
+        for (const item of summary) {
+          unread[item.driverId] = item.unreadCount;
+        }
+        this.unreadByDriver.set(unread);
+      },
+    });
+  }
+
+  protected driverPhotoUrl(driver: DriverDto): string | null {
+    if (!driver.profilePhotoUrl || (driver.id !== undefined && this.failedDriverPhotoIds().has(driver.id))) {
+      return null;
+    }
+    return driver.profilePhotoUrl;
+  }
+
+  protected markDriverPhotoFailed(driverId: number | undefined): void {
+    if (driverId === undefined) {
+      return;
+    }
+    this.failedDriverPhotoIds.update((ids) => new Set(ids).add(driverId));
+  }
+
+  protected driverUnread(driverId: number | undefined): number {
+    return driverId === undefined ? 0 : (this.unreadByDriver()[driverId] ?? 0);
+  }
+
+  private setDriverUnread(driverId: number, count: number): void {
+    this.unreadByDriver.update((current) => ({...current, [driverId]: count}));
+  }
+
+  /** 把目前對話中某一方發的、還沒讀的訊息標上 readAt */
+  private markDriverMessagesAsRead(senderType: DriverMessageDto['senderType'], readAt: string | null): void {
+    this.driverMessages.update((messages) =>
+      messages.map((message) =>
+        message.senderType === senderType && !message.readAt ? {...message, readAt} : message,
+      ),
+    );
   }
 
   /**

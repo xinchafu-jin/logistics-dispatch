@@ -1,6 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import {MatIconModule} from '@angular/material/icon';
+import {MatDateFormats, provideNativeDateAdapter} from '@angular/material/core';
+import {MatDatepicker, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   DriverDto,
@@ -9,6 +13,21 @@ import {
   ScheduleMonthDto,
   ShiftType,
 } from '../../../../core/services/dispatch-api.models';
+
+/**
+ * 這頁的日期選擇器只選到月份，輸入框要顯示「2026年9月」而不是整個日期。
+ * 只影響這個元件（放在元件的 providers），其他頁的日期欄位仍是 app.config 的預設格式。
+ * 輸入框是唯讀的，不會解析手打的字，所以 parse 不用設。
+ */
+const MONTH_ONLY_FORMATS: MatDateFormats = {
+  parse: {dateInput: null},
+  display: {
+    dateInput: {year: 'numeric', month: 'long'},
+    monthYearLabel: {year: 'numeric', month: 'short'},
+    dateA11yLabel: {year: 'numeric', month: 'long', day: 'numeric'},
+    monthYearA11yLabel: {year: 'numeric', month: 'long'},
+  },
+};
 
 interface MonthDay {
   iso: string;
@@ -62,7 +81,11 @@ interface BatchDriverOption {
   selector: 'app-driver-schedule',
   imports: [
     MatIconModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
+    MatInputModule,
   ],
+  providers: [provideNativeDateAdapter(MONTH_ONLY_FORMATS)],
   templateUrl: './driver-schedule.html',
   styleUrl: './driver-schedule.scss',
 })
@@ -70,6 +93,11 @@ export class DriverSchedule implements OnInit {
   private readonly api = inject(DispatchApiService);
 
   readonly selectedMonth = signal(this.currentMonthValue());
+  // 日期選擇器吃 Date；API 與月曆計算仍用 YYYY-MM 字串，只在這裡轉換（取該月 1 號）
+  protected readonly selectedMonthDate = computed(() => {
+    const [year, month] = this.selectedMonth().split('-').map(Number);
+    return new Date(year, month - 1, 1);
+  });
   readonly scheduleMonth = signal<ScheduleMonthDto | null>(null);
   readonly shifts = signal<DriverShiftDto[]>([]);
   readonly drivers = signal<DriverDto[]>([]);
@@ -167,9 +195,11 @@ export class DriverSchedule implements OnInit {
     this.loadMonth();
   }
 
-  protected selectMonth(event: Event): void {
-    const month = (event.target as HTMLInputElement).value;
-    if (!/^\d{4}-\d{2}$/.test(month) || month === this.selectedMonth()) {
+  /** 在月曆上點了月份：直接關掉，不讓它往下進到選日期 */
+  protected selectMonth(date: Date, picker: MatDatepicker<Date>): void {
+    picker.close();
+    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    if (month === this.selectedMonth()) {
       return;
     }
 

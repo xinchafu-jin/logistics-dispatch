@@ -192,3 +192,26 @@ input {
     color: #a3483e;
   }
 }
+
+// 後台頁面裡的 Material 日期欄位（歷史報表、司機月班表）。
+// Material 主題固定是淺色（見上方 mat.theme），但後台有自己的深淺色切換（--text、--border 等），
+// 不對應的話深色模式下輸入框是深色字疊在深色底上。高度調成 38px，跟旁邊原生的 select 對齊；
+// 標題沿用各頁自己的 <span>，所以不用 mat-label
+.admin-date-field {
+  --mat-form-field-container-height: 38px;
+  --mat-form-field-container-vertical-padding: 7px;
+  --mat-form-field-container-text-size: 0.8125rem;
+  --mat-form-field-outlined-container-shape: 5px;
+  --mat-form-field-outlined-input-text-color: var(--text);
+  --mat-form-field-outlined-input-text-placeholder-color: var(--subtle);
+  --mat-form-field-outlined-caret-color: var(--accent);
+  --mat-form-field-outlined-outline-color: var(--border);
+  --mat-form-field-outlined-hover-outline-color: var(--muted);
+  --mat-form-field-outlined-focus-outline-color: var(--accent);
+  --mat-form-field-trailing-icon-color: var(--muted);
+  --mat-datepicker-toggle-icon-color: var(--muted);
+  --mat-datepicker-toggle-active-state-icon-color: var(--accent);
+  // 日期區間中間的「–」
+  --mat-datepicker-range-input-separator-color: var(--muted);
+  min-width: 0;
+}

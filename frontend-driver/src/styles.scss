@@ -111,3 +111,25 @@ input {
   border-radius: 0;
   padding-top: calc(8px + env(safe-area-inset-top));
 }
+
+// 班表月曆每一格依班別上色（class 由 driver-dashboard 的 scheduleDateClass 加上）。
+// 要寫在全域：格子是 MatCalendar 自己元件裡的元素，元件樣式有封裝，碰不到。
+// 顏色跟下方明細的 .shift-type 標籤一致：上班綠、休假灰、請假橘；選中那天仍由 Material 的實心綠圈蓋過
+.driver-schedule-calendar .shift-cell .mat-calendar-body-cell-content {
+  font-weight: 700;
+}
+
+.driver-schedule-calendar .shift-work .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #246a59;
+  background: #e5f2ec;
+}
+
+.driver-schedule-calendar .shift-day_off .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #7a8a84;
+  background: #eef1ef;
+}
+
+.driver-schedule-calendar .shift-leave .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #9a5a17;
+  background: #fbeedd;
+}

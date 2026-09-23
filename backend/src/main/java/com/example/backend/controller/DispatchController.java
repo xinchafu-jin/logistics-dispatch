@@ -1,5 +1,6 @@
 package com.example.backend.controller;
 
+import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.dto.request.ReassignDTO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.dto.respones.RouteMetricsResponse;
@@ -32,6 +33,15 @@ public class DispatchController {
     ) {
         this.dispatchWorkflowService = dispatchWorkflowService;
         this.routePlanMetricsService = routePlanMetricsService;
+    }
+
+    /**
+     * 依看板上的格子自動排車。格子的司機、車輛都是選填，只填司機的格子由後端配車；
+     * 回應的 notices 會說明配了哪台車、哪些司機沒帶入、哪些車沒排到訂單。
+     */
+    @PostMapping("/optimize/slots")
+    public ResponseEntity<DispatchResponse> optimizeSlots(@Valid @RequestBody OptimizeSlotsDTO dto) {
+        return ResponseEntity.ok(dispatchWorkflowService.optimizeSlots(dto));
     }
 
     @PostMapping("/optimize")

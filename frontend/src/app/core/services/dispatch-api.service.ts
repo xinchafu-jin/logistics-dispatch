@@ -37,6 +37,7 @@ import {
   TemplateRequest,
   VehicleDto,
   WarehouseDto,
+  OptimizeSlotsRequest,
 } from './dispatch-api.models';
 
 const API_ROOT = '/api';
@@ -382,6 +383,14 @@ export class DispatchApiService {
    *
    * 這支跟 optimize 一樣會寫入資料庫：清掉當天草稿後照送去的內容重建。
    */
+  /**
+   * 依看板上的格子自動排車：OR-Tools 只用格子裡的車，排完帶入格子的司機，
+   * 排不進去的訂單留在待排單區。回應的 notices 說明配車與沒帶入的原因。
+   */
+  optimizeSlots(request: OptimizeSlotsRequest): Observable<DispatchResultDto> {
+    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize/slots`, request);
+  }
+
   reassignDispatch(request: ReassignRequest): Observable<DispatchResultDto> {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/reassign`, request);
   }

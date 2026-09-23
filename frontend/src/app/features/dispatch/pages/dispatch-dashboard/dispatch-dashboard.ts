@@ -11,11 +11,13 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
-import {Component, computed, DestroyRef, inject, OnInit, signal} from '@angular/core';
+import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
+import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
 import {
   DispatchResultDto,
   DriverDto,
@@ -38,6 +40,8 @@ import {
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
 import {MatIconModule} from '@angular/material/icon';
+import {MatButtonModule} from '@angular/material/button';
+import {MatDialog, MatDialogModule} from '@angular/material/dialog';
 
 /** 後端錯誤統一是 { message }，取得到就用它的文字，否則給個能辨識的替代。 */
 function describeError(error: unknown): string {
@@ -90,15 +94,19 @@ interface BoardCard {
 }
 
 /**
- * 看板上的一格車輛槽位。
+ * 看板上的一格，代表今天的一趟車。
  *
- * 每台車固定一格，沒排到訂單就是空槽（routeId 為 0）——不能只畫「已有路線的車」，
- * 否則空白盤面上完全沒有可拖曳的目標。
+ * 司機、車輛都是選填（以人為準）：已有路線的車一格，調度員另外填的人車也各一格，
+ * 空格固定補成 3 的倍數，填滿一排就再長出 3 格（見 withEmptySlots）。
+ * 有訂單的格子一定有車；沒車的格子不能拖入訂單，要先選車或交給自動排車配車。
  */
 interface BoardRoute {
-  /** 0 代表這台車今天還沒有路線 */
+  /** 畫面用的穩定 key：格子可能還沒有路線、也還沒選車，不能拿 routeId 或 vehicleId 當 key */
+  slotKey: string;
+  /** 0 代表這格今天還沒有路線 */
   routeId: number;
-  vehicleId: number;
+  /** 還沒選車為 null */
+  vehicleId: number | null;
   plateNumber: string;
   vehicleType: string | null;
   capacity: number;
@@ -113,6 +121,11 @@ interface BoardRoute {
   /** 維修車保留在看板供辨識，但不可改派或拖曳。 */
   isMaintenance: boolean;
   cards: BoardCard[];
+  /**
+   * 這格編組的門市：只記錄，不動訂單。按「套用門市訂單」才會把這些門市的待排單拉進來，
+   * 按「儲存編組」會存成編組的 stops。只存在畫面上，重新整理就沒了，跟還沒排單的人車格一樣。
+   */
+  storeIds: number[];
 }
 
 function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
@@ -132,6 +145,24 @@ interface DriverOption {
   name: string;
   /** 不是 null 就代表當天已排在別處，選單要 disabled 並顯示這句原因 */
   takenNote: string | null;
+  /** 班表上不能出車的原因（休假、請假…）。仍然可以選，選了車道會標紅框，派出時才擋 */
+  scheduleNote: string | null;
+}
+
+/** 格子「加入門市」下拉的一個選項 */
+interface StoreOption {
+  id: number;
+  name: string;
+  /** 不是 null 就代表已在別格，選單要 disabled 並顯示這句原因（同一間門市只能在一格） */
+  takenNote: string | null;
+}
+
+/** 格子車輛下拉的一個選項 */
+interface VehicleOption {
+  id: number;
+  label: string;
+  /** 不是 null 就代表已被別格選走，選單要 disabled 並顯示這句原因 */
+  takenNote: string | null;
 }
 
 type TaskboardColumnId = 'pending' | 'confirmed' | 'delivering' | 'completed' | 'failed' | 'cancelled';
@@ -146,7 +177,10 @@ interface TaskboardColumn {
 
 @Component({
   selector: 'app-dispatch-dashboard',
-  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule, MatIconModule],
+  imports: [
+    LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
+    MatSlideToggleModule, MatIconModule, MatButtonModule, MatDialogModule,
+  ],
   templateUrl: './dispatch-dashboard.html',
   styleUrl: './dispatch-dashboard.scss',
 })
@@ -164,8 +198,16 @@ export class DispatchDashboard implements OnInit {
   /** 0 代表倉庫清單還沒載回來，尚未決定預設倉庫 */
   readonly warehouseId = signal(0);
   readonly optimizing = signal(false);
+  /** 「套用門市訂單」送出中 */
+  readonly applyingStores = signal(false);
   private readonly api = inject(DispatchApiService);
+  private readonly boardEvents = inject(DispatchBoardEventsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly dialog = inject(MatDialog);
+  // 按「＋」清空看板前的確認視窗，寫在 dispatch-dashboard.html 最下面的 <ng-template #clearBoardDialog>
+  private readonly clearBoardDialog = viewChild.required<TemplateRef<unknown>>('clearBoardDialog');
+  // 在編組分頁按「儲存編組」前的確認視窗，同樣寫在 html 最下面
+  private readonly saveTemplateDialog = viewChild.required<TemplateRef<unknown>>('saveTemplateDialog');
   readonly dispatchResult = signal<DispatchResultDto | null>(null);
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
@@ -188,8 +230,12 @@ export class DispatchDashboard implements OnInit {
   readonly templates = signal<TemplateDto[]>([]);
   /** 目前選中的編組分頁；0 代表沒有選任何編組 */
   readonly activeTemplateId = signal(0);
-  /** 加號分頁：空白編成表模式，盤面清空等使用者編 */
-  readonly creatingTemplate = signal(false);
+  /** 依格子自動排車、載入編組時，沒完全照要求完成的地方（配了哪台車、哪位司機沒帶入…） */
+  readonly boardNotices = signal<string[]>([]);
+  /** 格子 key 的流水號 */
+  private slotSeq = 0;
+  /** 目前看板屬於哪個倉；換倉時不能沿用上一個倉排到一半的格子 */
+  private boardWarehouseId = 0;
   readonly templateName = signal('');
   readonly templateError = signal('');
   readonly templateBusy = signal(false);
@@ -207,6 +253,11 @@ export class DispatchDashboard implements OnInit {
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
   );
   readonly warehouseName = signal('高雄配送區');
+  private readonly header = inject(DispatchHeaderService);
+  // 倉庫名稱與更新時間顯示在頂部欄（dispatch-shell），這頁本身不再畫；兩個 signal 任一變了就同步過去
+  private readonly syncHeaderMeta = effect(() => {
+    this.header.meta.set(`${this.warehouseName()} · 資料更新於 ${this.updatedAt()}`);
+  });
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
@@ -256,21 +307,8 @@ export class DispatchDashboard implements OnInit {
 
   readonly publishedTemplateName = computed(() => this.activeTemplate()?.name ?? '今日手動排車');
 
-  /** 這個倉庫今天能出的車。排車不給勾選，這裡只是讓調度員知道手上有什麼 */
-  readonly availableVehicles = computed(() =>
-    this.vehicles().filter(
-      (vehicle) => vehicle.warehouseId === this.warehouseId() && vehicle.status === 'AVAILABLE',
-    ),
-  );
-
-  readonly availableVehicleSummary = computed(() =>
-    this.availableVehicles()
-      .map((vehicle) => `${vehicle.plateNumber} ${vehicle.capacity}箱`)
-      .join('、'),
-  );
-
   /** 排車中或改派儲存中都不該再觸發排車 */
-  readonly busy = computed(() => this.optimizing() || this.saving());
+  readonly busy = computed(() => this.optimizing() || this.applyingStores() || this.saving());
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -501,9 +539,15 @@ export class DispatchDashboard implements OnInit {
   });
 
   ngOnInit(): void {
+    // 離開這頁就清掉頂部欄的資訊，不然切到別頁還會顯示這頁的倉庫與更新時間
+    this.destroyRef.onDestroy(() => this.header.meta.set(null));
     this.loadDashboard();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
+    // AI 清單在聊天面板確認後，資料庫已經換了，重讀一次才不會用舊畫面蓋回去
+    this.boardEvents.boardChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.reloadBoard());
     timer(15_000, 15_000)
       .pipe(
         switchMap(() => this.api.getOrders().pipe(catchError(() => of<OrderDto[] | null>(null)))),
@@ -537,6 +581,7 @@ export class DispatchDashboard implements OnInit {
 
   onWarehouseChange(event: Event): void {
     this.warehouseId.set(Number((event.target as HTMLSelectElement).value));
+    this.boardNotices.set([]);
     this.reloadBoard();
   }
 
@@ -602,13 +647,32 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    if (this.published()) {
+      return;
+    }
+    // 以人為準：選了司機或車的格子才拿去排；只選司機的格子由後端配車。
+    // 格子裡已經有的訂單一起送，後端會把它們固定在這格的車上，不會被自動排車分到別台
+    const slots = this.routes()
+      .filter((lane) => lane.driverId !== null || lane.vehicleId !== null)
+      .map((lane) => ({
+        driverId: lane.driverId,
+        vehicleId: lane.vehicleId,
+        orderIds: lane.cards.map((card) => card.orderId),
+      }));
+    if (slots.length === 0) {
+      this.boardError.set('先在格子裡選司機或車，再自動排車。');
+      return;
+    }
+
     this.optimizing.set(true);
     this.boardError.set('');
+    this.boardNotices.set([]);
 
-    // 不指定車輛，由後端取該倉所有可用車，交給 OR-Tools 決定實際出幾台
-    this.api.optimizeDispatch(this.dispatchDate(), this.warehouseId()).subscribe({
+    this.api.optimizeSlots({date: this.dispatchDate(), warehouseId: this.warehouseId(), slots}).subscribe({
       next: (result) => {
         this.applyDispatchResult(result);
+        this.sortLaneStoresByRoute();
+        this.boardNotices.set(result.notices ?? []);
         this.optimizing.set(false);
       },
       error: (err) => {
@@ -617,6 +681,152 @@ export class DispatchDashboard implements OnInit {
         this.optimizing.set(false);
       },
     });
+  }
+
+  /**
+   * 「套用門市訂單」：把每格門市在待排單的訂單拉進那格，交給後端只排這些單。
+   *
+   * 停靠順序由後端算（OSRM 實際道路距離 + OR-Tools），不用調度員排：
+   * 哪幾間門市今天有單每天都不一樣，最順的順序也跟著變，存死一個順序反而常常不是最佳解。
+   *
+   * 送 pinnedOnly，後端只排固定的單，其他待排單不動；格子原本就有的單也一起固定送出，
+   * 因為後端排之前會先清掉當天草稿，沒送的單會被退回待排單。
+   * 車裝滿就不再拉，剩下的留在待排單並提示；後端遇到固定的箱數超過容量會整批擋下。
+   */
+  applyStoreOrders(): void {
+    if (this.busy() || this.published()) {
+      return;
+    }
+
+    const notices: string[] = [];
+    const pool = [...this.unassigned()];
+    const orderIdsByLane = new Map<string, number[]>();
+    let pulled = 0;
+    for (const lane of this.routes()) {
+      if (lane.vehicleId === null) {
+        if (lane.storeIds.length > 0) {
+          notices.push(`${this.templateSlotLabel(lane.driverId, lane.vehicleId)} 還沒選車，門市先不拉單`);
+        }
+        continue;
+      }
+      const orderIds = lane.cards.map((card) => card.orderId);
+      if (!lane.isMaintenance && !lane.hasLockedStops) {
+        let room = lane.capacity - this.loadedBoxes(lane);
+        for (const storeId of lane.storeIds) {
+          const left: BoardCard[] = [];
+          for (const card of pool.filter((item) => item.storeId === storeId)) {
+            if (card.boxCount > room) {
+              left.push(card);
+              continue;
+            }
+            room -= card.boxCount;
+            orderIds.push(card.orderId);
+            pool.splice(pool.indexOf(card), 1);
+            pulled++;
+          }
+          if (left.length > 0) {
+            notices.push(`${lane.plateNumber} 裝滿，${left[0].storeName} ${left.length} 張留在待排單`);
+          }
+        }
+      }
+      if (orderIds.length > 0) {
+        orderIdsByLane.set(lane.slotKey, orderIds);
+      }
+    }
+    if (pulled === 0) {
+      this.boardNotices.set(notices);
+      this.boardError.set('格子裡的門市今天沒有待排的訂單。先在格子裡加入門市，或確認待排單裡有這些門市的單。');
+      return;
+    }
+
+    // 只送有單的格子：沒單的格子送出去，後端會替它配車、排不到單又多一句「沒有排到訂單」，
+    // 沒送的人車格 applyDispatchResult 會原樣留在畫面上
+    const slots = this.routes()
+      .filter((lane) => orderIdsByLane.has(lane.slotKey))
+      .map((lane) => ({driverId: lane.driverId, vehicleId: lane.vehicleId, orderIds: orderIdsByLane.get(lane.slotKey)!}));
+
+    this.applyingStores.set(true);
+    this.boardError.set('');
+    this.boardNotices.set([]);
+    this.api
+      .optimizeSlots({date: this.dispatchDate(), warehouseId: this.warehouseId(), slots, pinnedOnly: true})
+      .subscribe({
+        next: (result) => {
+          this.applyDispatchResult(result);
+          this.sortLaneStoresByRoute();
+          this.boardNotices.set([...notices, ...(result.notices ?? [])]);
+          this.applyingStores.set(false);
+        },
+        error: (error: unknown) => {
+          this.boardError.set(describeError(error));
+          this.applyingStores.set(false);
+        },
+      });
+  }
+
+  /**
+   * 門市照後端排出來的停靠順序重排，今天沒單的門市接在最後、維持原本的先後。
+   * 這時按「儲存編組」，存進去的就是算好的順序，下次打開比較接近實際跑法。
+   */
+  private sortLaneStoresByRoute(): void {
+    this.routes.update((lanes) =>
+      lanes.map((lane) => {
+        if (lane.storeIds.length < 2) {
+          return lane;
+        }
+        const visited = [...new Set(lane.cards.map((card) => card.storeId))].filter((id) => lane.storeIds.includes(id));
+        const rest = lane.storeIds.filter((id) => !visited.includes(id));
+        return {...lane, storeIds: [...visited, ...rest]};
+      }),
+    );
+  }
+
+  /** 這格「加入門市」的選項：營業中的門市，已在別格的 disabled 並附原因，這格已選的不列 */
+  storeOptions(route: BoardRoute): StoreOption[] {
+    const takenBy = new Map<number, string>();
+    for (const lane of this.routes()) {
+      if (lane.slotKey === route.slotKey) {
+        continue;
+      }
+      const who = lane.driverId !== null ? this.driverName(lane.driverId) : lane.plateNumber || '其他格';
+      for (const storeId of lane.storeIds) {
+        takenBy.set(storeId, `已在${who}那格`);
+      }
+    }
+    return this.stores()
+      .filter(
+        (store): store is StoreDto & {id: number} =>
+          store.id != null && store.status === 'ACTIVE' && !route.storeIds.includes(store.id),
+      )
+      .map((store) => ({id: store.id, name: store.name, takenNote: takenBy.get(store.id) ?? null}));
+  }
+
+  /** 選了就加進這格的門市清單，下拉馬上歸回「＋ 加入門市」；只改畫面，不動訂單 */
+  addLaneStore(route: BoardRoute, event: Event): void {
+    const select = event.target as HTMLSelectElement;
+    const storeId = Number(select.value);
+    select.value = '';
+    if (!storeId || this.published()) {
+      return;
+    }
+    this.routes.update((lanes) =>
+      lanes.map((lane) =>
+        lane.slotKey === route.slotKey && !lane.storeIds.includes(storeId)
+          ? {...lane, storeIds: [...lane.storeIds, storeId]}
+          : lane,
+      ),
+    );
+  }
+
+  removeLaneStore(route: BoardRoute, storeId: number): void {
+    if (this.published()) {
+      return;
+    }
+    this.routes.update((lanes) =>
+      lanes.map((lane) =>
+        lane.slotKey === route.slotKey ? {...lane, storeIds: lane.storeIds.filter((id) => id !== storeId)} : lane,
+      ),
+    );
   }
 
   /** 車道目前實際載運的箱數。拖曳後會變動，所以用卡片重算而不是用後端給的值 */
@@ -710,13 +920,14 @@ export class DispatchDashboard implements OnInit {
    * 佔用有兩種來源：同一個倉的其他車道（看板上看得到），以及當天其他倉
    * （看板看不到，要靠後端的 driversTakenElsewhere 補）。
    *
-   * 停用或當日無法排班的司機不會出現在今日調度，避免被重新指派。
+   * 班表有問題的司機照樣列出並標上原因：草稿允許紅框，派出時才擋（DispatchGuardService）。
+   * 停用的司機不列，除非他就是這條車道目前的司機，不然選單找不到對應選項會誤顯示成「未指派司機」。
    */
   driverOptions(route: BoardRoute): DriverOption[] {
     const takenHere = new Map<number, string>();
     for (const item of this.routes()) {
-      if (item.routeId !== route.routeId && item.driverId !== null) {
-        takenHere.set(item.driverId, `已排在 ${item.plateNumber}`);
+      if (item.slotKey !== route.slotKey && item.driverId !== null) {
+        takenHere.set(item.driverId, item.plateNumber ? `已排在 ${item.plateNumber}` : '已在其他格');
       }
     }
 
@@ -728,7 +939,7 @@ export class DispatchDashboard implements OnInit {
     return this.drivers()
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && this.isDriverDispatchable(driver.id),
+          driver.id != null && (driver.isActive || driver.id === route.driverId),
       )
       .map((driver) => ({
         id: driver.id,
@@ -737,12 +948,97 @@ export class DispatchDashboard implements OnInit {
           driver.id === route.driverId
             ? null
             : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
+        scheduleNote: this.driverScheduleNote(driver.id),
       }));
   }
 
-  /** 僅限啟用且當天有 WORK 班次的司機能出現在今日調度。 */
-  isDriverDispatchable(driverId: number | null): boolean {
-    return driverId !== null && this.driverScheduleNote(driverId) === null;
+  /**
+   * 這格的車輛選項：這個倉目前能出車的車，已被別格選走的 disabled 並附原因。
+   * 這格目前的車就算在維修也要列出，不然選單會誤顯示成「未選車」。
+   */
+  vehicleOptions(route: BoardRoute): VehicleOption[] {
+    const usedElsewhere = new Map<number, string>();
+    for (const lane of this.routes()) {
+      if (lane.slotKey !== route.slotKey && lane.vehicleId !== null) {
+        usedElsewhere.set(
+          lane.vehicleId,
+          lane.driverId !== null ? `已在 ${this.driverName(lane.driverId)} 那格` : '已被其他格選走',
+        );
+      }
+    }
+    return this.vehicles()
+      .filter(
+        (vehicle): vehicle is VehicleDto & {id: number} =>
+          vehicle.id != null &&
+          vehicle.warehouseId === this.warehouseId() &&
+          (vehicle.status === 'AVAILABLE' || vehicle.id === route.vehicleId),
+      )
+      .map((vehicle) => ({
+        id: vehicle.id,
+        label: `${vehicle.plateNumber} · ${vehicle.capacity} 箱`,
+        takenNote: usedElsewhere.get(vehicle.id) ?? null,
+      }));
+  }
+
+  /** 選了司機、選了車或已經有訂單，就算填了 */
+  private isLaneFilled(lane: BoardRoute): boolean {
+    return lane.vehicleId !== null || lane.driverId !== null || lane.cards.length > 0;
+  }
+
+  private emptyLane(): BoardRoute {
+    return {
+      slotKey: `slot-${++this.slotSeq}`,
+      routeId: 0,
+      vehicleId: null,
+      plateNumber: '',
+      vehicleType: null,
+      capacity: 0,
+      driverId: null,
+      totalDistance: 0,
+      routeStatus: 'DRAFT',
+      hasLockedStops: false,
+      isMaintenance: false,
+      cards: [],
+      storeIds: [],
+    };
+  }
+
+  /**
+   * 填了的格子排前面，後面補空格，總數固定是 3 的倍數而且至少留一個空格：
+   * 一開始 3 格，3 格都填了就變 6 格，以此類推。原本的空格沿用，key 不變畫面才不會閃。
+   */
+  private withEmptySlots(lanes: readonly BoardRoute[]): BoardRoute[] {
+    const filled = lanes.filter((lane) => this.isLaneFilled(lane));
+    const total = Math.max(3, Math.ceil((filled.length + 1) / 3) * 3);
+    const result = [...filled];
+    for (const lane of lanes) {
+      if (!this.isLaneFilled(lane) && result.length < total) {
+        // 人車都拿掉的格子存不進編組，門市也跟著清掉，不然會留著看不到的門市佔住「同一間只能在一格」
+        result.push(lane.storeIds.length > 0 ? {...lane, storeIds: []} : lane);
+      }
+    }
+    while (result.length < total) {
+      result.push(this.emptyLane());
+    }
+    return result;
+  }
+
+  /** 把某格的車換成 vehicleId（null＝不選車），車牌、容量一起帶 */
+  private withVehicle(lane: BoardRoute, vehicleId: number | null): BoardRoute {
+    const vehicle = vehicleId === null ? undefined : this.vehicles().find((item) => item.id === vehicleId);
+    return {
+      ...lane,
+      vehicleId,
+      plateNumber: vehicle?.plateNumber ?? '',
+      vehicleType: vehicle?.vehicleType ?? null,
+      capacity: vehicle?.capacity ?? 0,
+      isMaintenance: vehicle?.status === 'MAINTENANCE',
+    };
+  }
+
+  /** 車道司機今天不能出車的原因；沒指派司機或可以出車時回傳 null。車道紅框與狀態標籤用 */
+  routeScheduleProblem(route: BoardRoute): string | null {
+    return route.driverId === null ? null : this.driverScheduleNote(route.driverId);
   }
 
   /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
@@ -756,30 +1052,54 @@ export class DispatchDashboard implements OnInit {
    * 因為 reassign 本來就會重建當天路線，司機沒跟著送就會被清掉。
    */
   onDriverChange(route: BoardRoute, event: Event): void {
-    if (this.saving()) {
+    if (this.saving() || this.published()) {
       return;
     }
 
     const selected = (event.target as HTMLSelectElement).value;
     const driverId = selected === '' ? null : Number(selected);
-    const scheduleNote = driverId === null ? null : this.driverScheduleNote(driverId);
 
-    // DOM 的 disabled option 已防住一般操作；這道檢查則保護鍵盤操作與日後的其他呼叫點。
-    if (driverId !== null && scheduleNote) {
-      this.boardError.set(`無法指派司機：${this.driverName(driverId)}${scheduleNote}。`);
-      (event.target as HTMLSelectElement).value = route.driverId === null ? '' : String(route.driverId);
+    this.routes.update((routes) =>
+      this.withEmptySlots(routes.map((item) => (item.slotKey === route.slotKey ? {...item, driverId} : item))),
+    );
+
+    // 還沒有訂單的格子只是排人車，存在畫面上就好；有訂單才是路線，要存進資料庫
+    if (route.cards.length > 0) {
+      this.submitReassign();
+    }
+  }
+
+  /**
+   * 選車或取消車。有訂單的格子換車會直接存（路線改由新車跑）；
+   * 有訂單的格子不能取消車，路線一定要有車。
+   */
+  onVehicleChange(route: BoardRoute, event: Event): void {
+    if (this.saving() || this.published()) {
       return;
     }
 
+    const select = event.target as HTMLSelectElement;
+    const vehicleId = select.value === '' ? null : Number(select.value);
+    if (vehicleId === null && route.cards.length > 0) {
+      this.boardError.set('這格已經有訂單，不能取消車輛；請先把訂單拖回待排單區。');
+      select.value = String(route.vehicleId);
+      return;
+    }
+
+    this.boardError.set('');
     this.routes.update((routes) =>
-      routes.map((item) => (item.routeId === route.routeId ? {...item, driverId} : item)),
+      this.withEmptySlots(
+        routes.map((item) => (item.slotKey === route.slotKey ? this.withVehicle(item, vehicleId) : item)),
+      ),
     );
 
-    this.submitReassign();
+    if (route.cards.length > 0) {
+      this.submitReassign();
+    }
   }
 
   onDrop(event: CdkDragDrop<BoardCard[]>): void {
-    if (this.saving()) {
+    if (this.saving() || this.published()) {
       return;
     }
 
@@ -811,21 +1131,10 @@ export class DispatchDashboard implements OnInit {
   private submitReassign(): void {
     const request = this.buildReassignRequest();
 
-    const scheduleIssues = this.scheduleIssuesForRoutes(this.routes());
-    if (scheduleIssues.length > 0) {
-      this.boardError.set(`無法儲存排車：${scheduleIssues.join('；')}。`);
-      // 拖曳採樂觀更新；資格不符時重讀伺服器資料，避免畫面留下未儲存的排列。
-      this.reloadBoard();
-      return;
-    }
+    // 班表有問題照樣存：草稿允許紅框，派出時才擋（前端 publish 預檢＋後端 DispatchGuardService）
 
-    // 全部訂單都被拖到未排入池時沒有東西可送。後端的 routes 有 @NotEmpty，
-    // 送出去只會拿到 400，所以在這裡就停住。
-    if (request.routes.length === 0) {
-      this.boardError.set('至少要有一台車載到訂單才能儲存。');
-      return;
-    }
-
+    // 訂單全部拖回待排單時 routes 是空陣列，照樣送：後端收到空陣列會清掉當天這個倉的草稿
+    // （DispatchWorkflowService.reassign → clearDraftRoutes），畫面的「全空」才會真的寫進資料庫
     this.saving.set(true);
     this.boardError.set('');
 
@@ -848,8 +1157,8 @@ export class DispatchDashboard implements OnInit {
       date: this.dispatchDate(),
       warehouseId: this.warehouseId(),
       routes: this.routes()
-        // 空車道不送：後端會擋，而且沒載貨的車本來就不該有路線
-        .filter((route) => route.cards.length > 0)
+        // 空車道不送：orderIds 有 @NotEmpty，而且沒載貨的車本來就不該有路線；有訂單的格子一定有車
+        .filter((route): route is BoardRoute & {vehicleId: number} => route.cards.length > 0 && route.vehicleId !== null)
         .map((route) => ({
           vehicleId: route.vehicleId,
           driverId: route.driverId,
@@ -957,123 +1266,185 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 點分頁＝直接套用該編組。
+   * 點分頁＝把編組的人車載進看板的格子。
    *
-   * 套用是破壞性的（清掉當天該倉草稿再重建），所以切換分頁會放棄
-   * 目前看板上未儲存的手動調整 —— 這是刻意的：分頁代表「今天照這個編組跑」。
+   * 只改畫面、不寫資料庫：編組是人車搭配的樣板，載進來之後要不要排車，由調度員按自動排車決定。
+   * 已派出的日子看板鎖定，分頁照樣能點開看、能編輯，只是不能載入，撤回後才能載入。
    */
   selectTemplate(templateId: number): void {
-    this.creatingTemplate.set(false);
     this.templateError.set('');
-    if (this.activeTemplateId() === templateId) {
-      return;
-    }
     this.activeTemplateId.set(templateId);
-    this.applyActiveTemplate();
+    this.loadActiveTemplateIntoBoard();
   }
 
   /**
-   * 套用選中的編組。會清掉當天該倉的草稿路線並重建，
-   * 所以按下去等於放棄目前看板上的手動調整。
+   * 把選中編組在目前倉庫的格子載進看板：人車，加上每格的門市清單。只改畫面、不拉單、不寫資料庫，
+   * 要把門市的單拉進來按「套用門市訂單」。
+   *
+   * 看板上已經有同一組人車就沿用那一格，門市換成編組的；只撞到其中一個（人或車已經在別格）
+   * 就略過這格，不去拆調度員排好的格子。
+   * 門市已經在看板別格的也略過：同一間門市只能在一格，不然存編組時後端會擋。
    */
-  applyActiveTemplate(): void {
-    const templateId = this.activeTemplateId();
-    if (!templateId || this.templateBusy()) {
+  loadActiveTemplateIntoBoard(): void {
+    const template = this.activeTemplate();
+    if (!template || this.saving()) {
+      return;
+    }
+    if (this.published()) {
+      this.templateError.set('今天已派出，看板鎖定中；撤回後才能載入編組。');
       return;
     }
 
-    this.templateBusy.set(true);
-    this.templateError.set('');
-    this.api.applyTemplate(templateId, this.dispatchDate()).subscribe({
-      next: (boards) => {
-        // 編組可跨倉，回傳是多包；挑出目前正在看的那一倉
-        const mine = boards.find((board) => board.warehouse.id === this.warehouseId());
-        if (mine) {
-          this.applyDispatchResult(mine);
-        } else {
-          // 這個編組今天在本倉沒排到任何路線（門市都沒單）
-          this.templateError.set('本倉當天沒有可排入的訂單。');
-          this.reloadBoard();
-        }
-        this.templateBusy.set(false);
-      },
-      error: (error: unknown) => {
-        this.templateError.set(describeError(error));
-        this.templateBusy.set(false);
-      },
-    });
+    const lanes = this.routes().filter((lane) => this.isLaneFilled(lane));
+    const usedDrivers = new Set(lanes.map((lane) => lane.driverId).filter((id): id is number => id !== null));
+    const usedVehicles = new Set(lanes.map((lane) => lane.vehicleId).filter((id): id is number => id !== null));
+    const slots = template.routes.filter((slot) => slot.warehouseId === this.warehouseId());
+    for (const slot of slots) {
+      const sameIndex = lanes.findIndex((lane) => lane.driverId === slot.driverId && lane.vehicleId === slot.vehicleId);
+      const storesElsewhere = new Set(
+        lanes.filter((_, index) => index !== sameIndex).flatMap((lane) => lane.storeIds),
+      );
+      const storeIds = slot.stops.map((stop) => stop.storeId).filter((id) => !storesElsewhere.has(id));
+      if (sameIndex >= 0) {
+        lanes[sameIndex] = {...lanes[sameIndex], storeIds};
+        continue;
+      }
+      if (
+        (slot.driverId !== null && usedDrivers.has(slot.driverId)) ||
+        (slot.vehicleId !== null && usedVehicles.has(slot.vehicleId))
+      ) {
+        // 人或車已經在別格，略過不提示；覆蓋編組時確認框會列出看板實際的人車
+        continue;
+      }
+      lanes.push({...this.withVehicle({...this.emptyLane(), driverId: slot.driverId}, slot.vehicleId), storeIds});
+      if (slot.driverId !== null) {
+        usedDrivers.add(slot.driverId);
+      }
+      if (slot.vehicleId !== null) {
+        usedVehicles.add(slot.vehicleId);
+      }
+    }
+
+    this.routes.set(this.withEmptySlots(lanes));
+    this.boardNotices.set(slots.length === 0 ? ['這個編組沒有目前倉庫的格子。'] : []);
+  }
+
+  /** 編組格子的顯示文字，例如「王小明 · TN-2001」；沒選的寫「未選司機」「未選車」 */
+  templateSlotLabel(driverId: number | null, vehicleId: number | null): string {
+    const who = driverId === null ? '未選司機' : this.driverName(driverId);
+    const car = vehicleId === null ? '未選車' : this.vehicleLabel(vehicleId);
+    return `${who} · ${car}`;
   }
 
   // ── 新增編組表單 ──────────────────────────────────────
 
   /**
-   * 開一張空白編成表：把盤面上所有訂單收回未排入池，車輛槽位全部清空。
+   * 「＋」分頁＝從空白看板重新開始，同時也是新增編組：
+   * 格子清成空的、訂單全部回待排單，人車直接在格子裡選，填名稱按「儲存編組」即可。
    *
-   * 只改前端狀態、不打後端 —— reassign 的 routes 有 @NotEmpty，空盤送不出去。
-   * 等使用者拖第一張卡（或按一鍵編組）才會真的寫進資料庫。
+   * 看板上有東西就先跳確認：清掉的是當天這個倉的草稿路線（訂單不會刪，回到待排單），
+   * 以及還沒訂單、只存在畫面上的人車格。已派出時看板鎖定，只切分頁不清。
    */
   openCreateTemplate(): void {
-    this.activeTemplateId.set(0);
-    this.creatingTemplate.set(true);
-    this.templateName.set('');
-    this.templateError.set('');
-    this.clearBoard();
+    if (this.saving()) {
+      return;
+    }
+    if (this.published()) {
+      this.resetTemplateTab();
+      return;
+    }
+    if (!this.routes().some((lane) => this.isLaneFilled(lane))) {
+      this.clearBoard();
+      return;
+    }
+    this.dialog.open(this.clearBoardDialog()).afterClosed().subscribe((ok) => {
+      // 按取消是 false；點背景、按 Esc 是 undefined，只有按「直接離開」才是 true
+      if (ok) {
+        this.clearBoard();
+      }
+    });
   }
 
-  closeCreateTemplate(): void {
-    this.creatingTemplate.set(false);
+  private resetTemplateTab(): void {
+    this.activeTemplateId.set(0);
+    this.templateName.set('');
     this.templateError.set('');
-    this.reloadBoard();
+  }
+
+  /** 送空的 reassign 讓後端清掉當天這個倉的草稿，再用回傳結果重畫看板 */
+  private clearBoard(): void {
+    this.resetTemplateTab();
+    this.boardError.set('');
+    this.boardNotices.set([]);
+    // 先清掉畫面上的格子：applyDispatchResult 會保留排到一半的人車格，不清的話它們會留在新分頁上
+    this.routes.set([]);
+    this.saving.set(true);
+    this.api.reassignDispatch({date: this.dispatchDate(), warehouseId: this.warehouseId(), routes: []}).subscribe({
+      next: (result) => {
+        this.applyDispatchResult(result);
+        this.saving.set(false);
+      },
+      error: (error: unknown) => {
+        this.boardError.set(describeError(error));
+        this.reloadBoard();
+      },
+    });
   }
 
   updateTemplateName(event: Event): void {
     this.templateName.set((event.target as HTMLInputElement).value);
   }
 
-  /** 把所有已排入的卡片收回未排入池，槽位留著但清空 */
-  private clearBoard(): void {
-    const pooled: BoardCard[] = [...this.unassigned()];
-    for (const lane of this.routes()) {
-      pooled.push(...lane.cards);
-    }
-    this.routes.update((lanes) => lanes.map((lane) => ({...lane, cards: [], driverId: null})));
-    this.unassigned.set(pooled);
+  /**
+   * 看板格子裡的人車轉成編組內容，連同每格選的門市（格子的門市清單，不是今天的訂單）。
+   * 存的是門市不是訂單：訂單綁日期，要用時按「套用門市訂單」依門市去待排單拉當天的單。
+   */
+  private boardSlotsAsTemplate(): TemplateRouteRequest[] {
+    const warehouseId = this.warehouseId();
+    return this.routes()
+      .filter((lane) => lane.driverId !== null || lane.vehicleId !== null)
+      .map((lane) => ({warehouseId, vehicleId: lane.vehicleId, driverId: lane.driverId, storeIds: [...lane.storeIds]}));
+  }
+
+  storeName(storeId: number): string {
+    return this.stores().find((store) => store.id === storeId)?.name ?? `門市 #${storeId}`;
   }
 
   /**
-   * 把目前盤面存成編組。
-   *
-   * 編組記的是「哪台車跑哪幾間門市」，所以只取卡片的 storeId；
-   * 同一間門市在同一條線出現多張單時要去重，後端有
-   * uk_template_stops(template_route_id, store_id) 擋重複。
+   * 「儲存編組」唯一的入口：在「＋」分頁是新增，在編組分頁是覆蓋這個編組。
+   * 判斷新增還是修改交給程式，調度員只要記得「排好就按儲存編組」。
    */
   saveTemplate(): void {
+    if (this.templateBusy()) {
+      return;
+    }
+    const boardSlots = this.boardSlotsAsTemplate();
+    if (boardSlots.length === 0) {
+      this.templateError.set('看板上至少要有一格選了司機或車，才能儲存編組。');
+      return;
+    }
+
+    const template = this.activeTemplate();
+    if (template) {
+      this.confirmOverwriteTemplate(template, boardSlots);
+    } else {
+      this.createTemplate(boardSlots);
+    }
+  }
+
+  private createTemplate(routes: TemplateRouteRequest[]): void {
     const name = this.templateName().trim();
     if (!name) {
       this.templateError.set('請填寫編組名稱。');
       return;
     }
 
-    const warehouseId = this.warehouseId();
-    const routes: TemplateRouteRequest[] = this.routes()
-      .filter((lane) => lane.cards.length > 0)
-      .map((lane) => ({
-        warehouseId,
-        vehicleId: lane.vehicleId,
-        storeIds: [...new Set(lane.cards.map((card) => card.storeId))],
-      }));
-
-    if (routes.length === 0) {
-      this.templateError.set('至少要有一台車排到訂單，才能存成編組。');
-      return;
-    }
-
     this.templateBusy.set(true);
+    this.templateError.set('');
     this.api.createTemplate({name, routes}).subscribe({
       next: (created) => {
         this.templates.update((templates) => [...templates, created]);
         this.activeTemplateId.set(created.id);
-        this.creatingTemplate.set(false);
         this.templateBusy.set(false);
       },
       error: (error: unknown) => {
@@ -1084,44 +1455,59 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 用目前盤面覆蓋選中的編組。
+   * 覆蓋既有編組前先跳確認框，列出要存的人車。
    *
-   * 後端 update 會把舊的 template_routes / template_stops 整批刪掉重建，
-   * 所以這是「以現在的排法為準」，不是增量合併。
+   * 點編組分頁是把人車「加」進看板，不是換掉看板：看板上本來就有的人或車不會載入，
+   * 從別的編組分頁切過來也可能混著別組的人。確認框列出來，就是讓調度員在覆蓋前看得出來。
+   *
+   * 後端 update 會把舊的 template_routes 整批刪掉重建。看板只看得到目前這個倉，
+   * 所以其他倉的格子要原樣帶回去，不然存一次就被刪掉。
    */
-  overwriteActiveTemplate(): void {
-    const template = this.activeTemplate();
-    if (!template || this.templateBusy()) {
-      return;
-    }
-
-    const warehouseId = this.warehouseId();
-    const routes: TemplateRouteRequest[] = this.routes()
-      .filter((lane) => lane.cards.length > 0)
-      .map((lane) => ({
-        warehouseId,
-        vehicleId: lane.vehicleId,
-        storeIds: [...new Set(lane.cards.map((card) => card.storeId))],
+  private confirmOverwriteTemplate(template: TemplateDto, boardSlots: TemplateRouteRequest[]): void {
+    const otherWarehouseSlots: TemplateRouteRequest[] = template.routes
+      .filter((slot) => slot.warehouseId !== this.warehouseId())
+      .map((slot) => ({
+        warehouseId: slot.warehouseId,
+        vehicleId: slot.vehicleId,
+        driverId: slot.driverId,
+        storeIds: slot.stops.map((stop) => stop.storeId),
       }));
 
-    if (routes.length === 0) {
-      this.templateError.set('盤面上沒有排到訂單的車，無法覆蓋編組。');
-      return;
-    }
-
-    this.templateBusy.set(true);
-    this.templateError.set('');
-    this.api.updateTemplate(template.id, {name: template.name, routes}).subscribe({
-      next: (updated) => {
-        this.templates.update((templates) =>
-          templates.map((item) => (item.id === updated.id ? updated : item)),
-        );
-        this.templateBusy.set(false);
-      },
-      error: (error: unknown) => {
-        this.templateError.set(describeError(error));
-        this.templateBusy.set(false);
-      },
+    const data = {
+      name: template.name,
+      // 例如「李冠廷 · TN-1001：東區門市 → 永康門市」，讓調度員看得到門市順序也會一起存
+      labels: boardSlots.map((slot) => {
+        const who = this.templateSlotLabel(slot.driverId, slot.vehicleId);
+        return slot.storeIds.length === 0
+          ? who
+          : `${who}：${slot.storeIds.map((id) => this.storeName(id)).join(' → ')}`;
+      }),
+    };
+    this.dialog.open(this.saveTemplateDialog(), {data}).afterClosed().subscribe((ok) => {
+      // 按取消是 false；點背景、按 Esc 是 undefined，只有按「儲存」才是 true
+      if (!ok) {
+        return;
+      }
+      this.templateBusy.set(true);
+      this.templateError.set('');
+      this.api
+        .updateTemplate(template.id, {
+          name: template.name,
+          notes: template.notes,
+          routes: [...otherWarehouseSlots, ...boardSlots],
+        })
+        .subscribe({
+          next: (updated) => {
+            this.templates.update((templates) =>
+              templates.map((item) => (item.id === updated.id ? updated : item)),
+            );
+            this.templateBusy.set(false);
+          },
+          error: (error: unknown) => {
+            this.templateError.set(describeError(error));
+            this.templateBusy.set(false);
+          },
+        });
     });
   }
 
@@ -1143,10 +1529,6 @@ export class DispatchDashboard implements OnInit {
         this.templateBusy.set(false);
       },
     });
-  }
-
-  storeName(storeId: number): string {
-    return this.stores().find((store) => store.id === storeId)?.name ?? `門市 #${storeId}`;
   }
 
   vehicleLabel(vehicleId: number): string {
@@ -1246,19 +1628,6 @@ export class DispatchDashboard implements OnInit {
     }
   }
 
-  private scheduleIssuesForRoutes(routes: readonly BoardRoute[]): string[] {
-    const assignedDriverIds = new Set(
-      routes
-        .filter((route) => route.cards.length > 0 && route.driverId !== null)
-        .map((route) => route.driverId!),
-    );
-
-    return [...assignedDriverIds].flatMap((driverId) => {
-      const note = this.driverScheduleNote(driverId);
-      return note ? [`${this.driverName(driverId)}${note}`] : [];
-    });
-  }
-
   private scheduleIssuesForDispatchBoards(boards: readonly DispatchResultDto[]): string[] {
     const assignedDriverIds = new Set(
       boards.flatMap((board) =>
@@ -1295,45 +1664,79 @@ export class DispatchDashboard implements OnInit {
     // 原始結果留著不動，之後要做「調整前後差異」時當作比較基準
     this.dispatchResult.set(result);
 
-    // 車輛＝固定槽位：只為這個倉可派車的車輛建立一格，後端有回路線的就填進去。
-    const routeByVehicle = new Map(result.routes.map((route) => [route.vehicleId, route]));
+    // 格子：後端有路線的車各一格，再加上調度員排到一半、還沒有路線的人車格，最後補空格。
     const dispatchableOrderIds = new Set(
       this.orders()
         .filter((order) => order.status === 'CONFIRMED')
         .map((order) => order.id),
     );
-    const boardVehicles = this.vehicles().filter(
-      (vehicle): vehicle is VehicleDto & {id: number} =>
-        vehicle.id != null &&
-        vehicle.warehouseId === this.warehouseId() &&
-        vehicle.status !== 'RETIRED',
+    const vehicleById = new Map(
+      this.vehicles()
+        .filter((vehicle): vehicle is VehicleDto & {id: number} => vehicle.id != null)
+        .map((vehicle) => [vehicle.id, vehicle]),
     );
-    const boardVehicleIds = new Set(boardVehicles.map((vehicle) => vehicle.id));
-    this.routes.set(
-      boardVehicles.map((vehicle) => {
-        const route = routeByVehicle.get(vehicle.id);
-        const routeStops = route?.stops ?? [];
+    const isBoardVehicle = (vehicleId: number): boolean => {
+      const vehicle = vehicleById.get(vehicleId);
+      return vehicle !== undefined && vehicle.warehouseId === this.warehouseId() && vehicle.status !== 'RETIRED';
+    };
+    // 換倉時，上一個倉排到一半的格子不能帶過來
+    const previous = this.boardWarehouseId === this.warehouseId() ? this.routes() : [];
+    this.boardWarehouseId = this.warehouseId();
+
+    const serverLanes: BoardRoute[] = result.routes
+      .filter((route) => isBoardVehicle(route.vehicleId))
+      .map((route) => {
+        const vehicle = vehicleById.get(route.vehicleId)!;
+        const routeStops = route.stops ?? [];
+        const isMaintenance = vehicle.status === 'MAINTENANCE';
         return {
-          routeId: route?.routeId ?? 0,
-          vehicleId: vehicle.id,
+          // 同一台車沿用原本的 key，畫面不會整格重畫
+          slotKey: previous.find((lane) => lane.vehicleId === route.vehicleId)?.slotKey ?? `slot-${++this.slotSeq}`,
+          routeId: route.routeId,
+          vehicleId: route.vehicleId,
           plateNumber: vehicle.plateNumber,
           vehicleType: vehicle.vehicleType ?? null,
           capacity: vehicle.capacity,
-          driverId: route?.driverId ?? null,
-          totalDistance: route?.totalDistance ?? 0,
-          routeStatus: route?.status ?? 'DRAFT',
+          driverId: route.driverId ?? null,
+          totalDistance: route.totalDistance ?? 0,
+          routeStatus: route.status ?? 'DRAFT',
           hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
-          isMaintenance: vehicle.status === 'MAINTENANCE',
-          cards: (vehicle.status === 'MAINTENANCE'
+          isMaintenance,
+          cards: (isMaintenance
             ? routeStops
             : routeStops.filter((stop) => dispatchableOrderIds.has(stop.orderId)))
             .map(toBoardCard),
+          // 門市清單只在畫面上，後端不知道；沿用原本那格的。只選司機的格子被後端配了車，要用司機對回去
+          storeIds:
+            (previous.find((lane) => lane.vehicleId === route.vehicleId) ??
+              previous.find((lane) => lane.vehicleId === null && lane.driverId !== null && lane.driverId === route.driverId))
+              ?.storeIds ?? [],
         };
-      }),
+      });
+
+    // 排到一半的人車格：這次結果沒有用到它的人或車，就留在畫面上（訂單以後端為準，一律清空）。
+    // 例如 OR-Tools 沒用到的車、只排了人還沒排車的格子、訂單全被拖走的格子。
+    const usedDrivers = new Set(
+      serverLanes.map((lane) => lane.driverId).filter((id): id is number => id !== null),
     );
-    // 報廢車不畫成車道，但其中仍待排的訂單必須保留給其他可派車輛。
+    const usedVehicles = new Set(serverLanes.map((lane) => lane.vehicleId));
+    const draftLanes: BoardRoute[] = previous
+      .filter((lane) => lane.driverId !== null || lane.vehicleId !== null)
+      .filter((lane) => !(lane.driverId !== null && usedDrivers.has(lane.driverId)))
+      .filter((lane) => !(lane.vehicleId !== null && usedVehicles.has(lane.vehicleId)))
+      .map((lane) => ({
+        ...lane,
+        routeId: 0,
+        cards: [],
+        totalDistance: 0,
+        routeStatus: 'DRAFT' as RouteStatus,
+        hasLockedStops: false,
+      }));
+    this.routes.set(this.withEmptySlots([...serverLanes, ...draftLanes]));
+
+    // 報廢車（或已調走的車）不畫成格子，但其中仍待排的訂單必須保留給其他車。
     const strandedOrders = result.routes
-      .filter((route) => !boardVehicleIds.has(route.vehicleId))
+      .filter((route) => !isBoardVehicle(route.vehicleId))
       .flatMap((route) => route.stops)
       .filter((stop) => dispatchableOrderIds.has(stop.orderId));
     const unassignedByOrderId = new Map(

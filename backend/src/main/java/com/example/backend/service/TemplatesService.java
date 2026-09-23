@@ -8,12 +8,11 @@ import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.dto.respones.TemplatesDTO;
 import com.example.backend.entity.DispatchTemplatesEntity;
+import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.TemplateRoutesEntity;
 import com.example.backend.entity.TemplateStopsEntity;
 import com.example.backend.entity.VehiclesEntity;
-import com.sun.jna.platform.win32.COM.Dispatch;
 import jakarta.persistence.EntityNotFoundException;
-import org.hibernate.sql.Template;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +30,7 @@ public class TemplatesService {
     private final StoresDAO storesDAO;
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;
+    private final DriversDAO driversDAO;
     private final DispatchWorkflowService dispatchWorkflowService;
 
 
@@ -43,6 +43,7 @@ public class TemplatesService {
             StoresDAO storesDAO,
             OrdersDAO ordersDAO,
             RoutesDAO routesDAO,
+            DriversDAO driversDAO,
             DispatchWorkflowService dispatchWorkflowService
     ) {
         this.dispatchTemplatesDAO = dispatchTemplatesDAO;
@@ -53,6 +54,7 @@ public class TemplatesService {
         this.storesDAO = storesDAO;
         this.ordersDAO = ordersDAO;
         this.routesDAO = routesDAO;
+        this.driversDAO = driversDAO;
         this.dispatchWorkflowService = dispatchWorkflowService;
     }
 
@@ -159,6 +161,10 @@ public class TemplatesService {
         // 車輛調倉後，編組記的倉庫會跟車輛實際的倉庫對不上。
         // 不擋的話那條線會靜默消失（門市的訂單屬於舊倉，撈不到）
         for (TemplatesDTO.TemplateRouteResponse route : template.getRoutes()) {
+            // 格子式編組可以只有人沒有車，這種格子沒有門市可撈，下面分組時也會略過
+            if (route.getVehicleId() == null) {
+                continue;
+            }
             VehiclesEntity vehicle = vehiclesDAO.findById(route.getVehicleId())
                     .orElseThrow(() -> new EntityNotFoundException(
                             "找不到車輛，ID：" + route.getVehicleId()));
@@ -171,6 +177,9 @@ public class TemplatesService {
         // 編組可跨倉（第二層每列各帶 warehouseId），但 reassign 一次只處理一個倉
         Map<Long, List<TemplatesDTO.TemplateRouteResponse>> byWarehouse = new LinkedHashMap<>();
         for (TemplatesDTO.TemplateRouteResponse route : template.getRoutes()) {
+            if (route.getVehicleId() == null) {
+                continue;
+            }
             byWarehouse.computeIfAbsent(route.getWarehouseId(), key -> new ArrayList<>())
                     .add(route);
         }
@@ -278,6 +287,7 @@ public class TemplatesService {
             route.setTemplateId(templateId);
             route.setWarehouseId(routeRequest.getWarehouseId());
             route.setVehicleId(routeRequest.getVehicleId());
+            route.setDriverId(routeRequest.getDriverId());
             templateRoutesDAO.save(route);
 
             List<TemplateStopsEntity> stops = new ArrayList<>();
@@ -307,6 +317,7 @@ public class TemplatesService {
 
     private void validateReferences(TemplatesRequestDTO dto) {
         Set<Long> usedVehicleIds = new HashSet<>();
+        Set<Long> usedDriverIds = new HashSet<>();
         Set<Long> usedStoreIds = new HashSet<>();
         for (TemplatesRequestDTO.TemplateRouteRequest route : dto.getRoutes()) {
             Long warehouseId = route.getWarehouseId();
@@ -315,13 +326,30 @@ public class TemplatesService {
             }
 
             Long vehicleId = route.getVehicleId();
-            if (!usedVehicleIds.add(vehicleId)) {
-                throw new IllegalArgumentException("同一編組不能重複使用車輛，ID：" + vehicleId);
+            Long driverId = route.getDriverId();
+            if (vehicleId == null && driverId == null) {
+                throw new IllegalArgumentException("每一格至少要選司機或車輛");
             }
-            VehiclesEntity vehicle = vehiclesDAO.findById(vehicleId)
-                    .orElseThrow(() -> new IllegalArgumentException("找不到車輛，ID：" + vehicleId));
-            if (!warehouseId.equals(vehicle.getWarehouseId())) {
-                throw new IllegalArgumentException("車輛 " + vehicleId + " 不屬於倉庫 " + warehouseId);
+            if (vehicleId != null) {
+                if (!usedVehicleIds.add(vehicleId)) {
+                    throw new IllegalArgumentException("同一編組不能重複使用車輛，ID：" + vehicleId);
+                }
+                VehiclesEntity vehicle = vehiclesDAO.findById(vehicleId)
+                        .orElseThrow(() -> new IllegalArgumentException("找不到車輛，ID：" + vehicleId));
+                if (!warehouseId.equals(vehicle.getWarehouseId())) {
+                    throw new IllegalArgumentException("車輛 " + vehicleId + " 不屬於倉庫 " + warehouseId);
+                }
+            }
+            if (driverId != null) {
+                // 編組套用到同一天，一位司機一天只能開一條線（uk_tpl_routes_tpl_driver 是最後一道）
+                if (!usedDriverIds.add(driverId)) {
+                    throw new IllegalArgumentException("同一編組不能重複使用司機，ID：" + driverId);
+                }
+                DriversEntity driver = driversDAO.findById(driverId)
+                        .orElseThrow(() -> new IllegalArgumentException("找不到司機，ID：" + driverId));
+                if (!Boolean.TRUE.equals(driver.getIsActive())) {
+                    throw new IllegalArgumentException("司機「" + driver.getName() + "」已停用，不能放進編組");
+                }
             }
 
             Set<Long> storesInThisRoute = new HashSet<>();
@@ -365,6 +393,7 @@ public class TemplatesService {
             routeResponse.setId(route.getId());
             routeResponse.setWarehouseId(route.getWarehouseId());
             routeResponse.setVehicleId(route.getVehicleId());
+            routeResponse.setDriverId(route.getDriverId());
 
             List<TemplateStopsEntity> stops = stopsByRoute.get(route.getId());
             if (stops == null) {

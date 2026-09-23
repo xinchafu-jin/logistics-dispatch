@@ -18,6 +18,10 @@
     </div>
 
     <div class="workspace-actions">
+      <!-- 由頁面透過 DispatchHeaderService 提供，例如今日調度的「倉庫 · 資料更新於」；沒有就不顯示 -->
+      @if (headerMeta(); as meta) {
+        <span class="workspace-meta">{{ meta }}</span>
+      }
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
       <button
         type="button"
@@ -324,7 +328,8 @@
           >
             <!-- [selected] 仍要綁：面板收合時清單會被銷毀，重新打開要照 signal 還原選中狀態 -->
             <mat-list-option [value]="{ kind: 'ai' }" [selected]="isSelectedChatContact({ kind: 'ai' })">
-              <span matListItemAvatar>AI</span>
+              <!-- smart_toy：Material Icons 裡的機器人頭；robot / robot_2 只在 Material Symbols，index.html 載的是舊版字型所以不能用 -->
+              <span matListItemAvatar class="chat-contact-avatar"><mat-icon aria-hidden="true">smart_toy</mat-icon></span>
               <span matListItemTitle>AI 調度助理</span>
             </mat-list-option>
 
@@ -334,7 +339,21 @@
                 [value]="{ kind: 'driver', driverId: driver.id!, name: driver.name }"
                 [selected]="isSelectedChatContact({ kind: 'driver', driverId: driver.id!, name: driver.name })"
               >
-                <span matListItemAvatar>{{ driver.name.charAt(0) }}</span>
+                <span
+                  matListItemAvatar
+                  class="chat-contact-avatar"
+                  [matBadge]="driverUnread(driver.id)"
+                  [matBadgeHidden]="driverUnread(driver.id) === 0"
+                  [matBadgeDescription]="driverUnread(driver.id) + ' 則未讀'"
+                  matBadgeSize="small"
+                >
+                  <!-- 有大頭照就顯示照片；沒上傳、或檔案不見（載入失敗）就退回名字第一個字 -->
+                  @if (driverPhotoUrl(driver); as photoUrl) {
+                    <img class="chat-contact-photo" [src]="photoUrl" alt="" (error)="markDriverPhotoFailed(driver.id)" />
+                  } @else {
+                    {{ driver.name.charAt(0) }}
+                  }
+                </span>
                 <span matListItemTitle>{{ driver.name }}</span>
               </mat-list-option>
             }
@@ -439,7 +458,13 @@
                     <!-- 調度中心（我們這邊）發的靠右，司機發的靠左，沿用 AI 對話的 is-user 樣式 -->
                     <p class="chat-message" [class.is-user]="message.senderType === 'ADMIN'">
                       {{ message.content }}
-                      <small>{{ formatNotificationTime(message.createdAt) }}</small>
+                      <small>
+                        {{ formatNotificationTime(message.createdAt) }}
+                        <!-- 只有我們發的才顯示：司機有沒有讀到回覆，是調度員要知道的 -->
+                        @if (message.senderType === 'ADMIN' && message.readAt) {
+                          · 已讀
+                        }
+                      </small>
                     </p>
                   } @empty {
                     <p class="chat-panel__placeholder">還沒有和 {{ contact.name }} 的對話</p>
@@ -483,7 +508,15 @@
       </div>
     </section>
   } @else {
-    <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">聊天室</button>
+    <button
+      type="button"
+      matButton="filled"
+      class="chat-launcher"
+      (click)="openChat()"
+      [matBadge]="totalUnread() > 99 ? '99+' : totalUnread()"
+      [matBadgeHidden]="totalUnread() === 0"
+      [matBadgeDescription]="totalUnread() + ' 則司機未讀訊息'"
+    >聊天室</button>
   }
 </div>
 
