@@ -12,6 +12,7 @@ import com.example.backend.dto.respones.PhotoUploadResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -199,16 +200,18 @@ public class DriverPortalController {
     @PostMapping("/mileage/start")
     public MileageLogResponse startMileage(
             @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody MileageRequestDTO request) {
-        return mileageLogsService.start(driverId(jwt), request);
+            @Valid @ModelAttribute MileageRequestDTO request,
+            @RequestPart("photo") MultipartFile photo) {
+        return mileageLogsService.start(driverId(jwt), request, photo);
     }
 
     /** 記錄今日收工時的里程表讀數。 */
     @PostMapping("/mileage/end")
     public MileageLogResponse endMileage(
             @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody MileageRequestDTO request) {
-        return mileageLogsService.end(driverId(jwt), request);
+            @Valid @ModelAttribute MileageRequestDTO request,
+            @RequestPart("photo") MultipartFile photo) {
+        return mileageLogsService.end(driverId(jwt), request, photo);
     }
 
     /** GPS 點較晚送達或 OSRM 暫時失敗時，重新結算今天已收車的里程。 */

@@ -171,6 +171,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isTaskSubmitting = signal(false);
   protected readonly startMileageReading = signal('');
   protected readonly endMileageReading = signal('');
+  protected readonly startMileagePhoto = signal<File | null>(null);
+  protected readonly endMileagePhoto = signal<File | null>(null);
+  protected readonly startMileagePhotoUrl = signal<string | null>(null);
+  protected readonly endMileagePhotoUrl = signal<string | null>(null);
   protected readonly mileageError = signal<string | null>(null);
   protected readonly mileageMessage = signal<string | null>(null);
   protected readonly isMileageSubmitting = signal(false);
@@ -728,17 +732,23 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected submitStartMileage(): void {
     const odometer = this.readOdometer(this.startMileageReading());
-    if (odometer === null || this.isMileageSubmitting()) {
+    const photo = this.startMileagePhoto();
+    if (odometer === null || !photo || this.isMileageSubmitting()) {
+      if (!photo) {
+        this.mileageError.set('請先拍攝出車里程表照片。');
+      }
       return;
     }
 
     this.isMileageSubmitting.set(true);
     this.mileageError.set(null);
     this.mileageMessage.set(null);
-    this.operations.startMileage({odometer}).subscribe({
+    this.operations.startMileage({odometer}, photo).subscribe({
       next: (mileageLog) => {
         this.startMileageReading.set('');
-        this.mileageMessage.set(`已記錄出車里程 ${mileageLog.startOdometer} km。`);
+        this.startMileagePhoto.set(null);
+        this.startMileagePhotoUrl.set(mileageLog.startMileagePhotoUrl ?? null);
+        this.mileageMessage.set(`已記錄出車里程 ${mileageLog.startOdometer} km及照片。`);
         this.isMileageSubmitting.set(false);
       },
       error: (error: unknown) => {
@@ -750,18 +760,24 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected submitEndMileage(): void {
     const odometer = this.readOdometer(this.endMileageReading());
-    if (odometer === null || this.isMileageSubmitting()) {
+    const photo = this.endMileagePhoto();
+    if (odometer === null || !photo || this.isMileageSubmitting()) {
+      if (!photo) {
+        this.mileageError.set('請先拍攝收車里程表照片。');
+      }
       return;
     }
 
     this.isMileageSubmitting.set(true);
     this.mileageError.set(null);
     this.mileageMessage.set(null);
-    this.operations.endMileage({odometer}).subscribe({
+    this.operations.endMileage({odometer}, photo).subscribe({
       next: (mileageLog) => {
         this.endMileageReading.set('');
+        this.endMileagePhoto.set(null);
+        this.endMileagePhotoUrl.set(mileageLog.endMileagePhotoUrl ?? null);
         this.mileageMessage.set(
-          `已記錄收車里程 ${mileageLog.endOdometer} km，本日行駛 ${mileageLog.actualDistance ?? 0} km。`,
+          `已記錄收車里程 ${mileageLog.endOdometer} km及照片，本日行駛 ${mileageLog.actualDistance ?? 0} km。`,
         );
         this.isMileageSubmitting.set(false);
       },
@@ -794,6 +810,41 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.isMileageSubmitting.set(false);
       },
     });
+  }
+
+  protected selectStartMileagePhoto(event: Event): void {
+    const file = this.readMileagePhoto(event);
+    if (file) {
+      this.startMileagePhoto.set(file);
+    }
+  }
+
+  protected selectEndMileagePhoto(event: Event): void {
+    const file = this.readMileagePhoto(event);
+    if (file) {
+      this.endMileagePhoto.set(file);
+    }
+  }
+
+  private readMileagePhoto(event: Event): File | null {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || this.isMileageSubmitting()) {
+      return null;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      this.mileageError.set('里程照片請使用 JPG、PNG 或 WebP 格式。');
+      return null;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      this.mileageError.set('里程照片不可超過 5 MB。');
+      return null;
+    }
+
+    this.mileageError.set(null);
+    this.mileageMessage.set(null);
+    return file;
   }
 
   protected navigationRouteDetail(): string | null {

@@ -18,6 +18,7 @@ import com.example.backend.entity.VehiclesEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -42,6 +43,7 @@ public class MileageLogsService {
     private final EmergencyLeaveService emergencyLeaveService;
     private final WarehouseProximityService warehouseProximityService;
     private final RouteLegMileageService routeLegMileageService;
+    private final MileagePhotoStorageService mileagePhotoStorageService;
 
     public MileageLogsService(
             MileageLogsDAO mileageLogsDAO,
@@ -54,7 +56,8 @@ public class MileageLogsService {
             EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO,
             EmergencyLeaveService emergencyLeaveService,
             WarehouseProximityService warehouseProximityService,
-            RouteLegMileageService routeLegMileageService
+            RouteLegMileageService routeLegMileageService,
+            MileagePhotoStorageService mileagePhotoStorageService
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
         this.driversDAO = driversDAO;
@@ -67,9 +70,10 @@ public class MileageLogsService {
         this.emergencyLeaveService = emergencyLeaveService;
         this.warehouseProximityService = warehouseProximityService;
         this.routeLegMileageService = routeLegMileageService;
+        this.mileagePhotoStorageService = mileagePhotoStorageService;
     }
 
-    public MileageLogResponse start(Long driverId, MileageRequestDTO request) {
+    public MileageLogResponse start(Long driverId, MileageRequestDTO request, MultipartFile photo) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         LocalDate today = now.toLocalDate();
         requireActiveDriver(driverId);
@@ -119,11 +123,13 @@ public class MileageLogsService {
         mileage.setDate(today);
         mileage.setStartOdometer(startOdometer);
         mileage.setStartTime(now);
+        mileage.setStartMileagePhotoUrl(mileagePhotoStorageService.store(photo));
+        mileage.setStartMileagePhotoRecordedAt(now);
         mileage.setGpsDistanceStatus("IN_PROGRESS");
         return toResponse(mileageLogsDAO.save(mileage));
     }
 
-    public MileageLogResponse end(Long driverId, MileageRequestDTO request) {
+    public MileageLogResponse end(Long driverId, MileageRequestDTO request, MultipartFile photo) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
 
         // 確認司機存在且目前仍在職
@@ -168,6 +174,8 @@ public class MileageLogsService {
         warehouseProximityService.requireWithinWarehouseRadius(
                 driverId, mileage.getRouteId(), now);
 
+        mileage.setEndMileagePhotoUrl(mileagePhotoStorageService.store(photo));
+        mileage.setEndMileagePhotoRecordedAt(now);
         mileage.setEndOdometer(request.getOdometer());
         mileage.setActualDistanceKm(request.getOdometer() - mileage.getStartOdometer());
         mileage.setEndTime(now);
@@ -229,6 +237,10 @@ public class MileageLogsService {
         response.setDate(mileage.getDate());
         response.setStartOdometer(mileage.getStartOdometer());
         response.setEndOdometer(mileage.getEndOdometer());
+        response.setStartMileagePhotoUrl(mileage.getStartMileagePhotoUrl());
+        response.setStartMileagePhotoRecordedAt(mileage.getStartMileagePhotoRecordedAt());
+        response.setEndMileagePhotoUrl(mileage.getEndMileagePhotoUrl());
+        response.setEndMileagePhotoRecordedAt(mileage.getEndMileagePhotoRecordedAt());
         response.setStartTime(mileage.getStartTime());
         response.setEndTime(mileage.getEndTime());
         response.setActualDistance(actualDistance);

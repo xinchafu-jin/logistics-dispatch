@@ -96,12 +96,18 @@ export class DriverOperationsService {
     return this.http.post<DeliveryRecordResponse>('/api/driver/exception', request);
   }
 
-  startMileage(request: MileageRequest): Observable<MileageLogResponse> {
-    return this.http.post<MileageLogResponse>('/api/driver/mileage/start', request);
+  startMileage(request: MileageRequest, photo: File): Observable<MileageLogResponse> {
+    const formData = new FormData();
+    formData.append('odometer', String(request.odometer));
+    formData.append('photo', photo);
+    return this.http.post<MileageLogResponse>('/api/driver/mileage/start', formData);
   }
 
-  endMileage(request: MileageRequest): Observable<MileageLogResponse> {
-    return this.http.post<MileageLogResponse>('/api/driver/mileage/end', request);
+  endMileage(request: MileageRequest, photo: File): Observable<MileageLogResponse> {
+    const formData = new FormData();
+    formData.append('odometer', String(request.odometer));
+    formData.append('photo', photo);
+    return this.http.post<MileageLogResponse>('/api/driver/mileage/end', formData);
   }
 
   recalculateMileage(): Observable<MileageLogResponse> {

@@ -49,6 +49,20 @@ public class MileageLogsEntity {
     @Column
     private Integer actualDistanceKm;
 
+    /** 出車時的里程表照片；沿用 V5 欄位。 */
+    @Column(name = "mileage_photo_url", length = 512)
+    private String startMileagePhotoUrl;
+
+    @Column(name = "mileage_photo_recorded_at")
+    private LocalDateTime startMileagePhotoRecordedAt;
+
+    /** 收車時的里程表照片。 */
+    @Column(name = "end_mileage_photo_url", length = 512)
+    private String endMileagePhotoUrl;
+
+    @Column(name = "end_mileage_photo_recorded_at")
+    private LocalDateTime endMileagePhotoRecordedAt;
+
     @Column
     private LocalDateTime startTime;
 
@@ -129,6 +143,38 @@ public class MileageLogsEntity {
 
     public void setActualDistanceKm(Integer actualDistanceKm) {
         this.actualDistanceKm = actualDistanceKm;
+    }
+
+    public String getStartMileagePhotoUrl() {
+        return startMileagePhotoUrl;
+    }
+
+    public void setStartMileagePhotoUrl(String startMileagePhotoUrl) {
+        this.startMileagePhotoUrl = startMileagePhotoUrl;
+    }
+
+    public LocalDateTime getStartMileagePhotoRecordedAt() {
+        return startMileagePhotoRecordedAt;
+    }
+
+    public void setStartMileagePhotoRecordedAt(LocalDateTime startMileagePhotoRecordedAt) {
+        this.startMileagePhotoRecordedAt = startMileagePhotoRecordedAt;
+    }
+
+    public String getEndMileagePhotoUrl() {
+        return endMileagePhotoUrl;
+    }
+
+    public void setEndMileagePhotoUrl(String endMileagePhotoUrl) {
+        this.endMileagePhotoUrl = endMileagePhotoUrl;
+    }
+
+    public LocalDateTime getEndMileagePhotoRecordedAt() {
+        return endMileagePhotoRecordedAt;
+    }
+
+    public void setEndMileagePhotoRecordedAt(LocalDateTime endMileagePhotoRecordedAt) {
+        this.endMileagePhotoRecordedAt = endMileagePhotoRecordedAt;
     }
 
     public LocalDateTime getStartTime() {

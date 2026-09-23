@@ -148,6 +148,10 @@ export interface MileageLogResponse {
   date: string;
   startOdometer: number | null;
   endOdometer: number | null;
+  startMileagePhotoUrl?: string | null;
+  startMileagePhotoRecordedAt?: string | null;
+  endMileagePhotoUrl?: string | null;
+  endMileagePhotoRecordedAt?: string | null;
   startTime: string | null;
   endTime: string | null;
   actualDistance: number | null;

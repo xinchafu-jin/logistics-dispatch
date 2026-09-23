@@ -225,7 +225,7 @@
             <mat-icon aria-hidden="true">speed</mat-icon>
           </div>
           <p>上班後記錄出車里程，下班前記錄收車里程。</p>
-          <div class="mileage-form-row">
+          <div class="mileage-form-row mileage-form-row--with-actions">
             <label>
               <span>出車表讀數（km）</span>
               <input
@@ -239,17 +239,46 @@
                 [disabled]="!canRecordMileage() || isMileageSubmitting()"
               />
             </label>
-            <button
-              type="button"
-              class="mileage-start-button"
-              (click)="submitStartMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
-            >
-              <mat-icon aria-hidden="true">play_arrow</mat-icon>
-              出車
-            </button>
+            <div class="mileage-row-actions">
+              <input
+                #startMileagePhotoInput
+                class="mileage-photo-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                aria-label="拍攝出車里程表照片"
+                (change)="selectStartMileagePhoto($event)"
+              />
+              <button
+                type="button"
+                class="mileage-photo-capture-button"
+                (click)="startMileagePhotoInput.click()"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+                aria-label="拍攝出車照片"
+                title="拍攝出車照片"
+              >
+                <mat-icon aria-hidden="true">photo_camera</mat-icon>
+              </button>
+              <button
+                type="button"
+                class="mileage-start-button"
+                (click)="submitStartMileage()"
+                [disabled]="!canRecordMileage() || !startMileagePhoto() || isMileageSubmitting()"
+              >
+                <mat-icon aria-hidden="true">play_arrow</mat-icon>
+                出車
+              </button>
+            </div>
           </div>
-          <div class="mileage-form-row">
+          @if (startMileagePhoto(); as photo) {
+            <small class="mileage-photo-selected">出車照片已選：{{ photo.name }}</small>
+          }
+          @if (startMileagePhotoUrl(); as photoUrl) {
+            <a class="mileage-photo-link" [href]="photoUrl" target="_blank" rel="noopener noreferrer">
+              查看出車照片
+            </a>
+          }
+          <div class="mileage-form-row mileage-form-row--with-actions">
             <label>
               <span>收車表讀數（km）</span>
               <input
@@ -263,25 +292,56 @@
                 [disabled]="!canRecordMileage() || isMileageSubmitting()"
               />
             </label>
+            <div class="mileage-row-actions">
+              <input
+                #endMileagePhotoInput
+                class="mileage-photo-input"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                aria-label="拍攝收車里程表照片"
+                (change)="selectEndMileagePhoto($event)"
+              />
+              <button
+                type="button"
+                class="mileage-photo-capture-button"
+                (click)="endMileagePhotoInput.click()"
+                [disabled]="!canRecordMileage() || isMileageSubmitting()"
+                aria-label="拍攝收車照片"
+                title="拍攝收車照片"
+              >
+                <mat-icon aria-hidden="true">photo_camera</mat-icon>
+              </button>
+              <button
+                type="button"
+                class="mileage-end-button"
+                (click)="submitEndMileage()"
+                [disabled]="!canRecordMileage() || !endMileagePhoto() || isMileageSubmitting()"
+              >
+                <mat-icon aria-hidden="true">stop_circle</mat-icon>
+                收車
+              </button>
+            </div>
+          </div>
+          @if (endMileagePhoto(); as photo) {
+            <small class="mileage-photo-selected">收車照片已選：{{ photo.name }}</small>
+          }
+          @if (endMileagePhotoUrl(); as photoUrl) {
+            <a class="mileage-photo-link" [href]="photoUrl" target="_blank" rel="noopener noreferrer">
+              查看收車照片
+            </a>
+          }
+          <div class="mileage-actions">
             <button
               type="button"
-              class="mileage-end-button"
-              (click)="submitEndMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              class="outline-action mileage-recalculate-button"
+              (click)="recalculateMileage()"
+              [disabled]="isMileageSubmitting()"
             >
-              <mat-icon aria-hidden="true">stop_circle</mat-icon>
-              收車
+              <mat-icon aria-hidden="true">sync</mat-icon>
+              依 GPS 重新結算
             </button>
           </div>
-          <button
-            type="button"
-            class="outline-action mileage-recalculate-button"
-            (click)="recalculateMileage()"
-            [disabled]="isMileageSubmitting()"
-          >
-            <mat-icon aria-hidden="true">sync</mat-icon>
-            依 GPS 重新結算
-          </button>
           @if (!canRecordMileage()) {
             <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
           }

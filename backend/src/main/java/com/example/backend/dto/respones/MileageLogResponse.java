@@ -17,6 +17,10 @@ public class MileageLogResponse {
     private LocalDate date;
     private Integer startOdometer;
     private Integer endOdometer;
+    private String startMileagePhotoUrl;
+    private LocalDateTime startMileagePhotoRecordedAt;
+    private String endMileagePhotoUrl;
+    private LocalDateTime endMileagePhotoRecordedAt;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Integer actualDistance;
@@ -52,6 +56,26 @@ public class MileageLogResponse {
 
     public Integer getEndOdometer() { return endOdometer; }
     public void setEndOdometer(Integer endOdometer) { this.endOdometer = endOdometer; }
+
+    public String getStartMileagePhotoUrl() { return startMileagePhotoUrl; }
+    public void setStartMileagePhotoUrl(String startMileagePhotoUrl) {
+        this.startMileagePhotoUrl = startMileagePhotoUrl;
+    }
+
+    public LocalDateTime getStartMileagePhotoRecordedAt() { return startMileagePhotoRecordedAt; }
+    public void setStartMileagePhotoRecordedAt(LocalDateTime startMileagePhotoRecordedAt) {
+        this.startMileagePhotoRecordedAt = startMileagePhotoRecordedAt;
+    }
+
+    public String getEndMileagePhotoUrl() { return endMileagePhotoUrl; }
+    public void setEndMileagePhotoUrl(String endMileagePhotoUrl) {
+        this.endMileagePhotoUrl = endMileagePhotoUrl;
+    }
+
+    public LocalDateTime getEndMileagePhotoRecordedAt() { return endMileagePhotoRecordedAt; }
+    public void setEndMileagePhotoRecordedAt(LocalDateTime endMileagePhotoRecordedAt) {
+        this.endMileagePhotoRecordedAt = endMileagePhotoRecordedAt;
+    }
 
     public LocalDateTime getStartTime() { return startTime; }
     public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }

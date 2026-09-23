@@ -607,8 +607,17 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    // 已發布的路線受後端保護，必須先由使用者明確撤回。
+    // 介面按鈕也會停用；此處保留防護，避免鍵盤操作或狀態切換期間送出請求。
+    if (this.published()) {
+      this.boardError.set('');
+      this.publishError.set('目前路線已發布，請先按「撤回發布」再重新編組。');
+      return;
+    }
+
     this.optimizing.set(true);
     this.boardError.set('');
+    this.publishError.set('');
 
     // 不指定車輛，由後端取該倉所有可用車，交給 OR-Tools 決定實際出幾台
     this.api.optimizeDispatch(this.dispatchDate(), this.warehouseId()).subscribe({
@@ -1311,6 +1320,9 @@ export class DispatchDashboard implements OnInit {
   }
 
   private applyDispatchResult(result: DispatchResultDto): void {
+    // 只要伺服器狀態已成功重新載入，就不應繼續顯示上一個操作留下的錯誤。
+    this.boardError.set('');
+    this.publishError.set('');
     // 原始結果留著不動，之後要做「調整前後差異」時當作比較基準
     this.dispatchResult.set(result);
 

@@ -969,9 +969,50 @@ h2 {
   gap: 8px;
 }
 
+.mileage-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .mileage-start-button,
 .mileage-end-button {
   min-width: 58px;
+}
+
+.mileage-photo-capture-button {
+  display: inline-grid;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #42645b;
+  border-radius: 5px;
+  color: #b9d5cc;
+  background: transparent;
+  cursor: pointer;
+}
+
+.mileage-photo-capture-button mat-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  overflow: visible;
+  font-size: 24px;
+  line-height: 24px;
+}
+
+.mileage-photo-capture-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mileage-photo-selected {
+  overflow-wrap: anywhere;
+  color: #9eb8af;
+  font-size: 11px;
 }
 
 .mileage-note {
@@ -980,10 +1021,33 @@ h2 {
   line-height: 1.4;
 }
 
-.mileage-recalculate-button {
-  justify-self: start;
-  min-height: 36px;
+.mileage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 2px;
+}
+
+.mileage-photo-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mileage-recalculate-button {
+  min-height: 36px;
+}
+
+.mileage-photo-link {
+  width: fit-content;
+  color: #82dfc7;
+  font-size: 11px;
+  text-decoration: underline;
 }
 
 .month-selector {

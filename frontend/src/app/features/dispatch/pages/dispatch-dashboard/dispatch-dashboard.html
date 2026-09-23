@@ -206,8 +206,14 @@
           }
         </p>
 
-        <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
-          {{ optimizing() ? '編組中…' : '一鍵編組' }}
+        <button
+          type="button"
+          class="toolbar-action"
+          (click)="runOptimize()"
+          [disabled]="busy() || published()"
+          [attr.title]="published() ? '目前路線已發布，請先撤回發布再重新編組' : null"
+        >
+          {{ optimizing() ? '編組中…' : published() ? '請先撤回再編組' : '一鍵編組' }}
         </button>
 
         <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->

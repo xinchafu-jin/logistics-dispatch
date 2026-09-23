@@ -77,6 +77,9 @@ services:
       # 瀏覽器對 POST 一律送 Origin（即使同源），沒列進白名單會 403 Invalid CORS request
       CORS_ALLOWED_ORIGINS: https://dispatch.xinchafujin.com,https://driver.xinchafujin.com,https://xinchafujin.com
     mem_limit: 1400m
+    volumes:
+      # 司機出車／收車里程照片保存在主機，避免重建容器後遺失。
+      - ./uploads/mileage-photos:/app/uploads/mileage-photos
 
   web:
     image: ghcr.io/xinchafu-jin/logistics-web:${IMAGE_TAG:-latest}
