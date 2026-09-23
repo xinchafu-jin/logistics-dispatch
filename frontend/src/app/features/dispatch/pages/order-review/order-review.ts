@@ -20,8 +20,9 @@ type OrderReviewStatus =
   | '配送中'
   | '已完成'
   | '已取消'
+  | '無人簽收'
   | '配送失敗';
-type FilterKey = 'all' | OrderReviewStatus;
+type FilterKey = OrderReviewStatus;
 type OrderFormMode = 'create' | 'edit' | null;
 
 /** 匯入失敗的單筆訂單，row 是 Excel 上的列號。 */
@@ -121,7 +122,6 @@ export class OrderReview implements OnInit {
   private readonly importer = inject(OrderImportService);
 
   readonly filters: { key: FilterKey; label: string }[] = [
-    { key: 'all', label: '全部' },
     { key: '待總部確認', label: '待確認' },
     { key: '待排車', label: '待排車' },
     { key: '配送中', label: '配送中' },
@@ -131,7 +131,7 @@ export class OrderReview implements OnInit {
   readonly orders = signal<DeliveryOrder[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
-  readonly activeFilter = signal<FilterKey>('all');
+  readonly activeFilter = signal<FilterKey>('待總部確認');
   readonly searchTerm = signal('');
   readonly selectedOrderId = signal('');
   readonly actionMessage = signal('確認資料後，可將配送需求送入待排車佇列。');
@@ -151,7 +151,7 @@ export class OrderReview implements OnInit {
     const term = this.searchTerm().trim().toLowerCase();
 
     return this.orders().filter((order) => {
-      const matchesFilter = filter === 'all' || order.status === filter;
+      const matchesFilter = order.status === filter;
       const searchSource = `${order.id} ${order.store} ${order.area}`.toLowerCase();
       return matchesFilter && (!term || searchSource.includes(term));
     });
@@ -527,6 +527,8 @@ export class OrderReview implements OnInit {
         return '已完成';
       case 'CANCELLED':
         return '已取消';
+      case 'NO_SIGNATURE':
+        return '無人簽收';
       case 'FAILED':
         return '配送失敗';
     }

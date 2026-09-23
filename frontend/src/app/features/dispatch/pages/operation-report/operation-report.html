@@ -100,8 +100,8 @@
         <article class="signal-item tone-warning">
           <span class="summary-icon"><mat-icon aria-hidden="true">warning_amber</mat-icon></span>
           <div>
-            <p>配送失敗</p>
-            <strong>{{ failedOrders().length }}</strong>
+            <p>配送異常</p>
+            <strong>{{ exceptionOrders().length }}</strong>
             <span>請至異常中心查看原因</span>
           </div>
         </article>
@@ -214,33 +214,34 @@
       <header class="panel-header">
         <div>
           <p class="section-eyebrow">異常追蹤</p>
-          <h3 id="exception-source-title">配送失敗狀況</h3>
+          <h3 id="exception-source-title">配送異常狀況</h3>
         </div>
-        <span>{{ failedOrders().length }} 筆</span>
+        <span>{{ exceptionOrders().length }} 筆</span>
       </header>
 
-      @if (failedOrders().length) {
-        <div class="exception-chart" [style.--exception-chart-columns]="failedChartData().length">
-          @for (item of failedChartData(); track item.from) {
+      @if (exceptionOrders().length) {
+        <div class="exception-chart" [style.--exception-chart-columns]="exceptionChartData().length">
+          @for (item of exceptionChartData(); track item.orderId ?? item.orderNumber) {
             <button
               type="button"
               class="exception-chart-column"
-              [attr.aria-label]="item.label + ' ' + item.count + ' 筆配送失敗訂單，點選查看明細'"
-              (click)="drillInto(item)"
+              [attr.aria-label]="item.orderNumber + ' ' + exceptionStatusLabel(item.status) + '，點選查看異常詳情'"
+              [attr.title]="item.orderNumber + ' · ' + exceptionStatusLabel(item.status) + ' · ' + item.boxCount + ' 箱，點選查看異常詳情'"
+              (click)="openExceptionDetail(item)"
             >
-              <span>{{ item.count }}</span>
+              <span>{{ item.boxCount }} 箱</span>
               <i><b [style.height.%]="item.height"></b></i>
-              <strong>{{ item.label }}</strong>
+              <strong>{{ exceptionStatusLabel(item.status) }}</strong>
               <small>{{ item.date }}</small>
             </button>
           }
         </div>
-        <p class="exception-chart-note"><mat-icon aria-hidden="true">bar_chart</mat-icon>{{ chartFootnote() }}</p>
+        <p class="exception-chart-note"><mat-icon aria-hidden="true">open_in_new</mat-icon>每根長條代表一筆異常訂單，點選可直接查看案件詳情。</p>
       } @else {
         <div class="exception-healthy-state">
           <span class="exception-healthy-icon"><mat-icon aria-hidden="true">verified</mat-icon></span>
-          <strong>目前沒有配送失敗訂單</strong>
-          <p>這個期間配送狀況正常</p>
+          <strong>目前沒有配送異常訂單</strong>
+          <p>這個期間沒有配送失敗或無人簽收紀錄</p>
         </div>
       }
     </section>
