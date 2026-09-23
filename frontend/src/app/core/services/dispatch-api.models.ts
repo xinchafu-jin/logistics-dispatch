@@ -537,7 +537,7 @@ export interface TemplateRouteRequest {
  */
 
 /** 對應後端 AiActionType */
-export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY';
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY' | 'UNASSIGN_DRIVER';
 
 /** POST /api/ai/chat 的請求本體 */
 export interface AiChatRequest {
@@ -568,9 +568,9 @@ export interface AiPendingActionDto {
   warehouseId: number | null;
   /** 只給分組標題顯示用；PUBLISH_DAY 為 null，畫面顯示「全部倉庫」 */
   warehouseName: string | null;
-  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
+  /** ASSIGN_DRIVER、UNASSIGN_DRIVER 為該路線的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
   vehicleId: number | null;
-  /** 只有 ASSIGN_DRIVER 有值 */
+  /** ASSIGN_DRIVER 為被指派的司機；UNASSIGN_DRIVER 為要被取消的司機；其他為 null */
   driverId: number | null;
   /** 只有 MOVE_ORDER 有值 */
   orderId: number | null;
