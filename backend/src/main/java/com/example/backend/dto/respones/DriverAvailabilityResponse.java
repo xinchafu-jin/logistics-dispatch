@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/** AI 調度工具使用的司機可派狀態。 */
 /**
  * 某一天的司機可派狀況，給 AI 助理挑人用。
  *

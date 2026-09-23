@@ -16,6 +16,8 @@ public interface DriversDAO extends JpaRepository<DriversEntity, Long> {
      */
     boolean existsByAccount(String account);
 
+    boolean existsByAccountIgnoreCase(String account);
+
     Optional<DriversEntity> findByAccount(String account);
 
     List<DriversEntity> findAllByIsActiveTrueOrderByIdAsc();

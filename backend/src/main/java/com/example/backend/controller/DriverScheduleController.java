@@ -61,6 +61,15 @@ public class DriverScheduleController {
         return driverScheduleService.updateShift(shiftId, dto);
     }
 
+    /** 批次套用班次規則；任一筆失敗時整批回滾。 */
+    @PutMapping("/months/{scheduleMonthId}/shifts/batch")
+    public List<DriverShiftDTO> updateShiftsBatch(
+            @PathVariable Long scheduleMonthId,
+            @RequestBody List<DriverShiftDTO> updates
+    ) {
+        return driverScheduleService.updateShiftsBatch(scheduleMonthId, updates);
+    }
+
     /** 將草稿建立後才新增或復職的司機補進整月班表。 */
     @PostMapping("/months/{scheduleMonthId}/sync-drivers")
     public List<DriverShiftDTO> syncActiveDrivers(@PathVariable Long scheduleMonthId) {
@@ -73,7 +82,7 @@ public class DriverScheduleController {
             @PathVariable Long shiftId,
             @Valid @RequestBody LeaveRequest request
     ) {
-        return driverScheduleService.markLeave(shiftId, request.getReason());
+        return driverScheduleService.markLeave(shiftId, request.getReason(), request.getVersion());
     }
 
     /** 發布已排完的班表；發布後司機才查得到。 */
@@ -88,12 +97,22 @@ public class DriverScheduleController {
         @NotBlank(message = "請假原因不能為空")
         private String reason;
 
+        private Long version;
+
         public String getReason() {
             return reason;
         }
 
         public void setReason(String reason) {
             this.reason = reason;
+        }
+
+        public Long getVersion() {
+            return version;
+        }
+
+        public void setVersion(Long version) {
+            this.version = version;
         }
     }
 }

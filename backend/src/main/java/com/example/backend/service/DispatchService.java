@@ -293,7 +293,10 @@ public class DispatchService {
             if (warehouseId.equals(other.getWarehouseId())) {
                 continue;
             }
-            if (hasActiveOrders(other.getId()) && driverIds.contains(other.getDriverId())) {
+            if (!hasActiveOrders(other.getId())) {
+                continue;
+            }
+            if (driverIds.contains(other.getDriverId())) {
                 throw new IllegalArgumentException(
                         "司機 " + driverNameOf(other.getDriverId()) + " 當天已排在 "
                                 + plateNumberOf(other.getVehicleId()) + "，無法重複指派");
@@ -352,7 +355,7 @@ public class DispatchService {
         for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
             VehiclesEntity vehicle = vehiclesMap.get(ra.getVehicleId());
 
-            // 有結案訂單的草稿會保留原 route；同車重排時沿用，避免破壞配送歷史。
+            // 已有結案訂單的草稿會保留原 route；同車重排時沿用它，避免破壞配送歷史。
             RoutesEntity route = reusableRoutes.remove(vehicle.getId());
             if (route == null) {
                 route = new RoutesEntity();
@@ -522,7 +525,10 @@ public class DispatchService {
         }
 
         for (RoutesEntity route : routes) {
-            if (route.getStatus() == RouteStatus.DRAFT && hasActiveOrders(route.getId())) {
+            boolean hasActiveOrders = ordersDAO.findByRouteIdOrderBySequence(route.getId()).stream()
+                    .anyMatch(order -> order.getStatus() == OrderStatus.CONFIRMED
+                            || order.getStatus() == OrderStatus.IN_DELIVERY);
+            if (route.getStatus() == RouteStatus.DRAFT && hasActiveOrders) {
                 route.setStatus(RouteStatus.PUBLISHED);
             }
         }
@@ -672,7 +678,9 @@ public class DispatchService {
         List<Long> deletableRouteIds = draftRouteIds.stream()
                 .filter(routeId -> !retainedRouteIds.contains(routeId))
                 .toList();
+        // route_vehicle_segments 以 route_id 外鍵指向 routes；必須先清子表再刪路線。
         if (!deletableRouteIds.isEmpty()) {
+            routesDAO.deleteVehicleSegmentsByRouteIdIn(deletableRouteIds);
             routesDAO.deleteAllById(deletableRouteIds);
             // 必須立刻送出 DELETE：Hibernate flush 時會先做 INSERT 再做 DELETE，
             // 不先清掉舊路線的話，新路線會撞上 uk_routes_date_vehicle 唯一鍵

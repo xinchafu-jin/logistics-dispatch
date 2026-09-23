@@ -38,11 +38,15 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
 
     List<OrdersEntity> findByRouteIdOrderBySequence(Long routeId);
 
-    /** 看板與司機任務只取仍需處理的訂單，結案訂單保留路線關聯但不再顯示。 */
+    /** 看板只取仍需處理的訂單，已完成或已結案的訂單保留關聯但不回到拖曳區。 */
     List<OrdersEntity> findByRouteIdAndStatusInOrderBySequence(
             Long routeId,
             Collection<OrderStatus> statuses
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select orders from OrdersEntity orders where orders.routeId = :routeId order by orders.id")
+    List<OrdersEntity> findByRouteIdForUpdate(@Param("routeId") Long routeId);
 
     List<OrdersEntity> findByDeliveryDateAndWarehouseIdAndRouteIdIsNull(LocalDate date, Long warehouseId);
 

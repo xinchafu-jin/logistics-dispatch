@@ -2,10 +2,12 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
+import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.constants.ShiftType;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.EmergencyLeaveRequestsDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.ReportReadDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -59,10 +61,12 @@ public class ReportService {
     private final VehiclesDAO vehiclesDAO;
     private final WarehousesDAO warehousesDAO;
     private final StoresDAO storesDAO;
+    private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
 
     public ReportService(
             ReportReadDAO reportReadDAO, OrdersDAO ordersDAO, RoutesDAO routesDAO, DriversDAO driversDAO,
-            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO
+            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO,
+            EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO
     ) {
         this.reportReadDAO = reportReadDAO;
         this.ordersDAO = ordersDAO;
@@ -71,6 +75,7 @@ public class ReportService {
         this.vehiclesDAO = vehiclesDAO;
         this.warehousesDAO = warehousesDAO;
         this.storesDAO = storesDAO;
+        this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
     }
 
     public static class Range {
@@ -257,8 +262,10 @@ public class ReportService {
                     .thenComparing(OrdersEntity::getId));
             VehiclesEntity vehicle = vehicles.get(route.getVehicleId());
             WarehousesEntity warehouse = warehouses.get(route.getWarehouseId());
-            MileageMatch match = matchMileage(
-                    route, routesByDriverDay, mileageByDriverDay, mileageByRoute);
+            MileageMatch match = emergencyLeaveRequestsDAO.existsByRouteIdAndStatus(
+                    route.getId(), EmergencyLeaveStatus.APPROVED)
+                    ? new MileageMatch(null, null, null, null, "DRIVER_HANDOVER")
+                    : matchMileage(route, routesByDriverDay, mileageByDriverDay, mileageByRoute);
             Double plannedKm = km(route.getTotalDistance());
             Double difference = match.getActualKm() == null || plannedKm == null
                     ? null : match.getActualKm() - plannedKm;

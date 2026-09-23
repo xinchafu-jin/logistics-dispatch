@@ -1,9 +1,8 @@
 package com.example.backend.dto.request;
 
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import static com.example.backend.constants.ValidMsg.DELIVERY_BOX_COUNT_MIN;
@@ -11,8 +10,6 @@ import static com.example.backend.constants.ValidMsg.DELIVERY_BOX_COUNT_REQUIRED
 import static com.example.backend.constants.ValidMsg.DELIVERY_NOTES_MAX_LENGTH;
 import static com.example.backend.constants.ValidMsg.DELIVERY_ORDER_ID_POSITIVE;
 import static com.example.backend.constants.ValidMsg.DELIVERY_ORDER_ID_REQUIRED;
-import static com.example.backend.constants.ValidMsg.DELIVERY_PHOTO_MAX_LENGTH;
-import static com.example.backend.constants.ValidMsg.DELIVERY_PHOTO_REQUIRED;
 
 /** 司機完成門市交貨時填寫的實際結果。 */
 public class DeliverRequestDTO {
@@ -22,13 +19,20 @@ public class DeliverRequestDTO {
     private Long orderId;
 
     @NotNull(message = DELIVERY_BOX_COUNT_REQUIRED)
-    @Min(value = 1, message = DELIVERY_BOX_COUNT_MIN)
+    @PositiveOrZero(message = DELIVERY_BOX_COUNT_MIN)
     private Integer boxCount;
 
-    /** 第一版先接收已上傳完成的照片網址。 */
-    @NotBlank(message = DELIVERY_PHOTO_REQUIRED)
-    @Size(max = 500, message = DELIVERY_PHOTO_MAX_LENGTH)
-    private String photo;
+    @PositiveOrZero(message = "缺少箱數不能小於 0")
+    private Integer shortageBoxCount;
+
+    @PositiveOrZero(message = "損壞箱數不能小於 0")
+    private Integer damagedBoxCount;
+
+    @PositiveOrZero(message = "需要補送箱數不能小於 0")
+    private Integer replacementRequiredBoxCount;
+
+    @Size(max = 500, message = "照片網址長度不能超過 500 字")
+    private String photoUrl;
 
     @Size(max = 500, message = DELIVERY_NOTES_MAX_LENGTH)
     private String notes;
@@ -49,12 +53,36 @@ public class DeliverRequestDTO {
         this.boxCount = boxCount;
     }
 
-    public String getPhoto() {
-        return photo;
+    public Integer getShortageBoxCount() {
+        return shortageBoxCount;
     }
 
-    public void setPhoto(String photo) {
-        this.photo = photo;
+    public void setShortageBoxCount(Integer shortageBoxCount) {
+        this.shortageBoxCount = shortageBoxCount;
+    }
+
+    public Integer getDamagedBoxCount() {
+        return damagedBoxCount;
+    }
+
+    public void setDamagedBoxCount(Integer damagedBoxCount) {
+        this.damagedBoxCount = damagedBoxCount;
+    }
+
+    public Integer getReplacementRequiredBoxCount() {
+        return replacementRequiredBoxCount;
+    }
+
+    public void setReplacementRequiredBoxCount(Integer replacementRequiredBoxCount) {
+        this.replacementRequiredBoxCount = replacementRequiredBoxCount;
+    }
+
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
     }
 
     public String getNotes() {
