@@ -29,6 +29,9 @@ public class VehiclesDTO {
     @Min(value = 0, message = VEHICLE_FUEL_CONSUMPTION_MIN)
     private Double fuelConsumption;
 
+    /** 後端唯讀回傳欄位，新增或修改車輛時不會由前端覆寫。 */
+    private Double cumulativeMileageKm;
+
     @NotNull(message = VEHICLE_STATUS_REQUIRED)
     private VehicleStatus status;
 
@@ -57,6 +60,11 @@ public class VehiclesDTO {
 
     public Double getFuelConsumption() { return fuelConsumption; }
     public void setFuelConsumption(Double fuelConsumption) { this.fuelConsumption = fuelConsumption; }
+
+    public Double getCumulativeMileageKm() { return cumulativeMileageKm; }
+    public void setCumulativeMileageKm(Double cumulativeMileageKm) {
+        this.cumulativeMileageKm = cumulativeMileageKm;
+    }
 
     public VehicleStatus getStatus() { return status; }
     public void setStatus(VehicleStatus status) { this.status = status; }

@@ -5,7 +5,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * 司機 GPS 軌跡點。保存期限 3 個月，期滿刪除或去識別化。
+ * 司機 GPS 軌跡點。依目前設定保存 5 年，期滿由排程清除。
  */
 @Entity
 @Table(name = "gps_pings", indexes = {

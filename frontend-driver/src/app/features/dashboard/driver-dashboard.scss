@@ -12,17 +12,11 @@
 }
 
 .map-surface {
-  position: absolute;
-  top: calc(60px + env(safe-area-inset-top));
-  right: 0;
-  bottom: calc(160px + env(safe-area-inset-bottom));
-  left: 0;
+  // 滿版鋪底：地圖分頁不顯示頂部欄，地圖從螢幕最上緣鋪到最下緣，按鈕、出勤抽屜、底部導覽都疊在它上面
+  position: fixed;
+  inset: 0;
   z-index: 0;
-  width: min(calc(100% - 28px), 480px);
-  margin: 0 auto;
   overflow: hidden;
-  border: 1px solid #c8dad3;
-  border-radius: 8px;
   background: #f2f6f4;
 }
 
@@ -118,7 +112,8 @@
 }
 
 .icon-button,
-.locate-control {
+.locate-control,
+.chat-control {
   display: grid;
   width: 38px;
   height: 38px;
@@ -133,6 +128,7 @@
 
 .icon-button mat-icon,
 .locate-control mat-icon,
+.chat-control mat-icon,
 .gps-status mat-icon,
 .primary-action mat-icon,
 .outline-action mat-icon,
@@ -144,7 +140,18 @@
 }
 
 .map-content {
-  min-height: calc(100dvh - 60px - env(safe-area-inset-top));
+  // 地圖分頁沒有頂部欄，內容層吃滿整個畫面高度
+  min-height: 100dvh;
+}
+
+// 地圖控制項避開瀏海與底部：指北針在左上，要讓出狀態列；
+// 版權標示在右下，要抬到收合的出勤抽屜（bottom 86px + 64px 高）上面，不然會被蓋住
+:host ::ng-deep .driver-app .maplibregl-ctrl-top-left {
+  top: env(safe-area-inset-top);
+}
+
+:host ::ng-deep .driver-app .maplibregl-ctrl-bottom-right {
+  bottom: calc(156px + env(safe-area-inset-bottom));
 }
 
 .eyebrow {
@@ -174,11 +181,46 @@ h2 {
   font-size: 21px;
 }
 
-.locate-control {
+.map-quick-actions {
   position: absolute;
-  top: 22px;
+  // 沒有頂部欄後直接貼著螢幕上緣，要讓出瀏海／狀態列
+  top: calc(14px + env(safe-area-inset-top));
   right: 0;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
 }
+
+.locate-control,
+.chat-control {
+  // 必須是 relative，不能是 static：Material 按鈕裡的波紋、焦點框、觸控區是 absolute，會貼滿「最近有定位的祖先」。
+  // static 時它們會往上貼滿整個 .map-quick-actions，排在後面的定位鈕就蓋住聊天鈕，點聊天其實點到定位
+  position: relative;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  place-content: center;
+}
+
+// 未讀紅點用 MatBadge。司機端沒有套 mat.theme()，badge 預設吃的 --mat-sys-error 等系統色都是空的，
+// 不給 token 會變成透明底，只看得到數字
+.chat-control {
+  --mat-badge-background-color: #e5484d;
+  --mat-badge-text-color: #fff;
+  --mat-badge-small-size-text-size: 10px;
+}
+
+.map-quick-actions .locate-control mat-icon,
+.map-quick-actions .chat-control mat-icon {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  font-size: 22px;
+  line-height: 22px;
+}
+
 
 .attendance-sheet {
   position: absolute;
@@ -207,6 +249,12 @@ h2 {
 
 .attendance-sheet.is-dragging {
   transition: none;
+}
+
+/* 收合時只保留摘要列，避免內容透過底部導覽列顯示或被誤觸。 */
+.attendance-sheet:not(.is-expanded) .attendance-drawer-content {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .attendance-drawer-handle {
@@ -368,8 +416,7 @@ h2 {
 }
 
 .navigation-action mat-icon,
-.task-navigation-button mat-icon,
-.month-selector mat-icon {
+.task-navigation-button mat-icon {
   width: 17px;
   height: 17px;
 }
@@ -524,8 +571,7 @@ h2 {
   gap: 12px;
 }
 
-.task-route-card,
-.month-selector {
+.task-route-card {
   border: 1px solid #2e4a45;
   border-radius: 8px;
   background: #142322;
@@ -794,8 +840,21 @@ h2 {
 
 .delivery-action-buttons {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+}
+
+.delivery-photo-input small,
+.delivery-exception-detail small {
+  color: #9eb8af;
+  font-size: 11px;
+}
+
+.delivery-exception-detail {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgb(158 184 175 / 24%);
 }
 
 .delivery-complete-button,
@@ -933,31 +992,12 @@ h2 {
   line-height: 1.4;
 }
 
-.month-selector {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  padding: 5px;
+.mileage-recalculate-button {
+  justify-self: start;
+  min-height: 36px;
+  margin-top: 2px;
 }
 
-.month-selector strong {
-  color: #edf6f1;
-  font-size: 14px;
-}
-
-.month-selector button {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  place-items: center;
-  border: 0;
-  border-radius: 5px;
-  color: #bfe7dc;
-  background: transparent;
-  cursor: pointer;
-}
 
 .empty-state,
 .profile-list,
@@ -1176,7 +1216,7 @@ dd {
 
 .bottom-navigation {
   position: fixed;
-  z-index: 600;
+  z-index: 700;
   right: 0;
   bottom: max(12px, env(safe-area-inset-bottom));
   left: 0;
@@ -1186,12 +1226,15 @@ dd {
   padding: 7px;
   border: 1px solid rgb(120 185 167 / 34%);
   border-radius: 8px;
-  background: rgb(9 24 25 / 94%);
+  background: #091819;
   box-shadow: 0 10px 26px rgb(0 0 0 / 30%);
 }
 
 .bottom-navigation button {
   display: grid;
+  grid-template-rows: 22px 14px;
+  align-content: center;
+  row-gap: 2px;
   min-height: 50px;
   padding: 4px;
   place-items: center;
@@ -1203,6 +1246,20 @@ dd {
   font: inherit;
   font-size: 11px;
   font-weight: 800;
+}
+
+.bottom-navigation mat-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  font-size: 22px;
+  line-height: 22px;
+}
+
+.bottom-navigation span {
+  display: block;
+  line-height: 14px;
 }
 
 .bottom-navigation button.is-active {
@@ -1242,22 +1299,24 @@ dd {
 
 .driver-app .icon-button,
 .driver-app .locate-control,
+.driver-app .chat-control,
 .driver-app .attendance-sheet,
 .driver-app .empty-state,
 .driver-app .profile-list,
 .driver-app .shift-list,
 .driver-app .task-route-card,
 .driver-app .mileage-panel,
-.driver-app .month-selector,
 .driver-app .bottom-navigation {
   border-color: #c8dad3;
-  background: rgb(249 253 251 / 94%);
+  background: #f9fdfb;
 }
 
 .driver-app .icon-button,
-.driver-app .locate-control {
+.driver-app .locate-control,
+.driver-app .chat-control {
   color: #174c40;
 }
+
 
 .driver-app .attendance-drawer-handle {
   border-color: #c8dad3;
@@ -1315,8 +1374,7 @@ dd {
 }
 
 .driver-app .task-route-heading h2,
-.driver-app .task-stop-copy strong,
-.driver-app .month-selector strong {
+.driver-app .task-stop-copy strong {
   color: #1d392f;
 }
 
@@ -1384,16 +1442,20 @@ dd {
   background: #e5f2ec;
 }
 
-.driver-app .shift-type.is-day_off,
-.driver-app .shift-type.is-leave {
+.driver-app .shift-type.is-day_off {
   color: #516860;
   background: #e7ece9;
 }
 
+// 請假跟休假分開：月曆格子、圖例、明細標籤都用同一組橘色，一眼分得出是臨時請假
+.driver-app .shift-type.is-leave {
+  color: #9a5a17;
+  background: #fbeedd;
+}
+
 .driver-app .stop-sequence,
 .driver-app .task-navigation-button,
-.driver-app .task-delivery-button,
-.driver-app .month-selector button {
+.driver-app .task-delivery-button {
   color: #226c5a;
 }
 
@@ -1427,6 +1489,11 @@ dd {
 .driver-app .delivery-action-panel label > span,
 .driver-app .mileage-form-row label > span {
   color: #42635a;
+}
+
+.driver-app .delivery-photo-input small,
+.driver-app .delivery-exception-detail small {
+  color: #617b72;
 }
 
 .driver-app .delivery-action-panel input,
@@ -1486,4 +1553,187 @@ dd {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+// ── 聊天 Bottom Sheet 的內容 ──────────────────────────────
+// 外框（背景、圓角）在 styles.scss：sheet 掛在 body 底下的 overlay，元件樣式碰不到外框；
+// 裡面的內容來自這個元件的 <ng-template>，所以寫在這裡照樣吃得到
+.driver-chat-sheet {
+  display: grid;
+  // 撐滿全螢幕的 sheet：標題固定在上面，第二列的對話列表吃掉剩下的高度
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+  gap: 12px;
+  padding: 4px 0 calc(12px + env(safe-area-inset-bottom));
+}
+
+.driver-chat-sheet__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.driver-chat-sheet__header h2 {
+  margin: 0;
+  color: #173129;
+  font-size: 17px;
+}
+
+.driver-chat-sheet__eyebrow {
+  margin: 0 0 2px;
+  color: #087c6b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.driver-chat-thread {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 4px 2px 20px;
+}
+
+.driver-chat-message {
+  width: fit-content;
+  max-width: min(82%, 440px);
+  padding: 10px 12px 8px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px 8px 8px 2px;
+  color: #173129;
+  background: #f2f7f5;
+}
+
+.driver-chat-message.is-own {
+  justify-self: end;
+  border-color: #0d8a73;
+  border-radius: 8px 8px 2px;
+  color: #ffffff;
+  background: #087c6b;
+}
+
+.driver-chat-message p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.driver-chat-message small {
+  display: block;
+  margin-top: 5px;
+  color: #6d827a;
+  font-size: 11px;
+  text-align: right;
+}
+
+.driver-chat-message.is-own small {
+  color: rgb(255 255 255 / 78%);
+}
+
+.driver-chat-sheet__placeholder {
+  margin: 0;
+  color: #31584d;
+  font-size: 14px;
+}
+
+.driver-chat-sheet__placeholder.is-error {
+  color: #a14c2e;
+}
+
+// 版面跟後台 .chat-composer 一樣：輸入框吃滿、送出鈕靠右。
+// 送出失敗的錯誤、輸入框會落在 .driver-chat-sheet 自動多出來的列（高度 auto），對話列表仍吃掉剩下的高度
+.driver-chat-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  // 司機端沒有套 mat.theme()，form-field 預設吃的 --mat-sys-* 都是空的，
+  // 外框會退回文字色、聚焦時也不會變色；這裡補上，顏色沿用聊天泡泡的綠
+  --mat-form-field-outlined-outline-color: #b9d3ca;
+  --mat-form-field-outlined-hover-outline-color: #6d827a;
+  --mat-form-field-outlined-focus-outline-color: #087c6b;
+  --mat-form-field-outlined-caret-color: #087c6b;
+  --mat-form-field-outlined-input-text-color: #173129;
+  --mat-form-field-outlined-input-text-placeholder-color: #6d827a;
+  --mat-form-field-outlined-container-shape: 12px;
+  --mat-icon-button-icon-color: #087c6b;
+  --mat-icon-button-disabled-icon-color: #b9d3ca;
+}
+
+.driver-chat-composer__field {
+  flex: 1;
+}
+
+.driver-chat-empty {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 44px 18px;
+  color: #527067;
+  text-align: center;
+}
+
+.driver-chat-empty mat-icon {
+  width: 28px;
+  height: 28px;
+  color: #087c6b;
+  font-size: 28px;
+}
+
+.driver-chat-empty strong {
+  color: #173129;
+  font-size: 15px;
+}
+
+.driver-chat-empty span {
+  font-size: 13px;
+}
+
+// ── 班表月曆（Material mat-calendar）─────────────────────
+// 司機端沒有套 mat.theme()，月曆的系統色都是空的，這裡用工作台淺色面板的配色補上 token。
+// 每一格依班別上色的 class（shift-work 等）在 styles.scss：格子在 MatCalendar 自己的元件裡，這裡的樣式碰不到
+.schedule-calendar-card {
+  margin-bottom: 14px;
+  padding: 6px 6px 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  background: #f9fdfb;
+}
+
+.driver-schedule-calendar {
+  --mat-datepicker-calendar-text-font: inherit;
+  --mat-datepicker-calendar-container-text-color: #1d392f;
+  --mat-datepicker-calendar-header-text-color: #516860;
+  --mat-datepicker-calendar-header-divider-color: #c8dad3;
+  --mat-datepicker-calendar-body-label-text-color: #516860;
+  --mat-datepicker-calendar-period-button-text-color: #1d392f;
+  --mat-datepicker-calendar-period-button-icon-color: #516860;
+  --mat-datepicker-calendar-navigation-button-icon-color: #087c6b;
+  --mat-datepicker-calendar-date-text-color: #1d392f;
+  --mat-datepicker-calendar-date-today-outline-color: #087c6b;
+  --mat-datepicker-calendar-date-selected-state-background-color: #087c6b;
+  --mat-datepicker-calendar-date-selected-state-text-color: #fff;
+  --mat-datepicker-calendar-date-hover-state-background-color: rgb(8 124 107 / 10%);
+  --mat-datepicker-calendar-date-focus-state-background-color: rgb(8 124 107 / 16%);
+}
+
+.schedule-legend {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.schedule-state {
+  margin: 0;
+  padding: 16px;
+  color: #516860;
+  font-size: 13px;
+  text-align: center;
+}
+
+.schedule-state.is-error {
+  color: #a14c2e;
 }

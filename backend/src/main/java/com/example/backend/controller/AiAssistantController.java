@@ -43,7 +43,13 @@ public class AiAssistantController {
     /** 調度員確認後才真正執行整批動作。 */
     @PostMapping("/plan/confirm")
     public List<DispatchResponse> confirmPlan(@AuthenticationPrincipal Jwt jwt) {
-        return aiAssistantService.confirmPlan(conversationId(jwt));
+        String conversationId = conversationId(jwt);
+        // 先留一份：confirmPlan 成功後清單就清空了，紀錄要寫的是剛剛確認了哪些動作
+        List<PendingActionResponse> confirmed = aiAssistantService.getPlan(conversationId);
+        List<DispatchResponse> results = aiAssistantService.confirmPlan(conversationId);
+        // confirmPlan 的交易在回到這裡時已經 commit，失敗會直接丟例外、不會走到這行
+        aiAssistantService.recordConfirmed(conversationId, confirmed);
+        return results;
     }
 
     /** 整批放棄，不執行任何動作。 */

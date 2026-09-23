@@ -30,12 +30,22 @@ input {
 }
 
 .driver-location-marker {
-  width: 28px;
-  height: 28px;
+  position: relative;
+  width: 30px;
+  height: 30px;
   border: 2px solid #ffffff;
-  color: #08231f;
-  background: #70d5ba;
-  font-size: 12px;
+  background: #0f8d75;
+  box-shadow: 0 2px 8px rgb(6 56 47 / 34%);
+}
+
+.driver-location-marker::before {
+  width: 0;
+  height: 0;
+  border-right: 7px solid transparent;
+  border-bottom: 15px solid #ffffff;
+  border-left: 7px solid transparent;
+  content: '';
+  transform: translateY(-1px);
 }
 
 .driver-destination-marker {
@@ -59,4 +69,67 @@ input {
 
 .driver-destination-tooltip .maplibregl-popup-tip {
   border-top-color: #1d67ad;
+}
+
+// 司機端沒有套用 Angular Material 主題，Bottom Sheet 的背景變數（--mat-sys-surface-container-low）
+// 是空的，不設的話 sheet 會是透明的，直接疊在地圖上看不清楚。顏色沿用工作台淺色面板的配色。
+// 要寫在全域：sheet 掛在 body 底下的 overlay，不在任何元件裡面
+:root {
+  --mat-bottom-sheet-container-background-color: #f9fdfb;
+  --mat-bottom-sheet-container-text-color: #173129;
+  --mat-bottom-sheet-container-shape: 16px;
+}
+
+// 手機寬度下 Material 預設不給圓角，這裡補上，看起來才像從底部拉起的卡片
+.mat-bottom-sheet-container {
+  border-top-left-radius: var(--mat-bottom-sheet-container-shape);
+  border-top-right-radius: var(--mat-bottom-sheet-container-shape);
+}
+
+// Bottom Sheet 的動畫速度。Material 沒有提供設定，只能用 CSS 覆蓋
+// 前面加 .cdk-overlay-container 是為了提高優先順序：Material 的樣式比這個檔案晚載入，
+// 寫一樣的選擇器會被它蓋掉
+.cdk-overlay-container .mat-bottom-sheet-container-animations-enabled.mat-bottom-sheet-container-enter {
+  animation-duration: 20ms;   // 打開：預設 195ms，數字越大越慢
+}
+
+.cdk-overlay-container .mat-bottom-sheet-container-animations-enabled.mat-bottom-sheet-container-exit {
+  animation-duration: 20ms;   // 關閉：預設 375ms，不要超過 500ms（原因見下方）
+}
+
+// 聊天 Bottom Sheet 全螢幕：覆蓋 Material 預設的 max-height: 80vh，以及寬螢幕下的寬度限制
+// （min-width: 384px／max-width: calc(100vw - 128px)）。
+// 用 .driver-chat-sheet-panel 開頭：兩個 class 的優先順序高過 Material 的單一 class，而且只影響聊天這個 sheet
+.driver-chat-sheet-panel .mat-bottom-sheet-container {
+  width: 100vw;
+  min-width: 100vw;
+  max-width: 100vw;
+  // dvh：手機瀏覽器網址列收合、展開時會跟著變，vh 不會，底部會被網址列蓋住一截
+  height: 100dvh;
+  max-height: 100dvh;
+  // 全螢幕不需要圓角；上方留出瀏海／狀態列的安全區域
+  border-radius: 0;
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+
+// 班表月曆每一格依班別上色（class 由 driver-dashboard 的 scheduleDateClass 加上）。
+// 要寫在全域：格子是 MatCalendar 自己元件裡的元素，元件樣式有封裝，碰不到。
+// 顏色跟下方明細的 .shift-type 標籤一致：上班綠、休假灰、請假橘；選中那天仍由 Material 的實心綠圈蓋過
+.driver-schedule-calendar .shift-cell .mat-calendar-body-cell-content {
+  font-weight: 700;
+}
+
+.driver-schedule-calendar .shift-work .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #246a59;
+  background: #e5f2ec;
+}
+
+.driver-schedule-calendar .shift-day_off .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #7a8a84;
+  background: #eef1ef;
+}
+
+.driver-schedule-calendar .shift-leave .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #9a5a17;
+  background: #fbeedd;
 }

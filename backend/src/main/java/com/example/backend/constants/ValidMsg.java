@@ -49,8 +49,6 @@ public final class ValidMsg {
     public static final String DELIVERY_ORDER_ID_POSITIVE = "訂單 ID 必須大於 0";
     public static final String DELIVERY_BOX_COUNT_REQUIRED = "實際交貨箱數不能為空";
     public static final String DELIVERY_BOX_COUNT_MIN = "實際交貨箱數至少為 1";
-    public static final String DELIVERY_PHOTO_REQUIRED = "現場照片不能為空";
-    public static final String DELIVERY_PHOTO_MAX_LENGTH = "照片網址不能超過 500 字元";
     public static final String DELIVERY_NOTES_MAX_LENGTH = "交貨備註不能超過 500 字元";
     public static final String DELIVERY_ALREADY_ARRIVED = "這張訂單已經登記抵達門市";
     public static final String DELIVERY_ARRIVE_STATUS_INVALID = "目前訂單狀態不能登記抵達";
@@ -69,7 +67,6 @@ public final class ValidMsg {
     public static final String DELIVERY_NOT_ARRIVED = "訂單尚未登記抵達門市";
     public static final String DELIVERY_ALREADY_FINISHED = "這次配送已經完成交貨或回報無人簽收";
     public static final String DELIVERY_STATUS_SUFFIX = "，目前狀態：%s";
-    public static final String DELIVERY_NO_SIGNATURE_WAIT_REQUIRED = "抵達門市後需等候 %d 分鐘才能回報無人簽收";
     public static final String DELIVERY_NO_SIGNATURE_DESCRIPTION = "門市無人簽收";
 
     // Template（常配編組）
@@ -115,4 +112,8 @@ public final class ValidMsg {
     public static final String WAREHOUSE_LAT_REQUIRED = "倉庫緯度不能為空";
     public static final String WAREHOUSE_LNG_REQUIRED = "倉庫經度不能為空";
     public static final String WAREHOUSE_PHONE_MAX_LENGTH = "電話長度不能超過 30 字元";
+
+    // Driver message（司機聊天室）
+    public static final String DRIVER_MESSAGE_CONTENT_REQUIRED = "訊息不能是空白";
+    public static final String DRIVER_MESSAGE_CONTENT_MAX_LENGTH = "訊息不能超過 1000 字";
 }

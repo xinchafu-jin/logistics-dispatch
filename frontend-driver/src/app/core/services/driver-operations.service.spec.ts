@@ -116,6 +116,9 @@ describe('DriverOperationsService', () => {
     }).subscribe();
     service.startMileage({ odometer: 18_400 }).subscribe();
     service.endMileage({ odometer: 18_438 }).subscribe();
+    service.recalculateMileage().subscribe();
+    service.reportException({orderId: 41, description: '外箱破損，已拍照存證。'}).subscribe();
+    service.uploadDeliveryPhoto(new File(['proof'], 'proof.jpg', {type: 'image/jpeg'})).subscribe();
 
     const arrive = httpTesting.expectOne('/api/driver/arrive');
     expect(arrive.request.body).toEqual({ orderId: 41 });
@@ -145,5 +148,51 @@ describe('DriverOperationsService', () => {
       expect(request.request.body).toEqual({ odometer });
       request.flush({});
     }
+
+    const recalculate = httpTesting.expectOne('/api/driver/mileage/recalculate');
+    expect(recalculate.request.method).toBe('POST');
+    expect(recalculate.request.body).toEqual({});
+    recalculate.flush({});
+
+    const exception = httpTesting.expectOne('/api/driver/exception');
+    expect(exception.request.body).toEqual({orderId: 41, description: '外箱破損，已拍照存證。'});
+    exception.flush({});
+
+    const photo = httpTesting.expectOne('/api/driver/delivery-photo');
+    expect(photo.request.method).toBe('POST');
+    expect(photo.request.body).toBeInstanceOf(FormData);
+    photo.flush({url: '/uploads/delivery-photos/proof.jpg'});
+  });
+
+  it('uses the driver chat endpoints without sending a driver id', () => {
+    service.getMessages().subscribe();
+    service.getMessages(42).subscribe();
+    service.sendMessage('國道塞車，晚 20 分鐘').subscribe();
+    service.markMessagesRead().subscribe();
+
+    // 第一次打開：不能帶 afterId，帶成 "undefined" 後端會回 400
+    const firstLoad = httpTesting.expectOne(
+      (request) =>
+        request.method === 'GET' && request.url === '/api/driver/messages' && !request.params.has('afterId'),
+    );
+    expect(firstLoad.request.method).toBe('GET');
+    firstLoad.flush([]);
+
+    const catchUp = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/messages' && request.params.get('afterId') === '42',
+    );
+    expect(catchUp.request.method).toBe('GET');
+    catchUp.flush([]);
+
+    const send = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/messages' && request.method === 'POST',
+    );
+    // 只送內容：driverId、寄件人、時間都由後端決定
+    expect(send.request.body).toEqual({content: '國道塞車，晚 20 分鐘'});
+    send.flush({});
+
+    const read = httpTesting.expectOne('/api/driver/messages/read');
+    expect(read.request.method).toBe('POST');
+    read.flush(1);
   });
 });

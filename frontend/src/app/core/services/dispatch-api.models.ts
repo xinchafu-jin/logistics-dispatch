@@ -59,6 +59,8 @@ export interface DriverDto {
   password?: string;
   name: string;
   phone?: string;
+  /** 司機在司機端上傳的大頭照，例如 /uploads/driver-photos/xxx.jpg；沒上傳是 null。只讀，更新司機資料時不用帶 */
+  profilePhotoUrl?: string | null;
   workStart: string;
   workEnd: string;
   restDuration: number;
@@ -187,6 +189,87 @@ export interface DriverShiftUpdateRequest {
 /** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
 export interface LeaveRequest {
   reason: string;
+  version?: number | null;
+}
+
+export interface FuelPriceDto {
+  id: number;
+  fuelType: 'DIESEL' | string;
+  pricePerLiter: number;
+  effectiveFrom: string;
+  fetchedAt: string;
+}
+
+export interface RouteMetricsDto {
+  routeId: number;
+  date: string;
+  plannedKm: number | null;
+  plannedDriveMinutes: number | null;
+  plannedTotalMinutes: number | null;
+  plannedFuelLiters: number | null;
+  plannedFuelCost: number | null;
+  gpsEstimatedKm: number | null;
+  gpsEstimatedFuelLiters: number | null;
+  gpsEstimatedFuelCost: number | null;
+  remainingKm: number | null;
+  remainingDriveMinutes: number | null;
+  estimatedNextArrivalAt: string | null;
+  estimatedReturnAt: string | null;
+  mileageStatus: string | null;
+  fuelStatus: string | null;
+}
+
+export type BackendReportPeriod = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
+
+export interface ReportQuery {
+  period?: BackendReportPeriod;
+  date?: string;
+  from?: string;
+  to?: string;
+  warehouseId?: number;
+  driverId?: number;
+  vehicleId?: number;
+  storeId?: number;
+  routeId?: number;
+}
+
+export interface ReportDailySummaryDto {
+  date: string;
+  totalOrders: number;
+  totalBoxes: number;
+  completedOrders: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+}
+
+export interface ReportSummaryDto {
+  from: string;
+  to: string;
+  totalOrders: number;
+  totalBoxes: number;
+  distinctStores: number;
+  pendingConfirmationOrders: number;
+  confirmedUnassignedOrders: number;
+  assignedOrders: number;
+  inDeliveryOrders: number;
+  completedOrders: number;
+  failedOrders: number;
+  cancelledOrders: number;
+  publishedRoutes: number;
+  dispatchedDrivers: number;
+  dispatchedVehicles: number;
+  unassignedOrders: number;
+  unassignedBoxes: number;
+  completionEligibleOrders: number;
+  completionRatePercent: number | null;
+  dailyTrend: ReportDailySummaryDto[];
+}
+
+/** 其餘報表 API 的共同範圍欄位；各資料列由後端依端點回傳。 */
+export interface ReportCollectionDto<T = Record<string, unknown>> {
+  from: string;
+  to: string;
+  [key: string]: string | number | boolean | null | T[];
 }
 
 export interface VehicleDto {
@@ -257,6 +340,8 @@ export interface DispatchResultDto {
   routes: RouteDto[];
   /** 裝不下、沒排進去的訂單，狀態維持 CONFIRMED */
   unassignedOrders: UnassignedOrderDto[];
+  /** 依格子排車時才有：配了哪台車、哪位司機沒帶入、哪台車沒排到訂單 */
+  notices?: string[];
   /**
    * 當天已在「其他倉庫」被指派的司機。
    *
@@ -423,10 +508,12 @@ export interface TemplateStopDto {
   sequence: number;
 }
 
+/** 編組裡的一格：司機、車輛都是選填（至少一個）。stops 是這格固定跑的門市，依 sequence 排 */
 export interface TemplateRouteDto {
   id: number;
   warehouseId: number;
-  vehicleId: number;
+  vehicleId: number | null;
+  driverId: number | null;
   stops: TemplateStopDto[];
 }
 
@@ -446,8 +533,24 @@ export interface TemplateRequest {
 
 export interface TemplateRouteRequest {
   warehouseId: number;
-  vehicleId: number;
+  vehicleId: number | null;
+  driverId: number | null;
+  /** 這格固定跑的門市，陣列順序就是停靠順序；同一間門市不能出現在兩格 */
   storeIds: number[];
+}
+
+/** POST /api/dispatch/optimize/slots：依看板上的格子自動排車 */
+export interface OptimizeSlotsRequest {
+  /** yyyy-MM-dd */
+  date: string;
+  warehouseId: number;
+  /**
+   * 司機、車輛都選填；只填司機的格子由後端配車。
+   * orderIds 是格子裡已經有的訂單，自動排車時固定在這格的車上，只有待排單的訂單交給 OR-Tools 分配
+   */
+  slots: {driverId: number | null; vehicleId: number | null; orderIds: number[]}[];
+  /** true＝「套用門市訂單」：只排 orderIds 裡的單，其他待排單不動，OR-Tools 只負責排停靠順序 */
+  pinnedOnly?: boolean;
 }
 
 /* ── AI 調度助理 ───────────────────────────────────────────────
@@ -456,7 +559,7 @@ export interface TemplateRouteRequest {
  */
 
 /** 對應後端 AiActionType */
-export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY';
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY' | 'UNASSIGN_DRIVER';
 
 /** POST /api/ai/chat 的請求本體 */
 export interface AiChatRequest {
@@ -487,10 +590,58 @@ export interface AiPendingActionDto {
   warehouseId: number | null;
   /** 只給分組標題顯示用；PUBLISH_DAY 為 null，畫面顯示「全部倉庫」 */
   warehouseName: string | null;
-  /** ASSIGN_DRIVER 為被指派的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
+  /** ASSIGN_DRIVER、UNASSIGN_DRIVER 為該路線的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
   vehicleId: number | null;
-  /** 只有 ASSIGN_DRIVER 有值 */
+  /** ASSIGN_DRIVER 為被指派的司機；UNASSIGN_DRIVER 為要被取消的司機；其他為 null */
   driverId: number | null;
   /** 只有 MOVE_ORDER 有值 */
   orderId: number | null;
+}
+
+// ── 司機聊天室 ─────────────────────────────────────────
+
+/** 對應後端 MessageSender：訊息是誰發的。ADMIN 代表「調度中心」，不分是哪一位管理員 */
+export type MessageSender = 'DRIVER' | 'ADMIN';
+
+/** 一則聊天訊息。對應後端 DriverMessageResponse */
+export interface DriverMessageDto {
+  /** 最後一則的 id 當下一次查詢的 afterId；前端合併清單時也用它去重 */
+  id: number;
+  /** 屬於哪位司機的對話串，不是寄件人 */
+  driverId: number;
+  senderType: MessageSender;
+  content: string;
+  createdAt: string;
+  /** 對方讀到的時間；null 或沒有這個欄位都代表還沒讀 */
+  readAt?: string | null;
+}
+
+/** POST /api/drivers/{driverId}/messages 的請求本體。對話屬於誰、誰發的、時間都由後端決定，只送內容 */
+export interface DriverMessageRequest {
+  content: string;
+}
+
+/** 紅點：某位司機有幾則還沒被管理員讀的訊息。對應後端 DriverMessageSummaryResponse */
+export interface DriverMessageSummaryDto {
+  driverId: number;
+  unreadCount: number;
+}
+
+/** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */
+export type DriverMessagePushType = 'MESSAGE' | 'READ';
+
+/**
+ * WebSocket 推播的內容。對應後端 DriverMessagePushResponse。
+ * 管理員頻道 /topic/admin/driver-messages 會收到所有司機的 MESSAGE 與 READ。
+ */
+export interface DriverMessagePushDto {
+  type: DriverMessagePushType;
+  /** 哪位司機的對話串；兩種 type 都有 */
+  driverId: number;
+  /** 新訊息本體；只有 MESSAGE 有 */
+  message?: DriverMessageDto | null;
+  /** 被讀的是哪一方發的訊息；只有 READ 有。DRIVER＝管理員讀了司機的訊息，ADMIN＝司機讀了調度中心的回覆 */
+  readSenderType?: MessageSender | null;
+  /** 標已讀的時間；只有 READ 有 */
+  readAt?: string | null;
 }

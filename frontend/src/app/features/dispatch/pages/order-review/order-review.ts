@@ -102,7 +102,7 @@ function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
 function describeError(error: unknown): string {
   if (error instanceof HttpErrorResponse) {
     const message = (error.error as { message?: string } | null)?.message;
-    return message || `後端回應 ${error.status}`;
+    return message || `操作未完成（代碼 ${error.status}）`;
   }
 
   return '未知錯誤';
@@ -285,13 +285,13 @@ export class OrderReview implements OnInit {
           this.orders.update((orders) => [saved, ...orders]);
         }
         this.selectedOrderId.set(saved.id);
-        this.actionMessage.set(`已將 ${saved.id} 儲存到後端。`);
+        this.actionMessage.set(`${saved.id} 已儲存。`);
         this.isSaving.set(false);
         this.activeForm.set(null);
         this.editingOrderId.set(null);
       },
       error: () => {
-        this.formError.set('儲存失敗，請檢查訂單欄位與後端回應。');
+        this.formError.set('儲存失敗，請檢查訂單欄位後再試。');
         this.isSaving.set(false);
       },
     });
@@ -318,12 +318,12 @@ export class OrderReview implements OnInit {
       next: () => {
         this.orders.update((orders) => orders.filter((item) => item.backendId !== order.backendId));
         this.syncSelectedOrder();
-        this.actionMessage.set(`${order.id} 已從後端刪除。`);
+        this.actionMessage.set(`${order.id} 已刪除。`);
         this.deleteTarget.set(null);
         this.isDeleting.set(false);
       },
       error: () => {
-        this.actionMessage.set('訂單刪除失敗，請確認後端回應。');
+        this.actionMessage.set('訂單刪除失敗，請稍後再試。');
         this.isDeleting.set(false);
       },
     });
@@ -389,7 +389,7 @@ export class OrderReview implements OnInit {
           orderNumber: row.data.orderNumber,
           message,
         }));
-        this.actionMessage.set(`${fileName} 未完成匯入，後端未建立任何訂單。`);
+        this.actionMessage.set(`${fileName} 未完成匯入，未新增任何訂單。`);
         this.importState.set({ stage: 'done', fileName, succeeded: 0, failures });
       },
     });
@@ -450,7 +450,7 @@ export class OrderReview implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.errorMessage.set('無法取得訂單與門市資料，請確認後端服務是否正在執行。');
+        this.errorMessage.set('暫時無法載入訂單與門市資料，請稍後再試。');
         this.loading.set(false);
       },
     });
@@ -465,7 +465,7 @@ export class OrderReview implements OnInit {
       return;
     }
 
-    this.actionMessage.set('正在將訂單狀態寫回後端...');
+    this.actionMessage.set('正在更新訂單狀態...');
     this.api
       .updateOrder(selected.backendId, {
         ...selected.raw,
@@ -484,7 +484,7 @@ export class OrderReview implements OnInit {
           this.actionMessage.set(successMessage);
         },
         error: () => {
-          this.actionMessage.set('訂單狀態更新失敗，請檢查後端回應與訂單資料。');
+          this.actionMessage.set('訂單狀態更新失敗，請稍後再試。');
         },
       });
   }

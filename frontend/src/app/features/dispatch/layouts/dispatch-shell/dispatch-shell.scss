@@ -307,6 +307,20 @@ app-brand-logo {
   gap: 12px;
 }
 
+// 頁面資訊（倉庫 · 資料更新於）：比使用者名稱淡一階，放在它左邊
+.workspace-meta {
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+// 手機寬度頂部欄塞不下，只留必要的按鈕
+@media (max-width: 640px) {
+  .workspace-meta {
+    display: none;
+  }
+}
+
 .application-notification,
 .theme-toggle,
 .profile-link,
@@ -815,10 +829,23 @@ app-brand-logo {
   gap: 4px;
 }
 
-// 外觀交給 matIconButton，這裡只控制 Material 圖示大小
+.chat-panel__icon-button {
+  display: inline-grid;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  place-items: center;
+}
+
 .chat-panel__icon-button mat-icon {
-  width: 16px;
-  height: 16px;
+  display: block;
+  width: 20px;
+  height: 20px;
+  overflow: visible;
+  font-size: 20px;
+  line-height: 20px;
 }
 
 .chat-panel__body {
@@ -979,4 +1006,20 @@ app-brand-logo {
     animation: none;
     transition: none;
   }
+}
+
+// 聊天室司機清單的大頭照：填滿 Material 的圓形 avatar。
+// 圓角寫在 img 上而不是在 avatar 加 overflow: hidden：同一個 avatar 上還掛著未讀紅點，裁切的話紅點會被切掉
+.chat-contact-photo {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+// 聊天對象的頭像（AI 圖示、司機名字首字）置中在圓形 avatar 裡；
+// Material 的 avatar 只給尺寸與底色，不處理內容對齊，文字預設會貼在左上角
+.chat-contact-avatar {
+  display: grid;
+  place-items: center;
 }

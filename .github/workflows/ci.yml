@@ -1,0 +1,98 @@
+# 後端測試 + 兩個前端的 production build。
+#
+# 什麼時候跑：
+#   - push 到 main 以外的分支：合併前就先知道有沒有壞
+#   - 被 build-images.yml 當成第一步呼叫（workflow_call）：
+#     main 上測試沒過就不建映像、不部署，壞掉的版本不會上線
+#   （PR 不另外觸發：同一個 repo 的分支 push 時已經跑過，PR 頁面會直接顯示那次的結果）
+
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    # @SpringBootTest 會真的連資料庫並跑 Flyway，所以要一顆空的 MySQL。
+    # 順便驗證 V1～V最新 在全新資料庫上能從頭套完（正式機只跑增量，看不出這種問題）。
+    services:
+      mysql:
+        image: mysql:8.4           # 跟 deploy/docker-compose.yml 同版本
+        env:
+          MYSQL_DATABASE: logistics
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      DB_URL: jdbc:mysql://127.0.0.1:3306/logistics?serverTimezone=Asia/Taipei&rewriteBatchedStatements=true
+      DB_USER: root
+      DB_PASSWORD: root
+      # application.properties 沒給預設值，缺了 context 起不來；CI 用假的就好。
+      # SecurityConfig 會檢查格式：密碼至少 32 字元、salt 是偶數長度且至少 16 字元的 hex
+      APP_CRYPTO_PASSWORD: ci-only-crypto-password-not-a-secret
+      APP_CRYPTO_SALT: deadbeefcafebabe
+      SHOW_SQL: "false"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4   # 快取 ~/.gradle，第二次起省掉下載依賴的時間
+
+      - name: Test
+        run: ./gradlew test --no-daemon
+
+      # 失敗時把 HTML 報告留下來，不用在 log 裡翻 stack trace
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test/
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [frontend, frontend-driver]
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'       # 跟 deploy/web/Dockerfile 同版本
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - run: npm ci --ignore-scripts
+
+      # production build 會檢查 angular.json 的 budgets，超過上限直接失敗——
+      # 這一步要在這裡擋下，不然會等到建映像時才爆
+      - name: Build
+        run: npx ng build

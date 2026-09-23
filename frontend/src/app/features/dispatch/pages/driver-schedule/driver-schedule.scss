@@ -63,6 +63,11 @@
   gap: 4px;
 }
 
+.month-field {
+  // 「2026年9月」加上月曆圖示的寬度，太寬會把旁邊的換月按鈕擠開
+  width: 150px;
+}
+
 .month-controls label span,
 .editor-form label > span {
   color: var(--field-label);
@@ -70,7 +75,6 @@
   font-weight: 700;
 }
 
-.month-controls input,
 .editor-form input,
 .editor-form select {
   min-height: 38px;
@@ -83,7 +87,6 @@
   font-size: 0.8125rem;
 }
 
-.month-controls input:focus,
 .editor-form input:focus,
 .editor-form select:focus {
   border-color: rgb(99 209 198 / 56%);
@@ -308,17 +311,6 @@ select:disabled {
 .schedule-actions {
   justify-content: flex-end;
   gap: 8px;
-}
-
-.published-note {
-  margin: 14px 0 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(217 141 87 / 32%);
-  border-radius: 6px;
-  color: #f0c07a;
-  background: rgb(217 141 87 / 7%);
-  font-size: 0.75rem;
-  line-height: 1.5;
 }
 
 .batch-schedule {
@@ -768,10 +760,6 @@ thead th.is-weekend {
   }
 
   .leave-action,
-  .published-note {
-    color: #875713;
-  }
-
   .leave-action {
     background: #fff7e8;
     border-color: #e2c28d;

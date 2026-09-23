@@ -59,6 +59,23 @@ public class FleetController {
     }
 
     /** 清除 GPS API 的回傳格式。 */
-    public record PurgeResponse(long deletedCount) {
+    public static class PurgeResponse {
+
+        private long deletedCount;
+
+        public PurgeResponse() {
+        }
+
+        public PurgeResponse(long deletedCount) {
+            this.deletedCount = deletedCount;
+        }
+
+        public long getDeletedCount() {
+            return deletedCount;
+        }
+
+        public void setDeletedCount(long deletedCount) {
+            this.deletedCount = deletedCount;
+        }
     }
 }

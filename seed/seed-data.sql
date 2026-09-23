@@ -15,13 +15,19 @@
 
 USE logistics;
 
--- 清空舊資料（依外鍵相依順序反向刪除）
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- 清空舊資料
 DELETE FROM orders;
 DELETE FROM routes;
 DELETE FROM vehicles;
 DELETE FROM drivers;
 DELETE FROM stores;
 DELETE FROM warehouses;
+DELETE FROM driver_messages;
+DELETE FROM attendance_records;
+DELETE FROM mileage_logs;
+DELETE FROM gps_pings;
 
 ALTER TABLE orders     AUTO_INCREMENT = 1;
 ALTER TABLE routes     AUTO_INCREMENT = 1;
@@ -29,6 +35,8 @@ ALTER TABLE vehicles   AUTO_INCREMENT = 1;
 ALTER TABLE drivers    AUTO_INCREMENT = 1;
 ALTER TABLE stores     AUTO_INCREMENT = 1;
 ALTER TABLE warehouses AUTO_INCREMENT = 1;
+
+SET FOREIGN_KEY_CHECKS = 1;
 
 -- ══════════════════════════════════════════
 -- 倉庫（id = 1）

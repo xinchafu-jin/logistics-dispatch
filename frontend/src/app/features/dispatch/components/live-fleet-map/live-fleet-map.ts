@@ -4,13 +4,9 @@ import {
   ElementRef,
   OnDestroy,
   ViewChild,
-  computed,
-  inject,
   signal, input, effect,
 } from '@angular/core';
 import * as L from 'leaflet';
-import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {DriverDto} from '../../../../core/services/dispatch-api.models';
 
 const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
@@ -33,18 +29,13 @@ function badgeIcon(kind: 'warehouse' | 'store', size: number): L.DivIcon {
   });
 }
 
-interface FleetDriver {
-  id: number;
-  displayId: string;
-  name: string;
-  isActive: boolean;
-}
-
 /** 地圖上的一個點。倉庫與門市共用同一個型別，差別只在畫出來的樣式 */
 export interface MapPoint {
   id: number;
   label: string;   // 名稱
   detail: string;  // tooltip 第二行
+  /** 額外資訊會同時出現在地圖提示與右側定位清單。 */
+  details?: string[];
   lat: number;
   lng: number;
 }
@@ -87,20 +78,6 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   readonly routeLines = input<RouteLine[]>([]);
   /** 路線圖層開關 */
   readonly showRouteLines = input(false);
-  readonly drivers = signal<FleetDriver[]>([]);
-  readonly selectedDriverId = signal<number | null>(null);
-  readonly selectedDriver = computed(() =>
-    this.drivers().find((driver) => driver.id === this.selectedDriverId()),
-  );
-  readonly selectedDriverPoint = computed(() => {
-    const driver = this.selectedDriver();
-    return driver ? this.driverPoints().find((point) => point.id === driver.id) ?? null : null;
-  });
-  readonly activeDriverCount = computed(
-    () => this.drivers().filter((driver) => driver.isActive).length,
-  );
-
-  private readonly api = inject(DispatchApiService);
   private map?: L.Map;
   private resizeObserver?: ResizeObserver;
   private markerLayer?: L.LayerGroup;
@@ -158,20 +135,21 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }).addTo(this.map);
     L.control.zoom({position: 'bottomright'}).addTo(this.map);
 
-    this.resizeObserver = new ResizeObserver(() => this.map?.invalidateSize());
+    this.resizeObserver = new ResizeObserver(() => {
+      const activeMap = this.map;
+      if (activeMap?.getContainer().isConnected) {
+        activeMap.invalidateSize();
+      }
+    });
     this.resizeObserver.observe(canvas);
     requestAnimationFrame(() => this.map?.invalidateSize());
     this.mapReady.set(true);
-    this.loadDrivers();
   }
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
     this.map?.remove();
-  }
-
-  selectDriver(id: number): void {
-    this.selectedDriverId.set(id);
+    this.map = undefined;
   }
 
   /**
@@ -203,7 +181,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
         icon: badgeIcon('warehouse', 34),
         keyboard: false,
       })
-        .bindTooltip(`倉庫｜${warehouse.label}`, {direction: 'top'})
+        .bindTooltip(`倉庫｜${this.escapeTooltip(warehouse.label)}`, {direction: 'top'})
         .addTo(this.markerLayer);
     }
 
@@ -213,7 +191,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
           icon: badgeIcon('store', 26),
           keyboard: false,
         })
-          .bindTooltip(`${store.label}<br>${store.detail}`, {direction: 'top'})
+          .bindTooltip(this.tooltipContent(store), {direction: 'top'})
           .addTo(this.markerLayer);
       }
     }
@@ -229,7 +207,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
           fillColor: '#0b0e0f',
           fillOpacity: 0.85,
         })
-          .bindTooltip(`司機｜${driver.label}<br>${driver.detail}`, {direction: 'top'})
+          .bindTooltip(`司機｜${this.tooltipContent(driver)}`, {direction: 'top'})
           .addTo(this.markerLayer);
       }
     }
@@ -239,6 +217,23 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     if (visible) {
       this.fitOnce(map, warehouse, stores);
     }
+  }
+
+  private tooltipContent(point: MapPoint): string {
+    return [point.label, ...(point.details ?? [point.detail])]
+      .filter(Boolean)
+      .map((value) => this.escapeTooltip(value))
+      .join('<br>');
+  }
+
+  private escapeTooltip(value: string): string {
+    return value.replace(/[&<>'"]/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      "'": '&#39;',
+      '"': '&quot;',
+    })[character]!);
   }
 
   /**
@@ -293,28 +288,6 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       L.latLngBounds(points.map((point) => [point.lat, point.lng] as L.LatLngTuple)),
       {padding: [56, 56], maxZoom: 14},
     );
-  }
-
-  private loadDrivers(): void {
-    this.api.getDrivers().subscribe({
-      next: (drivers) => {
-        this.drivers.set(drivers.map((driver) => this.toFleetDriver(driver)));
-        this.selectedDriverId.set(this.drivers()[0]?.id ?? null);
-      },
-      error: () => {
-        this.drivers.set([]);
-        this.selectedDriverId.set(null);
-      },
-    });
-  }
-
-  private toFleetDriver(driver: DriverDto): FleetDriver {
-    return {
-      id: driver.id ?? 0,
-      displayId: driver.id ? `DR-${String(driver.id).padStart(3, '0')}` : driver.account,
-      name: driver.name,
-      isActive: driver.isActive,
-    };
   }
 
 }

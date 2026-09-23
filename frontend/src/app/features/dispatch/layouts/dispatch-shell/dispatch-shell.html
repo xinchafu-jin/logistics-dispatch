@@ -18,6 +18,10 @@
     </div>
 
     <div class="workspace-actions">
+      <!-- 由頁面透過 DispatchHeaderService 提供，例如今日調度的「倉庫 · 資料更新於」；沒有就不顯示 -->
+      @if (headerMeta(); as meta) {
+        <span class="workspace-meta">{{ meta }}</span>
+      }
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
       <button
         type="button"
@@ -228,17 +232,7 @@
         <span>今日調度</span>
       </a>
 
-      <p class="nav-group-title">管理與監控</p>
-
-      <a mat-list-item class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">fact_check</mat-icon>
-        <span>訂單審核</span>
-      </a>
-
-      <a mat-list-item class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">local_shipping</mat-icon>
-        <span>人車資源</span>
-      </a>
+      <p class="nav-group-title">資源準備</p>
 
       <a
         mat-list-item
@@ -252,10 +246,19 @@
         <span>司機班表</span>
       </a>
 
-      <a mat-list-item class="nav-item" routerLink="/dispatch/fleet" routerLinkActive="is-active">
-        <mat-icon matListItemIcon aria-hidden="true">map</mat-icon>
-        <span>即時車隊</span>
+      <a mat-list-item class="nav-item" routerLink="/dispatch/resources" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">local_shipping</mat-icon>
+        <span>人車資源</span>
       </a>
+
+      <p class="nav-group-title">配送管理</p>
+
+      <a mat-list-item class="nav-item" routerLink="/dispatch/orders" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">fact_check</mat-icon>
+        <span>訂單審核</span>
+      </a>
+
+      <p class="nav-group-title">追蹤與分析</p>
 
       <a mat-list-item class="nav-item" routerLink="/dispatch/anomalies" routerLinkActive="is-active">
         <mat-icon matListItemIcon aria-hidden="true">warning_amber</mat-icon>
@@ -265,6 +268,11 @@
       <a mat-list-item class="nav-item" routerLink="/dispatch/reports" routerLinkActive="is-active">
         <mat-icon matListItemIcon aria-hidden="true">bar_chart</mat-icon>
         <span>營運報表</span>
+      </a>
+
+      <a mat-list-item class="nav-item" routerLink="/dispatch/history" routerLinkActive="is-active">
+        <mat-icon matListItemIcon aria-hidden="true">history</mat-icon>
+        <span>歷史報表查詢中心</span>
       </a>
     </mat-nav-list>
   </aside>
@@ -320,7 +328,8 @@
           >
             <!-- [selected] 仍要綁：面板收合時清單會被銷毀，重新打開要照 signal 還原選中狀態 -->
             <mat-list-option [value]="{ kind: 'ai' }" [selected]="isSelectedChatContact({ kind: 'ai' })">
-              <span matListItemAvatar>AI</span>
+              <!-- smart_toy：Material Icons 裡的機器人頭；robot / robot_2 只在 Material Symbols，index.html 載的是舊版字型所以不能用 -->
+              <span matListItemAvatar class="chat-contact-avatar"><mat-icon aria-hidden="true">smart_toy</mat-icon></span>
               <span matListItemTitle>AI 調度助理</span>
             </mat-list-option>
 
@@ -330,7 +339,21 @@
                 [value]="{ kind: 'driver', driverId: driver.id!, name: driver.name }"
                 [selected]="isSelectedChatContact({ kind: 'driver', driverId: driver.id!, name: driver.name })"
               >
-                <span matListItemAvatar>{{ driver.name.charAt(0) }}</span>
+                <span
+                  matListItemAvatar
+                  class="chat-contact-avatar"
+                  [matBadge]="driverUnread(driver.id)"
+                  [matBadgeHidden]="driverUnread(driver.id) === 0"
+                  [matBadgeDescription]="driverUnread(driver.id) + ' 則未讀'"
+                  matBadgeSize="small"
+                >
+                  <!-- 有大頭照就顯示照片；沒上傳、或檔案不見（載入失敗）就退回名字第一個字 -->
+                  @if (driverPhotoUrl(driver); as photoUrl) {
+                    <img class="chat-contact-photo" [src]="photoUrl" alt="" (error)="markDriverPhotoFailed(driver.id)" />
+                  } @else {
+                    {{ driver.name.charAt(0) }}
+                  }
+                </span>
                 <span matListItemTitle>{{ driver.name }}</span>
               </mat-list-option>
             }
@@ -427,9 +450,57 @@
                   </button>
                 </form>
               } @else {
-                <!-- 司機：後端還沒有司機聊天 API，先顯示提示 -->
+                <!-- 司機對話：資料來自後端 driver_messages，換人時由 loadDriverConversation 重新載入 -->
                 <h3 class="chat-panel__title">{{ contact.name }}</h3>
-                <p class="chat-panel__placeholder">尚未開放與 {{ contact.name }} 的聊天</p>
+                <div class="chat-messages">
+                  <!-- track 用 message.id：之後推播和送出會把新訊息合併進來，用 id 才認得出是同一則 -->
+                  @for (message of driverMessages(); track message.id) {
+                    <!-- 調度中心（我們這邊）發的靠右，司機發的靠左，沿用 AI 對話的 is-user 樣式 -->
+                    <p class="chat-message" [class.is-user]="message.senderType === 'ADMIN'">
+                      {{ message.content }}
+                      <small>
+                        {{ formatNotificationTime(message.createdAt) }}
+                        <!-- 只有我們發的才顯示：司機有沒有讀到回覆，是調度員要知道的 -->
+                        @if (message.senderType === 'ADMIN' && message.readAt) {
+                          · 已讀
+                        }
+                      </small>
+                    </p>
+                  } @empty {
+                    <p class="chat-panel__placeholder">還沒有和 {{ contact.name }} 的對話</p>
+                  }
+                </div>
+
+                @if (driverChatError()) {
+                  <p class="chat-panel__contacts-error" role="alert">{{ driverChatError() }}</p>
+                }
+
+                <!-- 跟 AI 的輸入框分開：各自綁自己的 signal，換對象時字不會跟著跑 -->
+                <form class="chat-composer" (ngSubmit)="sendDriverMessage()">
+                  <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                    <!-- maxlength 跟後端的 1000 字上限一致，超過就打不進去，不用等送出才被擋 -->
+                    <textarea
+                      matInput
+                      cdkTextareaAutosize
+                      cdkAutosizeMinRows="1"
+                      cdkAutosizeMaxRows="5"
+                      maxlength="1000"
+                      [placeholder]="'回覆 ' + contact.name"
+                      name="driverChatInput"
+                      [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
+                      [(ngModel)]="driverChatInput"
+                    ></textarea>
+                  </mat-form-field>
+                  <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+                  <button
+                    type="submit"
+                    matIconButton
+                    aria-label="送出"
+                    [disabled]="isSendingDriverMessage() || !driverChatInput().trim()"
+                  >
+                    <mat-icon aria-hidden="true">send</mat-icon>
+                  </button>
+                </form>
               }
             }
           </div>
@@ -437,7 +508,15 @@
       </div>
     </section>
   } @else {
-    <button type="button" matButton="filled" class="chat-launcher" (click)="openChat()">聊天室</button>
+    <button
+      type="button"
+      matButton="filled"
+      class="chat-launcher"
+      (click)="openChat()"
+      [matBadge]="totalUnread() > 99 ? '99+' : totalUnread()"
+      [matBadgeHidden]="totalUnread() === 0"
+      [matBadgeDescription]="totalUnread() + ' 則司機未讀訊息'"
+    >聊天室</button>
   }
 </div>
 

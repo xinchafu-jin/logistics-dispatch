@@ -36,10 +36,10 @@
     <article class="summary-card">
       <p>可用車輛</p>
       <strong>{{ availableVehicleCount() }}</strong>
-      <span>以後端車輛 AVAILABLE 計算</span>
+      <span>依車輛目前狀態計算</span>
     </article>
     <article class="summary-card tone-accent">
-      <p>後端配送據點</p>
+      <p>配送據點</p>
       <strong>{{ stores().length + warehouses().length }}</strong>
       <span>店家與倉庫資料已同步</span>
     </article>
@@ -113,7 +113,7 @@
       </div>
 
       @if (loading()) {
-        <p class="empty-state">正在從後端載入資源資料...</p>
+        <p class="empty-state">正在載入資源資料...</p>
       } @else if (errorMessage()) {
         <p class="empty-state">{{ errorMessage() }}</p>
       } @else if (activeView() === 'vehicles') {
@@ -214,7 +214,7 @@
               </div>
               <div class="table-value">
                 <strong>{{ store.contact }}</strong>
-                <span>門市資料來自後端</span>
+                <span>門市聯絡資訊</span>
               </div>
               <div class="row-actions">
                 <button
@@ -238,7 +238,7 @@
               </div>
             </article>
           } @empty {
-            <p class="empty-state">後端目前沒有店家資料。</p>
+            <p class="empty-state">目前沒有店家資料。</p>
           }
         </div>
       } @else {
@@ -265,7 +265,7 @@
               }}</span>
               <div class="table-value">
                 <strong>{{ warehouse.location }}</strong>
-                <span>倉庫座標來自後端</span>
+                <span>倉庫位置</span>
               </div>
               <div class="table-value">
                 <strong>{{ warehouse.phone }}</strong>
@@ -293,7 +293,7 @@
               </div>
             </article>
           } @empty {
-            <p class="empty-state">後端目前沒有倉庫資料。</p>
+            <p class="empty-state">目前沒有倉庫資料。</p>
           }
         </div>
       }
@@ -303,7 +303,7 @@
       <header class="assignment-header">
         <div>
           <p class="section-eyebrow">資源同步</p>
-          <h3 id="assignment-title">後端資源狀態</h3>
+          <h3 id="assignment-title">資源狀態</h3>
         </div>
         <span>帳號建立</span>
       </header>
@@ -315,8 +315,8 @@
       <section class="resource-alert" aria-label="資源提醒">
         <mat-icon aria-hidden="true">warning_amber</mat-icon>
         <div>
-          <strong>後端資源資料已同步</strong>
-          <span>配送路線與即時定位會依已登入司機與後端 GPS 資料顯示。</span>
+          <strong>資源資料已更新</strong>
+          <span>配送路線與即時定位會依已登入司機顯示。</span>
         </div>
       </section>
     </aside>
@@ -782,7 +782,7 @@
       >
         <p class="section-eyebrow">確認操作</p>
         <h3>確定刪除{{ deleteTargetLabel(target) }}？</h3>
-        <p>即將刪除「{{ target.name }}」，資料會透過後端 API 移除。</p>
+        <p>即將刪除「{{ target.name }}」，此操作無法復原。</p>
         <div class="modal-actions">
           <button type="button" class="plain-button" (click)="cancelDelete()">取消</button>
           <button

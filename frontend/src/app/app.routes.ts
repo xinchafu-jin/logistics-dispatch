@@ -49,14 +49,6 @@ export const routes: Routes = [
           ),
       },
       {
-        path: 'fleet',
-        data: { title: '即時車隊' },
-        loadComponent: () =>
-          import('./features/dispatch/pages/fleet-monitor/fleet-monitor').then(
-            (component) => component.FleetMonitor,
-          ),
-      },
-      {
         path: 'anomalies',
         data: { title: '異常中心' },
         loadComponent: () =>
@@ -70,6 +62,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/dispatch/pages/operation-report/operation-report').then(
             (component) => component.OperationReport,
+          ),
+      },
+      {
+        path: 'history',
+        data: { title: '歷史報表查詢中心' },
+        loadComponent: () =>
+          import('./features/dispatch/pages/report-history/report-history').then(
+            (component) => component.ReportHistory,
           ),
       },
       {

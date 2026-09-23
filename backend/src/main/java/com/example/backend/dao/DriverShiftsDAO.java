@@ -21,5 +21,8 @@ public interface DriverShiftsDAO extends JpaRepository<DriverShiftsEntity, Long>
 
     Optional<DriverShiftsEntity> findByDriverIdAndWorkDate(Long driverId, LocalDate workDate);
 
+    /** 某天所有司機的班次；發布前檢查一次撈完，不必每條路線各查一次。 */
+    List<DriverShiftsEntity> findAllByWorkDate(LocalDate workDate);
+
     boolean existsByScheduleMonthIdAndDriverId(Long scheduleMonthId, Long driverId);
 }

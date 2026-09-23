@@ -46,7 +46,7 @@
     <article class="summary-card tone-accent">
       <p>待補送數量</p>
       <strong>{{ summary().replacementBoxes }}<span>箱</span></strong>
-      <span>依後端異常紀錄加總</span>
+      <span>依異常紀錄加總</span>
     </article>
   </section>
 
@@ -154,12 +154,12 @@
 
         <section class="detail-block">
           <p>異常說明</p>
-          <span>{{ incident.description || '後端未提供額外異常說明。' }}</span>
+          <span>{{ incident.description || '尚無額外異常說明。' }}</span>
         </section>
 
         <section class="detail-block recommendation-block">
           <p>確認後處理</p>
-          <span>後續訂單會轉為待排車；若今日路線已發布，後端會安排到下一個可配送日。</span>
+          <span>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</span>
         </section>
 
         <p class="action-message">確認前請核對來源訂單與待補送數量。</p>

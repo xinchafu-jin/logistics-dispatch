@@ -34,6 +34,19 @@ public class DeliveryRecordsEntity {
     @Column
     private Integer deliveredBoxCount;
 
+    /** 本次配送開始時訂單記載的應到箱數快照。 */
+    @Column
+    private Integer expectedBoxCount;
+
+    @Column
+    private Integer shortageBoxCount;
+
+    @Column
+    private Integer damagedBoxCount;
+
+    @Column
+    private Integer replacementRequiredBoxCount;
+
     @Column(length = 500)
     private String photoUrl;
 
@@ -98,6 +111,38 @@ public class DeliveryRecordsEntity {
 
     public void setDeliveredBoxCount(Integer deliveredBoxCount) {
         this.deliveredBoxCount = deliveredBoxCount;
+    }
+
+    public Integer getExpectedBoxCount() {
+        return expectedBoxCount;
+    }
+
+    public void setExpectedBoxCount(Integer expectedBoxCount) {
+        this.expectedBoxCount = expectedBoxCount;
+    }
+
+    public Integer getShortageBoxCount() {
+        return shortageBoxCount;
+    }
+
+    public void setShortageBoxCount(Integer shortageBoxCount) {
+        this.shortageBoxCount = shortageBoxCount;
+    }
+
+    public Integer getDamagedBoxCount() {
+        return damagedBoxCount;
+    }
+
+    public void setDamagedBoxCount(Integer damagedBoxCount) {
+        this.damagedBoxCount = damagedBoxCount;
+    }
+
+    public Integer getReplacementRequiredBoxCount() {
+        return replacementRequiredBoxCount;
+    }
+
+    public void setReplacementRequiredBoxCount(Integer replacementRequiredBoxCount) {
+        this.replacementRequiredBoxCount = replacementRequiredBoxCount;
     }
 
     public String getPhotoUrl() {

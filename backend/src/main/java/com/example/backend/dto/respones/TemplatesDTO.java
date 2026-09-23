@@ -61,6 +61,8 @@ public class TemplatesDTO {
 
         private Long vehicleId;
 
+        private Long driverId;
+
         private List<TemplateStopResponse> stops;
 
         public TemplateRouteResponse() {
@@ -88,6 +90,14 @@ public class TemplatesDTO {
 
         public void setVehicleId(Long vehicleId) {
             this.vehicleId = vehicleId;
+        }
+
+        public Long getDriverId() {
+            return driverId;
+        }
+
+        public void setDriverId(Long driverId) {
+            this.driverId = driverId;
         }
 
         public List<TemplateStopResponse> getStops() {

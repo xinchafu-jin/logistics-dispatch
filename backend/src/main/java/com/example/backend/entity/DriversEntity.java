@@ -30,6 +30,10 @@ public class DriversEntity {
     @Column(length = 30)
     private String phone;
 
+    /** 司機大頭照的公開相對網址，例如 /uploads/driver-photos/{uuid}.jpg。 */
+    @Column(name = "profile_photo_url", length = 500)
+    private String profilePhotoUrl;
+
     @Column(nullable = false)
     private LocalTime workStart;
 
@@ -85,6 +89,14 @@ public class DriversEntity {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getProfilePhotoUrl() {
+        return profilePhotoUrl;
+    }
+
+    public void setProfilePhotoUrl(String profilePhotoUrl) {
+        this.profilePhotoUrl = profilePhotoUrl;
     }
 
     public LocalTime getWorkStart() {

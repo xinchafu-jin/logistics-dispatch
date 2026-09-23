@@ -285,6 +285,19 @@ describe('DispatchApiService', () => {
       })
       .subscribe();
     service.syncScheduleDrivers(41).subscribe();
+    service.updateDriverShiftsBatch(41, [{
+      id: 86,
+      scheduleMonthId: 41,
+      driverId: 3,
+      workDate: '2026-09-01',
+      shiftType: 'WORK',
+      workStart: '08:30',
+      workEnd: '17:30',
+      overtimeMinutes: 0,
+      changeReason: '批次套用',
+      lastModifiedAt: null,
+      version: 2,
+    }]).subscribe();
     service.markDriverShiftLeave(87, {reason: '已核准特休'}).subscribe();
     service.publishScheduleMonth(41).subscribe();
 
@@ -325,6 +338,11 @@ describe('DispatchApiService', () => {
     expect(syncDrivers.request.body).toBeNull();
     syncDrivers.flush([]);
 
+    const batch = httpTesting.expectOne('/api/driver-schedules/months/41/shifts/batch');
+    expect(batch.request.method).toBe('PUT');
+    expect(batch.request.body).toHaveLength(1);
+    batch.flush([]);
+
     const leave = httpTesting.expectOne('/api/driver-schedules/shifts/87/leave');
     expect(leave.request.method).toBe('PATCH');
     expect(leave.request.body).toEqual({reason: '已核准特休'});
@@ -334,6 +352,47 @@ describe('DispatchApiService', () => {
     expect(publish.request.method).toBe('POST');
     expect(publish.request.body).toBeNull();
     publish.flush({id: 41, scheduleMonth: '2026-09-01', status: 'PUBLISHED'});
+  });
+
+  it('uses route metrics, fuel price, and report contracts from the GPS and mileage backend', () => {
+    service.getRouteMetrics(77).subscribe();
+    service.getLatestFuelPrice().subscribe();
+    service.syncFuelPrice().subscribe();
+    service.getFuelPriceHistory('2026-09-01', '2026-09-30').subscribe();
+    service.getReportSummary({period: 'THIS_WEEK'}).subscribe();
+    service.getReportAttendance({period: 'THIS_WEEK'}).subscribe();
+    service.getReportRoutes({period: 'THIS_WEEK'}).subscribe();
+    service.getReportDrivers({period: 'THIS_WEEK'}).subscribe();
+    service.getReportVehicles({period: 'THIS_WEEK'}).subscribe();
+    service.getReportWarehouses({period: 'THIS_WEEK'}).subscribe();
+    service.getReportStores({period: 'THIS_WEEK'}).subscribe();
+    service.getReportExceptions({period: 'THIS_WEEK'}).subscribe();
+
+    const routeMetrics = httpTesting.expectOne('/api/dispatch/routes/77/metrics');
+    expect(routeMetrics.request.method).toBe('GET');
+    routeMetrics.flush({routeId: 77});
+
+    const fuel = httpTesting.expectOne('/api/fuel-prices/latest');
+    expect(fuel.request.method).toBe('GET');
+    fuel.flush({});
+
+    const sync = httpTesting.expectOne('/api/fuel-prices/sync');
+    expect(sync.request.method).toBe('POST');
+    sync.flush({});
+
+    const history = httpTesting.expectOne((request) => request.url === '/api/fuel-prices/history');
+    expect(history.request.params.get('from')).toBe('2026-09-01');
+    expect(history.request.params.get('to')).toBe('2026-09-30');
+    history.flush([]);
+
+    for (const endpoint of [
+      '/api/reports/summary', '/api/reports/attendance', '/api/reports/routes', '/api/reports/drivers',
+      '/api/reports/vehicles', '/api/reports/warehouses', '/api/reports/stores', '/api/reports/exceptions',
+    ]) {
+      const request = httpTesting.expectOne((candidate) => candidate.url === endpoint);
+      expect(request.request.params.get('period')).toBe('THIS_WEEK');
+      request.flush({from: '2026-09-15', to: '2026-09-21'});
+    }
   });
 
   it('deletes a driver through the backend DELETE contract', () => {

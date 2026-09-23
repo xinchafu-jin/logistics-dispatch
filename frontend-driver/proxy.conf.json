@@ -3,8 +3,9 @@
     "target": "http://localhost:8080",
     "secure": false,
     "changeOrigin": true,
+    "ws": true,
     "headers": {
-      "origin": "http://localhost:4204"
+      "origin": "http://localhost:4001"
     }
   },
   "/uploads": {

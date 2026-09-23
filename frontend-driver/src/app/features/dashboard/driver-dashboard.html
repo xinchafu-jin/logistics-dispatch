@@ -3,6 +3,8 @@
     <div #driverMap class="driver-map"></div>
   </section>
 
+  <!-- 地圖分頁不顯示頂部欄：地圖要滿版當底圖；其他分頁照常顯示品牌與天氣 -->
+  @if (activeTab() !== 'map') {
   <header class="app-topbar">
     <div class="brand">
       <app-brand-logo></app-brand-logo>
@@ -41,18 +43,36 @@
       </span>
     </div>
   </header>
+  }
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
-      <button
-        type="button"
-        class="locate-control"
-        (click)="locateOnMap()"
-        title="取得目前位置"
-        aria-label="取得目前位置"
-      >
-        <mat-icon aria-hidden="true">my_location</mat-icon>
-      </button>
+      <div class="map-quick-actions">
+        <button
+          type="button"
+          matIconButton
+          class="chat-control"
+          (click)="openDriverChat()"
+          title="聊天室"
+          aria-label="聊天室"
+          [matBadge]="unreadChatCount() > 99 ? '99+' : unreadChatCount()"
+          [matBadgeHidden]="unreadChatCount() === 0"
+          [matBadgeDescription]="unreadChatCount() + ' 則未讀訊息'"
+          matBadgeSize="small"
+        >
+          <mat-icon aria-hidden="true">forum</mat-icon>
+        </button>
+        <button
+          type="button"
+          matIconButton
+          class="locate-control"
+          (click)="locateOnMap()"
+          title="取得目前位置"
+          aria-label="取得目前位置"
+        >
+          <mat-icon aria-hidden="true">my_location</mat-icon>
+        </button>
+      </div>
 
       <section
         class="attendance-sheet"
@@ -260,6 +280,15 @@
               收車
             </button>
           </div>
+          <button
+            type="button"
+            class="outline-action mileage-recalculate-button"
+            (click)="recalculateMileage()"
+            [disabled]="isMileageSubmitting()"
+          >
+            <mat-icon aria-hidden="true">sync</mat-icon>
+            依 GPS 重新結算
+          </button>
           @if (!canRecordMileage()) {
             <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
           }
@@ -350,7 +379,7 @@
                           [title]="
                             canNavigate(stop)
                               ? '在地圖顯示並開始導航'
-                              : '後端尚未提供這個站點的座標'
+                              : '此站點尚未設定座標'
                           "
                         >
                           <mat-icon aria-hidden="true">near_me</mat-icon>
@@ -391,6 +420,18 @@
                               (input)="updateDeliveryNotes($event)"
                             ></textarea>
                           </label>
+                          <label class="delivery-photo-input">
+                            <span>交貨照片（選填）</span>
+                            <input
+                              type="file"
+                              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                              [disabled]="isTaskSubmitting()"
+                              (change)="selectDeliveryPhoto($event)"
+                            />
+                            @if (deliveryPhoto(); as photo) {
+                              <small>已選擇：{{ photo.name }}</small>
+                            }
+                          </label>
                           <div class="delivery-action-buttons">
                             <button
                               type="button"
@@ -412,12 +453,42 @@
                             </button>
                             <button
                               type="button"
+                              class="delivery-exception-button"
+                              (click)="toggleDeliveryException()"
+                              [disabled]="isTaskSubmitting()"
+                            >
+                              <mat-icon aria-hidden="true">report_problem</mat-icon>
+                              貨況異常
+                            </button>
+                            <button
+                              type="button"
                               class="delivery-cancel-button"
                               (click)="closeDeliveryAction()"
                             >
                               取消
                             </button>
                           </div>
+                          @if (deliveryExceptionOpen()) {
+                            <label class="delivery-exception-detail">
+                              <span>異常說明</span>
+                              <textarea
+                                rows="3"
+                                maxlength="1000"
+                                placeholder="例如貨物短少、外箱破損或現場無法交付的原因"
+                                [value]="deliveryExceptionDescription()"
+                                [disabled]="isTaskSubmitting()"
+                                (input)="updateDeliveryExceptionDescription($event)"
+                              ></textarea>
+                              <button
+                                type="button"
+                                class="delivery-exception-button"
+                                (click)="reportDeliveryException(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                送出異常
+                              </button>
+                            </label>
+                          }
                         </section>
                       }
                     </li>
@@ -432,38 +503,37 @@
           <p class="eyebrow">班表</p>
           <h1>本月班表</h1>
         </div>
-        <div class="month-selector" aria-label="選擇班表月份">
-          <button
-            type="button"
-            (click)="changeScheduleMonth(-1)"
-            title="上個月"
-            aria-label="上個月"
-          >
-            <mat-icon aria-hidden="true">chevron_left</mat-icon>
-          </button>
-          <strong>{{ scheduleMonthLabel() }}</strong>
-          <button type="button" (click)="changeScheduleMonth(1)" title="下個月" aria-label="下個月">
-            <mat-icon aria-hidden="true">chevron_right</mat-icon>
-          </button>
-        </div>
+        <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
+             每天依班別上色（scheduleDateClass），點某一天看下方明細 -->
+        <section class="schedule-calendar-card" aria-label="班表月曆">
+          <mat-calendar
+            #scheduleCalendar
+            class="driver-schedule-calendar"
+            [startAt]="scheduleMonth()"
+            [selected]="selectedScheduleDate()"
+            [dateClass]="scheduleDateClass"
+            (selectedChange)="selectedScheduleDate.set($event!)"
+          />
+          <div class="schedule-legend" aria-hidden="true">
+            <span class="shift-type is-work">上班</span>
+            <span class="shift-type is-day_off">休假</span>
+            <span class="shift-type is-leave">請假</span>
+          </div>
+        </section>
+
         @if (scheduleViewState() === 'loading') {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>正在取得已發布班表</h2>
-          </div>
+          <p class="schedule-state">正在取得已發布班表...</p>
         } @else if (scheduleViewState() === 'error') {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>班表暫時無法取得</h2>
-            <p>{{ scheduleError() }}</p>
-          </div>
-        } @else if (scheduleViewState() === 'ready') {
+          <p class="schedule-state is-error">{{ scheduleError() }}</p>
+        } @else if (scheduleViewState() === 'empty') {
+          <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
+        } @else {
+          <!-- 點選那天的班次明細；沿用原本清單的一列樣式 -->
           <div class="shift-list">
-            @for (shift of publishedShifts(); track shift.id) {
+            @if (selectedShift(); as shift) {
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
-                <span class="shift-type"
-                      [class]="shiftTypeClass(shift.shiftType)">{{
+                <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{
                   formatShiftType(shift.shiftType)
                 }}</span>
                 <div class="shift-details">
@@ -478,77 +548,11 @@
                   }
                 </div>
               </article>
-            }
-          </div>
-        } @else {
-          <div class="empty-state">
-            <mat-icon aria-hidden="true">calendar_month</mat-icon>
-            <h2>這個月沒有已發布班表</h2>
-            <p>主管發布班表後，司機端會在這裡顯示。</p>
-          </div>
-        }
-      } @else {
-        <div class="panel-heading">
-          <p class="eyebrow">司機</p>
-          <h1>司機資訊</h1>
-        </div>
-        <section class="profile-photo-card" aria-label="司機大頭照">
-          <div class="profile-photo-preview">
-            @if (profilePhotoUrl(); as photoUrl) {
-              <img
-                [src]="photoUrl"
-                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
-                (error)="handleProfilePhotoLoadError()"
-              />
             } @else {
-              <span aria-hidden="true">{{ profileInitial() }}</span>
+              <p class="schedule-state">這一天沒有已發布的班次。</p>
             }
           </div>
-          <div class="profile-photo-copy">
-            <strong>{{ profile()?.name ?? user()?.name }}</strong>
-            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
-            <label
-              class="profile-photo-action"
-              [class.is-disabled]="isProfilePhotoUploading()"
-            >
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                [disabled]="isProfilePhotoUploading()"
-                (change)="selectProfilePhoto($event)"
-              />
-              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
-            </label>
-          </div>
-        </section>
-        @if (profilePhotoMessage()) {
-          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
         }
-        @if (profileError()) {
-          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
-        }
-        <dl class="profile-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ profile()?.name ?? user()?.name }}</dd>
-          </div>
-          <div>
-            <dt>帳號</dt>
-            <dd>{{ profile()?.account ?? user()?.account }}</dd>
-          </div>
-          <div>
-            <dt>司機編號</dt>
-            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
-          </div>
-          <div>
-            <dt>電話</dt>
-            <dd>{{ profile()?.phone || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>登入狀態</dt>
-            <dd>已安全登入</dd>
-          </div>
-        </dl>
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
           <div class="mileage-heading">
             <div>
@@ -622,6 +626,68 @@
             }
           </div>
         </section>
+      } @else {
+        <div class="panel-heading">
+          <p class="eyebrow">司機</p>
+          <h1>司機資訊</h1>
+        </div>
+        <section class="profile-photo-card" aria-label="司機大頭照">
+          <div class="profile-photo-preview">
+            @if (profilePhotoUrl(); as photoUrl) {
+              <img
+                [src]="photoUrl"
+                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                (error)="handleProfilePhotoLoadError()"
+              />
+            } @else {
+              <span aria-hidden="true">{{ profileInitial() }}</span>
+            }
+          </div>
+          <div class="profile-photo-copy">
+            <strong>{{ profile()?.name ?? user()?.name }}</strong>
+            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
+            <label
+              class="profile-photo-action"
+              [class.is-disabled]="isProfilePhotoUploading()"
+            >
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                [disabled]="isProfilePhotoUploading()"
+                (change)="selectProfilePhoto($event)"
+              />
+              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
+            </label>
+          </div>
+        </section>
+        @if (profilePhotoMessage()) {
+          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+        }
+        @if (profileError()) {
+          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+        }
+        <dl class="profile-list">
+          <div>
+            <dt>姓名</dt>
+            <dd>{{ profile()?.name ?? user()?.name }}</dd>
+          </div>
+          <div>
+            <dt>帳號</dt>
+            <dd>{{ profile()?.account ?? user()?.account }}</dd>
+          </div>
+          <div>
+            <dt>司機編號</dt>
+            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>電話</dt>
+            <dd>{{ profile()?.phone || '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>登入狀態</dt>
+            <dd>已安全登入</dd>
+          </div>
+        </dl>
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>
@@ -658,3 +724,76 @@
     </button>
   </nav>
 </main>
+
+<!-- 與調度中心的聊天：交給 MatBottomSheet 開啟（openDriverChat），不另外開元件。
+     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到 -->
+<ng-template #driverChatSheet>
+  <section class="driver-chat-sheet" aria-labelledby="driver-chat-title">
+    <header class="driver-chat-sheet__header">
+      <div>
+        <p class="driver-chat-sheet__eyebrow">配送支援</p>
+        <h2 id="driver-chat-title">調度中心</h2>
+      </div>
+      <button type="button" matIconButton aria-label="關閉" (click)="closeDriverChat()">
+        <mat-icon aria-hidden="true">close</mat-icon>
+      </button>
+    </header>
+    <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
+      @if (chatViewState() === 'loading') {
+        <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+      } @else if (chatViewState() === 'error') {
+        <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
+      } @else if (chatViewState() === 'empty') {
+        <div class="driver-chat-empty">
+          <mat-icon aria-hidden="true">forum</mat-icon>
+          <strong>目前還沒有對話</strong>
+          <span>有狀況可以直接在下方留言給調度中心</span>
+        </div>
+      } @else {
+        @for (message of chatMessages(); track message.id) {
+          <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+            <p>{{ message.content }}</p>
+            <small>
+              {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+              @if (isOwnChatMessage(message) && message.readAt) {
+                · 已讀
+              }
+            </small>
+          </article>
+        }
+      }
+    </section>
+
+    @if (chatSendError()) {
+      <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+    }
+
+    <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
+    <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
+      <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
+      <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+        <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
+        <textarea
+          matInput
+          cdkTextareaAutosize
+          cdkAutosizeMinRows="1"
+          cdkAutosizeMaxRows="4"
+          maxlength="1000"
+          placeholder="留言給調度中心"
+          name="chatInput"
+          aria-label="輸入給調度中心的訊息"
+          [(ngModel)]="chatInput"
+        ></textarea>
+      </mat-form-field>
+      <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+      <button
+        type="submit"
+        matIconButton
+        aria-label="送出"
+        [disabled]="isSendingChatMessage() || !chatInput().trim()"
+      >
+        <mat-icon aria-hidden="true">send</mat-icon>
+      </button>
+    </form>
+  </section>
+</ng-template>

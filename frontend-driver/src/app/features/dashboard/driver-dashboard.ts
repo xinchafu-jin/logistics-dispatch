@@ -4,21 +4,34 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  TemplateRef,
   ViewChild,
   computed,
+  effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {Router} from '@angular/router';
+import {FormsModule} from '@angular/forms';
+import {TextFieldModule} from '@angular/cdk/text-field';
+import {MatBadgeModule} from '@angular/material/badge';
+import {MatBottomSheet, MatBottomSheetModule, MatBottomSheetRef} from '@angular/material/bottom-sheet';
+import {MatButtonModule} from '@angular/material/button';
+import {MatCalendar, MatCalendarCellClassFunction, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
+import {MatInputModule} from '@angular/material/input';
 import type * as maplibregl from 'maplibre-gl';
-import {Observable, single} from 'rxjs';
+import {Observable, of, single, switchMap} from 'rxjs';
 import {DriverAuthService} from '../../core/auth/driver-auth.service';
 import {
   clearStoredMapLocation,
   readStoredMapLocation,
   saveStoredMapLocation,
 } from '../../core/location/driver-map-location.storage';
+import {DriverChatSocketService} from '../../core/services/driver-chat-socket.service';
 import {DriverGpsTrackingService} from '../../core/services/driver-gps-tracking.service';
 import {
   AttendanceRecordDto,
@@ -27,6 +40,8 @@ import {
   DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
+  DriverMessageDto,
+  DriverMessagePushDto,
   DriverTaskStop,
   DriverTaskOrderStatus,
   DriverTasksResponse,
@@ -40,6 +55,7 @@ type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
 type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
 type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
 type NavigationRouteState = 'idle' | 'loading' | 'ready' | 'error';
+type ChatViewState = 'loading' | 'ready' | 'empty' | 'error';
 
 interface DriverTaskSelection {
   route: DriverRouteTask;
@@ -49,6 +65,8 @@ interface DriverTaskSelection {
 type MapPosition = [lng: number, lat: number];
 const DRIVER_ROUTE_SOURCE_ID = 'driver-navigation-route';
 const DRIVER_ROUTE_LAYER_ID = 'driver-navigation-route-line';
+const DRIVER_MAP_DEFAULT_CENTER: MapPosition = [120.3014, 22.6273];
+const OPEN_FREE_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 
 // 找出路線上離 here 最近的點，回傳距離（公尺）與索引。
 export function findNearest(
@@ -98,16 +116,34 @@ function distanceInMeters(from: MapPosition, to: MapPosition): number {
   return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(arc), Math.sqrt(1 - arc));
 }
 
-//todo 之後看是否加進階選項參數化
+function bearingInDegrees(from: MapPosition, to: MapPosition): number {
+  const longitudeDelta = (to[0] - from[0]) * (Math.PI / 180);
+  const fromLatitude = from[1] * (Math.PI / 180);
+  const toLatitude = to[1] * (Math.PI / 180);
+  const y = Math.sin(longitudeDelta) * Math.cos(toLatitude);
+  const x =
+    Math.cos(fromLatitude) * Math.sin(toLatitude) -
+    Math.sin(fromLatitude) * Math.cos(toLatitude) * Math.cos(longitudeDelta);
+
+  return (Math.atan2(y, x) * (180 / Math.PI) + 360) % 360;
+}
+
 const OFF_ROUTE_METERS = 70;
 const OFF_ROUTE_STREAK = 3;
-// cd
 const RECALC_COOLDOWN_MS = 15_000;
 
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
+    MatBadgeModule,
+    MatBottomSheetModule,
+    MatButtonModule,
+    MatDatepickerModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
+    TextFieldModule,
+    FormsModule,
     BrandLogo,
   ],
   templateUrl: './driver-dashboard.html',
@@ -115,6 +151,8 @@ const RECALC_COOLDOWN_MS = 15_000;
 })
 export class DriverDashboard implements AfterViewInit, OnDestroy {
   @ViewChild('driverMap') private driverMapElement?: ElementRef<HTMLElement>;
+  // 聊天 Bottom Sheet 的內容，寫在 driver-dashboard.html 最下面的 <ng-template #driverChatSheet>
+  @ViewChild('driverChatSheet') private driverChatSheet?: TemplateRef<unknown>;
 
   protected readonly user = inject(DriverAuthService).user;
   protected readonly weather = signal<DriverWeather | null>(null);
@@ -128,17 +166,57 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly scheduleViewState = signal<ScheduleViewState>('loading');
   protected readonly scheduleError = signal<string | null>(null);
   protected readonly scheduleMonth = signal(this.monthStart(new Date()));
-  protected readonly scheduleMonthLabel = computed(() =>
-    new Intl.DateTimeFormat('zh-TW', {year: 'numeric', month: 'long'}).format(
-      this.scheduleMonth(),
-    ),
+  // 班表月曆點選的那一天，下方顯示這天的班次；預設今天
+  protected readonly selectedScheduleDate = signal(new Date());
+  // workDate（YYYY-MM-DD）→ 班次，月曆每一格、下方明細都從這裡查
+  private readonly shiftsByDate = computed(
+    () => new Map(this.publishedShifts().map((shift) => [shift.workDate, shift])),
   );
+  protected readonly selectedShift = computed(
+    () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
+  );
+  private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
+
+  /**
+   * 月曆每一格的 class：依當天班別上色（shift-work／shift-day_off／shift-leave），樣式在 styles.scss。
+   * Material 只在月曆重畫時才呼叫這個函式，所以班表載完要呼叫 updateTodaysDate() 讓它重畫。
+   */
+  protected readonly scheduleDateClass: MatCalendarCellClassFunction<Date> = (date, view) => {
+    if (view !== 'month') {
+      return '';
+    }
+    const shift = this.shiftsByDate().get(this.toIsoDate(date));
+    return shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : '';
+  };
+
+  /**
+   * 月曆標頭的上一月／下一月換月時，跟著載那個月的班表。
+   * MatCalendar 沒有「換月」的 output，只能聽它的 stateChanges（activeDate 變了就會發），自己比對月份。
+   * 月曆只在班表分頁存在，viewChild 會跟著出現、消失，所以用 effect 在它出現時訂閱、消失時退訂。
+   */
+  private readonly followScheduleCalendarMonth = effect((onCleanup) => {
+    const calendar = this.scheduleCalendar();
+    if (!calendar) {
+      return;
+    }
+    const subscription = calendar.stateChanges.subscribe(() => {
+      const month = this.monthStart(calendar.activeDate);
+      if (month.getTime() !== this.scheduleMonth().getTime()) {
+        this.scheduleMonth.set(month);
+        this.loadPublishedShifts();
+      }
+    });
+    onCleanup(() => subscription.unsubscribe());
+  });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
   protected readonly taskViewState = signal<TaskViewState>('loading');
   protected readonly taskError = signal<string | null>(null);
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
   protected readonly activeDeliveryOrderId = signal<number | null>(null);
   protected readonly deliveryNotes = signal('');
+  protected readonly deliveryPhoto = signal<File | null>(null);
+  protected readonly deliveryExceptionOpen = signal(false);
+  protected readonly deliveryExceptionDescription = signal('');
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
@@ -167,6 +245,44 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isAttendanceSheetExpanded = signal(false);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
+  protected readonly chatMessages = signal<DriverMessageDto[]>([]);
+  protected readonly chatViewState = signal<ChatViewState>('loading');
+  protected readonly chatError = signal<string | null>(null);
+  // 聊天鈕紅點：調度中心發的、司機還沒讀的則數。只看已載入的清單（最近 50 則＋之後的推播），
+  // 未讀超過 50 則的情況不會發生在一天的配送裡，所以不另外開一支「司機未讀數」API
+  protected readonly unreadChatCount = computed(
+    () => this.chatMessages().filter((message) => message.senderType === 'ADMIN' && !message.readAt).length,
+  );
+  // 輸入框；sheet 關掉再打開，打到一半的字還在
+  protected readonly chatInput = signal('');
+  // 送出中：鎖住送出鈕，避免連按送出兩則一樣的訊息
+  protected readonly isSendingChatMessage = signal(false);
+  // 送出失敗的訊息，空字串代表沒有錯誤；跟 chatError（載入失敗）分開，送不出去不能把整串對話換成錯誤畫面
+  protected readonly chatSendError = signal('');
+  // 聊天 sheet 是否開著；用 signal 而不是只看 driverChatSheetRef，effect 才追蹤得到
+  private readonly isChatOpen = signal(false);
+
+  /**
+   * 司機「看得到對話」而且有未讀，就標已讀。跟後台 dispatch-shell 的 markViewingDriverRead 同一種寫法。
+   *
+   * 會讓司機看到的入口有：打開 sheet、對話載入完成、開著時收到新訊息、重連補抓；
+   * 用 effect 只描述「開著＋有未讀＝標已讀」，不用在每個入口各呼叫一次，漏一個紅點就消不掉。
+   */
+  private readonly markViewingChatRead = effect(() => {
+    if (!this.isChatOpen() || this.unreadChatCount() === 0) {
+      return;
+    }
+
+    // 先在畫面上標掉：不標的話 effect 重跑時還是有未讀，會連續打好幾次 API。
+    // 後端標完會推 READ 回來，但 readAt 已經有值就不會再改，不影響畫面
+    const readAt = new Date().toISOString();
+    this.chatMessages.update((messages) =>
+      messages.map((message) => (message.senderType === 'ADMIN' && !message.readAt ? {...message, readAt} : message)),
+    );
+    // 失敗不重試：重抓會把未讀抓回來又觸發這裡，網路斷著就會一直打。
+    // 資料庫仍是未讀，下次重連或重開 sheet 重新載入時紅點會回來，再標一次
+    this.operations.markMessagesRead().subscribe({error: () => undefined});
+  });
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
 
@@ -174,11 +290,17 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readonly operations = inject(DriverOperationsService);
   private readonly weatherService = inject(DriverWeatherService);
   private readonly router = inject(Router);
+  private readonly bottomSheet = inject(MatBottomSheet);
+  private readonly chatSocket = inject(DriverChatSocketService);
+  // 目前開著的聊天 Bottom Sheet；null 代表沒開，用來避免連點開出兩層
+  private driverChatSheetRef: MatBottomSheetRef | null = null;
   private breakTimer: ReturnType<typeof setInterval> | null = null;
   private attendanceRefreshTimer: ReturnType<typeof setInterval> | null = null;
   private maplibre: typeof import('maplibre-gl') | null = null;
   private driverMap: maplibregl.Map | null = null;
   private currentMapLocation: MapPosition | null = null;
+  private lastMovementLocation: MapPosition | null = null;
+  private lastMovementHeading: number | null = null;
   private currentLocationMarker: maplibregl.Marker | null = null;
   private destinationMarker: maplibregl.Marker | null = null;
   private destinationPopup: maplibregl.Popup | null = null;
@@ -203,6 +325,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadPublishedShifts();
     this.loadTodayTasks();
     this.loadProfile();
+    this.connectChatSocket();
+  }
+
+  /**
+   * 聊天室的即時推播：進工作台就連線，不等打開聊天卡片，之後紅點才能在卡片關著時也更新。
+   * 斷線寫在 ngOnDestroy 與 signOut，不寫在 DriverAuthService.logout()：
+   * 連線 service 本身要向 DriverAuthService 拿 token，反過來注入會變成互相依賴，Angular 會直接報錯。
+   *
+   * 收到的推播合併到對話清單。第一次連上也要載一次對話：不載的話，
+   * 司機登入前調度中心就發的訊息不會算進紅點，要點開聊天才知道有人找他。
+   * 重連時同樣重載，補回斷線期間漏掉的推播。
+   */
+  private connectChatSocket(): void {
+    this.chatSocket.pushes$
+      .pipe(takeUntilDestroyed())
+      .subscribe((push) => this.handleChatPush(push));
+    this.chatSocket.connected$
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.loadChatMessages());
+    this.chatSocket.connect();
   }
 
   ngAfterViewInit(): void {
@@ -210,6 +352,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // 登出離開工作台時，sheet 還掛在 body 上的 overlay 裡，要一起關掉
+    this.driverChatSheetRef?.dismiss();
+    this.chatSocket.disconnect();
     this.stopNavigation();
     this.clearBreakTimer();
     this.clearAttendanceRefreshTimer();
@@ -236,6 +381,121 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected refreshAttendance(): void {
     this.loadAttendance();
+  }
+
+  /**
+   * 打開與調度中心的聊天（Material Bottom Sheet，從底部滑上來）。
+   *
+   * 內容用 <ng-template>，不另開元件：跟後台確認視窗（MatDialog）同一種寫法，一頁看得到全部。
+   * 之後的對話內容與 WebSocket 連線要放在這個元件的 signal／service，不能放在 sheet 裡：
+   * sheet 關掉時裡面的畫面會整個銷毀，放在裡面的話，關著時收不到訊息、重開要整串重載。
+   */
+  protected openDriverChat(): void {
+    if (!this.driverChatSheet || this.driverChatSheetRef) {
+      return;
+    }
+    this.driverChatSheetRef = this.bottomSheet.open(this.driverChatSheet, {
+      ariaLabel: '與調度中心的對話',
+      // 全螢幕：尺寸寫在 styles.scss 的 .driver-chat-sheet-panel。
+      // 只設 height 不夠，Material 自己的 CSS 還限制了 max-height: 80vh 和寬螢幕下的寬度
+      panelClass: 'driver-chat-sheet-panel',
+    });
+    // 點背景、按 Esc、下滑關閉都會走到這裡，統一在這裡清掉，下次才開得起來
+    this.isChatOpen.set(true);
+    this.driverChatSheetRef.afterDismissed().subscribe(() => {
+      this.driverChatSheetRef = null;
+      this.isChatOpen.set(false);
+    });
+    this.loadChatMessages();
+  }
+
+  protected closeDriverChat(): void {
+    this.driverChatSheetRef?.dismiss();
+  }
+
+  protected isOwnChatMessage(message: DriverMessageDto): boolean {
+    return message.senderType === 'DRIVER';
+  }
+
+  protected formatChatTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    return new Intl.DateTimeFormat('zh-TW', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  }
+
+  private loadChatMessages(): void {
+    this.chatViewState.set('loading');
+    this.chatError.set(null);
+    this.operations.getMessages().subscribe({
+      next: (messages) => {
+        this.chatMessages.set(this.mergeChatMessages(messages));
+        // 要不要標已讀交給 markViewingChatRead：背景載入（連線、重連）時 sheet 關著，就不會標
+        this.chatViewState.set(this.chatMessages().length ? 'ready' : 'empty');
+      },
+      error: () => {
+        this.chatViewState.set('error');
+        this.chatError.set('目前無法取得對話內容。');
+      },
+    });
+  }
+
+  private handleChatPush(push: DriverMessagePushDto): void {
+    if (push.type === 'MESSAGE' && push.message) {
+      this.chatMessages.set(this.mergeChatMessages([push.message]));
+      this.chatViewState.set('ready');
+      return;
+    }
+
+    // DRIVER：調度中心讀了我的訊息，畫面顯示「已讀」；
+    // ADMIN：自己標已讀後後端也會推回來，可能比 HTTP 回應先到；只補還沒填的，誰先到都一樣
+    if (push.type === 'READ' && push.readSenderType && push.readAt) {
+      const readAt = push.readAt;
+      this.chatMessages.update((messages) =>
+        messages.map((message) =>
+          message.senderType === push.readSenderType && !message.readAt ? {...message, readAt} : message,
+        ),
+      );
+    }
+  }
+
+  private mergeChatMessages(incoming: DriverMessageDto[]): DriverMessageDto[] {
+    const merged = new Map(this.chatMessages().map((message) => [message.id, message]));
+    incoming.forEach((message) => merged.set(message.id, message));
+    return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+  }
+
+  /**
+   * 發訊息給調度中心。跟後台 dispatch-shell 的 sendDriverMessage 同一種寫法。
+   *
+   * 成功：把後端存好的那一則（有 id）合併進清單、清空輸入框；推播之後會再送來同一則，用 id 去重。
+   * 失敗：保留輸入框的字，讓司機修改或再按一次；錯誤訊息優先用後端回的（例如超過 1000 字）。
+   */
+  protected sendChatMessage(): void {
+    const content = this.chatInput().trim();
+    // 送出中再按一次（Enter 連按、手滑雙擊）直接忽略，不然會送出兩則一樣的
+    if (!content || this.isSendingChatMessage()) {
+      return;
+    }
+
+    this.isSendingChatMessage.set(true);
+    this.chatSendError.set('');
+    this.operations.sendMessage(content).subscribe({
+      next: (saved) => {
+        this.isSendingChatMessage.set(false);
+        this.chatInput.set('');
+        this.chatMessages.set(this.mergeChatMessages([saved]));
+        this.chatViewState.set('ready');
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isSendingChatMessage.set(false);
+        this.chatSendError.set(error.error?.message ?? '訊息沒有送出，請稍後再試。');
+      },
+    });
   }
 
   protected profilePhotoUrl(): string | null {
@@ -290,6 +550,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected signOut(): void {
     this.clearBreakTimer();
     this.gpsTracking.stop();
+    // 在清掉 token 之前先斷線：不然 5 秒後會用已經失效的 token 重撥
+    this.chatSocket.disconnect();
     this.stopMapLocationWatch();
     clearStoredMapLocation();
     this.authService.logout();
@@ -428,6 +690,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     this.activeDeliveryOrderId.set(stop.orderId);
     this.deliveryNotes.set('');
+    this.deliveryPhoto.set(null);
+    this.deliveryExceptionOpen.set(false);
+    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
   }
@@ -435,11 +700,36 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected closeDeliveryAction(): void {
     this.activeDeliveryOrderId.set(null);
     this.deliveryNotes.set('');
+    this.deliveryPhoto.set(null);
+    this.deliveryExceptionOpen.set(false);
+    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
   }
 
   protected updateDeliveryNotes(event: Event): void {
     this.deliveryNotes.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected selectDeliveryPhoto(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.item(0) ?? null;
+    if (!file) {
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      this.taskActionError.set('請選擇 5 MB 以下的 JPG、PNG 或 WebP 圖片。');
+      return;
+    }
+    this.deliveryPhoto.set(file);
+    this.taskActionError.set(null);
+  }
+
+  protected toggleDeliveryException(): void {
+    this.deliveryExceptionOpen.update((open) => !open);
+    this.deliveryExceptionDescription.set('');
+  }
+
+  protected updateDeliveryExceptionDescription(event: Event): void {
+    this.deliveryExceptionDescription.set((event.target as HTMLTextAreaElement).value);
   }
 
   protected arriveAtStop(stop: DriverTaskStop): void {
@@ -471,10 +761,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     this.submitDeliveryResult(
-      () =>
+      (photoUrl) =>
         this.operations.deliver({
           orderId: stop.orderId,
           boxCount: stop.expectedBoxCount,
+          photoUrl,
           notes: this.optionalDeliveryNotes(),
         }),
       '交貨已完成。',
@@ -487,13 +778,37 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     this.submitDeliveryResult(
-      () =>
+      (photoUrl) =>
         this.operations.noSignature({
           orderId: stop.orderId,
+          photoUrl,
           notes: this.optionalDeliveryNotes(),
         }),
-      '已登記無人簽收，後端已建立待處理異常。',
+      '已登記無人簽收，已建立待處理異常。',
     );
+  }
+
+  protected reportDeliveryException(stop: DriverTaskStop): void {
+    const description = this.deliveryExceptionDescription().trim();
+    if (!description || this.isTaskSubmitting()) {
+      this.taskActionError.set('請填寫異常說明後再送出。');
+      return;
+    }
+
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.operations.reportException({orderId: stop.orderId, description}).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeDeliveryAction();
+        this.taskActionMessage.set('異常已送出，主管可在異常中心處理。');
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.taskActionError.set(this.getErrorMessage(error, '無法送出配送異常。'));
+        this.isTaskSubmitting.set(false);
+      },
+    });
   }
 
   protected updateStartMileage(event: Event): void {
@@ -549,6 +864,30 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       },
       error: (error: unknown) => {
         this.mileageError.set(this.getErrorMessage(error, '無法記錄收車里程。'));
+        this.isMileageSubmitting.set(false);
+      },
+    });
+  }
+
+  protected recalculateMileage(): void {
+    if (this.isMileageSubmitting()) {
+      return;
+    }
+    this.isMileageSubmitting.set(true);
+    this.mileageError.set(null);
+    this.mileageMessage.set(null);
+    this.operations.recalculateMileage().subscribe({
+      next: (mileageLog) => {
+        const gpsDistance = mileageLog.gpsDistanceKm;
+        this.mileageMessage.set(
+          gpsDistance === null || gpsDistance === undefined
+            ? '里程已重新結算。'
+            : `里程已依 GPS 軌跡重新結算：${gpsDistance.toFixed(1)} km。`,
+        );
+        this.isMileageSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.mileageError.set(this.getErrorMessage(error, '目前無法重新結算里程。'));
         this.isMileageSubmitting.set(false);
       },
     });
@@ -656,13 +995,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return selected.stop.address;
   }
 
-  protected changeScheduleMonth(offset: number): void {
-    const current = this.scheduleMonth();
-    const next = new Date(current.getFullYear(), current.getMonth() + offset, 1);
-    this.scheduleMonth.set(next);
-    this.loadPublishedShifts();
-  }
-
   private requestMapLocation(isManualRequest: boolean): void {
     if (!this.driverMap) {
       return;
@@ -729,13 +1061,28 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   private applyMapPosition(position: GeolocationPosition, animate: boolean): void {
     const location: MapPosition = [position.coords.longitude, position.coords.latitude];
+    const heading = this.resolveMovementHeading(position.coords.heading, location);
     if (this.isNavigating()) {
-      this.applyNavigationPosition(location);
+      this.applyNavigationPosition(location, heading);
     } else {
-      this.showMapLocation(location, animate);
+      this.showMapLocation(location, animate, heading);
     }
+    this.lastMovementLocation = location;
     this.saveMapLocation(location);
     this.mapLocationStatus.set('已定位至目前位置');
+  }
+
+  private resolveMovementHeading(gpsHeading: number | null, location: MapPosition): number | null {
+    if (typeof gpsHeading === 'number' && Number.isFinite(gpsHeading) && gpsHeading >= 0) {
+      this.lastMovementHeading = gpsHeading;
+      return gpsHeading;
+    }
+
+    if (this.lastMovementLocation && distanceInMeters(this.lastMovementLocation, location) >= 4) {
+      this.lastMovementHeading = bearingInDegrees(this.lastMovementLocation, location);
+    }
+
+    return this.lastMovementHeading;
   }
 
   protected statusLabel(): string {
@@ -869,9 +1216,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
           [...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)),
         );
         this.scheduleViewState.set(shifts.length ? 'ready' : 'empty');
+        // 月曆不會因為資料變了自己重畫格子的 class，要手動叫它重畫
+        this.scheduleCalendar()?.updateTodaysDate();
       },
       error: (error: unknown) => {
         this.publishedShifts.set([]);
+        this.scheduleCalendar()?.updateTodaysDate();
         this.scheduleViewState.set('error');
         this.scheduleError.set(this.getErrorMessage(error, '無法取得已發布班表。'));
       },
@@ -946,14 +1296,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private submitDeliveryResult(
-    action: () => Observable<DeliveryRecordResponse>,
+    action: (photoUrl?: string) => Observable<DeliveryRecordResponse>,
     successMessage: string,
   ): void {
     this.isTaskSubmitting.set(true);
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
 
-    action().subscribe({
+    this.uploadSelectedDeliveryPhoto().pipe(switchMap((photoUrl) => action(photoUrl))).subscribe({
       next: (response) => {
         this.applyDeliveryResponse(response);
         this.closeDeliveryAction();
@@ -990,6 +1340,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private optionalDeliveryNotes(): string | undefined {
     const notes = this.deliveryNotes().trim();
     return notes || undefined;
+  }
+
+  private uploadSelectedDeliveryPhoto(): Observable<string | undefined> {
+    const file = this.deliveryPhoto();
+    return file ? this.operations.uploadDeliveryPhoto(file).pipe(switchMap((response) => of(response.url))) : of(undefined);
   }
 
   private readOdometer(value: string): number | null {
@@ -1100,32 +1455,25 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     const maplibregl = await import('maplibre-gl');
+    maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
     this.maplibre = maplibregl;
     this.driverMap = new maplibregl.Map({
       container: mapElement,
-      center: [120.3014, 22.6273],
+      center: DRIVER_MAP_DEFAULT_CENTER,
       zoom: 12,
       maxZoom: 19,
+      maxPitch: 0,
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: false,
+      pitchWithRotate: false,
       attributionControl: {},
-      style: {
-        version: 8,
-        sources: {
-          openStreetMap: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
-          },
-        },
-        layers: [
-          {
-            id: 'openStreetMap',
-            type: 'raster',
-            source: 'openStreetMap',
-          },
-        ],
-      },
+      style: OPEN_FREE_MAP_STYLE,
     });
+    this.driverMap.addControl(
+      new maplibregl.NavigationControl({showCompass: true, showZoom: false, visualizePitch: false}),
+      'top-left',
+    );
 
     this.driverMap.once('load', () => {
       this.restoreMapLocation();
@@ -1144,7 +1492,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.mapLocationStatus.set('已顯示上次定位，正在更新...');
   }
 
-  private showMapLocation(location: MapPosition, animate: boolean): void {
+
+  private showMapLocation(
+    location: MapPosition,
+    animate: boolean,
+    heading: number | null = this.lastMovementHeading,
+  ): void {
     const maplibregl = this.maplibre;
     if (!maplibregl || !this.driverMap) {
       return;
@@ -1156,11 +1509,23 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.currentLocationMarker.setLngLat(location);
     } else {
       this.currentLocationMarker = new maplibregl.Marker({
-        element: this.createMapMarkerElement('driver-location-marker', 'A'),
+        element: this.createDriverMarkerElement(),
         anchor: 'center',
+        rotationAlignment: 'viewport',
       })
         .setLngLat(location)
         .addTo(this.driverMap);
+    }
+
+    this.currentLocationMarker.setRotation(this.isNavigating() ? 0 : (heading ?? 0));
+
+    if (this.isNavigating() && heading !== null) {
+      this.driverMap.easeTo({
+        center: location,
+        bearing: heading,
+        zoom: Math.max(this.driverMap.getZoom(), 16),
+        duration: animate ? 500 : 0,
+      });
     }
 
     this.renderNavigationMap(animate);
@@ -1230,6 +1595,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
+    if (this.isNavigating()) {
+      if (this.routeLatLng.length > 0) {
+        this.setNavigationRoute(this.routeLatLng);
+      }
+
+      // 導航中只跟著司機位置移動；即使道路路線還沒回傳，也不可縮放到 A/B 全覽。
+      this.driverMap.easeTo({center: this.currentMapLocation, duration: 0});
+      return;
+    }
+
     if (this.routeLatLng.length === 0) {
       this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
         padding: {top: 94, right: 24, bottom: 310, left: 24},
@@ -1239,17 +1614,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
     this.setNavigationRoute(this.routeLatLng);
-    if (this.isNavigating()) {
-      // 導航中：鏡頭平移跟著司機，不改縮放，避免畫面一直跳
-      this.driverMap.easeTo({center: this.currentMapLocation, duration: 0});
-    } else {
-      // 預覽中：框住整條路線給司機看全貌
-      this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
-        padding: {top: 94, right: 24, bottom: 310, left: 24},
-        duration: animate ? 500 : 0,
-        maxZoom: 15,
-      });
-    }
+    // 預覽中：框住整條路線給司機看全貌。
+    this.driverMap.fitBounds(this.mapBounds(this.currentMapLocation, destination), {
+      padding: {top: 94, right: 24, bottom: 310, left: 24},
+      duration: animate ? 500 : 0,
+      maxZoom: 15,
+    });
   }
 
   private destinationLocation(): MapPosition | null {
@@ -1266,6 +1636,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     element.className = className;
     element.textContent = label;
     element.setAttribute('aria-hidden', 'true');
+    return element;
+  }
+
+  private createDriverMarkerElement(): HTMLDivElement {
+    const element = document.createElement('div');
+    element.className = 'driver-location-marker';
+    element.setAttribute('aria-label', '目前位置');
     return element;
   }
 
@@ -1318,6 +1695,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     stop: DriverTaskStop,
   ): stop is DriverTaskStop & { lat: number; lng: number } {
     return typeof stop.lat === 'number' && typeof stop.lng === 'number';
+  }
+
+  /** 用本地年月日組 YYYY-MM-DD；toISOString 會先轉 UTC，台灣早上 8 點前會變成前一天 */
+  private toIsoDate(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   private monthStart(date: Date): Date {
@@ -1432,8 +1814,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.attendanceSheetDragOffset.set(0);
     this.isNavigating.set(true);
     this.offRouteStreak = 0;
+    if (this.currentMapLocation) {
+      this.showMapLocation(this.currentMapLocation, true, this.lastMovementHeading);
+    } else {
+      this.focusNavigationOrigin();
+    }
     this.renderNavigationMap(false);
-    this.focusNavigationOrigin();
     void this.requestWakeLock();
   }
 
@@ -1456,9 +1842,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private applyNavigationPosition(here: MapPosition): void {
+  private applyNavigationPosition(here: MapPosition, heading: number | null): void {
     if (this.routeLatLng.length === 0) {
-      this.showMapLocation(here, false);
+      this.showMapLocation(here, false, heading);
       return;
     }
     const {distance, index} = findNearest(here, this.routeLatLng);
@@ -1469,7 +1855,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.routeLatLng = this.routeLatLng.slice(index);
       this.updateRemainingRouteMetrics(here);
     }
-    this.showMapLocation(here, false);
+    this.showMapLocation(here, false, heading);
 
     if (
       this.offRouteStreak >= OFF_ROUTE_STREAK && Date.now() - this.lastRecalcAt > RECALC_COOLDOWN_MS

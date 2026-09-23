@@ -12,16 +12,24 @@ import {
   DispatchResultDto,
   DriverAccountApplicationDto,
   DriverDto,
+  DriverMessageDto,
+  DriverMessageRequest,
+  DriverMessageSummaryDto,
   DriverShiftDto,
   DriverShiftUpdateRequest,
   DriverStatusPayload,
   ExceptionCaseDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
+  FuelPriceDto,
   GpsPingDto,
   LeaveRequest,
   OrderDto,
   ReassignRequest,
+  ReportCollectionDto,
+  ReportQuery,
+  ReportSummaryDto,
+  RouteMetricsDto,
   ScheduleMonthDto,
   StoreDto,
   StoreStatusPayload,
@@ -29,6 +37,7 @@ import {
   TemplateRequest,
   VehicleDto,
   WarehouseDto,
+  OptimizeSlotsRequest,
 } from './dispatch-api.models';
 
 const API_ROOT = '/api';
@@ -71,6 +80,16 @@ export class DispatchApiService {
     return this.http.put<DriverShiftDto>(`${API_ROOT}/driver-schedules/shifts/${shiftId}`, request);
   }
 
+  updateDriverShiftsBatch(
+    scheduleMonthId: number,
+    updates: DriverShiftDto[],
+  ): Observable<DriverShiftDto[]> {
+    return this.http.put<DriverShiftDto[]>(
+      `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/shifts/batch`,
+      updates,
+    );
+  }
+
   syncScheduleDrivers(scheduleMonthId: number): Observable<DriverShiftDto[]> {
     return this.http.post<DriverShiftDto[]>(
       `${API_ROOT}/driver-schedules/months/${scheduleMonthId}/sync-drivers`,
@@ -83,6 +102,57 @@ export class DispatchApiService {
       `${API_ROOT}/driver-schedules/shifts/${shiftId}/leave`,
       request,
     );
+  }
+
+  getRouteMetrics(routeId: number): Observable<RouteMetricsDto> {
+    return this.http.get<RouteMetricsDto>(`${API_ROOT}/dispatch/routes/${routeId}/metrics`);
+  }
+
+  getLatestFuelPrice(): Observable<FuelPriceDto> {
+    return this.http.get<FuelPriceDto>(`${API_ROOT}/fuel-prices/latest`);
+  }
+
+  syncFuelPrice(): Observable<FuelPriceDto> {
+    return this.http.post<FuelPriceDto>(`${API_ROOT}/fuel-prices/sync`, null);
+  }
+
+  getFuelPriceHistory(from?: string, to?: string): Observable<FuelPriceDto[]> {
+    let params = new HttpParams();
+    if (from) params = params.set('from', from);
+    if (to) params = params.set('to', to);
+    return this.http.get<FuelPriceDto[]>(`${API_ROOT}/fuel-prices/history`, {params});
+  }
+
+  getReportSummary(query: ReportQuery): Observable<ReportSummaryDto> {
+    return this.http.get<ReportSummaryDto>(`${API_ROOT}/reports/summary`, {params: this.reportParams(query)});
+  }
+
+  getReportAttendance(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/attendance`, {params: this.reportParams(query)});
+  }
+
+  getReportRoutes(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/routes`, {params: this.reportParams(query)});
+  }
+
+  getReportDrivers(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/drivers`, {params: this.reportParams(query)});
+  }
+
+  getReportVehicles(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/vehicles`, {params: this.reportParams(query)});
+  }
+
+  getReportWarehouses(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/warehouses`, {params: this.reportParams(query)});
+  }
+
+  getReportStores(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/stores`, {params: this.reportParams(query)});
+  }
+
+  getReportExceptions(query: ReportQuery): Observable<ReportCollectionDto> {
+    return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/exceptions`, {params: this.reportParams(query)});
   }
 
   publishScheduleMonth(scheduleMonthId: number): Observable<ScheduleMonthDto> {
@@ -313,6 +383,14 @@ export class DispatchApiService {
    *
    * 這支跟 optimize 一樣會寫入資料庫：清掉當天草稿後照送去的內容重建。
    */
+  /**
+   * 依看板上的格子自動排車：OR-Tools 只用格子裡的車，排完帶入格子的司機，
+   * 排不進去的訂單留在待排單區。回應的 notices 說明配車與沒帶入的原因。
+   */
+  optimizeSlots(request: OptimizeSlotsRequest): Observable<DispatchResultDto> {
+    return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize/slots`, request);
+  }
+
   reassignDispatch(request: ReassignRequest): Observable<DispatchResultDto> {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/reassign`, request);
   }
@@ -445,5 +523,42 @@ export class DispatchApiService {
    */
   removeAiPlanAction(id: string): Observable<AiPendingActionDto[]> {
     return this.http.delete<AiPendingActionDto[]>(`${API_ROOT}/ai/plan/${id}`);
+  }
+
+  // ── 司機聊天室 ─────────────────────────────────────────
+
+  /**
+   * 讀取某位司機的對話，一律由舊到新。
+   * 不帶 afterId：最近 50 則，打開對話時用；帶 afterId：只回比它新的，重連補抓用。
+   */
+  getDriverMessages(driverId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    // 沒有 afterId 就不能帶這個參數，帶成 "undefined" 字串後端會回 400
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`${API_ROOT}/drivers/${driverId}/messages`, {params});
+  }
+
+  /** 回覆某位司機。回傳存好的那一則（含 id），直接放進清單，之後推播收到同一則時用 id 去重 */
+  sendDriverMessage(driverId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`${API_ROOT}/drivers/${driverId}/messages`, request);
+  }
+
+  /** 把這位司機發的未讀訊息標成已讀，回傳這次標了幾筆。已讀是所有管理員共用的 */
+  markDriverMessagesRead(driverId: number): Observable<number> {
+    return this.http.post<number>(`${API_ROOT}/drivers/${driverId}/messages/read`, {});
+  }
+
+  /** 紅點：每位司機有幾則未讀。只列有未讀的司機，用 driverId 對到司機名單 */
+  getDriverMessageSummary(): Observable<DriverMessageSummaryDto[]> {
+    return this.http.get<DriverMessageSummaryDto[]>(`${API_ROOT}/drivers/messages/summary`);
+  }
+
+  private reportParams(query: ReportQuery): HttpParams {
+    return Object.entries(query).reduce((params, [key, value]) => {
+      return value === undefined || value === null ? params : params.set(key, String(value));
+    }, new HttpParams());
   }
 }

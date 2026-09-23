@@ -1,6 +1,7 @@
 package com.example.backend.dto.request;
 
 import com.example.backend.constants.ShiftType;
+import com.fasterxml.jackson.annotation.JsonSetter;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -15,10 +16,20 @@ public class DriverShiftDTO {
     private ShiftType shiftType;
     private LocalTime workStart;
     private LocalTime workEnd;
-    private Integer overtimeMinutes;
     private String changeReason;
     private LocalDateTime lastModifiedAt;
     private Long version;
+    /** 舊版後台仍會傳此欄位；只為了拒絕非零預排加班，不回傳給前端。 */
+    private Integer legacyOvertimeMinutes;
+
+    @JsonSetter("overtimeMinutes")
+    public void setLegacyOvertimeMinutes(Integer legacyOvertimeMinutes) {
+        this.legacyOvertimeMinutes = legacyOvertimeMinutes;
+    }
+
+    public Integer requestedLegacyOvertimeMinutes() {
+        return legacyOvertimeMinutes;
+    }
 
     public Long getId() {
         return id;
@@ -74,14 +85,6 @@ public class DriverShiftDTO {
 
     public void setWorkEnd(LocalTime workEnd) {
         this.workEnd = workEnd;
-    }
-
-    public Integer getOvertimeMinutes() {
-        return overtimeMinutes;
-    }
-
-    public void setOvertimeMinutes(Integer overtimeMinutes) {
-        this.overtimeMinutes = overtimeMinutes;
     }
 
     public String getChangeReason() {

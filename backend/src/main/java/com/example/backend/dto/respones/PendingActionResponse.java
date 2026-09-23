@@ -11,8 +11,8 @@ public class PendingActionResponse {
     private LocalDate date;
     private Long warehouseId;
     private String warehouseName; // 只給畫面分組顯示用，執行不讀；PUBLISH_DAY 為 null（全部倉庫）
-    private Long vehicleId;
-    private Long driverId;
+    private Long vehicleId;     // ASSIGN_DRIVER、UNASSIGN_DRIVER 為該路線的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null
+    private Long driverId;      // ASSIGN_DRIVER 為被指派的司機；UNASSIGN_DRIVER 為要被取消的司機（確認時比對用）
     private Long orderId;
 
 

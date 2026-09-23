@@ -1,13 +1,16 @@
 package com.example.backend.controller;
 
+import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.dto.request.ReassignDTO;
 import com.example.backend.dto.respones.DispatchResponse;
-import com.example.backend.service.DispatchService;
+import com.example.backend.dto.respones.RouteMetricsResponse;
+import com.example.backend.service.DispatchWorkflowService;
+import com.example.backend.service.RoutePlanMetricsService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,16 +19,29 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dispatch")
 public class DispatchController {
 
-    private final DispatchService dispatchService;
+    private final DispatchWorkflowService dispatchWorkflowService;
+    private final RoutePlanMetricsService routePlanMetricsService;
 
-    public DispatchController(DispatchService dispatchService) {
-        this.dispatchService = dispatchService;
+    public DispatchController(
+            DispatchWorkflowService dispatchWorkflowService,
+            RoutePlanMetricsService routePlanMetricsService
+    ) {
+        this.dispatchWorkflowService = dispatchWorkflowService;
+        this.routePlanMetricsService = routePlanMetricsService;
+    }
+
+    /**
+     * 依看板上的格子自動排車。格子的司機、車輛都是選填，只填司機的格子由後端配車；
+     * 回應的 notices 會說明配了哪台車、哪些司機沒帶入、哪些車沒排到訂單。
+     */
+    @PostMapping("/optimize/slots")
+    public ResponseEntity<DispatchResponse> optimizeSlots(@Valid @RequestBody OptimizeSlotsDTO dto) {
+        return ResponseEntity.ok(dispatchWorkflowService.optimizeSlots(dto));
     }
 
     @PostMapping("/optimize")
@@ -35,7 +51,7 @@ public class DispatchController {
             @RequestParam(value = "vehicleIds", required = false) List<Long> vehicleIds
     ) {
         return ResponseEntity.ok(
-                dispatchService.optimize(
+                dispatchWorkflowService.optimize(
                         date,
                         warehouseId,
                         vehicleIds
@@ -51,7 +67,7 @@ public class DispatchController {
      */
     @PostMapping("/reassign")
     public ResponseEntity<DispatchResponse> reassign(@Valid @RequestBody ReassignDTO dto) {
-        return ResponseEntity.ok(dispatchService.reassign(dto));
+        return ResponseEntity.ok(dispatchWorkflowService.reassign(dto));
     }
 
     /**
@@ -63,7 +79,7 @@ public class DispatchController {
             @RequestParam("warehouseId") Long warehouseId
     ) {
         return ResponseEntity.ok(
-                dispatchService.getBoard(date, warehouseId)
+                dispatchWorkflowService.getBoard(date, warehouseId)
         );
     }
 
@@ -77,7 +93,7 @@ public class DispatchController {
     public ResponseEntity<List<DispatchResponse>> publish(
             @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
-        return ResponseEntity.ok(dispatchService.publish(date));
+        return ResponseEntity.ok(dispatchWorkflowService.publish(date));
     }
 
     /**
@@ -87,6 +103,12 @@ public class DispatchController {
     public ResponseEntity<List<DispatchResponse>> withdraw(
             @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
-        return ResponseEntity.ok(dispatchService.withdraw(date));
+        return ResponseEntity.ok(dispatchWorkflowService.withdraw(date));
+    }
+
+    /** 主管查詢單一路線的分段預估、GPS 推估里程與油耗。 */
+    @GetMapping("/routes/{routeId}/metrics")
+    public ResponseEntity<RouteMetricsResponse> routeMetrics(@PathVariable Long routeId) {
+        return ResponseEntity.ok(routePlanMetricsService.getMetrics(routeId));
     }
 }

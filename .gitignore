@@ -24,6 +24,9 @@ build/
 # 系統
 .DS_Store
 
+# 本機上傳的大頭照與送達照片（後端從哪個目錄啟動，uploads/ 就建在那裡）
+uploads/
+
 # Docker 部署密鑰，絕對不能進版控
 deploy/.env
 deploy/certbot/

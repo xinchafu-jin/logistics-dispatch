@@ -212,6 +212,6 @@ export class AnomalyCenter implements OnInit {
     if (typeof error.error?.message === 'string' && error.error.message.trim()) {
       return error.error.message;
     }
-    return error.status ? `後端回應 ${error.status}` : fallback;
+    return error.status ? `操作未完成（代碼 ${error.status}）` : fallback;
   }
 }

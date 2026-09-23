@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.example.backend.constants.ValidMsg.*;
@@ -56,10 +57,12 @@ public class TemplatesRequestDTO {
         @NotNull(message = TEMPLATE_WAREHOUSE_ID_REQUIRED)
         private Long warehouseId;
 
-        @NotNull(message = TEMPLATE_VEHICLE_ID_REQUIRED)
+        // 車輛、司機都是選填，但至少要有一個（TemplatesService 檢查）
         private Long vehicleId;
 
-        @NotEmpty(message = TEMPLATE_STORE_IDS_REQUIRED)
+        private Long driverId;
+
+        // 這格固定跑的門市，順序即停靠順序；看板存編組時由格子裡訂單的門市組成，沒有就不填
         private List<@NotNull(message = TEMPLATE_STORE_IDS_REQUIRED) Long> storeIds;
 
         public Long getWarehouseId() {
@@ -78,8 +81,17 @@ public class TemplatesRequestDTO {
             this.vehicleId = vehicleId;
         }
 
+        public Long getDriverId() {
+            return driverId;
+        }
+
+        public void setDriverId(Long driverId) {
+            this.driverId = driverId;
+        }
+
+        /** 沒填時回傳空清單，呼叫端不必每次判斷 null */
         public List<Long> getStoreIds() {
-            return storeIds;
+            return storeIds == null ? new ArrayList<>() : storeIds;
         }
 
         public void setStoreIds(List<Long> storeIds) {
