@@ -58,6 +58,29 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4   # 快取 ~/.gradle，第二次起省掉下載依賴的時間
 
+      # 部分整合測試假設 DB 已有資料（drivers id 1、2，至少一位主管），空資料庫會全部失敗。
+      # 順序跟正式機一樣：先由 Flyway 建表，再灌 seed。
+      # 不能讓 Spring 啟動時才跑 Flyway——那時測試已經開始了，來不及灌資料。
+      # CLI 版本對齊後端依賴的 flyway-core，寫進 flyway_schema_history 的格式與 checksum 才會一致，
+      # 測試啟動時 Spring 的 Flyway 看到全部已套用就直接略過。
+      - name: Migrate schema
+        working-directory: .
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/backend/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:11.14.1 \
+            -url="$DB_URL" -user="$DB_USER" -password="$DB_PASSWORD" \
+            -locations=filesystem:/flyway/sql migrate
+
+      # seed-data.sql 沒有主管帳號（正式機的主管是手動建的），這裡補一位。
+      # 測試用 JwtEncoder 直接簽 token，不會走登入，所以密碼欄只是佔位。
+      - name: Load seed data
+        working-directory: .
+        run: |
+          MYSQL="docker exec -i ${{ job.services.mysql.id }} mysql -uroot -proot --default-character-set=utf8mb4 logistics"
+          $MYSQL < seed/seed-data.sql
+          $MYSQL -e "INSERT INTO admin_users (id, account, password, name) VALUES (1, 'ci-admin', 'not-used', 'CI 主管');"
+
       - name: Test
         run: ./gradlew test --no-daemon
 
