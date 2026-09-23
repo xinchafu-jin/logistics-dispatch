@@ -140,41 +140,10 @@
   font-size: 0.8125rem;
 }
 
-.alerts-section {
-  min-width: 0;
-}
-
-.alerts-section {
-  margin-top: 22px;
-  border-top: 1px solid var(--border);
-}
-
 .dispatch-workspace-overview {
   display: grid;
   gap: 16px;
   padding-bottom: 8px;
-}
-
-.workspace-status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.workspace-status-grid > * {
-  min-width: 0;
-  padding: 0 18px 16px;
-  border-left: 1px solid var(--border);
-}
-
-.workspace-status-grid > :first-child {
-  border-left: 0;
-}
-
-.workspace-status-grid .alerts-section {
-  margin-top: 0;
-  border-top: 0;
 }
 
 .live-taskboard {
@@ -319,82 +288,120 @@
   border-top-color: #998c89;
 }
 
-.section-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
+.taskboard-routes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
-  padding: 14px 0 15px;
+  padding: 4px 0 16px;
 }
 
-.section-heading h3 {
+.taskboard-route {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgb(16 21 24 / 38%);
+}
+
+.taskboard-route.is-delivering {
+  border-color: rgb(99 209 198 / 65%);
+}
+
+.taskboard-route > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.taskboard-route p,
+.taskboard-route strong,
+.taskboard-route small,
+.taskboard-route em {
   margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
 }
 
-.alert-count {
-  flex: 0 0 auto;
+.taskboard-route > header p {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.taskboard-route > header strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 0.6875rem;
+}
+
+.taskboard-route > header > span {
   color: var(--subtle);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.taskboard-route-metrics {
+  display: flex;
+  gap: 12px;
+  padding: 9px 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.6875rem;
+}
+
+.taskboard-route ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+}
+
+.taskboard-route li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 5px;
+}
+
+.taskboard-route li.is-current {
+  border-color: rgb(99 209 198 / 70%);
+  background: rgb(99 209 198 / 8%);
+}
+
+.taskboard-route li > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  color: var(--subtle);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 8%);
   font-size: 0.625rem;
 }
 
-.alert-list {
-  display: grid;
+.taskboard-route li strong,
+.taskboard-route li small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.alert-item {
-  display: grid;
-  grid-template-columns: 7px minmax(0, 1fr);
-  gap: 11px;
-  padding: 15px 0;
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
-}
+.taskboard-route li strong { color: var(--text); font-size: 0.75rem; }
+.taskboard-route li small { margin-top: 3px; color: var(--subtle); font-size: 0.625rem; }
+.taskboard-route li em { color: var(--muted); font-size: 0.625rem; font-style: normal; white-space: nowrap; }
 
-.alert-indicator {
-  width: 6px;
-  height: 6px;
-  margin-top: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 10px rgb(99 209 198 / 70%);
-}
-
-.alert-item.tone-warning .alert-indicator {
-  background: #e4a74d;
-  box-shadow: 0 0 10px rgb(228 167 77 / 60%);
-}
-
-.alert-item.tone-critical .alert-indicator {
-  background: #ea6b73;
-  box-shadow: 0 0 10px rgb(234 107 115 / 60%);
-}
-
-.alert-item h4 {
-  margin: 0;
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.alert-item p {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.55;
-}
 
 // The dashboard was originally composed for the dark workspace, so its panels
 // use dark translucent surfaces instead of the shared surface tokens. Keep the
 // map dark, but give the data panels a complete, readable light counterpart.
 :host-context(.dispatch-layout.is-light-theme) {
-  .alert-item {
-    border-color: var(--border);
-  }
-
   .ticker-group .ticker-alert {
     color: #89500a;
   }
@@ -418,20 +425,6 @@
 }
 
 @media (max-width: 760px) {
-  .workspace-status-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-status-grid > * {
-    padding: 0 0 16px;
-    border-top: 1px solid var(--border);
-    border-left: 0;
-  }
-
-  .workspace-status-grid > :first-child {
-    border-top: 0;
-  }
-
   .live-taskboard-header {
     align-items: flex-start;
   }
@@ -567,92 +560,6 @@
     opacity: 0.6;
     cursor: not-allowed;
   }
-}
-
-.driver-assignment {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 2.1fr);
-  gap: 12px;
-  margin: 0 0 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: rgb(99 209 198 / 4%);
-}
-
-.driver-pool,
-.driver-targets,
-.driver-chip-list {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.driver-pool {
-  min-width: 0;
-}
-
-.driver-pool > span,
-.driver-pool small,
-.driver-target span {
-  color: var(--muted);
-  font-size: 0.68rem;
-}
-
-.driver-chip-list,
-.driver-targets {
-  flex-wrap: wrap;
-}
-
-.driver-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 0 8px;
-  color: var(--text);
-  background: rgb(99 209 198 / 12%);
-  border: 1px solid rgb(99 209 198 / 28%);
-  border-radius: 5px;
-  cursor: grab;
-  font: inherit;
-  font-size: 0.73rem;
-}
-
-.driver-chip:active {
-  cursor: grabbing;
-}
-
-.driver-chip mat-icon {
-  width: 15px;
-  height: 15px;
-  font-size: 15px;
-}
-
-.driver-target {
-  display: grid;
-  flex: 1 1 130px;
-  min-height: 42px;
-  gap: 3px;
-  padding: 7px 9px;
-  border: 1px dashed rgb(99 209 198 / 35%);
-  border-radius: 5px;
-}
-
-.driver-target strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-.driver-target.cdk-drop-list-dragging,
-.driver-target.cdk-drop-list-receiving {
-  background: rgb(99 209 198 / 12%);
-  border-style: solid;
-}
-
-.driver-target.is-maintenance {
-  border-color: rgb(224 173 118 / 30%);
-  opacity: 0.58;
 }
 
 .board-dropzone {

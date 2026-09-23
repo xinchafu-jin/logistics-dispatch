@@ -81,38 +81,12 @@
       <!-- 分頁內層：排車條件 + 編成盤面 -->
       <div class="tab-panel">
         <section class="dispatch-workspace-overview" aria-label="今日調度重點">
-        <div class="workspace-status-grid" aria-label="待確認配送與待處理提醒">
-          <app-fleet-tracking-panel [driverPoints]="mapDrivers()" />
-
-          <section class="alerts-section" aria-labelledby="alerts-title">
-            <header class="section-heading">
-              <div>
-                <p class="section-eyebrow">待處理提醒</p>
-                <h3 id="alerts-title">待處理提醒</h3>
-              </div>
-
-              <span class="alert-count">{{ alerts().length }}</span>
-            </header>
-
-            <div class="alert-list">
-              @for (alert of alerts(); track alert.title) {
-                <article class="alert-item" [class]="'tone-' + alert.tone">
-                  <span class="alert-indicator" aria-hidden="true"></span>
-                  <div>
-                    <h4>{{ alert.title }}</h4>
-                    <p>{{ alert.detail }}</p>
-                  </div>
-                </article>
-              }
-            </div>
-          </section>
-        </div>
-
+        @if (published()) {
         <section class="live-taskboard" aria-labelledby="live-taskboard-title">
           <header class="live-taskboard-header">
             <div>
-              <p class="section-eyebrow">即時追蹤</p>
-              <h3 id="live-taskboard-title">今日訂單看板</h3>
+              <p class="section-eyebrow">已派出任務</p>
+              <h3 id="live-taskboard-title">任務看板 · {{ publishedTemplateName() }}</h3>
               <p>每 15 秒同步一次 · 最近同步 {{ taskboardLastSyncedAt() }}</p>
             </div>
             <button
@@ -143,7 +117,38 @@
               </section>
             }
           </div>
+
+          <div class="taskboard-routes" aria-label="已派出司機任務">
+            @for (route of publishedTaskboardRoutes(); track route.routeId) {
+              <article class="taskboard-route" [class.is-delivering]="routeDriverStatus(route) === '配送中'">
+                <header>
+                  <div>
+                    <p>{{ driverName(route.driverId!) }} · {{ route.plateNumber }}</p>
+                    <strong>{{ routeDriverStatus(route) }}</strong>
+                  </div>
+                  <span>{{ taskboardRouteProgress(route) }}</span>
+                </header>
+                <div class="taskboard-route-metrics">
+                  <span>預估抵達 {{ taskboardEstimatedArrival(route) }}</span>
+                  <span>剩餘 {{ taskboardRemainingKm(route) }}</span>
+                </div>
+                <ol>
+                  @for (card of route.cards; track card.orderId) {
+                    <li [class.is-current]="boardCardStatus(card) === 'IN_DELIVERY'">
+                      <span>{{ $index + 1 }}</span>
+                      <div>
+                        <strong>{{ card.storeName }}</strong>
+                        <small>{{ card.orderNumber }} · {{ card.boxCount }} 箱</small>
+                      </div>
+                      <em>{{ boardCardStatusLabel(card) }}</em>
+                    </li>
+                  }
+                </ol>
+              </article>
+            }
+          </div>
         </section>
+        }
       </section>
 
       <!-- 加號分頁：盤面已清空，編好之後命名存成編組 -->
@@ -178,10 +183,10 @@
       }
 
       <section class="board-toolbar" aria-label="排車條件">
-        <label class="toolbar-field">
+        <div class="toolbar-field toolbar-date">
           <span>配送日期</span>
-          <input type="date" [value]="dispatchDate()" (change)="onDateChange($event)"/>
-        </label>
+          <strong>今天 {{ dispatchDate() }}</strong>
+        </div>
 
         <label class="toolbar-field">
           <span>出貨倉庫</span>
@@ -286,39 +291,6 @@
         @if (boardError()) {
           <p class="board-error">{{ boardError() }}</p>
         }
-
-        <section class="driver-assignment" cdkDropListGroup aria-label="司機指派">
-          <div class="driver-pool" cdkDropList [cdkDropListData]="driverPool()" cdkDropListSortingDisabled>
-            <span>可指派司機</span>
-            <div class="driver-chip-list">
-              @for (driver of driverPool(); track driver.id) {
-                <button type="button" class="driver-chip" cdkDrag [cdkDragData]="driver" [disabled]="busy()">
-                  <mat-icon aria-hidden="true">person</mat-icon>
-                  {{ driver.name }}
-                </button>
-              } @empty {
-                <small>沒有可指派司機</small>
-              }
-            </div>
-          </div>
-
-          <div class="driver-targets">
-            @for (route of routes(); track route.vehicleId) {
-              <div
-                class="driver-target"
-                [class.is-maintenance]="route.isMaintenance"
-                cdkDropList
-                [cdkDropListData]="driverPool()"
-                [cdkDropListDisabled]="busy() || route.isMaintenance"
-                cdkDropListSortingDisabled
-                (cdkDropListDropped)="onDriverDrop(route, $event)"
-              >
-                <span>{{ route.plateNumber }}</span>
-                <strong>{{ route.driverId === null ? '拖曳司機到這裡' : driverName(route.driverId) }}</strong>
-              </div>
-            }
-          </div>
-        </section>
 
         @for (route of routes(); track route.vehicleId) {
           <div class="board-lane" [class.is-overloaded]="isOverloaded(route)" [class.is-maintenance]="route.isMaintenance">

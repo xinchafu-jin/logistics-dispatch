@@ -15,7 +15,6 @@ import {Component, computed, DestroyRef, inject, OnInit, signal} from '@angular/
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
-import {FleetTrackingPanel} from '../../components/fleet-tracking-panel/fleet-tracking-panel';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {
   DispatchResultDto,
@@ -135,12 +134,6 @@ interface DriverOption {
   takenNote: string | null;
 }
 
-interface DashboardAlert {
-  title: string;
-  detail: string;
-  tone: string;
-}
-
 type TaskboardColumnId = 'pending' | 'confirmed' | 'delivering' | 'completed' | 'failed' | 'cancelled';
 
 interface TaskboardColumn {
@@ -153,7 +146,7 @@ interface TaskboardColumn {
 
 @Component({
   selector: 'app-dispatch-dashboard',
-  imports: [LiveFleetMap, FleetTrackingPanel, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule, MatIconModule],
+  imports: [LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag, MatSlideToggleModule, MatIconModule],
   templateUrl: './dispatch-dashboard.html',
   styleUrl: './dispatch-dashboard.scss',
 })
@@ -183,7 +176,6 @@ export class DispatchDashboard implements OnInit {
   readonly shiftsByDriverId = signal<ReadonlyMap<number, DriverShiftDto>>(new Map());
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
-  readonly alerts = signal<DashboardAlert[]>([]);
   readonly loading = signal(true);
   readonly errorMessage = signal('');
   readonly updatedAt = signal('--:--');
@@ -232,9 +224,14 @@ export class DispatchDashboard implements OnInit {
 
   /** 今日訂單的追蹤看板。六欄直接對應後端訂單狀態，只供主管查看。 */
   readonly taskboardColumns = computed<TaskboardColumn[]>(() => {
+    const publishedOrderIds = new Set(
+      this.routes()
+        .filter((route) => route.routeStatus === 'PUBLISHED')
+        .flatMap((route) => route.cards.map((card) => card.orderId)),
+    );
     const orders = this.orders()
       .filter((order) =>
-        order.deliveryDate === this.dispatchDate(),
+        order.deliveryDate === this.dispatchDate() && order.id != null && publishedOrderIds.has(order.id),
       )
       .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER));
     const columns: Array<Omit<TaskboardColumn, 'count'> & {matches: (order: OrderDto) => boolean}> = [
@@ -251,6 +248,13 @@ export class DispatchDashboard implements OnInit {
       count: orders.filter(matches).length,
     }));
   });
+
+  /** 已派出的任務才進追蹤看板，草稿排車不會提前出現在主管畫面。 */
+  readonly publishedTaskboardRoutes = computed(() =>
+    this.routes().filter((route) => route.routeStatus === 'PUBLISHED' && route.cards.length > 0),
+  );
+
+  readonly publishedTemplateName = computed(() => this.activeTemplate()?.name ?? '今日手動排車');
 
   /** 這個倉庫今天能出的車。排車不給勾選，這裡只是讓調度員知道手上有什麼 */
   readonly availableVehicles = computed(() =>
@@ -375,7 +379,7 @@ export class DispatchDashboard implements OnInit {
 
     const lines: RouteLine[] = [];
     for (const route of this.routes()) {
-      if (route.driverId === null || route.cards.length === 0) {
+      if (route.routeStatus !== 'PUBLISHED' || route.driverId === null || route.cards.length === 0) {
         continue;
       }
 
@@ -446,11 +450,17 @@ export class DispatchDashboard implements OnInit {
     const storesById = new Map(
       this.stores().filter((store) => store.id != null).map((store) => [store.id!, store]),
     );
+    const publishedDriverIds = new Set(
+      this.routes()
+        .filter((route) => route.routeStatus === 'PUBLISHED' && route.driverId !== null && !route.isMaintenance)
+        .map((route) => route.driverId!),
+    );
     const activeOrdersByDriver = new Map<number, OrderDto>();
     this.orders()
       .filter((order) =>
         order.deliveryDate === this.dispatchDate()
         && order.assignedDriverId != null
+        && publishedDriverIds.has(order.assignedDriverId)
         && (order.status === 'CONFIRMED' || order.status === 'IN_DELIVERY'),
       )
       .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER))
@@ -461,7 +471,7 @@ export class DispatchDashboard implements OnInit {
       });
     const routeByDriver = new Map(
       this.routes()
-        .filter((route) => route.driverId !== null && !route.isMaintenance)
+        .filter((route) => route.routeStatus === 'PUBLISHED' && route.driverId !== null && !route.isMaintenance)
         .map((route) => [route.driverId!, route]),
     );
     const metricsByRoute = this.routeMetricsByRouteId();
@@ -525,12 +535,6 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  onDateChange(event: Event): void {
-    this.dispatchDate.set((event.target as HTMLInputElement).value);
-    this.loadScheduleEligibility();
-    this.reloadBoard();
-  }
-
   onWarehouseChange(event: Event): void {
     this.warehouseId.set(Number((event.target as HTMLSelectElement).value));
     this.reloadBoard();
@@ -553,7 +557,6 @@ export class DispatchDashboard implements OnInit {
         this.drivers.set(drivers);
         this.vehicles.set(vehicles);
         this.warehouses.set(warehouses);
-        this.alerts.set(this.toAlerts(drivers, vehicles));
         this.warehouseName.set(
           warehouses.find((warehouse) => warehouse.isActive)?.name ?? '高雄配送區',
         );
@@ -582,35 +585,6 @@ export class DispatchDashboard implements OnInit {
     const syncedAt = this.formatCurrentTime();
     this.taskboardLastSyncedAt.set(syncedAt);
     this.updatedAt.set(syncedAt);
-  }
-
-  private toAlerts(drivers: DriverDto[], vehicles: VehicleDto[]): DashboardAlert[] {
-    const alerts: DashboardAlert[] = [];
-    const inactiveDrivers = drivers.filter((driver) => !driver.isActive);
-    const maintenanceVehicles = vehicles.filter((vehicle) => vehicle.status === 'MAINTENANCE');
-
-    if (inactiveDrivers.length > 0) {
-      alerts.push({
-        title: '司機狀態提醒',
-        detail: `${inactiveDrivers.length} 位司機目前標記為停職。`,
-        tone: 'warning',
-      });
-    }
-    if (maintenanceVehicles.length > 0) {
-      alerts.push({
-        title: '車輛保養提醒',
-        detail: `${maintenanceVehicles.length} 台車輛目前標記為保養。`,
-        tone: 'critical',
-      });
-    }
-    if (alerts.length === 0) {
-      alerts.push({
-        title: '目前沒有資源提醒',
-        detail: '目前沒有資源異常。',
-        tone: 'normal',
-      });
-    }
-    return alerts;
   }
 
   private formatCurrentTime(): string {
@@ -699,6 +673,19 @@ export class DispatchDashboard implements OnInit {
     return '尚無訂單';
   }
 
+  taskboardRouteProgress(route: BoardRoute): string {
+    const completed = route.cards.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
+    return `${completed}/${route.cards.length} 已完成`;
+  }
+
+  taskboardEstimatedArrival(route: BoardRoute): string {
+    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
+  }
+
+  taskboardRemainingKm(route: BoardRoute): string {
+    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
   private orderStatusLabel(status: OrderStatus): string {
     switch (status) {
       case 'PENDING_CONFIRM':
@@ -764,18 +751,6 @@ export class DispatchDashboard implements OnInit {
     () => this.routes().filter((route) => route.cards.length > 0 && route.driverId === null).length,
   );
 
-  /** 看板上方的司機拖曳列只放尚未被本倉或其他倉占用的人。 */
-  readonly driverPool = computed<DriverOption[]>(() => {
-    const takenHere = new Set(
-      this.routes().map((route) => route.driverId).filter((driverId): driverId is number => driverId !== null),
-    );
-    const takenElsewhere = new Set(this.driversTakenElsewhere().map((item) => item.driverId));
-    return this.drivers()
-      .filter((driver): driver is DriverDto & {id: number} => driver.id != null && this.isDriverDispatchable(driver.id))
-      .filter((driver) => !takenHere.has(driver.id) && !takenElsewhere.has(driver.id))
-      .map((driver) => ({id: driver.id, name: driver.name, takenNote: null}));
-  });
-
   /**
    * 指派或清除司機。不另外開端點，直接走 reassign 整包送 ——
    * 因為 reassign 本來就會重建當天路線，司機沒跟著送就會被清掉。
@@ -800,23 +775,6 @@ export class DispatchDashboard implements OnInit {
       routes.map((item) => (item.routeId === route.routeId ? {...item, driverId} : item)),
     );
 
-    this.submitReassign();
-  }
-
-  onDriverDrop(route: BoardRoute, event: CdkDragDrop<DriverOption[]>): void {
-    if (this.busy() || route.isMaintenance) {
-      return;
-    }
-
-    const driver = event.item.data as DriverOption | undefined;
-    if (!driver || !this.isDriverDispatchable(driver.id) || !this.driverPool().some((item) => item.id === driver.id)) {
-      this.boardError.set('此司機目前無法指派，請重新整理看板後再試。');
-      return;
-    }
-
-    this.routes.update((routes) =>
-      routes.map((item) => item.routeId === route.routeId ? {...item, driverId: driver.id} : item),
-    );
     this.submitReassign();
   }
 
@@ -908,6 +866,11 @@ export class DispatchDashboard implements OnInit {
    */
   publish(): void {
     if (this.publishing() || this.busy()) {
+      return;
+    }
+
+    if (this.dispatchDate() !== todayLocalDate()) {
+      this.publishError.set('只能發布今天的配送任務。');
       return;
     }
 
