@@ -2,12 +2,10 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
-import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.constants.ShiftType;
 import com.example.backend.dao.DriversDAO;
-import com.example.backend.dao.EmergencyLeaveRequestsDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.ReportReadDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -61,12 +59,10 @@ public class ReportService {
     private final VehiclesDAO vehiclesDAO;
     private final WarehousesDAO warehousesDAO;
     private final StoresDAO storesDAO;
-    private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
 
     public ReportService(
             ReportReadDAO reportReadDAO, OrdersDAO ordersDAO, RoutesDAO routesDAO, DriversDAO driversDAO,
-            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO,
-            EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO
+            VehiclesDAO vehiclesDAO, WarehousesDAO warehousesDAO, StoresDAO storesDAO
     ) {
         this.reportReadDAO = reportReadDAO;
         this.ordersDAO = ordersDAO;
@@ -75,7 +71,6 @@ public class ReportService {
         this.vehiclesDAO = vehiclesDAO;
         this.warehousesDAO = warehousesDAO;
         this.storesDAO = storesDAO;
-        this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
     }
 
     public static class Range {
@@ -262,10 +257,8 @@ public class ReportService {
                     .thenComparing(OrdersEntity::getId));
             VehiclesEntity vehicle = vehicles.get(route.getVehicleId());
             WarehousesEntity warehouse = warehouses.get(route.getWarehouseId());
-            MileageMatch match = emergencyLeaveRequestsDAO.existsByRouteIdAndStatus(
-                    route.getId(), EmergencyLeaveStatus.APPROVED)
-                    ? new MileageMatch(null, null, null, null, "DRIVER_HANDOVER")
-                    : matchMileage(route, routesByDriverDay, mileageByDriverDay, mileageByRoute);
+            MileageMatch match = matchMileage(
+                    route, routesByDriverDay, mileageByDriverDay, mileageByRoute);
             Double plannedKm = km(route.getTotalDistance());
             Double difference = match.getActualKm() == null || plannedKm == null
                     ? null : match.getActualKm() - plannedKm;
@@ -717,7 +710,7 @@ public class ReportService {
     ) {
         List<MileageLogsEntity> directMatches = mileageByRoute.getOrDefault(route.getId(), List.of());
         if (directMatches.size() > 1) {
-            return new MileageMatch(null, null, null, null, "MULTIPLE_ROUTE_MILEAGE_LOGS");
+            return aggregateRouteMileage(directMatches);
         }
         if (directMatches.size() == 1) {
             return mileageMatch(directMatches.getFirst(), "READY_ROUTE_LINKED_GPS");
@@ -738,6 +731,37 @@ public class ReportService {
         }
         MileageLogsEntity log = logs.getFirst();
         return mileageMatch(log, "READY_INFERRED_DRIVER_DATE");
+    }
+
+    /** 同一路線臨時換司機時，各司機保留自己的里程；路線報表加總所有完整區段。 */
+    private static MileageMatch aggregateRouteMileage(List<MileageLogsEntity> logs) {
+        double totalKm = 0;
+        long totalDuration = 0;
+        LocalDateTime firstStart = null;
+        LocalDateTime lastEnd = null;
+
+        for (MileageLogsEntity log : logs) {
+            MileageMatch segment = mileageMatch(log, "READY_ROUTE_SEGMENT");
+            if (segment.getActualKm() == null
+                    || segment.getStartAt() == null
+                    || segment.getEndAt() == null
+                    || segment.getDurationMinutes() == null) {
+                return new MileageMatch(
+                        null, firstStart, lastEnd, null,
+                        "INCOMPLETE_HANDOVER_MILEAGE_SEGMENT");
+            }
+            totalKm += segment.getActualKm();
+            totalDuration += segment.getDurationMinutes();
+            if (firstStart == null || segment.getStartAt().isBefore(firstStart)) {
+                firstStart = segment.getStartAt();
+            }
+            if (lastEnd == null || segment.getEndAt().isAfter(lastEnd)) {
+                lastEnd = segment.getEndAt();
+            }
+        }
+        return new MileageMatch(
+                totalKm, firstStart, lastEnd, totalDuration,
+                "READY_ROUTE_HANDOVER_SUMMED");
     }
 
     private static MileageMatch mileageMatch(MileageLogsEntity log, String readyStatus) {

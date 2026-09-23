@@ -21,8 +21,25 @@ public interface EmergencyLeaveRequestsDAO extends JpaRepository<EmergencyLeaveR
     boolean existsByRouteIdAndStatus(Long routeId, EmergencyLeaveStatus status);
     Optional<EmergencyLeaveRequestsEntity> findFirstByDriverIdAndWorkDateAndStatusOrderByRequestedAtDesc(
             Long driverId, LocalDate workDate, EmergencyLeaveStatus status);
+    boolean existsByReplacementDriverIdAndWorkDateAndStatusAndRouteReassignedAtIsNull(
+            Long replacementDriverId, LocalDate workDate, EmergencyLeaveStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select request from EmergencyLeaveRequestsEntity request where request.id = :id")
     Optional<EmergencyLeaveRequestsEntity> findForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select request from EmergencyLeaveRequestsEntity request
+            where request.driverId = :driverId
+              and request.workDate = :workDate
+              and request.routeId = :routeId
+              and request.status = :status
+              and request.routeReassignedAt is null
+            """)
+    Optional<EmergencyLeaveRequestsEntity> findPendingHandoverForUpdate(
+            @Param("driverId") Long driverId,
+            @Param("workDate") LocalDate workDate,
+            @Param("routeId") Long routeId,
+            @Param("status") EmergencyLeaveStatus status);
 }

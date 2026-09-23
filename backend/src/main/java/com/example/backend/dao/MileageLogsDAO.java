@@ -28,7 +28,7 @@ public interface MileageLogsDAO extends JpaRepository<MileageLogsEntity, Long> {
 
     Optional<MileageLogsEntity> findByDriverIdAndDate(Long driverId, LocalDate date);
 
-    Optional<MileageLogsEntity> findByRouteId(Long routeId);
+    List<MileageLogsEntity> findAllByRouteIdOrderByStartTimeAsc(Long routeId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

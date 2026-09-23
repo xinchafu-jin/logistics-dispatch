@@ -120,36 +120,77 @@ public class RoutePlanMetricsService {
         response.setLegs(plan.legs);
         populateLiveEta(response, route);
 
-        if (route.getDriverId() == null) {
-            response.setMileageStatus("NO_DRIVER");
-            return response;
+        List<MileageLogsEntity> mileageSegments = new ArrayList<>(
+                mileageLogsDAO.findAllByRouteIdOrderByStartTimeAsc(route.getId()));
+        if (mileageSegments.isEmpty() && route.getDriverId() != null) {
+            mileageLogsDAO.findByDriverIdAndDate(route.getDriverId(), route.getDate())
+                    .ifPresent(mileageSegments::add);
         }
-        MileageLogsEntity mileage = mileageLogsDAO.findByRouteId(route.getId())
-                .orElseGet(() -> mileageLogsDAO
-                        .findByDriverIdAndDate(route.getDriverId(), route.getDate())
-                        .orElse(null));
-        if (mileage == null || mileage.getStartTime() == null) {
+        if (mileageSegments.isEmpty()) {
             response.setMileageStatus("NO_TRIP_BOUNDARY");
             return response;
-        }
-        LocalDateTime end = mileage.getEndTime();
-        if (end == null) {
-            end = route.getDate().equals(LocalDate.now(TAIPEI))
-                    ? LocalDateTime.now(TAIPEI)
-                    : route.getDate().atTime(LocalTime.MAX);
         }
         WarehousesEntity warehouse = warehousesDAO.findById(route.getWarehouseId())
                 .orElseThrow(() -> new EntityNotFoundException(
                         "找不到路線倉庫，ID：" + route.getWarehouseId()));
         validateCoordinates(warehouse.getLat(), warehouse.getLng(),
                 "倉庫 " + warehouse.getName());
-        GpsDistanceService.DistanceResult gps = gpsDistanceService.calculate(
-                route.getDriverId(), mileage.getStartTime(), end,
-                warehouse.getLat(), warehouse.getLng(), null, null);
-        response.setMileageStatus(gps.getStatus());
-        response.setGpsEstimatedKm(gps.getKilometers());
-        if (gps.getKilometers() != null && plan.kmPerLiter != null) {
-            double liters = gps.getKilometers() / plan.kmPerLiter;
+
+        double totalKm = 0;
+        boolean hasDistance = false;
+        boolean allComplete = true;
+        String segmentProblem = null;
+        for (MileageLogsEntity mileage : mileageSegments) {
+            if (mileage.getStartTime() == null) {
+                allComplete = false;
+                segmentProblem = "MISSING_TRIP_BOUNDARY";
+                continue;
+            }
+
+            Double segmentKm = mileage.getMileageSettledAt() != null
+                    ? mileage.getGpsDistanceKm() : null;
+            if (segmentKm == null) {
+                LocalDateTime end = mileage.getEndTime();
+                if (end == null) {
+                    allComplete = false;
+                    end = route.getDate().equals(LocalDate.now(TAIPEI))
+                            ? LocalDateTime.now(TAIPEI)
+                            : route.getDate().atTime(LocalTime.MAX);
+                }
+                GpsDistanceService.DistanceResult gps = gpsDistanceService.calculate(
+                        mileage.getDriverId(), mileage.getStartTime(), end,
+                        warehouse.getLat(), warehouse.getLng(),
+                        mileage.getEndTime() == null ? null : warehouse.getLat(),
+                        mileage.getEndTime() == null ? null : warehouse.getLng());
+                segmentKm = gps.getKilometers();
+                if (segmentKm == null) {
+                    allComplete = false;
+                    segmentProblem = gps.getStatus();
+                    continue;
+                }
+            }
+            totalKm += segmentKm;
+            hasDistance = true;
+            if (mileage.getEndTime() == null) {
+                allComplete = false;
+            }
+        }
+
+        if (!hasDistance) {
+            response.setMileageStatus(segmentProblem == null
+                    ? "NO_GPS_DISTANCE" : segmentProblem);
+            return response;
+        }
+        response.setGpsEstimatedKm(totalKm);
+        if (mileageSegments.size() > 1) {
+            response.setMileageStatus(allComplete
+                    ? "COMPLETE_ROUTE_HANDOVER_SUMMED"
+                    : "IN_PROGRESS_ROUTE_HANDOVER_SUMMED");
+        } else {
+            response.setMileageStatus(allComplete ? "COMPLETE" : "IN_PROGRESS");
+        }
+        if (plan.kmPerLiter != null) {
+            double liters = totalKm / plan.kmPerLiter;
             response.setGpsEstimatedFuelLiters(liters);
             if (plan.pricePerLiter != null) {
                 response.setGpsEstimatedFuelCost(liters * plan.pricePerLiter);

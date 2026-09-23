@@ -8,6 +8,7 @@ import com.example.backend.constants.ShiftType;
 import com.example.backend.dao.AttendanceRecordsDAO;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.EmergencyLeaveRequestsDAO;
+import com.example.backend.dao.MileageLogsDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dao.VehiclesDAO;
@@ -17,6 +18,7 @@ import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.entity.AttendanceRecordsEntity;
 import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.EmergencyLeaveRequestsEntity;
+import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.EntityNotFoundException;
@@ -40,6 +42,7 @@ public class EmergencyLeaveService {
     private final RoutesDAO routesDAO;
     private final OrdersDAO ordersDAO;
     private final VehiclesDAO vehiclesDAO;
+    private final MileageLogsDAO mileageLogsDAO;
     private final AttendanceService attendanceService;
     private final DriverScheduleService driverScheduleService;
 
@@ -50,6 +53,7 @@ public class EmergencyLeaveService {
             RoutesDAO routesDAO,
             OrdersDAO ordersDAO,
             VehiclesDAO vehiclesDAO,
+            MileageLogsDAO mileageLogsDAO,
             AttendanceService attendanceService,
             DriverScheduleService driverScheduleService
     ) {
@@ -59,6 +63,7 @@ public class EmergencyLeaveService {
         this.routesDAO = routesDAO;
         this.ordersDAO = ordersDAO;
         this.vehiclesDAO = vehiclesDAO;
+        this.mileageLogsDAO = mileageLogsDAO;
         this.attendanceService = attendanceService;
         this.driverScheduleService = driverScheduleService;
     }
@@ -118,6 +123,7 @@ public class EmergencyLeaveService {
         return driversDAO.findAllByIsActiveTrueOrderByIdAsc().stream()
                 .filter(driver -> !driver.getId().equals(request.getDriverId()))
                 .filter(driver -> canTakeOver(driver.getId(), today))
+                .filter(driver -> !isReservedForPendingHandover(driver.getId(), today))
                 .map(driver -> new EmergencyLeaveReplacementCandidateResponse(
                         driver.getId(), driver.getAccount(), driver.getName(),
                         attendanceService.findToday(driver.getId())
@@ -125,7 +131,10 @@ public class EmergencyLeaveService {
                 .toList();
     }
 
-    /** 核准、交接未完成訂單及路線、原司機下班卡都在同一交易中完成。 */
+    /**
+     * 主管先核准並保留接手司機；此時不改路線。
+     * 原司機回倉庫並成功結束里程後，才由 finalizeApprovedHandover 正式交接。
+     */
     public EmergencyLeaveResponse approve(Long requestId, Long replacementDriverId, String reviewedBy) {
         EmergencyLeaveRequestsEntity request = findPendingRequestForUpdate(requestId);
         LocalDate today = LocalDate.now(TAIPEI);
@@ -142,6 +151,9 @@ public class EmergencyLeaveService {
         if (!canTakeOver(replacementDriverId, today)) {
             throw new IllegalArgumentException("接手司機須有已發布上班班次、已打卡且尚未被指派路線");
         }
+        if (isReservedForPendingHandover(replacementDriverId, today)) {
+            throw new IllegalArgumentException("接手司機已被其他待交接的臨時請假保留");
+        }
 
         RoutesEntity route = routesDAO.findForUpdate(request.getRouteId())
                 .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假的路線"));
@@ -152,22 +164,22 @@ public class EmergencyLeaveService {
             throw new IllegalArgumentException("路線已異動，請重新確認交接內容");
         }
 
-        List<OrdersEntity> orders = ordersDAO.findByRouteIdForUpdate(route.getId());
-        int transferred = 0;
-        for (OrdersEntity order : orders) {
-            if (order.getStatus() == OrderStatus.CONFIRMED
-                    || order.getStatus() == OrderStatus.IN_DELIVERY) {
-                order.setAssignedDriverId(replacementDriverId);
-                transferred++;
-            }
-        }
-        if (transferred == 0) {
+        boolean hasUnfinishedOrders = ordersDAO.findByRouteIdForUpdate(route.getId()).stream()
+                .anyMatch(this::isTransferable);
+        if (!hasUnfinishedOrders) {
             throw new IllegalArgumentException("路線已沒有待配送訂單，無須安排接手司機");
         }
-        ordersDAO.saveAll(orders);
-        route.setDriverId(replacementDriverId);
-        route.setVersion(route.getVersion() + 1);
-        routesDAO.save(route);
+
+        MileageLogsEntity originalMileage = mileageLogsDAO
+                .findForUpdate(request.getDriverId(), today)
+                .orElseThrow(() -> new IllegalArgumentException("原司機尚未開始里程，不能核准途中交接"));
+        if (!route.getId().equals(originalMileage.getRouteId())
+                || !route.getVehicleId().equals(originalMileage.getVehicleId())) {
+            throw new IllegalArgumentException("原司機里程紀錄與請假路線或車輛不一致");
+        }
+        if (originalMileage.getEndTime() != null) {
+            throw new IllegalArgumentException("原司機已結束里程，無法建立待回倉交接");
+        }
 
         AttendanceRecordDTO attendance = attendanceService.findToday(request.getDriverId())
                 .orElseThrow(() -> new IllegalArgumentException("原司機的出勤紀錄已遺失"));
@@ -181,11 +193,64 @@ public class EmergencyLeaveService {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         request.setStatus(EmergencyLeaveStatus.APPROVED);
         request.setReplacementDriverId(replacementDriverId);
-        request.setTransferredOrderCount(transferred);
+        request.setTransferredOrderCount(0);
         request.setReviewedBy(reviewedBy);
         request.setReviewedAt(now);
-        request.setRouteReassignedAt(now);
         return toResponse(requestsDAO.saveAndFlush(request));
+    }
+
+    /**
+     * 原司機已在倉庫完成第一段里程後，才把路線與未完成訂單交給核准的代班司機。
+     * 此方法與 mileage/end 共用同一交易；交接失敗時里程結束也會一起回滾。
+     */
+    public void finalizeApprovedHandover(
+            Long originalDriverId,
+            LocalDate workDate,
+            Long routeId,
+            LocalDateTime handedOverAt
+    ) {
+        EmergencyLeaveRequestsEntity request = requestsDAO.findPendingHandoverForUpdate(
+                        originalDriverId, workDate, routeId, EmergencyLeaveStatus.APPROVED)
+                .orElse(null);
+        if (request == null) {
+            return;
+        }
+
+        Long replacementDriverId = request.getReplacementDriverId();
+        requireActiveDriver(replacementDriverId);
+        attendanceRecordsDAO.findForUpdate(replacementDriverId, workDate)
+                .orElseThrow(() -> new IllegalArgumentException("接手司機的上班打卡紀錄已不存在"));
+        if (!canTakeOver(replacementDriverId, workDate)) {
+            throw new IllegalArgumentException("接手司機目前已下班或已被指派其他路線，無法完成交接");
+        }
+
+        RoutesEntity route = routesDAO.findForUpdate(routeId)
+                .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假的路線"));
+        if (route.getStatus() != RouteStatus.PUBLISHED
+                || !workDate.equals(route.getDate())
+                || !originalDriverId.equals(route.getDriverId())
+                || !request.getVehicleId().equals(route.getVehicleId())) {
+            throw new IllegalArgumentException("路線已異動，無法完成臨時請假交接");
+        }
+
+        List<OrdersEntity> orders = ordersDAO.findByRouteIdForUpdate(routeId);
+        int transferred = 0;
+        for (OrdersEntity order : orders) {
+            if (isTransferable(order)) {
+                order.setAssignedDriverId(replacementDriverId);
+                transferred++;
+            }
+        }
+        if (transferred > 0) {
+            ordersDAO.saveAll(orders);
+            route.setDriverId(replacementDriverId);
+            route.setVersion(route.getVersion() + 1);
+            routesDAO.save(route);
+        }
+
+        request.setTransferredOrderCount(transferred);
+        request.setRouteReassignedAt(handedOverAt);
+        requestsDAO.saveAndFlush(request);
     }
 
     public EmergencyLeaveResponse reject(Long requestId, String reason, String reviewedBy) {
@@ -208,8 +273,22 @@ public class EmergencyLeaveService {
         if (!isWorking(status)) {
             return false;
         }
+        // mileage_logs 目前以「司機＋日期」唯一；已有當日里程的司機不能再建立代班第二趟。
+        if (mileageLogsDAO.findByDriverIdAndDate(driverId, date).isPresent()) {
+            return false;
+        }
         return routesDAO.findByDateAndDriverIdIsNotNull(date).stream()
                 .noneMatch(route -> driverId.equals(route.getDriverId()));
+    }
+
+    private boolean isReservedForPendingHandover(Long driverId, LocalDate date) {
+        return requestsDAO.existsByReplacementDriverIdAndWorkDateAndStatusAndRouteReassignedAtIsNull(
+                driverId, date, EmergencyLeaveStatus.APPROVED);
+    }
+
+    private boolean isTransferable(OrdersEntity order) {
+        return order.getStatus() == OrderStatus.CONFIRMED
+                || order.getStatus() == OrderStatus.IN_DELIVERY;
     }
 
     private boolean isWorking(AttendanceStatus status) {

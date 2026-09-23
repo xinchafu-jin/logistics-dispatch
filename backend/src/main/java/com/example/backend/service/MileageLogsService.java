@@ -38,6 +38,7 @@ public class MileageLogsService {
     private final AttendanceService attendanceService;
     private final VehicleMileageSettlementService vehicleMileageSettlementService;
     private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
+    private final EmergencyLeaveService emergencyLeaveService;
     private final WarehouseProximityService warehouseProximityService;
 
     public MileageLogsService(
@@ -49,6 +50,7 @@ public class MileageLogsService {
             AttendanceService attendanceService,
             VehicleMileageSettlementService vehicleMileageSettlementService,
             EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO,
+            EmergencyLeaveService emergencyLeaveService,
             WarehouseProximityService warehouseProximityService
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
@@ -59,6 +61,7 @@ public class MileageLogsService {
         this.attendanceService = attendanceService;
         this.vehicleMileageSettlementService = vehicleMileageSettlementService;
         this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
+        this.emergencyLeaveService = emergencyLeaveService;
         this.warehouseProximityService = warehouseProximityService;
     }
 
@@ -146,6 +149,8 @@ public class MileageLogsService {
         mileage.setEndTime(now);
 
         vehicleMileageSettlementService.settle(mileage, now);
+        emergencyLeaveService.finalizeApprovedHandover(
+                driverId, now.toLocalDate(), mileage.getRouteId(), now);
 
         return toResponse(mileageLogsDAO.save(mileage));
     }
