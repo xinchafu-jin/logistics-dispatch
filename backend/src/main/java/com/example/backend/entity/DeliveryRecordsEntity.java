@@ -24,6 +24,10 @@ public class DeliveryRecordsEntity {
     @Column
     private LocalDateTime deliveredAt;
 
+    /** 這一站完成處理的時間；正常交貨與無人簽收都會記錄。 */
+    @Column
+    private LocalDateTime handledAt;
+
     /** 交貨地點 GPS */
     @Column
     private Double lat;
@@ -87,6 +91,14 @@ public class DeliveryRecordsEntity {
 
     public void setDeliveredAt(LocalDateTime deliveredAt) {
         this.deliveredAt = deliveredAt;
+    }
+
+    public LocalDateTime getHandledAt() {
+        return handledAt;
+    }
+
+    public void setHandledAt(LocalDateTime handledAt) {
+        this.handledAt = handledAt;
     }
 
     public Double getLat() {

@@ -288,15 +288,18 @@ public class DriverTasksResponse {
         private String plateNumber;
         private String vehicleType;
         private Integer capacity;
+        private Integer currentOdometerKm;
 
         public Vehicle() {
         }
 
-        public Vehicle(Long id, String plateNumber, String vehicleType, Integer capacity) {
+        public Vehicle(Long id, String plateNumber, String vehicleType, Integer capacity,
+                       Integer currentOdometerKm) {
             this.id = id;
             this.plateNumber = plateNumber;
             this.vehicleType = vehicleType;
             this.capacity = capacity;
+            this.currentOdometerKm = currentOdometerKm;
         }
 
         public Long getId() {
@@ -329,6 +332,14 @@ public class DriverTasksResponse {
 
         public void setCapacity(Integer capacity) {
             this.capacity = capacity;
+        }
+
+        public Integer getCurrentOdometerKm() {
+            return currentOdometerKm;
+        }
+
+        public void setCurrentOdometerKm(Integer currentOdometerKm) {
+            this.currentOdometerKm = currentOdometerKm;
         }
     }
 

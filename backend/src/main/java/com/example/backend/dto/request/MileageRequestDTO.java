@@ -1,9 +1,11 @@
 package com.example.backend.dto.request;
 
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
 public class MileageRequestDTO {
 
+    @NotNull(message = "總里程讀數不能留空")
     @PositiveOrZero(message = "里程表讀數不能小於 0")
     private Integer odometer;
 

@@ -41,19 +41,25 @@ public class DeliveryService {
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;
     private final DriversDAO driversDAO;
+    private final StoreProximityService storeProximityService;
+    private final RouteLegMileageService routeLegMileageService;
 
     public DeliveryService(
             DeliveryRecordsDAO deliveryRecordsDAO,
             ExceptionCasesDAO exceptionCasesDAO,
             OrdersDAO ordersDAO,
             RoutesDAO routesDAO,
-            DriversDAO driversDAO
+            DriversDAO driversDAO,
+            StoreProximityService storeProximityService,
+            RouteLegMileageService routeLegMileageService
     ) {
         this.deliveryRecordsDAO = deliveryRecordsDAO;
         this.exceptionCasesDAO = exceptionCasesDAO;
         this.ordersDAO = ordersDAO;
         this.routesDAO = routesDAO;
         this.driversDAO = driversDAO;
+        this.storeProximityService = storeProximityService;
+        this.routeLegMileageService = routeLegMileageService;
     }
 
     /** 抵達門市後建立本次配送紀錄，訂單進入配送中。 */
@@ -68,9 +74,15 @@ public class DeliveryService {
             throw new IllegalArgumentException(DELIVERY_ALREADY_ARRIVED);
         }
 
+        StoreProximityService.ArrivalLocation arrivalLocation =
+                storeProximityService.requireWithinStoreRadius(
+                        driverId, order.getStoreId(), now);
+
         DeliveryRecordsEntity record = new DeliveryRecordsEntity();
         record.setOrderId(order.getId());
         record.setArrivedAt(now);
+        record.setLat(arrivalLocation.lat());
+        record.setLng(arrivalLocation.lng());
         record.setExpectedBoxCount(order.getBoxCount());
         record.setShortageBoxCount(0);
         record.setDamagedBoxCount(0);
@@ -79,7 +91,9 @@ public class DeliveryService {
 
         order.setStatus(OrderStatus.IN_DELIVERY);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, null, null);
+        record = deliveryRecordsDAO.save(record);
+        routeLegMileageService.recordArrival(driverId, order, record, now);
+        return toResponse(record, order, null, null);
     }
 
     /** 完成交貨，保存實際箱數與備註並將訂單設為完成。 */
@@ -98,6 +112,7 @@ public class DeliveryService {
 
         DeliveryRecordsEntity record = findInProgressRecord(order.getId());
         record.setDeliveredAt(now);
+        record.setHandledAt(now);
         record.setExpectedBoxCount(order.getBoxCount());
         record.setDeliveredBoxCount(delivered);
         record.setShortageBoxCount(shortage);
@@ -133,6 +148,7 @@ public class DeliveryService {
         record.setPhotoUrl(trimToNull(request.getPhotoUrl()));
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(true);
+        record.setHandledAt(now);
         record = deliveryRecordsDAO.save(record);
 
         OrdersEntity followUpOrder = createNoSignatureFollowUpOrder(order, now.toLocalDate().plusDays(1));

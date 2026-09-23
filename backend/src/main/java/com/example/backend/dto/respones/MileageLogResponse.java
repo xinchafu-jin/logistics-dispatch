@@ -3,7 +3,11 @@ package com.example.backend.dto.respones;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** 司機出車／收車里程結果；保留原欄位並附加路線、車輛及 GPS 結算資訊。 */
+/**
+ * 司機出車／收車里程結果。
+ * 實際里程由人工登記的收車總里程減去出車總里程；系統里程由 GPS 軌跡與 OSRM 結算。
+ * 舊 GPS 欄位暫時保留，避免既有前端失效。
+ */
 public class MileageLogResponse {
 
     private Long id;
@@ -17,9 +21,12 @@ public class MileageLogResponse {
     private LocalDateTime endTime;
     private Integer actualDistance;
     private Long actualDurationMinutes;
+    private Double systemDistanceKm;
     private Double gpsDistanceKm;
     private String gpsDistanceStatus;
     private LocalDateTime mileageSettledAt;
+    private Integer vehicleCurrentOdometerKm;
+    private Double vehicleSystemCumulativeMileageKm;
     private Double vehicleCumulativeMileageKm;
 
     public MileageLogResponse() {
@@ -60,6 +67,11 @@ public class MileageLogResponse {
         this.actualDurationMinutes = actualDurationMinutes;
     }
 
+    public Double getSystemDistanceKm() { return systemDistanceKm; }
+    public void setSystemDistanceKm(Double systemDistanceKm) {
+        this.systemDistanceKm = systemDistanceKm;
+    }
+
     public Double getGpsDistanceKm() { return gpsDistanceKm; }
     public void setGpsDistanceKm(Double gpsDistanceKm) { this.gpsDistanceKm = gpsDistanceKm; }
 
@@ -71,6 +83,18 @@ public class MileageLogResponse {
     public LocalDateTime getMileageSettledAt() { return mileageSettledAt; }
     public void setMileageSettledAt(LocalDateTime mileageSettledAt) {
         this.mileageSettledAt = mileageSettledAt;
+    }
+
+    public Integer getVehicleCurrentOdometerKm() { return vehicleCurrentOdometerKm; }
+    public void setVehicleCurrentOdometerKm(Integer vehicleCurrentOdometerKm) {
+        this.vehicleCurrentOdometerKm = vehicleCurrentOdometerKm;
+    }
+
+    public Double getVehicleSystemCumulativeMileageKm() {
+        return vehicleSystemCumulativeMileageKm;
+    }
+    public void setVehicleSystemCumulativeMileageKm(Double vehicleSystemCumulativeMileageKm) {
+        this.vehicleSystemCumulativeMileageKm = vehicleSystemCumulativeMileageKm;
     }
 
     public Double getVehicleCumulativeMileageKm() { return vehicleCumulativeMileageKm; }

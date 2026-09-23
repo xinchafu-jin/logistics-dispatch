@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/** 路線的預估與 GPS 軌跡估算結果；距離為公里、時間為分鐘。 */
+/** 路線的預估、系統與實際里程結果；距離為公里、時間為分鐘。 */
 public class RouteMetricsResponse {
 
     private Long routeId;
@@ -16,8 +16,18 @@ public class RouteMetricsResponse {
     private Integer plannedTotalMinutes;
     private Double plannedFuelLiters;
     private Double plannedFuelCost;
+    private Double systemKm;
+    private Double systemFuelLiters;
+    private Double systemFuelCost;
+    private Double actualKm;
+    /** @deprecated 請改用 systemKm。 */
+    @Deprecated
     private Double gpsEstimatedKm;
+    /** @deprecated 請改用 systemFuelLiters。 */
+    @Deprecated
     private Double gpsEstimatedFuelLiters;
+    /** @deprecated 請改用 systemFuelCost。 */
+    @Deprecated
     private Double gpsEstimatedFuelCost;
     private Double pricePerLiter;
     private String mileageStatus;
@@ -106,6 +116,22 @@ public class RouteMetricsResponse {
     public void setPlannedFuelCost(Double plannedFuelCost) {
         this.plannedFuelCost = plannedFuelCost;
     }
+
+    public Double getSystemKm() { return systemKm; }
+    public void setSystemKm(Double systemKm) { this.systemKm = systemKm; }
+
+    public Double getSystemFuelLiters() { return systemFuelLiters; }
+    public void setSystemFuelLiters(Double systemFuelLiters) {
+        this.systemFuelLiters = systemFuelLiters;
+    }
+
+    public Double getSystemFuelCost() { return systemFuelCost; }
+    public void setSystemFuelCost(Double systemFuelCost) {
+        this.systemFuelCost = systemFuelCost;
+    }
+
+    public Double getActualKm() { return actualKm; }
+    public void setActualKm(Double actualKm) { this.actualKm = actualKm; }
 
     public Double getGpsEstimatedKm() {
         return gpsEstimatedKm;

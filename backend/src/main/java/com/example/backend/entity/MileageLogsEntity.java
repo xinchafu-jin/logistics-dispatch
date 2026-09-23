@@ -7,8 +7,8 @@ import java.time.LocalDateTime;
 
 /**
  * 里程紀錄。司機出車與收工各填一次里程表讀數。
- * 實際 GPS 里程由該趟相鄰 GPS 點的 OSRM 道路距離累加。
- * startOdometer、endOdometer 保留既有人工里程表紀錄用途。
+ * 系統里程由該趟相鄰 GPS 點的 OSRM 道路距離累加。
+ * 實際里程 = endOdometer - startOdometer。
  * 實際工時 = endTime - startTime
  */
 @Entity
@@ -45,13 +45,17 @@ public class MileageLogsEntity {
     @Column
     private Integer endOdometer;
 
+    /** 本趟實際里程，固定為 endOdometer - startOdometer。 */
+    @Column
+    private Integer actualDistanceKm;
+
     @Column
     private LocalDateTime startTime;
 
     @Column
     private LocalDateTime endTime;
 
-    /** 該趟經 GPS 與 OSRM 結算的實際公里數。 */
+    /** 該趟經 GPS 與 OSRM 結算的系統公里數。 */
     @Column
     private Double gpsDistanceKm;
 
@@ -117,6 +121,14 @@ public class MileageLogsEntity {
 
     public void setEndOdometer(Integer endOdometer) {
         this.endOdometer = endOdometer;
+    }
+
+    public Integer getActualDistanceKm() {
+        return actualDistanceKm;
+    }
+
+    public void setActualDistanceKm(Integer actualDistanceKm) {
+        this.actualDistanceKm = actualDistanceKm;
     }
 
     public LocalDateTime getStartTime() {

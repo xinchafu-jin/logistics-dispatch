@@ -910,6 +910,7 @@ public final class ReportResponses {
         private Double plannedKm;
         private Double plannedFuelCost;
         private Integer plannedWorkMinutes;
+        private Double systemKm;
         private Double actualKm;
         private Double differenceKm;
         private Double differencePercent;
@@ -918,6 +919,7 @@ public final class ReportResponses {
         private LocalDateTime tripEndAt;
         private Long tripDurationMinutes;
         private List<RouteOrder> deliveryOrder;
+        private List<RouteLegRow> routeLegs;
 
         public RouteRow() {
         }
@@ -1142,6 +1144,14 @@ public final class ReportResponses {
             this.plannedWorkMinutes = plannedWorkMinutes;
         }
 
+        public Double getSystemKm() {
+            return systemKm;
+        }
+
+        public void setSystemKm(Double systemKm) {
+            this.systemKm = systemKm;
+        }
+
         public Double getActualKm() {
             return actualKm;
         }
@@ -1204,6 +1214,132 @@ public final class ReportResponses {
 
         public void setDeliveryOrder(List<RouteOrder> deliveryOrder) {
             this.deliveryOrder = deliveryOrder;
+        }
+
+        public List<RouteLegRow> getRouteLegs() {
+            return routeLegs;
+        }
+
+        public void setRouteLegs(List<RouteLegRow> routeLegs) {
+            this.routeLegs = routeLegs;
+        }
+    }
+
+    /** 主管路線報表中的單一實際行駛區段。 */
+    public static class RouteLegRow {
+        private Long id;
+        private Long mileageLogId;
+        private Long driverId;
+        private Long vehicleId;
+        private Integer sequence;
+        private String fromType;
+        private Long fromStoreId;
+        private String fromName;
+        private String toType;
+        private Long toStoreId;
+        private String toName;
+        private Long orderId;
+        private Long deliveryRecordId;
+        private LocalDateTime startedAt;
+        private LocalDateTime endedAt;
+        private Long durationMinutes;
+        private Double systemKm;
+        private Integer gpsPointCount;
+        private Integer acceptedSegmentCount;
+        private String calculationStatus;
+
+        public RouteLegRow() {
+        }
+
+        public RouteLegRow(
+                Long id,
+                Long mileageLogId,
+                Long driverId,
+                Long vehicleId,
+                Integer sequence,
+                String fromType,
+                Long fromStoreId,
+                String fromName,
+                String toType,
+                Long toStoreId,
+                String toName,
+                Long orderId,
+                Long deliveryRecordId,
+                LocalDateTime startedAt,
+                LocalDateTime endedAt,
+                Long durationMinutes,
+                Double systemKm,
+                Integer gpsPointCount,
+                Integer acceptedSegmentCount,
+                String calculationStatus
+        ) {
+            this.id = id;
+            this.mileageLogId = mileageLogId;
+            this.driverId = driverId;
+            this.vehicleId = vehicleId;
+            this.sequence = sequence;
+            this.fromType = fromType;
+            this.fromStoreId = fromStoreId;
+            this.fromName = fromName;
+            this.toType = toType;
+            this.toStoreId = toStoreId;
+            this.toName = toName;
+            this.orderId = orderId;
+            this.deliveryRecordId = deliveryRecordId;
+            this.startedAt = startedAt;
+            this.endedAt = endedAt;
+            this.durationMinutes = durationMinutes;
+            this.systemKm = systemKm;
+            this.gpsPointCount = gpsPointCount;
+            this.acceptedSegmentCount = acceptedSegmentCount;
+            this.calculationStatus = calculationStatus;
+        }
+
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public Long getMileageLogId() { return mileageLogId; }
+        public void setMileageLogId(Long mileageLogId) { this.mileageLogId = mileageLogId; }
+        public Long getDriverId() { return driverId; }
+        public void setDriverId(Long driverId) { this.driverId = driverId; }
+        public Long getVehicleId() { return vehicleId; }
+        public void setVehicleId(Long vehicleId) { this.vehicleId = vehicleId; }
+        public Integer getSequence() { return sequence; }
+        public void setSequence(Integer sequence) { this.sequence = sequence; }
+        public String getFromType() { return fromType; }
+        public void setFromType(String fromType) { this.fromType = fromType; }
+        public Long getFromStoreId() { return fromStoreId; }
+        public void setFromStoreId(Long fromStoreId) { this.fromStoreId = fromStoreId; }
+        public String getFromName() { return fromName; }
+        public void setFromName(String fromName) { this.fromName = fromName; }
+        public String getToType() { return toType; }
+        public void setToType(String toType) { this.toType = toType; }
+        public Long getToStoreId() { return toStoreId; }
+        public void setToStoreId(Long toStoreId) { this.toStoreId = toStoreId; }
+        public String getToName() { return toName; }
+        public void setToName(String toName) { this.toName = toName; }
+        public Long getOrderId() { return orderId; }
+        public void setOrderId(Long orderId) { this.orderId = orderId; }
+        public Long getDeliveryRecordId() { return deliveryRecordId; }
+        public void setDeliveryRecordId(Long deliveryRecordId) {
+            this.deliveryRecordId = deliveryRecordId;
+        }
+        public LocalDateTime getStartedAt() { return startedAt; }
+        public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
+        public LocalDateTime getEndedAt() { return endedAt; }
+        public void setEndedAt(LocalDateTime endedAt) { this.endedAt = endedAt; }
+        public Long getDurationMinutes() { return durationMinutes; }
+        public void setDurationMinutes(Long durationMinutes) { this.durationMinutes = durationMinutes; }
+        public Double getSystemKm() { return systemKm; }
+        public void setSystemKm(Double systemKm) { this.systemKm = systemKm; }
+        public Integer getGpsPointCount() { return gpsPointCount; }
+        public void setGpsPointCount(Integer gpsPointCount) { this.gpsPointCount = gpsPointCount; }
+        public Integer getAcceptedSegmentCount() { return acceptedSegmentCount; }
+        public void setAcceptedSegmentCount(Integer acceptedSegmentCount) {
+            this.acceptedSegmentCount = acceptedSegmentCount;
+        }
+        public String getCalculationStatus() { return calculationStatus; }
+        public void setCalculationStatus(String calculationStatus) {
+            this.calculationStatus = calculationStatus;
         }
     }
 
@@ -1349,6 +1485,7 @@ public final class ReportResponses {
         private int startedTrips;
         private int publishedRoutes;
         private Double plannedKm;
+        private Double systemKm;
         private Double actualKm;
         private String actualMileageStatus;
         private int completeMileageLogs;
@@ -1494,6 +1631,14 @@ public final class ReportResponses {
 
         public void setPlannedKm(Double plannedKm) {
             this.plannedKm = plannedKm;
+        }
+
+        public Double getSystemKm() {
+            return systemKm;
+        }
+
+        public void setSystemKm(Double systemKm) {
+            this.systemKm = systemKm;
         }
 
         public Double getActualKm() {
@@ -1669,8 +1814,10 @@ public final class ReportResponses {
         private int distinctStores;
         private Double averageLoadRatePercent;
         private Double publishedPlannedKm;
+        private Double systemKm;
         private Double actualKm;
         private String actualMileageStatus;
+        private Integer currentOdometerKm;
         private Double cumulativeMileageKm;
         private List<VehicleRouteLoad> routeLoads;
 
@@ -1809,6 +1956,14 @@ public final class ReportResponses {
             this.publishedPlannedKm = publishedPlannedKm;
         }
 
+        public Double getSystemKm() {
+            return systemKm;
+        }
+
+        public void setSystemKm(Double systemKm) {
+            this.systemKm = systemKm;
+        }
+
         public Double getActualKm() {
             return actualKm;
         }
@@ -1823,6 +1978,14 @@ public final class ReportResponses {
 
         public void setActualMileageStatus(String actualMileageStatus) {
             this.actualMileageStatus = actualMileageStatus;
+        }
+
+        public Integer getCurrentOdometerKm() {
+            return currentOdometerKm;
+        }
+
+        public void setCurrentOdometerKm(Integer currentOdometerKm) {
+            this.currentOdometerKm = currentOdometerKm;
         }
 
         public Double getCumulativeMileageKm() {

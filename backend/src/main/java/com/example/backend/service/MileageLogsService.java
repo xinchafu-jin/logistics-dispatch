@@ -14,6 +14,7 @@ import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.RoutesEntity;
+import com.example.backend.entity.VehiclesEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class MileageLogsService {
     private final EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO;
     private final EmergencyLeaveService emergencyLeaveService;
     private final WarehouseProximityService warehouseProximityService;
+    private final RouteLegMileageService routeLegMileageService;
 
     public MileageLogsService(
             MileageLogsDAO mileageLogsDAO,
@@ -51,7 +53,8 @@ public class MileageLogsService {
             VehicleMileageSettlementService vehicleMileageSettlementService,
             EmergencyLeaveRequestsDAO emergencyLeaveRequestsDAO,
             EmergencyLeaveService emergencyLeaveService,
-            WarehouseProximityService warehouseProximityService
+            WarehouseProximityService warehouseProximityService,
+            RouteLegMileageService routeLegMileageService
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
         this.driversDAO = driversDAO;
@@ -63,6 +66,7 @@ public class MileageLogsService {
         this.emergencyLeaveRequestsDAO = emergencyLeaveRequestsDAO;
         this.emergencyLeaveService = emergencyLeaveService;
         this.warehouseProximityService = warehouseProximityService;
+        this.routeLegMileageService = routeLegMileageService;
     }
 
     public MileageLogResponse start(Long driverId, MileageRequestDTO request) {
@@ -88,8 +92,24 @@ public class MileageLogsService {
         if (mileageLogsDAO.findForUpdate(driverId, today).isPresent()) {
             throw new IllegalArgumentException("今天已經登記過出車里程");
         }
-        if (!mileageLogsDAO.findOpenByVehicleForUpdate(route.getVehicleId(), today).isEmpty()) {
+        if (!mileageLogsDAO.findOpenByVehicleForUpdate(route.getVehicleId()).isEmpty()) {
             throw new IllegalArgumentException("這台車仍有其他司機尚未結束的里程，請完成交接後再出車");
+        }
+        Integer startOdometer = request.getOdometer();
+        if (startOdometer == null) {
+            throw new IllegalArgumentException("出車總里程不能留空");
+        }
+        VehiclesEntity vehicle = vehiclesDAO.findByIdForUpdate(route.getVehicleId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "找不到已發布路線的車輛，ID：" + route.getVehicleId()));
+        if (vehicle.getCurrentOdometerKm() == null) {
+            // 舊車第一次使用新制時，以實際儀表板的出車讀數建立總里程基準。
+            vehicle.setCurrentOdometerKm(startOdometer);
+            vehiclesDAO.save(vehicle);
+        } else if (!vehicle.getCurrentOdometerKm().equals(startOdometer)) {
+            throw new IllegalArgumentException(
+                    "出車總里程必須與系統保存的車輛總里程一致，目前為 "
+                            + vehicle.getCurrentOdometerKm() + " km");
         }
 
         MileageLogsEntity mileage = new MileageLogsEntity();
@@ -97,7 +117,7 @@ public class MileageLogsService {
         mileage.setRouteId(route.getId());
         mileage.setVehicleId(route.getVehicleId());
         mileage.setDate(today);
-        mileage.setStartOdometer(request.getOdometer());
+        mileage.setStartOdometer(startOdometer);
         mileage.setStartTime(now);
         mileage.setGpsDistanceStatus("IN_PROGRESS");
         return toResponse(mileageLogsDAO.save(mileage));
@@ -122,7 +142,10 @@ public class MileageLogsService {
             throw new IllegalStateException("里程紀錄缺少出車資料，無法登記收車里程");
         }
 
-        if (request.getOdometer() != null && mileage.getStartOdometer() != null
+        if (request.getOdometer() == null) {
+            throw new IllegalArgumentException("收車總里程不能留空");
+        }
+        if (mileage.getStartOdometer() != null
                 && request.getOdometer() < mileage.getStartOdometer()) {
             throw new IllegalArgumentException("收車里程不能小於出車里程");
         }
@@ -146,7 +169,16 @@ public class MileageLogsService {
                 driverId, mileage.getRouteId(), now);
 
         mileage.setEndOdometer(request.getOdometer());
+        mileage.setActualDistanceKm(request.getOdometer() - mileage.getStartOdometer());
         mileage.setEndTime(now);
+
+        routeLegMileageService.recordReturnToWarehouse(mileage, now);
+
+        int vehicleUpdated = vehiclesDAO.updateCurrentOdometer(
+                mileage.getVehicleId(), mileage.getStartOdometer(), request.getOdometer());
+        if (vehicleUpdated != 1) {
+            throw new IllegalStateException("車輛總里程已變更，請重新確認儀表板讀數");
+        }
 
         vehicleMileageSettlementService.settle(mileage, now);
         emergencyLeaveService.finalizeApprovedHandover(
@@ -155,7 +187,7 @@ public class MileageLogsService {
         return toResponse(mileageLogsDAO.save(mileage));
     }
 
-    /** GPS 或 OSRM 暫時失敗時，可由本人重新計算；已成功結算者不會重複累加。 */
+    /** GPS 或 OSRM 暫時失敗時，可由本人重新計算系統里程；已成功結算者不會重複累加。 */
     public MileageLogResponse recalculate(Long driverId) {
         LocalDate today = LocalDate.now(TAIPEI);
         requireActiveDriver(driverId);
@@ -178,9 +210,11 @@ public class MileageLogsService {
     }
 
     private MileageLogResponse toResponse(MileageLogsEntity mileage) {
-        Integer actualDistance = null;
+        Integer actualDistance = mileage.getActualDistanceKm();
         Long actualDurationMinutes = null;
-        if (mileage.getStartOdometer() != null && mileage.getEndOdometer() != null) {
+        if (actualDistance == null
+                && mileage.getStartOdometer() != null && mileage.getEndOdometer() != null
+                && mileage.getEndOdometer() >= mileage.getStartOdometer()) {
             actualDistance = mileage.getEndOdometer() - mileage.getStartOdometer();
         }
         if (mileage.getStartTime() != null && mileage.getEndTime() != null) {
@@ -199,12 +233,16 @@ public class MileageLogsService {
         response.setEndTime(mileage.getEndTime());
         response.setActualDistance(actualDistance);
         response.setActualDurationMinutes(actualDurationMinutes);
+        response.setSystemDistanceKm(mileage.getGpsDistanceKm());
         response.setGpsDistanceKm(mileage.getGpsDistanceKm());
         response.setGpsDistanceStatus(mileage.getGpsDistanceStatus());
         response.setMileageSettledAt(mileage.getMileageSettledAt());
         if (mileage.getVehicleId() != null) {
-            vehiclesDAO.findById(mileage.getVehicleId()).ifPresent(vehicle ->
-                    response.setVehicleCumulativeMileageKm(vehicle.getCumulativeMileageKm()));
+            vehiclesDAO.findById(mileage.getVehicleId()).ifPresent(vehicle -> {
+                response.setVehicleCurrentOdometerKm(vehicle.getCurrentOdometerKm());
+                response.setVehicleSystemCumulativeMileageKm(vehicle.getCumulativeMileageKm());
+                response.setVehicleCumulativeMileageKm(vehicle.getCumulativeMileageKm());
+            });
         }
         return response;
     }

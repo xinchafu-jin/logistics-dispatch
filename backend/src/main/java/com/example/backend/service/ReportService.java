@@ -20,6 +20,7 @@ import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
 import com.example.backend.entity.VehiclesEntity;
@@ -248,6 +249,9 @@ public class ReportService {
         Map<Long, VehiclesEntity> vehicles = index(vehiclesDAO.findAll(), VehiclesEntity::getId);
         Map<Long, WarehousesEntity> warehouses = index(warehousesDAO.findAll(), WarehousesEntity::getId);
         Map<Long, StoresEntity> stores = index(storesDAO.findAll(), StoresEntity::getId);
+        Map<Long, List<RouteLegMileagesEntity>> legsByRoute = reportReadDAO.routeLegMileages(
+                        selectedRoutes.stream().map(RoutesEntity::getId).toList())
+                .stream().collect(Collectors.groupingBy(RouteLegMileagesEntity::getRouteId));
         List<ReportResponses.RouteRow> rows = new ArrayList<>();
 
         for (RoutesEntity route : selectedRoutes) {
@@ -274,7 +278,7 @@ public class ReportService {
                             order.getId(), order.getOrderNumber(), order.getSequence(), order.getStoreId(),
                             storeName(stores, order.getStoreId()), order.getBoxCount(), order.getStatus().name()))
                     .toList();
-            rows.add(new ReportResponses.RouteRow(
+            ReportResponses.RouteRow row = new ReportResponses.RouteRow(
                     route.getId(), route.getDate(), route.getWarehouseId(),
                     warehouse == null ? null : warehouse.getName(), route.getVehicleId(),
                     vehicle == null ? null : vehicle.getPlateNumber(), route.getDriverId(),
@@ -285,7 +289,12 @@ public class ReportService {
                     countStatus(assigned, OrderStatus.NO_SIGNATURE),
                     plannedKm, route.getEstimatedFuelCost(), route.getEstimatedWorkMinutes(),
                     match.getActualKm(), difference, differencePercent, comparisonStatus,
-                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder));
+                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder);
+            row.setSystemKm(match.getSystemKm());
+            row.setRouteLegs(legsByRoute.getOrDefault(route.getId(), List.of()).stream()
+                    .map(leg -> toRouteLegRow(leg, warehouse, stores))
+                    .toList());
+            rows.add(row);
         }
         return new ReportResponses.Routes(range.getFrom(), range.getTo(),
                 "CURRENT_ROUTE_RECORD_NOT_PUBLISH_SNAPSHOT", rows);
@@ -338,6 +347,11 @@ public class ReportService {
                     : incompleteMileage > 0 ? "INCOMPLETE_MILEAGE_LOG" : "COMPLETE";
             Double actualKm = !"COMPLETE".equals(actualMileageStatus) ? null
                     : completeMileage.stream().mapToDouble(log -> actualKilometers(log)).sum();
+            boolean completeSystemMileage = !driverMileage.isEmpty()
+                    && driverMileage.stream().allMatch(log -> systemKilometers(log) != null);
+            Double systemKm = completeSystemMileage
+                    ? driverMileage.stream().mapToDouble(log -> systemKilometers(log)).sum()
+                    : null;
             long afterScheduledEnd = 0;
             int missingIn = 0;
             for (DriverShiftsEntity shift : workShifts) {
@@ -356,7 +370,7 @@ public class ReportService {
                     .mapToLong(punch -> minutes(punch.getClockInAt(), punch.getClockOutAt())).sum();
             Long tripMinutes = completeMileage.isEmpty() ? null : completeMileage.stream()
                     .mapToLong(log -> minutes(log.getStartTime(), log.getEndTime())).sum();
-            rows.add(new ReportResponses.DriverRow(
+            ReportResponses.DriverRow row = new ReportResponses.DriverRow(
                     id, driver.getName(),
                     (int) workShifts.stream().map(DriverShiftsEntity::getWorkDate).distinct().count(),
                     (int) punches.stream().filter(punch -> punch.getClockInAt() != null)
@@ -369,7 +383,9 @@ public class ReportService {
                     countStatus(driverOrders, OrderStatus.FAILED), boxes(driverOrders),
                     distinctStores(driverOrders),
                     noSignatureOrderIds.size(),
-                    noSignatureOrderIds, "CURRENT_ORDER_ASSIGNMENT_ONLY", afterScheduledEnd));
+                    noSignatureOrderIds, "CURRENT_ORDER_ASSIGNMENT_ONLY", afterScheduledEnd);
+            row.setSystemKm(systemKm);
+            rows.add(row);
         }
         rows.sort(Comparator.comparing(ReportResponses.DriverRow::getDriverId));
         return new ReportResponses.Drivers(range.getFrom(), range.getTo(), rows);
@@ -417,15 +433,21 @@ public class ReportService {
             List<MileageLogsEntity> settledVehicleMileage = vehicleMileage.stream()
                     .filter(log -> log.getMileageSettledAt() != null && log.getGpsDistanceKm() != null)
                     .toList();
-            Double vehicleActualKm = settledVehicleMileage.isEmpty() ? null
+            List<MileageLogsEntity> completeVehicleMileage = vehicleMileage.stream()
+                    .filter(ReportService::completeMileage).toList();
+            Double vehicleSystemKm = settledVehicleMileage.isEmpty()
+                    || settledVehicleMileage.size() != vehicleMileage.size() ? null
                     : settledVehicleMileage.stream()
                             .mapToDouble(MileageLogsEntity::getGpsDistanceKm).sum();
+            Double vehicleActualKm = completeVehicleMileage.isEmpty()
+                    || completeVehicleMileage.size() != vehicleMileage.size() ? null
+                    : completeVehicleMileage.stream().mapToDouble(ReportService::actualKilometers).sum();
             String vehicleMileageStatus = vehicleMileage.isEmpty() ? "NO_MILEAGE_LOG"
-                    : settledVehicleMileage.size() != vehicleMileage.size()
-                    ? "INCOMPLETE_GPS_MILEAGE" : "COMPLETE";
+                    : completeVehicleMileage.size() != vehicleMileage.size()
+                    ? "INCOMPLETE_ACTUAL_MILEAGE" : "COMPLETE";
             List<Double> knownLoads = publishedVehicleRoutes.stream().map(RoutesEntity::getLoadRate)
                     .filter(load -> load != null).toList();
-            rows.add(new ReportResponses.VehicleRow(
+            ReportResponses.VehicleRow row = new ReportResponses.VehicleRow(
                     vehicle.getId(), vehicle.getPlateNumber(), vehicle.getWarehouseId(), vehicle.getCapacity(),
                     vehicleRoutes.size(),
                     (int) vehicleRoutes.stream().filter(route -> route.getStatus() == RouteStatus.PUBLISHED).count(),
@@ -435,7 +457,10 @@ public class ReportService {
                             ? null : knownLoads.stream().mapToDouble(Double::doubleValue)
                             .average().orElseThrow() * 100,
                     sumPlannedKm(publishedVehicleRoutes), vehicleActualKm, vehicleMileageStatus,
-                    vehicle.getCumulativeMileageKm(), loads));
+                    vehicle.getCumulativeMileageKm(), loads);
+            row.setSystemKm(vehicleSystemKm);
+            row.setCurrentOdometerKm(vehicle.getCurrentOdometerKm());
+            rows.add(row);
         }
         rows.sort(Comparator.comparing(ReportResponses.VehicleRow::getVehicleId));
         return new ReportResponses.Vehicles(range.getFrom(), range.getTo(), lowLoadThresholdPercent, rows);
@@ -667,19 +692,26 @@ public class ReportService {
     }
 
     private static class MileageMatch {
+        private final Double systemKm;
         private final Double actualKm;
         private final LocalDateTime startAt;
         private final LocalDateTime endAt;
         private final Long durationMinutes;
         private final String status;
 
-        private MileageMatch(Double actualKm, LocalDateTime startAt, LocalDateTime endAt,
+        private MileageMatch(Double systemKm, Double actualKm,
+                             LocalDateTime startAt, LocalDateTime endAt,
                              Long durationMinutes, String status) {
+            this.systemKm = systemKm;
             this.actualKm = actualKm;
             this.startAt = startAt;
             this.endAt = endAt;
             this.durationMinutes = durationMinutes;
             this.status = status;
+        }
+
+        private Double getSystemKm() {
+            return systemKm;
         }
 
         private Double getActualKm() {
@@ -713,21 +745,22 @@ public class ReportService {
             return aggregateRouteMileage(directMatches);
         }
         if (directMatches.size() == 1) {
-            return mileageMatch(directMatches.getFirst(), "READY_ROUTE_LINKED_GPS");
+            return mileageMatch(directMatches.getFirst(), "READY_ROUTE_LINKED_ACTUAL");
         }
         if (route.getDriverId() == null) {
-            return new MileageMatch(null, null, null, null, "NO_DRIVER");
+            return new MileageMatch(null, null, null, null, null, "NO_DRIVER");
         }
         DriverDate key = new DriverDate(route.getDriverId(), route.getDate());
         if (routesByDriverDay.getOrDefault(key, List.of()).size() != 1) {
-            return new MileageMatch(null, null, null, null, "MULTIPLE_ROUTES_FOR_DRIVER_DAY");
+            return new MileageMatch(null, null, null, null, null,
+                    "MULTIPLE_ROUTES_FOR_DRIVER_DAY");
         }
         List<MileageLogsEntity> logs = mileageByDriverDay.getOrDefault(key, List.of());
         if (logs.isEmpty()) {
-            return new MileageMatch(null, null, null, null, "NO_MILEAGE_LOG");
+            return new MileageMatch(null, null, null, null, null, "NO_MILEAGE_LOG");
         }
         if (logs.size() != 1) {
-            return new MileageMatch(null, null, null, null, "MULTIPLE_MILEAGE_LOGS");
+            return new MileageMatch(null, null, null, null, null, "MULTIPLE_MILEAGE_LOGS");
         }
         MileageLogsEntity log = logs.getFirst();
         return mileageMatch(log, "READY_INFERRED_DRIVER_DATE");
@@ -736,6 +769,8 @@ public class ReportService {
     /** 同一路線臨時換司機時，各司機保留自己的里程；路線報表加總所有完整區段。 */
     private static MileageMatch aggregateRouteMileage(List<MileageLogsEntity> logs) {
         double totalKm = 0;
+        double totalSystemKm = 0;
+        boolean completeSystemKm = true;
         long totalDuration = 0;
         LocalDateTime firstStart = null;
         LocalDateTime lastEnd = null;
@@ -747,10 +782,15 @@ public class ReportService {
                     || segment.getEndAt() == null
                     || segment.getDurationMinutes() == null) {
                 return new MileageMatch(
-                        null, firstStart, lastEnd, null,
+                        null, null, firstStart, lastEnd, null,
                         "INCOMPLETE_HANDOVER_MILEAGE_SEGMENT");
             }
             totalKm += segment.getActualKm();
+            if (segment.getSystemKm() == null) {
+                completeSystemKm = false;
+            } else {
+                totalSystemKm += segment.getSystemKm();
+            }
             totalDuration += segment.getDurationMinutes();
             if (firstStart == null || segment.getStartAt().isBefore(firstStart)) {
                 firstStart = segment.getStartAt();
@@ -760,6 +800,7 @@ public class ReportService {
             }
         }
         return new MileageMatch(
+                completeSystemKm ? totalSystemKm : null,
                 totalKm, firstStart, lastEnd, totalDuration,
                 "READY_ROUTE_HANDOVER_SUMMED");
     }
@@ -769,12 +810,11 @@ public class ReportService {
         LocalDateTime end = log.getEndTime();
         Long duration = start != null && end != null && !end.isBefore(start) ? minutes(start, end) : null;
         if (!completeMileage(log)) {
-            String status = log.getRouteId() == null ? "INCOMPLETE_MILEAGE_LOG"
-                    : log.getGpsDistanceStatus() == null
-                    ? "INCOMPLETE_GPS_MILEAGE" : log.getGpsDistanceStatus();
-            return new MileageMatch(null, start, end, duration, status);
+            return new MileageMatch(systemKilometers(log), null, start, end, duration,
+                    "INCOMPLETE_ACTUAL_MILEAGE");
         }
-        return new MileageMatch(actualKilometers(log), start, end, duration, readyStatus);
+        return new MileageMatch(systemKilometers(log), actualKilometers(log),
+                start, end, duration, readyStatus);
     }
 
     private static boolean completeMileage(MileageLogsEntity log) {
@@ -783,16 +823,43 @@ public class ReportService {
                 && !log.getEndTime().isBefore(log.getStartTime());
     }
 
-    /** 新紀錄以 GPS 結算；沒有路線／車輛關聯的舊紀錄才沿用人工里程表差值。 */
+    /** 實際里程＝收車時人工登記的車輛總里程－出車時人工登記的車輛總里程。 */
     private static Double actualKilometers(MileageLogsEntity log) {
-        if (log.getRouteId() != null || log.getVehicleId() != null) {
-            return log.getMileageSettledAt() == null ? null : log.getGpsDistanceKm();
+        if (log.getActualDistanceKm() != null && log.getActualDistanceKm() >= 0) {
+            return log.getActualDistanceKm().doubleValue();
         }
         if (log.getStartOdometer() == null || log.getEndOdometer() == null
                 || log.getEndOdometer() < log.getStartOdometer()) {
             return null;
         }
         return (double) (log.getEndOdometer() - log.getStartOdometer());
+    }
+
+    private ReportResponses.RouteLegRow toRouteLegRow(
+            RouteLegMileagesEntity leg,
+            WarehousesEntity warehouse,
+            Map<Long, StoresEntity> stores
+    ) {
+        String fromName = leg.getFromType() == com.example.backend.constants.RouteLegLocationType.WAREHOUSE
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getFromStoreId());
+        String toName = leg.getToType() == com.example.backend.constants.RouteLegLocationType.WAREHOUSE
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getToStoreId());
+        Long durationMinutes = leg.getStartedAt() == null || leg.getEndedAt() == null
+                ? null : Duration.between(leg.getStartedAt(), leg.getEndedAt()).toMinutes();
+        return new ReportResponses.RouteLegRow(
+                leg.getId(), leg.getMileageLogId(), leg.getDriverId(), leg.getVehicleId(),
+                leg.getSequence(), leg.getFromType().name(), leg.getFromStoreId(), fromName,
+                leg.getToType().name(), leg.getToStoreId(), toName, leg.getOrderId(),
+                leg.getDeliveryRecordId(),
+                leg.getStartedAt(), leg.getEndedAt(), durationMinutes, leg.getSystemDistanceKm(),
+                leg.getGpsPointCount(), leg.getAcceptedSegmentCount(), leg.getCalculationStatus());
+    }
+
+    /** 系統里程＝GPS 軌跡經過濾後，使用 OSRM 道路距離結算的結果。 */
+    private static Double systemKilometers(MileageLogsEntity log) {
+        return log.getMileageSettledAt() == null ? null : log.getGpsDistanceKm();
     }
 
     private Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder(List<OrdersEntity> orders) {

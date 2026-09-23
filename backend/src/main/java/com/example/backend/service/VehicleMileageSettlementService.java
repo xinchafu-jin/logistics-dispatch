@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
-/** 將單趟 GPS 道路距離結算一次，並原子累加至車輛永久里程。 */
+/** 將單趟系統里程（GPS 軌跡的 OSRM 道路距離）結算一次，並原子累加。 */
 @Service
 @Transactional
 public class VehicleMileageSettlementService {

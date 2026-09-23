@@ -137,10 +137,25 @@ public class RoutePlanMetricsService {
                 "倉庫 " + warehouse.getName());
 
         double totalKm = 0;
+        double totalActualKm = 0;
         boolean hasDistance = false;
+        boolean hasActualDistance = false;
+        boolean allActualDistanceComplete = true;
         boolean allComplete = true;
         String segmentProblem = null;
         for (MileageLogsEntity mileage : mileageSegments) {
+            Integer actualDistanceKm = mileage.getActualDistanceKm();
+            Integer startOdometer = mileage.getStartOdometer();
+            Integer endOdometer = mileage.getEndOdometer();
+            if (actualDistanceKm != null && actualDistanceKm >= 0) {
+                totalActualKm += actualDistanceKm;
+                hasActualDistance = true;
+            } else if (startOdometer == null || endOdometer == null || endOdometer < startOdometer) {
+                allActualDistanceComplete = false;
+            } else {
+                totalActualKm += endOdometer - startOdometer;
+                hasActualDistance = true;
+            }
             if (mileage.getStartTime() == null) {
                 allComplete = false;
                 segmentProblem = "MISSING_TRIP_BOUNDARY";
@@ -176,11 +191,16 @@ public class RoutePlanMetricsService {
             }
         }
 
+        if (hasActualDistance && allActualDistanceComplete) {
+            response.setActualKm(totalActualKm);
+        }
+
         if (!hasDistance) {
             response.setMileageStatus(segmentProblem == null
                     ? "NO_GPS_DISTANCE" : segmentProblem);
             return response;
         }
+        response.setSystemKm(totalKm);
         response.setGpsEstimatedKm(totalKm);
         if (mileageSegments.size() > 1) {
             response.setMileageStatus(allComplete
@@ -191,8 +211,10 @@ public class RoutePlanMetricsService {
         }
         if (plan.kmPerLiter != null) {
             double liters = totalKm / plan.kmPerLiter;
+            response.setSystemFuelLiters(liters);
             response.setGpsEstimatedFuelLiters(liters);
             if (plan.pricePerLiter != null) {
+                response.setSystemFuelCost(liters * plan.pricePerLiter);
                 response.setGpsEstimatedFuelCost(liters * plan.pricePerLiter);
             }
         }

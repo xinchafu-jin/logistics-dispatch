@@ -29,6 +29,9 @@ public class VehiclesDTO {
     @Min(value = 0, message = VEHICLE_FUEL_CONSUMPTION_MIN)
     private Double fuelConsumption;
 
+    /** 後端唯讀：車輛儀表板目前顯示的終身總里程。 */
+    private Integer currentOdometerKm;
+
     /** 後端唯讀回傳欄位，新增或修改車輛時不會由前端覆寫。 */
     private Double cumulativeMileageKm;
 
@@ -60,6 +63,11 @@ public class VehiclesDTO {
 
     public Double getFuelConsumption() { return fuelConsumption; }
     public void setFuelConsumption(Double fuelConsumption) { this.fuelConsumption = fuelConsumption; }
+
+    public Integer getCurrentOdometerKm() { return currentOdometerKm; }
+    public void setCurrentOdometerKm(Integer currentOdometerKm) {
+        this.currentOdometerKm = currentOdometerKm;
+    }
 
     public Double getCumulativeMileageKm() { return cumulativeMileageKm; }
     public void setCumulativeMileageKm(Double cumulativeMileageKm) {

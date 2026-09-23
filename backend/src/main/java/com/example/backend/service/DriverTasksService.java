@@ -171,7 +171,8 @@ public class DriverTasksService {
                 vehicle.getId(),
                 vehicle.getPlateNumber(),
                 vehicle.getVehicleType(),
-                vehicle.getCapacity()
+                vehicle.getCapacity(),
+                vehicle.getCurrentOdometerKm()
         );
     }
 
