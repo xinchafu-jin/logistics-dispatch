@@ -7,6 +7,7 @@ import com.example.backend.entity.DriverShiftsEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Repository;
@@ -79,6 +80,23 @@ public class ReportReadDAO {
                         """, MileageLogsEntity.class)
                 .setParameter("from", from).setParameter("to", to)
                 .getResultList();
+    }
+
+    public List<RouteLegMileagesEntity> routeLegMileages(List<Long> routeIds) {
+        if (routeIds.isEmpty()) {
+            return List.of();
+        }
+        List<RouteLegMileagesEntity> legs = new ArrayList<>();
+        for (int i = 0; i < routeIds.size(); i += ID_BATCH_SIZE) {
+            legs.addAll(entityManager.createQuery("""
+                            select leg from RouteLegMileagesEntity leg
+                            where leg.routeId in :routeIds
+                            order by leg.routeId, leg.sequence
+                            """, RouteLegMileagesEntity.class)
+                    .setParameter("routeIds", routeIds.subList(i, Math.min(i + ID_BATCH_SIZE, routeIds.size())))
+                    .getResultList());
+        }
+        return legs;
     }
 
     public List<ExceptionCasesEntity> exceptions(LocalDate from, LocalDate to) {

@@ -30,6 +30,10 @@ public class VehiclesEntity {
     @Column
     private Double fuelConsumption;
 
+    /** 車輛儀表板顯示的累積總里程。 */
+    @Column
+    private Integer currentOdometerKm;
+
     /**
      * 車輛自加入系統後，以每趟 GPS 道路距離結算的永久累積里程（公里）。
      */
@@ -78,6 +82,14 @@ public class VehiclesEntity {
 
     public void setFuelConsumption(Double fuelConsumption) {
         this.fuelConsumption = fuelConsumption;
+    }
+
+    public Integer getCurrentOdometerKm() {
+        return currentOdometerKm;
+    }
+
+    public void setCurrentOdometerKm(Integer currentOdometerKm) {
+        this.currentOdometerKm = currentOdometerKm;
     }
 
     public Double getCumulativeMileageKm() {

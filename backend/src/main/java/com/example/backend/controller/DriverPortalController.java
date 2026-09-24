@@ -211,6 +211,24 @@ public class DriverPortalController {
         return mileageLogsService.end(driverId(jwt), request);
     }
 
+    /** 補傳出車時的里程表照片；保留原本的 JSON 登記 API。 */
+    @PostMapping(value = "/mileage/start/photo", consumes = "multipart/form-data")
+    public MileageLogResponse uploadStartMileagePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return mileageLogsService.attachStartPhoto(driverId(jwt), file);
+    }
+
+    /** 補傳收車時的里程表照片；保留原本的 JSON 登記 API。 */
+    @PostMapping(value = "/mileage/end/photo", consumes = "multipart/form-data")
+    public MileageLogResponse uploadEndMileagePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return mileageLogsService.attachEndPhoto(driverId(jwt), file);
+    }
+
     /** GPS 點較晚送達或 OSRM 暫時失敗時，重新結算今天已收車的里程。 */
     @PostMapping("/mileage/recalculate")
     public MileageLogResponse recalculateMileage(@AuthenticationPrincipal Jwt jwt) {

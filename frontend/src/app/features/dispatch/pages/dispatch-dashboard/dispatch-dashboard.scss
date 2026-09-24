@@ -125,6 +125,14 @@
   font-size: 0.75rem;
   // 深色主題下 Material 的標籤是淺色字，疊在淺色小卡上會看不到，固定成地圖標頭的字色
   --mat-switch-label-text-color: #31584d;
+  color: #31584d;
+
+}
+
+// Material switch 的 label 在子元件內，Angular 的樣式封裝不會自動套到它；
+// 只穿透地圖圖層控制區，避免影響後台其他開關。
+:host ::ng-deep .map-layer-controls .mdc-label {
+  color: #31584d;
 }
 
 .dispatch-workspace-overview {
@@ -773,8 +781,13 @@
   gap: 0.25rem;
 
   span {
-    color: var(--muted);
+    color: var(--field-label);
     font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  strong {
+    color: var(--text);
   }
 
   input,
@@ -785,6 +798,11 @@
     background: var(--panel);
     color: var(--text);
     font: inherit;
+
+    &::placeholder {
+      color: var(--muted);
+      opacity: 1;
+    }
   }
 }
 
@@ -804,6 +822,31 @@
   &:disabled {
     opacity: 0.5;
     cursor: default;
+  }
+}
+
+// 原生欄位和 disabled 按鈕沒有自動使用後台的 CSS 色票；深色模式要明確指定，
+// 否則瀏覽器預設的深灰字會落在黑底上而看不清楚。
+:host-context(.dispatch-layout:not(.is-light-theme)) {
+  .toolbar-field input,
+  .toolbar-field select {
+    color-scheme: dark;
+
+    &:disabled {
+      border-color: #52605f;
+      background: #232829;
+      color: #c2cdcc;
+      -webkit-text-fill-color: #c2cdcc;
+      opacity: 1;
+    }
+  }
+
+  .toolbar-action:disabled {
+    border-color: #4e5a59;
+    background: #202526;
+    color: #aeb9b8;
+    -webkit-text-fill-color: #aeb9b8;
+    opacity: 1;
   }
 }
 

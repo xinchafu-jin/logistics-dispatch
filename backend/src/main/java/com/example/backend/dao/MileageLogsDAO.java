@@ -35,12 +35,9 @@ public interface MileageLogsDAO extends JpaRepository<MileageLogsEntity, Long> {
             select mileage
             from MileageLogsEntity mileage
             where mileage.vehicleId = :vehicleId
-              and mileage.date = :date
               and mileage.endTime is null
             """)
-    List<MileageLogsEntity> findOpenByVehicleForUpdate(
-            @Param("vehicleId") Long vehicleId,
-            @Param("date") LocalDate date);
+    List<MileageLogsEntity> findOpenByVehicleForUpdate(@Param("vehicleId") Long vehicleId);
 
     List<MileageLogsEntity> findByMileageSettledAtIsNullAndEndTimeIsNotNull();
 

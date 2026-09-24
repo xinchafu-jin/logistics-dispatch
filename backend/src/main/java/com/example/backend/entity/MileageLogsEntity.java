@@ -45,6 +45,22 @@ public class MileageLogsEntity {
     @Column
     private Integer endOdometer;
 
+    /** 儀表板收車讀數減去出車讀數的實際里程。 */
+    @Column
+    private Integer actualDistanceKm;
+
+    @Column(name = "mileage_photo_url", length = 512)
+    private String startMileagePhotoUrl;
+
+    @Column(name = "mileage_photo_recorded_at")
+    private LocalDateTime startMileagePhotoRecordedAt;
+
+    @Column(name = "end_mileage_photo_url", length = 512)
+    private String endMileagePhotoUrl;
+
+    @Column(name = "end_mileage_photo_recorded_at")
+    private LocalDateTime endMileagePhotoRecordedAt;
+
     @Column
     private LocalDateTime startTime;
 
@@ -117,6 +133,46 @@ public class MileageLogsEntity {
 
     public void setEndOdometer(Integer endOdometer) {
         this.endOdometer = endOdometer;
+    }
+
+    public Integer getActualDistanceKm() {
+        return actualDistanceKm;
+    }
+
+    public void setActualDistanceKm(Integer actualDistanceKm) {
+        this.actualDistanceKm = actualDistanceKm;
+    }
+
+    public String getStartMileagePhotoUrl() {
+        return startMileagePhotoUrl;
+    }
+
+    public void setStartMileagePhotoUrl(String startMileagePhotoUrl) {
+        this.startMileagePhotoUrl = startMileagePhotoUrl;
+    }
+
+    public LocalDateTime getStartMileagePhotoRecordedAt() {
+        return startMileagePhotoRecordedAt;
+    }
+
+    public void setStartMileagePhotoRecordedAt(LocalDateTime startMileagePhotoRecordedAt) {
+        this.startMileagePhotoRecordedAt = startMileagePhotoRecordedAt;
+    }
+
+    public String getEndMileagePhotoUrl() {
+        return endMileagePhotoUrl;
+    }
+
+    public void setEndMileagePhotoUrl(String endMileagePhotoUrl) {
+        this.endMileagePhotoUrl = endMileagePhotoUrl;
+    }
+
+    public LocalDateTime getEndMileagePhotoRecordedAt() {
+        return endMileagePhotoRecordedAt;
+    }
+
+    public void setEndMileagePhotoRecordedAt(LocalDateTime endMileagePhotoRecordedAt) {
+        this.endMileagePhotoRecordedAt = endMileagePhotoRecordedAt;
     }
 
     public LocalDateTime getStartTime() {
