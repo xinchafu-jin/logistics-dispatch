@@ -2,6 +2,7 @@ package com.example.backend.service;
 
 import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.dto.request.ReassignDTO;
+import com.example.backend.dto.respones.DispatchDayResponse;
 import com.example.backend.dto.respones.DispatchResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class DispatchWorkflowService {
     private final DispatchDraftService dispatchDraftService;
     private final RoutePlanMetricsService routePlanMetricsService;
     private final DispatchSlotService dispatchSlotService;
+    private final DispatchDayService dispatchDayService;
 
     public DispatchWorkflowService(
             DispatchService dispatchService,
@@ -36,7 +38,8 @@ public class DispatchWorkflowService {
             DispatchGuardService dispatchGuardService,
             DispatchDraftService dispatchDraftService,
             RoutePlanMetricsService routePlanMetricsService,
-            DispatchSlotService dispatchSlotService
+            DispatchSlotService dispatchSlotService,
+            DispatchDayService dispatchDayService
     ) {
         this.dispatchService = dispatchService;
         this.dispatchBoardService = dispatchBoardService;
@@ -44,6 +47,12 @@ public class DispatchWorkflowService {
         this.dispatchDraftService = dispatchDraftService;
         this.routePlanMetricsService = routePlanMetricsService;
         this.dispatchSlotService = dispatchSlotService;
+        this.dispatchDayService = dispatchDayService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<DispatchDayResponse> getDays(LocalDate from, LocalDate to) {
+        return dispatchDayService.getDays(from, to);
     }
 
     @Transactional(readOnly = true)

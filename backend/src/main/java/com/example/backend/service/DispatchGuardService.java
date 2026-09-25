@@ -133,7 +133,7 @@ public class DispatchGuardService {
         }
 
         if (!problems.isEmpty()) {
-            throw new IllegalArgumentException("發布前檢查失敗：" + String.join("；", problems));
+            throw new IllegalArgumentException(date + " 發布前檢查失敗：" + String.join("；", problems));
         }
     }
 
@@ -188,22 +188,22 @@ public class DispatchGuardService {
             return "當月班表尚未發布";
         }
         if (shift == null) {
-            return "今天未排班";
+            return "當天未排班";
         }
         if (shift.getShiftType() == ShiftType.WORK) {
             return null;
         }
         if (shift.getShiftType() == ShiftType.DAY_OFF) {
-            return "今天休假";
+            return "當天休假";
         }
         if (shift.getShiftType() == ShiftType.LEAVE) {
             if (shift.getChangeReason() == null || shift.getChangeReason().isBlank()) {
-                return "今天請假";
+                return "當天請假";
             }
-            return "今天請假（" + shift.getChangeReason() + "）";
+            return "當天請假（" + shift.getChangeReason() + "）";
         }
         // UNASSIGNED，以及日後新增、這裡還不認得的班次類型：一律當成不能出車
-        return "今天尚未安排";
+        return "當天尚未安排";
     }
 
     /** 訊息裡辨識路線：有車就用車牌，查不到車才退回路線編號 */

@@ -78,7 +78,10 @@ public class DispatchBoardService {
         List<OrdersEntity> unassigned =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.CONFIRMED, warehouseId);
-
+        List<OrdersEntity> pendingConfirm =
+                ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
+                        date, OrderStatus.PENDING_CONFIRM, warehouseId
+                );
         Map<Long, List<OrdersEntity>> ordersByRoute = new HashMap<>();
         Set<Long> storeIds = new LinkedHashSet<>();
         Set<Long> vehicleIds = new LinkedHashSet<>();
@@ -98,6 +101,9 @@ public class DispatchBoardService {
             }
         }
         for (OrdersEntity order : unassigned) {
+            storeIds.add(order.getStoreId());
+        }
+        for (OrdersEntity order : pendingConfirm) {
             storeIds.add(order.getStoreId());
         }
 
@@ -145,16 +151,12 @@ public class DispatchBoardService {
             routeResponses.add(response);
         }
 
-        List<DispatchResponse.UnassignedOrderResponse> unassignedResponses = new ArrayList<>();
-        for (OrdersEntity order : unassigned) {
-            unassignedResponses.add(toUnassigned(order, stores.get(order.getStoreId())));
-        }
-
         DispatchResponse result = new DispatchResponse();
         result.setDate(date);
         result.setWarehouse(toWarehouse(warehouse));
         result.setRoutes(routeResponses);
-        result.setUnassignedOrders(unassignedResponses);
+        result.setUnassignedOrders(toUnassignedList(unassigned, stores));
+        result.setPendingConfirmOrders(toUnassignedList(pendingConfirm, stores));
         result.setDriversTakenElsewhere(driversTakenElsewhere(date, warehouseId));
         return result;
     }
@@ -242,6 +244,16 @@ public class DispatchBoardService {
             stop.setReceivingEnd(store.getReceivingEnd());
         }
         return stop;
+    }
+
+    /** 待排單和待確認單都用同一種卡片顯示，門市資料由呼叫端先一次查好傳進來 */
+    private List<DispatchResponse.UnassignedOrderResponse> toUnassignedList(
+            List<OrdersEntity> orders, Map<Long, StoresEntity> stores) {
+        List<DispatchResponse.UnassignedOrderResponse> responses = new ArrayList<>();
+        for (OrdersEntity order : orders) {
+            responses.add(toUnassigned(order, stores.get(order.getStoreId())));
+        }
+        return responses;
     }
 
     private DispatchResponse.UnassignedOrderResponse toUnassigned(

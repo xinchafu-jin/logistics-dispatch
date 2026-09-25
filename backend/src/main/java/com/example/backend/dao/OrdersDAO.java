@@ -58,6 +58,31 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
 
     List<OrdersEntity> findByRouteIdIn(List<Long> routeIds);
 
+    /** 看板日期列：一段日期內全部倉庫的訂單，不分狀態，由 Service 分組計數。 */
+    List<OrdersEntity> findByDeliveryDateBetween(LocalDate from, LocalDate to);
+
+    /** 看板日期列：區間前面還沒結案的日子，補撈那幾天的全部訂單來算數量。 */
+    List<OrdersEntity> findByDeliveryDateIn(Collection<LocalDate> dates);
+
+    /**
+     * 看板日期列：[since, before) 之間還有未結束訂單的日期。
+     * 只回日期不回訂單，舊日子大多已結案，沒必要把整段歷史訂單都撈回來。
+     */
+    @Query("select distinct orders.deliveryDate from OrdersEntity orders " +
+            "where orders.deliveryDate >= :since and orders.deliveryDate < :before " +
+            "and orders.status in :statuses")
+    List<LocalDate> findDeliveryDatesWithStatus(
+            @Param("since") LocalDate since,
+            @Param("before") LocalDate before,
+            @Param("statuses") Collection<OrderStatus> statuses);
+
+    /** 看板日期列預設範圍：from 之後最晚一張有效訂單的配送日，沒有就回 null。 */
+    @Query("select max(orders.deliveryDate) from OrdersEntity orders " +
+            "where orders.deliveryDate >= :from and orders.status <> :excluded")
+    LocalDate findLatestDeliveryDate(
+            @Param("from") LocalDate from,
+            @Param("excluded") OrderStatus excluded);
+
     //撈當天、指定倉庫、這些門市、已確認且尚未排入路線之訂單。
     List<OrdersEntity> findByDeliveryDateAndStatusAndWarehouseIdAndStoreIdInAndRouteIdIsNull
     (
