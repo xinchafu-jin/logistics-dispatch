@@ -607,6 +607,18 @@ thead th.is-weekend {
   background: rgb(217 141 87 / 4%);
 }
 
+td.is-sunday,
+thead th.is-sunday {
+  background: rgb(148 163 184 / 16%);
+}
+
+.fixed-holiday {
+  display: block;
+  width: 100%;
+  min-height: 53px;
+  background: rgb(148 163 184 / 8%);
+}
+
 .shift-cell {
   width: 100%;
   height: 100%;

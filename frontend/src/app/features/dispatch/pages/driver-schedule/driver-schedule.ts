@@ -60,10 +60,9 @@ const weekdayOptions = [
   { index: 4, label: '四' },
   { index: 5, label: '五' },
   { index: 6, label: '六' },
-  { index: 0, label: '日' },
 ];
 const workdayIndexes = [1, 2, 3, 4, 5];
-const weekendIndexes = [0, 6];
+const saturdayIndexes = [6];
 type BatchShiftType = 'WORK' | 'DAY_OFF';
 
 interface BatchRule {
@@ -155,11 +154,12 @@ export class DriverSchedule implements OnInit {
   });
   readonly summary = computed(() => {
     const shifts = this.shifts();
+    const regularDayShifts = shifts.filter((shift) => !this.isSundayDate(shift.workDate));
     return {
       drivers: new Set(shifts.map((shift) => shift.driverId)).size,
-      work: shifts.filter((shift) => shift.shiftType === 'WORK').length,
-      leave: shifts.filter((shift) => shift.shiftType === 'LEAVE').length,
-      unassigned: shifts.filter((shift) => shift.shiftType === 'UNASSIGNED').length,
+      work: regularDayShifts.filter((shift) => shift.shiftType === 'WORK').length,
+      leave: regularDayShifts.filter((shift) => shift.shiftType === 'LEAVE').length,
+      unassigned: regularDayShifts.filter((shift) => shift.shiftType === 'UNASSIGNED').length,
     };
   });
   readonly batchDriverOptions = computed<BatchDriverOption[]>(() => {
@@ -243,7 +243,7 @@ export class DriverSchedule implements OnInit {
   }
 
   protected toggleWeekday(weekdayIndex: number): void {
-    if (this.saving()) {
+    if (this.saving() || weekdayIndex === 0) {
       return;
     }
 
@@ -259,7 +259,7 @@ export class DriverSchedule implements OnInit {
       return;
     }
 
-    this.selectedWeekdayIndexes.set([...weekdayIndexes]);
+    this.selectedWeekdayIndexes.set(weekdayIndexes.filter((index) => index !== 0));
   }
 
   protected isBatchDriverSelected(driverId: number): boolean {
@@ -294,9 +294,9 @@ export class DriverSchedule implements OnInit {
     this.applyBatchRules(
       [
         { weekdayIndexes: workdayIndexes, shiftType: 'WORK' },
-        { weekdayIndexes: weekendIndexes, shiftType: 'DAY_OFF' },
+        { weekdayIndexes: saturdayIndexes, shiftType: 'DAY_OFF' },
       ],
-      '已套用週一至週五上班、週六日休假的標準週班。',
+      '已套用週一至週五上班、週六排休；週日固定公休。',
     );
   }
 
@@ -322,6 +322,9 @@ export class DriverSchedule implements OnInit {
   }
 
   protected selectShift(shift: DriverShiftDto): void {
+    if (this.isSundayDate(shift.workDate)) {
+      return;
+    }
     this.selectedShiftId.set(shift.id);
     this.editorForm.set(this.toEditorForm(shift));
     this.errorMessage.set('');
@@ -356,7 +359,7 @@ export class DriverSchedule implements OnInit {
   protected saveShift(): void {
     const shift = this.selectedShift();
     const form = this.editorForm();
-    if (!shift || !form || !this.isDraft() || this.saving()) {
+    if (!shift || !form || this.isSundayDate(shift.workDate) || !this.isDraft() || this.saving()) {
       return;
     }
 
@@ -487,6 +490,7 @@ export class DriverSchedule implements OnInit {
     const shift = this.selectedShift();
     return (
       !!shift &&
+      !this.isSundayDate(shift.workDate) &&
       shift.workDate >= this.todayValue() &&
       shift.shiftType !== 'LEAVE' &&
       (this.isDraft() || shift.shiftType === 'WORK')
@@ -525,6 +529,7 @@ export class DriverSchedule implements OnInit {
       const targetType = shiftType === undefined ? undefined : targetTypeByWeekday.get(shiftType);
       if (
         !selectedDriverIds.has(shift.driverId) ||
+        shiftType === 0 ||
         !targetType ||
         shift.shiftType === 'LEAVE' ||
         shift.shiftType === targetType
@@ -734,6 +739,10 @@ export class DriverSchedule implements OnInit {
         isWeekend: weekdayIndex === 0 || weekdayIndex === 6,
       };
     });
+  }
+
+  private isSundayDate(workDate: string): boolean {
+    return new Date(`${workDate}T00:00:00`).getDay() === 0;
   }
 
   private currentMonthValue(): string {

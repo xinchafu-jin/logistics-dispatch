@@ -1,7 +1,4 @@
-import {
-  DecimalPipe,
-}
-  from '@angular/common';
+import {DecimalPipe} from '@angular/common';
 import {
   CdkDrag,
   CdkDragDrop,
@@ -91,6 +88,22 @@ interface BoardCard {
   storeCode: string;
   storeName: string;
   boxCount: number;
+  status: OrderStatus;
+}
+
+interface DispatchDayCard {
+  date: string;
+  dateLabel: string;
+  relativeLabel: string;
+  statusLabel: string;
+  isSelected: boolean;
+}
+
+interface DispatchAttentionItem {
+  key: string;
+  title: string;
+  detail: string;
+  kind: 'exception' | 'gps' | 'pending';
 }
 
 /**
@@ -128,7 +141,7 @@ interface BoardRoute {
   storeIds: number[];
 }
 
-function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
+function toBoardCard(source: RouteStopDto | UnassignedOrderDto, status: OrderStatus = 'CONFIRMED'): BoardCard {
   return {
     orderId: source.orderId,
     orderNumber: source.orderNumber,
@@ -136,6 +149,7 @@ function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
     storeCode: source.storeCode,
     storeName: source.storeName,
     boxCount: source.boxCount,
+    status,
   };
 }
 
@@ -165,16 +179,6 @@ interface VehicleOption {
   takenNote: string | null;
 }
 
-type TaskboardColumnId = 'pending' | 'confirmed' | 'delivering' | 'completed' | 'failed' | 'cancelled';
-
-interface TaskboardColumn {
-  id: TaskboardColumnId;
-  label: string;
-  detail: string;
-  status: OrderStatus;
-  count: number;
-}
-
 @Component({
   selector: 'app-dispatch-dashboard',
   imports: [
@@ -195,6 +199,8 @@ export class DispatchDashboard implements OnInit {
   readonly boardError = signal('');
   /** 動作列選的排車條件，optimize / board / reassign 三支 API 共用同一組值 */
   readonly dispatchDate = signal(todayLocalDate());
+  readonly draggedLaneKey = signal<string | null>(null);
+  readonly confirmingOrderIds = signal<ReadonlySet<number>>(new Set());
   /** 0 代表倉庫清單還沒載回來，尚未決定預設倉庫 */
   readonly warehouseId = signal(0);
   readonly optimizing = signal(false);
@@ -248,6 +254,129 @@ export class DispatchDashboard implements OnInit {
   readonly published = computed(() =>
     this.routes().some((route) => route.routeStatus === 'PUBLISHED'),
   );
+  /** 發布後只顯示仍需配送或處理的車道；草稿維持完整編輯看板。 */
+  readonly visibleRoutes = computed(() =>
+    this.published()
+      ? this.routes().filter((route) => this.visibleRouteCards(route).length > 0)
+      : this.routes(),
+  );
+  readonly visibleUnassigned = computed(() =>
+    this.unassigned().filter((card) => {
+      const status = this.boardCardStatus(card);
+      return status !== 'COMPLETED' && status !== 'CANCELLED';
+    }),
+  );
+  readonly pendingConfirmationCards = computed(() =>
+    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'PENDING_CONFIRM'),
+  );
+  readonly readyToAssignCards = computed(() =>
+    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'CONFIRMED'),
+  );
+  readonly unassignedFailedCards = computed(() =>
+    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'FAILED'),
+  );
+  readonly publishedRoutes = computed(() =>
+    this.routes().filter(
+      (route) => route.routeStatus === 'PUBLISHED' && this.visibleRouteCards(route).length > 0,
+    ),
+  );
+  readonly dispatchAttention = computed<DispatchAttentionItem[]>(() => {
+    const items: DispatchAttentionItem[] = [];
+    for (const route of this.publishedRoutes()) {
+      for (const card of route.cards) {
+        if (this.boardCardStatus(card) === 'FAILED') {
+          items.push({
+            key: `order-${card.orderId}`,
+            title: `${card.orderNumber} 配送異常`,
+            detail: `${card.storeName} · ${this.boardCardStatusLabel(card)}`,
+            kind: 'exception',
+          });
+        }
+      }
+
+      if (route.driverId !== null) {
+        const ping = this.routeGpsPing(route);
+        const gpsAge = ping ? minutesAgo(ping.timestamp) : null;
+        if (gpsAge === null || gpsAge >= 10) {
+          items.push({
+            key: `gps-${route.driverId}`,
+            title: `${this.driverName(route.driverId)} GPS ${gpsAge === null ? '未回報' : '超過 10 分鐘未更新'}`,
+            detail: gpsAge === null ? '尚未收到有效的最新定位' : `最後回報於 ${gpsAge} 分鐘前`,
+            kind: 'gps',
+          });
+        }
+      }
+    }
+
+    for (const card of this.visibleUnassigned()) {
+      const waitingConfirmation = this.boardCardStatus(card) === 'PENDING_CONFIRM';
+      items.push({
+        key: `unassigned-${card.orderId}`,
+        title: `${card.orderNumber} ${waitingConfirmation ? '待人工確認' : '尚未排入車格'}`,
+        detail: `${card.storeName} · ${this.boardCardStatusLabel(card)}`,
+        kind: 'pending',
+      });
+    }
+
+    return items;
+  });
+  readonly pendingConfirmationCount = computed(() =>
+    this.orders().filter((order) =>
+      order.deliveryDate === this.dispatchDate() && order.status === 'PENDING_CONFIRM',
+    ).length,
+  );
+  readonly publishBlockedByPendingConfirmation = computed(
+    () => this.dispatchDate() === todayLocalDate() && this.pendingConfirmationCount() > 0,
+  );
+
+  readonly dispatchDays = computed<DispatchDayCard[]>(() => {
+    const grouped = new Map<string, OrderDto[]>();
+    for (const order of this.orders()) {
+      if (order.warehouseId !== this.warehouseId()) {
+        continue;
+      }
+      grouped.set(order.deliveryDate, [...(grouped.get(order.deliveryDate) ?? []), order]);
+    }
+
+    return [...grouped.entries()]
+      .filter(([, orders]) => orders.some((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED'))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, orders]) => {
+        const active = orders.filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED');
+        const completed = orders.filter((order) => order.status === 'COMPLETED').length;
+        const hasDelivery = active.some((order) => order.status === 'IN_DELIVERY');
+        const pending = active.filter((order) => order.status === 'PENDING_CONFIRM').length;
+        const failed = active.filter((order) => order.status === 'FAILED').length;
+        const unassigned = active.filter((order) =>
+          order.status === 'CONFIRMED' && (order.assignedDriverId == null || order.assignedVehicleId == null),
+        ).length;
+        let statusLabel = `草稿 · ${unassigned} 待排`;
+
+        if (date === this.dispatchDate() && this.published()) {
+          statusLabel = hasDelivery ? `配送中 · ${completed}/${orders.length}` : '已發布';
+        } else if (hasDelivery) {
+          statusLabel = `配送中 · ${completed}/${orders.length}`;
+        } else if (pending > 0) {
+          statusLabel = `待確認 · ${pending}`;
+        } else if (failed > 0) {
+          statusLabel = `需處理 · ${failed}`;
+        } else if (unassigned === 0) {
+          statusLabel = `草稿 · 已排 ${active.length}`;
+        } else {
+          statusLabel = `未排 · ${unassigned} 單`;
+        }
+
+        const [, month, day] = date.split('-').map(Number);
+        const dateLabel = `${month}/${day}`;
+        return {
+          date,
+          dateLabel,
+          relativeLabel: this.dayOffsetLabel(date),
+          statusLabel,
+          isSelected: date === this.dispatchDate(),
+        };
+      });
+  });
 
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
@@ -272,40 +401,6 @@ export class DispatchDashboard implements OnInit {
       `目前 ${this.warehouseName()} 已納入首頁資料來源`,
     ];
   });
-
-  /** 今日訂單的追蹤看板。六欄直接對應後端訂單狀態，只供主管查看。 */
-  readonly taskboardColumns = computed<TaskboardColumn[]>(() => {
-    const publishedOrderIds = new Set(
-      this.routes()
-        .filter((route) => route.routeStatus === 'PUBLISHED')
-        .flatMap((route) => route.cards.map((card) => card.orderId)),
-    );
-    const orders = this.orders()
-      .filter((order) =>
-        order.deliveryDate === this.dispatchDate() && order.id != null && publishedOrderIds.has(order.id),
-      )
-      .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER));
-    const columns: Array<Omit<TaskboardColumn, 'count'> & {matches: (order: OrderDto) => boolean}> = [
-      {id: 'pending', label: '待確認', detail: '等待總部確認', status: 'PENDING_CONFIRM', matches: (order) => order.status === 'PENDING_CONFIRM'},
-      {id: 'confirmed', label: '待調度', detail: '已確認等待出發', status: 'CONFIRMED', matches: (order) => order.status === 'CONFIRMED'},
-      {id: 'delivering', label: '配送中', detail: '正在配送', status: 'IN_DELIVERY', matches: (order) => order.status === 'IN_DELIVERY'},
-      {id: 'completed', label: '已完成', detail: '今日已簽收', status: 'COMPLETED', matches: (order) => order.status === 'COMPLETED'},
-      {id: 'failed', label: '配送失敗', detail: '需要處理', status: 'FAILED', matches: (order) => order.status === 'FAILED'},
-      {id: 'cancelled', label: '已取消', detail: '不再配送', status: 'CANCELLED', matches: (order) => order.status === 'CANCELLED'},
-    ];
-
-    return columns.map(({matches, ...column}) => ({
-      ...column,
-      count: orders.filter(matches).length,
-    }));
-  });
-
-  /** 已派出的任務才進追蹤看板，草稿排車不會提前出現在主管畫面。 */
-  readonly publishedTaskboardRoutes = computed(() =>
-    this.routes().filter((route) => route.routeStatus === 'PUBLISHED' && route.cards.length > 0),
-  );
-
-  readonly publishedTemplateName = computed(() => this.activeTemplate()?.name ?? '今日手動排車');
 
   /** 排車中或改派儲存中都不該再觸發排車 */
   readonly busy = computed(() => this.optimizing() || this.applyingStores() || this.saving());
@@ -358,7 +453,7 @@ export class DispatchDashboard implements OnInit {
     // 同一間門市當天可能有多張訂單，以 storeId 去重並加總箱數；
     // 不去重就是同一個座標疊好幾個圈，只點得到最上面那一個。
     const boxesByStore = new Map<number, number>();
-    for (const card of [...this.routes().flatMap((route) => route.cards), ...this.unassigned()]) {
+    for (const card of [...this.routes().flatMap((route) => this.visibleRouteCards(route)), ...this.visibleUnassigned()]) {
       boxesByStore.set(card.storeId, (boxesByStore.get(card.storeId) ?? 0) + card.boxCount);
     }
 
@@ -446,6 +541,7 @@ export class DispatchDashboard implements OnInit {
    * 跟門市不同，這個一開就是持續輪詢的背景請求，不該預設一直跑。
    */
   readonly showDriverPoints = signal(false);
+  readonly pollDriverLocations = computed(() => this.showDriverPoints() || this.published());
 
   toggleDriverPoints(checked: boolean): void {
     this.showDriverPoints.set(checked);
@@ -459,7 +555,7 @@ export class DispatchDashboard implements OnInit {
    * 一次 401 或後端重啟就會讓整條 stream complete，之後永遠不會再重試。
    */
   private readonly livePings = toSignal(
-    toObservable(this.showDriverPoints).pipe(
+    toObservable(this.pollDriverLocations).pipe(
       switchMap((on) =>
         on
           ? timer(0, 30_000).pipe(
@@ -583,6 +679,65 @@ export class DispatchDashboard implements OnInit {
     this.warehouseId.set(Number((event.target as HTMLSelectElement).value));
     this.boardNotices.set([]);
     this.reloadBoard();
+  }
+
+  confirmPendingOrder(card: BoardCard): void {
+    const order = this.orders().find((item) => item.id === card.orderId);
+    if (!order?.id || order.status !== 'PENDING_CONFIRM' || this.confirmingOrderIds().has(order.id)) {
+      return;
+    }
+
+    this.confirmingOrderIds.update((ids) => new Set(ids).add(order.id!));
+    this.boardError.set('');
+    this.api.updateOrder(order.id, {...order, notes: order.notes ?? '', status: 'CONFIRMED'}).subscribe({
+      next: (updated) => {
+        this.applyTaskboardOrders(this.orders().map((item) => item.id === updated.id ? updated : item));
+        this.boardNotices.set([`${order.orderNumber} 已確認，可拖曳安排配送。`]);
+        this.reloadBoard();
+        this.confirmingOrderIds.update((ids) => {
+          const next = new Set(ids);
+          next.delete(order.id!);
+          return next;
+        });
+      },
+      error: (error: unknown) => {
+        this.boardError.set(`無法確認訂單：${describeError(error)}`);
+        this.confirmingOrderIds.update((ids) => {
+          const next = new Set(ids);
+          next.delete(order.id!);
+          return next;
+        });
+      },
+    });
+  }
+
+  selectDispatchDate(date: string): void {
+    if (date === this.dispatchDate() || this.saving() || this.publishing()) {
+      return;
+    }
+
+    this.dispatchDate.set(date);
+    this.activeTemplateId.set(0);
+    this.templateName.set('');
+    this.boardWarehouseId = 0;
+    this.routes.set([]);
+    this.boardNotices.set([]);
+    this.boardError.set('');
+    this.publishError.set('');
+    this.loadScheduleEligibility();
+    this.reloadBoard();
+  }
+
+  private dayOffsetLabel(date: string): string {
+    const [year, month, day] = date.split('-').map(Number);
+    const [todayYear, todayMonth, todayDay] = todayLocalDate().split('-').map(Number);
+    const offset = Math.round(
+      (Date.UTC(year, month - 1, day) - Date.UTC(todayYear, todayMonth - 1, todayDay)) / 86_400_000,
+    );
+    if (offset === 0) return '今天';
+    if (offset === 1) return '明天';
+    if (offset === 2) return '後天';
+    return `週${'日一二三四五六'[new Date(year, month - 1, day).getDay()]}`;
   }
 
   private loadDashboard(): void {
@@ -831,7 +986,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 車道目前實際載運的箱數。拖曳後會變動，所以用卡片重算而不是用後端給的值 */
   loadedBoxes(route: BoardRoute): number {
-    return route.cards.reduce((sum, card) => sum + card.boxCount, 0);
+    return this.visibleRouteCards(route).reduce((sum, card) => sum + card.boxCount, 0);
   }
 
   /** 超過車輛容量，畫面上要標出來 */
@@ -840,7 +995,14 @@ export class DispatchDashboard implements OnInit {
   }
 
   boardCardStatus(card: BoardCard): OrderStatus {
-    return this.orders().find((order) => order.id === card.orderId)?.status ?? 'CONFIRMED';
+    return this.orders().find((order) => order.id === card.orderId)?.status ?? card.status;
+  }
+
+  visibleRouteCards(route: BoardRoute): BoardCard[] {
+    return route.cards.filter((card) => {
+      const status = this.boardCardStatus(card);
+      return status !== 'COMPLETED' && status !== 'CANCELLED';
+    });
   }
 
   boardCardStatusLabel(card: BoardCard): string {
@@ -861,6 +1023,58 @@ export class DispatchDashboard implements OnInit {
     return order?.itemDescription || order?.notes || '未填寫品項或備註';
   }
 
+  boardCardAddress(card: BoardCard): string {
+    return this.stores().find((item) => item.id === card.storeId)?.address ?? '未設定配送地址';
+  }
+
+  boardCardOrder(card: BoardCard): OrderDto | undefined {
+    return this.orders().find((item) => item.id === card.orderId);
+  }
+
+  routeProgressLabel(route: BoardRoute): string {
+    const stops = route.cards.filter((card) => this.boardCardStatus(card) !== 'CANCELLED');
+    const completed = stops.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
+    const failed = stops.filter((card) => this.boardCardStatus(card) === 'FAILED').length;
+    return `${completed}/${stops.length} 站 · ${failed} 站異常`;
+  }
+
+  routeStopCount(route: BoardRoute): number {
+    return route.cards.filter((card) => this.boardCardStatus(card) !== 'CANCELLED').length;
+  }
+
+  routeNextStop(route: BoardRoute): string {
+    const next = route.cards.find((card) => {
+      const status = this.boardCardStatus(card);
+      return status === 'IN_DELIVERY' || status === 'FAILED' || status === 'CONFIRMED';
+    });
+    return next ? `${next.storeName} · ${next.orderNumber}` : '目前沒有待配送站點';
+  }
+
+  routeGpsPing(route: BoardRoute): GpsPingDto | undefined {
+    if (route.driverId === null) {
+      return undefined;
+    }
+    return this.livePings().find((ping) => ping.driverId === route.driverId);
+  }
+
+  routeGpsLabel(route: BoardRoute): string {
+    const ping = this.routeGpsPing(route);
+    if (!ping) {
+      return 'GPS 尚未回報';
+    }
+
+    const age = minutesAgo(ping.timestamp);
+    return Number.isFinite(age) ? `GPS ${age} 分鐘前` : 'GPS 時間無法判讀';
+  }
+
+  routeEtaLabel(route: BoardRoute): string {
+    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
+  }
+
+  routeRemainingDistanceLabel(route: BoardRoute): string {
+    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
   routeDriverStatus(route: BoardRoute): string {
     if (route.isMaintenance) {
       return '車輛維修中';
@@ -869,31 +1083,24 @@ export class DispatchDashboard implements OnInit {
       return '待指派司機';
     }
 
-    const statuses = route.cards.map((card) => this.boardCardStatus(card));
+    const statuses = this.visibleRouteCards(route).map((card) => this.boardCardStatus(card));
+    if (statuses.includes('FAILED')) {
+      return '有異常';
+    }
     if (statuses.includes('IN_DELIVERY')) {
       return '配送中';
     }
     if (statuses.includes('CONFIRMED')) {
       return '待出發';
     }
+    if (statuses.includes('PENDING_CONFIRM')) {
+      return '待確認';
+    }
     if (statuses.includes('COMPLETED')) {
       return '已完成';
     }
 
     return '尚無訂單';
-  }
-
-  taskboardRouteProgress(route: BoardRoute): string {
-    const completed = route.cards.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
-    return `${completed}/${route.cards.length} 已完成`;
-  }
-
-  taskboardEstimatedArrival(route: BoardRoute): string {
-    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
-  }
-
-  taskboardRemainingKm(route: BoardRoute): string {
-    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
   }
 
   private orderStatusLabel(status: OrderStatus): string {
@@ -1103,6 +1310,11 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    const draggedCard = event.previousContainer.data[event.previousIndex];
+    if (!draggedCard || this.boardCardStatus(draggedCard) === 'PENDING_CONFIRM') {
+      return;
+    }
+
     if (event.previousContainer === event.container) {
       moveItemInArray(event.container.data, event.previousIndex, event.currentIndex);
     } else {
@@ -1120,6 +1332,50 @@ export class DispatchDashboard implements OnInit {
     this.unassigned.update((cards) => [...cards]);
 
     this.submitReassign();
+  }
+
+  onLaneDragStart(event: DragEvent, route: BoardRoute): void {
+    if (this.published() || this.saving()) {
+      event.preventDefault();
+      return;
+    }
+    this.draggedLaneKey.set(route.slotKey);
+    event.dataTransfer?.setData('text/plain', route.slotKey);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  onLaneDragOver(event: DragEvent): void {
+    if (this.draggedLaneKey()) {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+    }
+  }
+
+  onLaneDrop(event: DragEvent, target: BoardRoute): void {
+    const sourceKey = this.draggedLaneKey();
+    if (!sourceKey || sourceKey === target.slotKey || this.published() || this.saving()) {
+      return;
+    }
+
+    event.preventDefault();
+    this.routes.update((routes) => {
+      const reordered = [...routes];
+      const fromIndex = reordered.findIndex((route) => route.slotKey === sourceKey);
+      const toIndex = reordered.findIndex((route) => route.slotKey === target.slotKey);
+      if (fromIndex >= 0 && toIndex >= 0) {
+        moveItemInArray(reordered, fromIndex, toIndex);
+      }
+      return reordered;
+    });
+    this.draggedLaneKey.set(null);
+  }
+
+  onLaneDragEnd(): void {
+    this.draggedLaneKey.set(null);
   }
 
   /**
@@ -1175,6 +1431,13 @@ export class DispatchDashboard implements OnInit {
    */
   publish(): void {
     if (this.publishing() || this.busy()) {
+      return;
+    }
+
+    if (this.publishBlockedByPendingConfirmation()) {
+      this.publishError.set(
+        `當天還有 ${this.pendingConfirmationCount()} 筆訂單待確認，請先在拖曳面板確認完成再發布。`,
+      );
       return;
     }
 
@@ -1705,7 +1968,7 @@ export class DispatchDashboard implements OnInit {
           cards: (isMaintenance
             ? routeStops
             : routeStops.filter((stop) => dispatchableOrderIds.has(stop.orderId)))
-            .map(toBoardCard),
+            .map((stop) => toBoardCard(stop, 'CONFIRMED')),
           // 門市清單只在畫面上，後端不知道；沿用原本那格的。只選司機的格子被後端配了車，要用司機對回去
           storeIds:
             (previous.find((lane) => lane.vehicleId === route.vehicleId) ??
@@ -1744,7 +2007,29 @@ export class DispatchDashboard implements OnInit {
         .filter((order) => dispatchableOrderIds.has(order.orderId))
         .map((order) => [order.orderId, order]),
     );
-    this.unassigned.set([...unassignedByOrderId.values()].map(toBoardCard));
+    const pendingConfirmCards = this.orders()
+      .filter((order) =>
+        order.id != null
+        && order.deliveryDate === this.dispatchDate()
+        && order.warehouseId === this.warehouseId()
+        && order.status === 'PENDING_CONFIRM',
+      )
+      .map((order): BoardCard => {
+        const store = this.stores().find((item) => item.id === order.storeId);
+        return {
+          orderId: order.id!,
+          orderNumber: order.orderNumber,
+          storeId: order.storeId,
+          storeCode: store?.storeCode ?? '',
+          storeName: store?.name ?? `門市 #${order.storeId}`,
+          boxCount: order.boxCount,
+          status: order.status,
+        };
+      });
+    this.unassigned.set([
+      ...[...unassignedByOrderId.values()].map((order) => toBoardCard(order, 'CONFIRMED')),
+      ...pendingConfirmCards,
+    ]);
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
     this.loadRouteMetrics(this.routes());
   }

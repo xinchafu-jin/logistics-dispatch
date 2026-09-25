@@ -41,109 +41,58 @@
       </mat-slide-toggle>
     </div>
   </section>
-  <section class="template-tabs" aria-label="常配編組">
-    <div class="tab-strip" role="tablist">
-      @for (template of templates(); track template.id) {
+  <section class="dispatch-day-picker" aria-label="配送日期">
+    <div class="dispatch-day-strip" role="group" aria-label="選擇配送日期">
+      @for (day of dispatchDays(); track day.date) {
         <button
           type="button"
-          role="tab"
-          class="tab"
-          [class.is-active]="activeTemplateId() === template.id"
-          [attr.aria-selected]="activeTemplateId() === template.id"
-          (click)="selectTemplate(template.id)"
+          class="dispatch-day-card"
+          [class.is-selected]="day.isSelected"
+          [attr.aria-pressed]="day.isSelected"
+          (click)="selectDispatchDate(day.date)"
         >
-          {{ template.name }}
+          <span class="dispatch-day-date">{{ day.dateLabel }} <small>{{ day.relativeLabel }}</small></span>
+          <span class="dispatch-day-status">{{ day.statusLabel }}</span>
         </button>
+      } @empty {
+        <p class="dispatch-day-empty">目前沒有尚未結案的配送日期</p>
       }
-      <button
-        type="button"
-        class="tab tab-add"
-        [class.is-active]="activeTemplateId() === 0"
-        [attr.aria-selected]="activeTemplateId() === 0"
-        (click)="openCreateTemplate()"
-        aria-label="不使用編組／新增編組"
-      >
-        ＋
-      </button>
     </div>
+  </section>
+  <section class="template-tabs" aria-label="常配編組">
+    @if (!published()) {
+      <div class="tab-strip" role="tablist">
+        @for (template of templates(); track template.id) {
+          <button
+            type="button"
+            role="tab"
+            class="tab"
+            [class.is-active]="activeTemplateId() === template.id"
+            [attr.aria-selected]="activeTemplateId() === template.id"
+            (click)="selectTemplate(template.id)"
+          >
+            {{ template.name }}
+          </button>
+        }
+        <button
+          type="button"
+          class="tab tab-add"
+          [class.is-active]="activeTemplateId() === 0"
+          [attr.aria-selected]="activeTemplateId() === 0"
+          (click)="openCreateTemplate()"
+          aria-label="不使用編組／新增編組"
+        >
+          ＋
+        </button>
+      </div>
 
-    @if (templateError()) {
-      <p class="template-error">{{ templateError() }}</p>
+      @if (templateError()) {
+        <p class="template-error">{{ templateError() }}</p>
+      }
     }
 
       <!-- 分頁內層：排車條件 + 編成盤面 -->
       <div class="tab-panel">
-        <section class="dispatch-workspace-overview" aria-label="今日調度重點">
-        @if (published()) {
-        <section class="live-taskboard" aria-labelledby="live-taskboard-title">
-          <header class="live-taskboard-header">
-            <div>
-              <p class="section-eyebrow">已派出任務</p>
-              <h3 id="live-taskboard-title">任務看板 · {{ publishedTemplateName() }}</h3>
-              <p>每 15 秒同步一次 · 最近同步 {{ taskboardLastSyncedAt() }}</p>
-            </div>
-            <button
-              type="button"
-              class="taskboard-refresh"
-              (click)="refreshTaskboard()"
-              [disabled]="taskboardSyncing()"
-            >
-              <mat-icon aria-hidden="true">refresh</mat-icon>
-              {{ taskboardSyncing() ? '同步中' : '同步' }}
-            </button>
-          </header>
-
-          @if (taskboardSyncError()) {
-            <p class="taskboard-sync-error">{{ taskboardSyncError() }}</p>
-          }
-
-          <div class="taskboard-columns" aria-label="今日訂單狀態">
-            @for (column of taskboardColumns(); track column.id) {
-              <section class="taskboard-column" [class]="'taskboard-' + column.id">
-                <header>
-                  <div>
-                    <h4>{{ column.label }}</h4>
-                    <p>{{ column.detail }}</p>
-                  </div>
-                  <span>{{ column.count }}</span>
-                </header>
-              </section>
-            }
-          </div>
-
-          <div class="taskboard-routes" aria-label="已派出司機任務">
-            @for (route of publishedTaskboardRoutes(); track route.routeId) {
-              <article class="taskboard-route" [class.is-delivering]="routeDriverStatus(route) === '配送中'">
-                <header>
-                  <div>
-                    <p>{{ driverName(route.driverId!) }} · {{ route.plateNumber }}</p>
-                    <strong>{{ routeDriverStatus(route) }}</strong>
-                  </div>
-                  <span>{{ taskboardRouteProgress(route) }}</span>
-                </header>
-                <div class="taskboard-route-metrics">
-                  <span>預估抵達 {{ taskboardEstimatedArrival(route) }}</span>
-                  <span>剩餘 {{ taskboardRemainingKm(route) }}</span>
-                </div>
-                <ol>
-                  @for (card of route.cards; track card.orderId) {
-                    <li [class.is-current]="boardCardStatus(card) === 'IN_DELIVERY'">
-                      <span>{{ $index + 1 }}</span>
-                      <div>
-                        <strong>{{ card.storeName }}</strong>
-                        <small>{{ card.orderNumber }} · {{ card.boxCount }} 箱</small>
-                      </div>
-                      <em>{{ boardCardStatusLabel(card) }}</em>
-                    </li>
-                  }
-                </ol>
-              </article>
-            }
-          </div>
-        </section>
-        }
-      </section>
-
       <section class="board-toolbar" aria-label="排車條件">
         <div class="toolbar-field toolbar-date">
           <span>配送日期</span>
@@ -162,7 +111,7 @@
         </label>
 
         <!-- 沒選編組＝看板預設狀態，也就是新增編組：格子裡的人車填個名稱就能存。跟排車條件合在同一列 -->
-        @if (activeTemplateId() === 0) {
+        @if (!published() && activeTemplateId() === 0) {
           <label class="toolbar-field">
             <span>編組名稱</span>
             <input
@@ -178,26 +127,24 @@
         <span class="toolbar-spacer"></span>
 
         <!-- 「＋」分頁是新增編組；編組分頁是用看板的人車覆蓋這個編組（會先跳確認框）。判斷在 saveTemplate() -->
-        <button
-          type="button"
-          class="toolbar-action"
-          (click)="saveTemplate()"
-          [disabled]="templateBusy()"
-        >
-          {{ templateBusy() ? '儲存中…' : '儲存編組' }}
-        </button>
+        @if (!published()) {
+          <button
+            type="button"
+            class="toolbar-action"
+            (click)="saveTemplate()"
+            [disabled]="templateBusy()"
+          >
+            {{ templateBusy() ? '儲存中…' : '儲存編組' }}
+          </button>
 
-        <!-- 把每格門市在待排單的訂單拉進那格，後端只排這些單並算出停靠順序；其他待排單不動 -->
-        <button type="button" class="toolbar-action" (click)="applyStoreOrders()" [disabled]="busy() || published()">
-          {{ applyingStores() ? '套用中…' : '套用門市訂單' }}
-        </button>
+          <!-- 把每格門市在待排單的訂單拉進那格，後端只排這些單並算出停靠順序；其他待排單不動 -->
+          <button type="button" class="toolbar-action" (click)="applyStoreOrders()" [disabled]="busy()">
+            {{ applyingStores() ? '套用中…' : '套用門市訂單' }}
+          </button>
 
-        <!-- OR-Tools 只用格子裡的人車排；只選司機的格子由後端配車。格子裡已有的訂單固定在那台車，只有待排單的訂單交給 OR-Tools 分配，排不進去的留在待排單區 -->
-        <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy() || published()">
-          {{ optimizing() ? '排車中…' : '自動排車' }}
-        </button>
+        }
 
-        <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->
+        <!-- 已發布的班次保留撤回入口；草稿的排車與發布按鈕放在待排面板底部 -->
         @if (published()) {
           <button
             type="button"
@@ -207,18 +154,9 @@
           >
             {{ publishing() ? '撤回中…' : '撤回發布' }}
           </button>
-        } @else {
-          <button
-            type="button"
-            class="toolbar-action"
-            (click)="publish()"
-            [disabled]="publishing() || busy()"
-          >
-            {{ publishing() ? '發布中…' : '發布' }}
-          </button>
         }
 
-        @if (activeTemplate()) {
+        @if (!published() && activeTemplate()) {
           <button
             type="button"
             class="toolbar-action toolbar-delete"
@@ -230,15 +168,36 @@
         }
       </section>
 
-      @if (published()) {
-        <p class="board-status">已派出：看板鎖定為即時狀態，要修改請先撤回。編組分頁仍可查看，但不能載入。</p>
-      }
       @if (publishError()) {
         <p class="board-error">{{ publishError() }}</p>
+      }
+      @if (!published() && publishBlockedByPendingConfirmation()) {
+        <p class="board-status" role="status" aria-live="polite">
+          當天還有 {{ pendingConfirmationCount() }} 筆訂單待確認；請在各倉拖曳面板確認完成後再發布。
+        </p>
       }
 
       <div class="board" cdkDropListGroup>
         <div class="board-slots">
+          @if (published()) {
+            <div class="board-live-status" role="status">
+              <p class="board-status">
+                已派出 · 每 15 秒同步訂單狀態（最近同步 {{ taskboardLastSyncedAt() }}）；已完成或取消的訂單會自動隱藏。
+              </p>
+              <button
+                type="button"
+                class="board-sync-button"
+                (click)="refreshTaskboard()"
+                [disabled]="taskboardSyncing()"
+              >
+                <mat-icon aria-hidden="true">refresh</mat-icon>
+                {{ taskboardSyncing() ? '同步中…' : '同步' }}
+              </button>
+            </div>
+          }
+          @if (taskboardSyncError()) {
+            <p class="board-error" role="alert">{{ taskboardSyncError() }}</p>
+          }
           @if (saving()) {
             <p class="board-status">儲存中…</p>
           }
@@ -250,21 +209,37 @@
             <p class="board-notice">{{ notice }}</p>
           }
 
+          @if (!published()) {
           <div class="slot-grid">
-            @for (route of routes(); track route.slotKey) {
+            @for (route of visibleRoutes(); track route.slotKey) {
               <div
                 class="board-lane"
                 [class.is-empty-slot]="route.vehicleId === null && route.driverId === null"
                 [class.is-overloaded]="isOverloaded(route)"
                 [class.is-maintenance]="route.isMaintenance"
                 [class.has-schedule-issue]="routeScheduleProblem(route) !== null"
+                [class.is-lane-dragging]="draggedLaneKey() === route.slotKey"
+                (dragover)="onLaneDragOver($event)"
+                (drop)="onLaneDrop($event, route)"
               >
                 <!-- 車牌、司機名稱不在這裡重複顯示，看下面兩個下拉選單就好；這裡只留下拉看不到的裝載量與狀態 -->
                 <!-- 裝載量靠左、狀態標籤靠右，放同一列；還沒選車時沒有裝載量，標籤自己靠右 -->
                 <header class="lane-header">
+                  <button
+                    type="button"
+                    class="lane-drag-handle"
+                    draggable="true"
+                    [disabled]="published() || saving()"
+                    (dragstart)="onLaneDragStart($event, route)"
+                    (dragend)="onLaneDragEnd()"
+                    [attr.aria-label]="'拖曳排序 ' + (route.driverId === null ? '未指派司機' : driverName(route.driverId)) + ' 人車格'"
+                    title="拖曳排序人車格"
+                  >
+                    <mat-icon aria-hidden="true">drag_indicator</mat-icon>
+                  </button>
                   @if (route.vehicleId !== null) {
                     <h4>
-                      {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
+                      {{ visibleRouteCards(route).length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
                       {{ route.totalDistance / 1000 | number: '1.1-1' }} km
                       @if (route.isMaintenance) { · 維修中 }
                     </h4>
@@ -323,7 +298,7 @@
                 </select>
 
                 <!-- 這格編組的門市：只記錄不動訂單，按「套用門市訂單」才拉單；沒選人或車的格子存不進編組，所以不顯示 -->
-                @if (route.driverId !== null || route.vehicleId !== null) {
+                @if (!published() && (route.driverId !== null || route.vehicleId !== null)) {
                   <div class="lane-stores">
                     @for (storeId of route.storeIds; track storeId) {
                       <span class="lane-store">
@@ -360,8 +335,8 @@
                   [cdkDropListDisabled]="saving() || published() || route.vehicleId === null || route.hasLockedStops || route.isMaintenance"
                   (cdkDropListDropped)="onDrop($event)"
                 >
-                  @for (card of route.cards; track card.orderId) {
-                    <article class="board-card" cdkDrag [cdkDragDisabled]="published() || route.isMaintenance || route.hasLockedStops">
+                  @for (card of visibleRouteCards(route); track card.orderId) {
+                    <article class="board-card" cdkDrag [cdkDragDisabled]="published() || route.isMaintenance || route.hasLockedStops || boardCardStatus(card) === 'PENDING_CONFIRM'">
                       <header>
                         <span>#{{ $index + 1 }}</span>
                         <strong>{{ card.orderNumber }}</strong>
@@ -370,6 +345,18 @@
                       <h5>{{ card.storeName }}</h5>
                       <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
                       <small>{{ boardCardDescription(card) }}</small>
+                      @if (boardCardOrder(card); as order) {
+                        <div class="board-card-details">
+                          <strong>訂單詳情</strong>
+                          <dl>
+                            <div><dt>配送日期</dt><dd>{{ order.deliveryDate }}</dd></div>
+                            <div><dt>狀態</dt><dd>{{ boardCardStatusLabel(card) }}</dd></div>
+                            <div><dt>品項</dt><dd>{{ order.itemDescription || '未填寫' }}</dd></div>
+                            <div><dt>配送地址</dt><dd>{{ boardCardAddress(card) }}</dd></div>
+                            <div><dt>備註</dt><dd>{{ order.notes || '無' }}</dd></div>
+                          </dl>
+                        </div>
+                      }
                     </article>
                   } @empty {
                     <p class="board-empty">
@@ -386,38 +373,210 @@
                   }
                 </div>
               </div>
+            } @empty {
+              <p class="board-status">尚未建立人車格，請先選擇司機或車輛。</p>
             }
           </div>
+          } @else {
+            <div class="published-route-grid">
+              @for (route of publishedRoutes(); track route.slotKey) {
+                <article class="published-route-card" [class.has-exception]="routeDriverStatus(route) === '有異常'">
+                  <header class="published-route-header">
+                    <div>
+                      <strong>{{ driverName(route.driverId!) }} · {{ route.plateNumber }}</strong>
+                      <p>{{ routeProgressLabel(route) }}</p>
+                    </div>
+                    <span class="published-route-state" [class.is-exception]="routeDriverStatus(route) === '有異常'">
+                      {{ routeDriverStatus(route) }}
+                    </span>
+                  </header>
+
+                  <div class="route-progress-dots" [attr.aria-label]="routeProgressLabel(route)">
+                    @for (card of route.cards; track card.orderId; let stopIndex = $index) {
+                      @if (boardCardStatus(card) !== 'CANCELLED') {
+                        <span
+                          class="route-progress-dot"
+                          [class.is-complete]="boardCardStatus(card) === 'COMPLETED'"
+                          [class.is-current]="boardCardStatus(card) === 'IN_DELIVERY'"
+                          [class.is-failed]="boardCardStatus(card) === 'FAILED'"
+                          [title]="'第 ' + (stopIndex + 1) + ' 站 · ' + boardCardStatusLabel(card)"
+                          [attr.aria-label]="'第 ' + (stopIndex + 1) + ' 站，' + boardCardStatusLabel(card)"
+                        ></span>
+                      }
+                    }
+                  </div>
+
+                  <div class="route-live-summary">
+                    <p><span>目前配送</span>{{ routeNextStop(route) }}</p>
+                    <p><span>定位狀態</span>{{ routeGpsLabel(route) }}</p>
+                    <p><span>預估抵達</span>{{ routeEtaLabel(route) }}</p>
+                    <p><span>剩餘里程</span>{{ routeRemainingDistanceLabel(route) }}</p>
+                  </div>
+
+                  <div class="published-order-list">
+                    @for (card of visibleRouteCards(route); track card.orderId) {
+                      <article class="published-order-card" [class.is-failed]="boardCardStatus(card) === 'FAILED'">
+                        <header>
+                          <strong>{{ card.orderNumber }} · {{ card.storeName }}</strong>
+                          <em>{{ boardCardStatusLabel(card) }}</em>
+                        </header>
+                        <p>{{ card.boxCount }} 箱 · {{ boardCardDeliveryWindow(card) }}</p>
+                        @if (boardCardOrder(card); as order) {
+                          <div class="board-card-details">
+                            <strong>訂單詳情</strong>
+                            <dl>
+                              <div><dt>配送日期</dt><dd>{{ order.deliveryDate }}</dd></div>
+                              <div><dt>品項</dt><dd>{{ order.itemDescription || '未填寫' }}</dd></div>
+                              <div><dt>配送地址</dt><dd>{{ boardCardAddress(card) }}</dd></div>
+                              <div><dt>備註</dt><dd>{{ order.notes || '無' }}</dd></div>
+                            </dl>
+                          </div>
+                        }
+                      </article>
+                    }
+                  </div>
+                </article>
+              } @empty {
+                <p class="board-status">目前沒有尚未結案的配送路線。</p>
+              }
+            </div>
+          }
         </div>
 
-        <!-- 待排單區固定在旁邊：自動排車排不進去的、還沒排的訂單都在這裡，可以拖進有車的格子 -->
-        <aside class="board-lane pending-pool">
-          <h4>待排單 {{ unassigned().length }} 筆</h4>
+        @if (!published()) {
+          <aside class="board-lane pending-pool">
+            <h4>待排單 <span>{{ visibleUnassigned().length }}</span></h4>
 
-          <div
-            class="board-dropzone"
-            cdkDropList
-            [cdkDropListData]="unassigned()"
-            [cdkDropListDisabled]="saving() || published()"
-            (cdkDropListDropped)="onDrop($event)"
-          >
-            @for (card of unassigned(); track card.orderId) {
-              <article class="board-card" cdkDrag [cdkDragDisabled]="published()">
-                <header>
-                  <span>待排</span>
-                  <strong>{{ card.orderNumber }}</strong>
-                  <em>{{ boardCardStatusLabel(card) }}</em>
-                </header>
-                <h5>{{ card.storeName }}</h5>
-                <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
-                <small>{{ boardCardDescription(card) }}</small>
+            <section class="pending-group" aria-labelledby="pending-confirm-title">
+              <h5 id="pending-confirm-title">待確認 <span>{{ pendingConfirmationCards().length }}</span></h5>
+              @for (card of pendingConfirmationCards(); track card.orderId) {
+                <article class="board-card pending-order-card">
+                  <header>
+                    <strong>{{ card.orderNumber }}</strong>
+                    <button
+                      type="button"
+                      class="pending-confirm-button"
+                      [disabled]="confirmingOrderIds().has(card.orderId)"
+                      (click)="confirmPendingOrder(card)"
+                    >{{ confirmingOrderIds().has(card.orderId) ? '確認中' : '確認' }}</button>
+                  </header>
+                  <h5>{{ card.storeName }}</h5>
+                  <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                  <small>{{ boardCardDescription(card) }}</small>
+                  @if (boardCardOrder(card); as order) {
+                    <div class="board-card-details">
+                      <strong>訂單詳情</strong>
+                      <dl>
+                        <div><dt>配送日期</dt><dd>{{ order.deliveryDate }}</dd></div>
+                        <div><dt>狀態</dt><dd>{{ boardCardStatusLabel(card) }}</dd></div>
+                        <div><dt>品項</dt><dd>{{ order.itemDescription || '未填寫' }}</dd></div>
+                        <div><dt>配送地址</dt><dd>{{ boardCardAddress(card) }}</dd></div>
+                        <div><dt>備註</dt><dd>{{ order.notes || '無' }}</dd></div>
+                      </dl>
+                    </div>
+                  }
+                </article>
+              } @empty {
+                <p class="board-empty">沒有待確認訂單</p>
+              }
+            </section>
+
+            <section class="pending-group" aria-labelledby="ready-to-assign-title">
+              <h5 id="ready-to-assign-title">已確認 · 可拖 <span>{{ readyToAssignCards().length }}</span></h5>
+              <div
+                class="board-dropzone"
+                cdkDropList
+                [cdkDropListData]="readyToAssignCards()"
+                [cdkDropListDisabled]="saving()"
+                (cdkDropListDropped)="onDrop($event)"
+              >
+                @for (card of readyToAssignCards(); track card.orderId) {
+                  <article class="board-card" cdkDrag>
+                    <header>
+                      <strong>{{ card.orderNumber }}</strong>
+                      <em>{{ boardCardStatusLabel(card) }}</em>
+                    </header>
+                    <h5>{{ card.storeName }}</h5>
+                    <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                    <small>{{ boardCardDescription(card) }}</small>
+                    @if (boardCardOrder(card); as order) {
+                      <div class="board-card-details">
+                        <strong>訂單詳情</strong>
+                        <dl>
+                          <div><dt>配送日期</dt><dd>{{ order.deliveryDate }}</dd></div>
+                          <div><dt>狀態</dt><dd>{{ boardCardStatusLabel(card) }}</dd></div>
+                          <div><dt>品項</dt><dd>{{ order.itemDescription || '未填寫' }}</dd></div>
+                          <div><dt>配送地址</dt><dd>{{ boardCardAddress(card) }}</dd></div>
+                          <div><dt>備註</dt><dd>{{ order.notes || '無' }}</dd></div>
+                        </dl>
+                      </div>
+                    }
+                  </article>
+                } @empty {
+                  <p class="board-empty">沒有可排入車格的訂單</p>
+                }
+              </div>
+            </section>
+
+            @if (unassignedFailedCards().length > 0) {
+              <section class="pending-group needs-attention" aria-labelledby="draft-attention-title">
+                <h5 id="draft-attention-title">需處理 <span>{{ unassignedFailedCards().length }}</span></h5>
+                @for (card of unassignedFailedCards(); track card.orderId) {
+                  <article class="board-card published-order-card is-failed">
+                    <header><strong>{{ card.orderNumber }}</strong><em>{{ boardCardStatusLabel(card) }}</em></header>
+                    <h5>{{ card.storeName }}</h5>
+                    <p>{{ card.boxCount }} 箱 · {{ boardCardDescription(card) }}</p>
+                    @if (boardCardOrder(card); as order) {
+                      <div class="board-card-details">
+                        <strong>訂單詳情</strong>
+                        <dl>
+                          <div><dt>配送日期</dt><dd>{{ order.deliveryDate }}</dd></div>
+                          <div><dt>備註</dt><dd>{{ order.notes || '無' }}</dd></div>
+                        </dl>
+                      </div>
+                    }
+                  </article>
+                }
+              </section>
+            }
+
+            <div class="dispatch-actions">
+              <button
+                type="button"
+                class="toolbar-action"
+                (click)="runOptimize()"
+                [disabled]="busy() || published() || routes().length === 0"
+              >{{ optimizing() ? '排車中…' : '自動排車' }}</button>
+              <button
+                type="button"
+                class="dispatch-publish-button"
+                (click)="publish()"
+                [disabled]="publishing() || busy() || publishBlockedByPendingConfirmation()"
+              >{{ publishing() ? '發布中…' : '派出' }}</button>
+            </div>
+          </aside>
+        } @else {
+          <aside class="dispatch-attention" aria-labelledby="dispatch-attention-title">
+            <h4 id="dispatch-attention-title">需要處理 <span>{{ dispatchAttention().length }}</span></h4>
+            @for (item of dispatchAttention(); track item.key) {
+              <article class="attention-item" [class.is-exception]="item.kind === 'exception'" [class.is-gps]="item.kind === 'gps'">
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.detail }}</p>
               </article>
             } @empty {
-              <p class="board-empty">沒有待排的訂單</p>
+              <p class="board-empty">目前沒有待處理事項</p>
             }
-          </div>
-        </aside>
+          </aside>
+        }
       </div>
+      @if (published()) {
+        <div class="status-legend" aria-label="配送狀態圖例">
+          <span><i class="is-complete"></i>已完成</span>
+          <span><i class="is-current"></i>配送中</span>
+          <span><i></i>未送</span>
+          <span><i class="is-failed"></i>失敗／無人簽收</span>
+        </div>
+      }
     </div>
   </section>
 
