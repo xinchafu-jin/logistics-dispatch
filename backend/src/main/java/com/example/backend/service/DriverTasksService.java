@@ -9,6 +9,7 @@ import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.entity.DriversEntity;
+import com.example.backend.entity.OrderItemsEntity;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
@@ -174,6 +175,14 @@ public class DriverTasksService {
     }
 
     private DriverTasksResponse.Stop toStop(OrdersEntity order, StoresEntity store) {
+        List<DriverTasksResponse.OrderItem> items = order.getItems().stream()
+                .map(this::toOrderItem)
+                .toList();
+        boolean checklistCompleted = items.isEmpty()
+                ? order.getLoadedAt() != null
+                : order.getItems().stream().allMatch(item -> item.getCheckedAt() != null
+                        && item.getLoadedQuantity() != null
+                        && item.getLoadedQuantity().equals(item.getExpectedQuantity()));
         return new DriverTasksResponse.Stop(
                 order.getSequence(),
                 order.getId(),
@@ -182,6 +191,10 @@ public class DriverTasksService {
                 order.getBoxCount(),
                 order.getItemDescription(),
                 order.getNotes(),
+                order.getLoadedAt(),
+                order.getStatus() == com.example.backend.constants.OrderStatus.CONFIRMED,
+                checklistCompleted,
+                items,
                 store.getId(),
                 store.getStoreCode(),
                 store.getName(),
@@ -192,6 +205,25 @@ public class DriverTasksService {
                 store.getPhone(),
                 store.getReceivingStart(),
                 store.getReceivingEnd()
+        );
+    }
+
+    private DriverTasksResponse.OrderItem toOrderItem(OrderItemsEntity item) {
+        boolean checked = item.getCheckedAt() != null
+                && item.getLoadedQuantity() != null
+                && item.getLoadedQuantity().equals(item.getExpectedQuantity());
+        return new DriverTasksResponse.OrderItem(
+                item.getId(),
+                item.getProductCode(),
+                item.getItemName(),
+                item.getExpectedQuantity(),
+                item.getUnit(),
+                item.getSequence(),
+                item.getNotes(),
+                item.getLoadedQuantity(),
+                checked,
+                item.getCheckedAt(),
+                item.getLoadingNotes()
         );
     }
 }

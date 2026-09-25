@@ -1,12 +1,14 @@
 package com.example.backend.dto.request;
 
 import com.example.backend.constants.OrderReviewAction;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public class OrderReviewRequestDTO {
 
@@ -30,6 +32,9 @@ public class OrderReviewRequestDTO {
     @Size(max = 255, message = "內容物說明不可超過 255 字")
     private String itemDescription;
 
+    @Valid
+    private List<OrderItemDTO> items;
+
     @Size(max = 500, message = "備註不可超過 500 字")
     private String notes;
 
@@ -50,6 +55,8 @@ public class OrderReviewRequestDTO {
     public void setSourceVendor(String sourceVendor) { this.sourceVendor = sourceVendor; }
     public String getItemDescription() { return itemDescription; }
     public void setItemDescription(String itemDescription) { this.itemDescription = itemDescription; }
+    public List<OrderItemDTO> getItems() { return items; }
+    public void setItems(List<OrderItemDTO> items) { this.items = items; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
     public String getReason() { return reason; }

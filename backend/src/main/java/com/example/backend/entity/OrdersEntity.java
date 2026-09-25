@@ -8,6 +8,8 @@ import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @EntityListeners(DispatchChangeEntityListener.class)
@@ -38,6 +40,14 @@ public class OrdersEntity {
      */
     @Column(length = 255)
     private String itemDescription;
+
+    /**
+     * 可逐項點交的實際內容物。itemDescription 保留給舊資料與摘要顯示，
+     * 新資料以這份明細為準。
+     */
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequence ASC, id ASC")
+    private List<OrderItemsEntity> items = new ArrayList<>();
 
     /**
      * 箱數，系統的唯一容量單位
@@ -151,6 +161,22 @@ public class OrdersEntity {
 
     public void setItemDescription(String itemDescription) {
         this.itemDescription = itemDescription;
+    }
+
+    public List<OrderItemsEntity> getItems() {
+        return items;
+    }
+
+    public void setItems(List<OrderItemsEntity> items) {
+        this.items.clear();
+        if (items != null) {
+            items.forEach(this::addItem);
+        }
+    }
+
+    public void addItem(OrderItemsEntity item) {
+        item.setOrder(this);
+        this.items.add(item);
     }
 
     public Integer getBoxCount() {
