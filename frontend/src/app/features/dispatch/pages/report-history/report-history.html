@@ -73,7 +73,17 @@
           }
           @case ('routes') {
             <div class="preview-table route-table"><div class="table-row table-head"><span>日期</span><span>路線</span><span>司機</span><span>車牌</span><span>訂單</span><span>箱數</span><span>預估公里</span><span>實際公里</span><span>油費</span></div>
-              @for (row of rows(report.routes, 'routes'); track row.routeId) { <div class="table-row"><span>{{ value(row.date) }}</span><span>#{{ value(row.routeId) }}</span><span>{{ value(row.driverName) }}</span><span>{{ value(row.plateNumber) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.plannedKm) }}</span><span>{{ value(row.actualKm) }}</span><span>{{ value(row.plannedFuelCost) }}</span></div> }
+              @for (row of rows(report.routes, 'routes'); track row.routeId) {
+                <div class="table-row"><span>{{ value(row.date) }}</span><span>#{{ value(row.routeId) }}</span><span>{{ value(row.driverName) }}</span><span>{{ value(row.plateNumber) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.plannedKm) }}</span><span>{{ value(row.actualKm) }}</span><span>{{ value(row.plannedFuelCost) }}</span></div>
+                @if (routeLegs(row).length) {
+                  <div class="route-legs" aria-label="分段實際里程">
+                    <strong>分段實際里程</strong>
+                    @for (leg of routeLegs(row); track $index) {
+                      <span>{{ value(leg.fromName) }} -> {{ value(leg.toName) }}：{{ value(leg.systemKm) }} km @if (leg.orderId) { <small>訂單 #{{ leg.orderId }}</small> }</span>
+                    }
+                  </div>
+                }
+              }
             </div>
           }
           @case ('attendance') {

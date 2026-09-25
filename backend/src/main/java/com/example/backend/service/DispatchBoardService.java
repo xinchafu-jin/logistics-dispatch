@@ -37,8 +37,15 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class DispatchBoardService {
 
-    private static final Set<OrderStatus> VISIBLE_ROUTE_STATUSES =
-            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.IN_DELIVERY);
+    /**
+     * 看板上路線要顯示的訂單。已完成、無人簽收、配送失敗也要回：路線派出後調度員要看得到送到哪裡，
+     * 只回待送的話，重新整理後送完的單就從格子裡消失了。
+     * 能不能改派是前端依狀態判斷（只有 CONFIRMED 能拖、會送進 reassign），後端 reassign 也會再擋。
+     * 取消的單不顯示，它已經不在這條路線上跑了。
+     */
+    private static final Set<OrderStatus> VISIBLE_ROUTE_STATUSES = EnumSet.of(
+            OrderStatus.CONFIRMED, OrderStatus.LOADED, OrderStatus.IN_DELIVERY,
+            OrderStatus.COMPLETED, OrderStatus.NO_SIGNATURE, OrderStatus.FAILED);
 
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;
@@ -71,7 +78,10 @@ public class DispatchBoardService {
         List<OrdersEntity> unassigned =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.CONFIRMED, warehouseId);
-
+        List<OrdersEntity> pendingConfirm =
+                ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
+                        date, OrderStatus.PENDING_CONFIRM, warehouseId
+                );
         Map<Long, List<OrdersEntity>> ordersByRoute = new HashMap<>();
         Set<Long> storeIds = new LinkedHashSet<>();
         Set<Long> vehicleIds = new LinkedHashSet<>();
@@ -91,6 +101,9 @@ public class DispatchBoardService {
             }
         }
         for (OrdersEntity order : unassigned) {
+            storeIds.add(order.getStoreId());
+        }
+        for (OrdersEntity order : pendingConfirm) {
             storeIds.add(order.getStoreId());
         }
 
@@ -138,16 +151,12 @@ public class DispatchBoardService {
             routeResponses.add(response);
         }
 
-        List<DispatchResponse.UnassignedOrderResponse> unassignedResponses = new ArrayList<>();
-        for (OrdersEntity order : unassigned) {
-            unassignedResponses.add(toUnassigned(order, stores.get(order.getStoreId())));
-        }
-
         DispatchResponse result = new DispatchResponse();
         result.setDate(date);
         result.setWarehouse(toWarehouse(warehouse));
         result.setRoutes(routeResponses);
-        result.setUnassignedOrders(unassignedResponses);
+        result.setUnassignedOrders(toUnassignedList(unassigned, stores));
+        result.setPendingConfirmOrders(toUnassignedList(pendingConfirm, stores));
         result.setDriversTakenElsewhere(driversTakenElsewhere(date, warehouseId));
         return result;
     }
@@ -235,6 +244,16 @@ public class DispatchBoardService {
             stop.setReceivingEnd(store.getReceivingEnd());
         }
         return stop;
+    }
+
+    /** 待排單和待確認單都用同一種卡片顯示，門市資料由呼叫端先一次查好傳進來 */
+    private List<DispatchResponse.UnassignedOrderResponse> toUnassignedList(
+            List<OrdersEntity> orders, Map<Long, StoresEntity> stores) {
+        List<DispatchResponse.UnassignedOrderResponse> responses = new ArrayList<>();
+        for (OrdersEntity order : orders) {
+            responses.add(toUnassigned(order, stores.get(order.getStoreId())));
+        }
+        return responses;
     }
 
     private DispatchResponse.UnassignedOrderResponse toUnassigned(

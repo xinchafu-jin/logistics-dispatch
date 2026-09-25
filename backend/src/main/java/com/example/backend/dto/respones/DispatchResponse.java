@@ -37,6 +37,12 @@ public class DispatchResponse {
     private List<UnassignedOrderResponse> unassignedOrders;
 
     /**
+     * 當天這一倉還沒確認的訂單（PENDING_CONFIRM）。看板上確認後才會進待排單，
+     * 不放進 unassignedOrders：OR-Tools 和 reassign 都假設那份清單全是 CONFIRMED。
+     */
+    private List<UnassignedOrderResponse> pendingConfirmOrders = new ArrayList<>();
+
+    /**
      * 當天已在「其他倉庫」被指派的司機。
      * <p>
      * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線。
@@ -92,6 +98,14 @@ public class DispatchResponse {
 
     public void setUnassignedOrders(List<UnassignedOrderResponse> unassignedOrders) {
         this.unassignedOrders = unassignedOrders;
+    }
+
+    public List<UnassignedOrderResponse> getPendingConfirmOrders() {
+        return pendingConfirmOrders;
+    }
+
+    public void setPendingConfirmOrders(List<UnassignedOrderResponse> pendingConfirmOrders) {
+        this.pendingConfirmOrders = pendingConfirmOrders;
     }
 
     public List<DriverTakenResponse> getDriversTakenElsewhere() {

@@ -96,8 +96,7 @@ public class DispatchGuardService {
             }
             List<OrdersEntity> orders = ordersDAO.findByRouteIdOrderBySequence(route.getId());
             List<OrdersEntity> activeOrders = orders.stream()
-                    .filter(order -> order.getStatus() == OrderStatus.CONFIRMED
-                            || order.getStatus() == OrderStatus.IN_DELIVERY)
+                    .filter(order -> order.getStatus().isActive())
                     .toList();
             if (activeOrders.isEmpty()) {
                 continue;
@@ -134,14 +133,15 @@ public class DispatchGuardService {
         }
 
         if (!problems.isEmpty()) {
-            throw new IllegalArgumentException("發布前檢查失敗：" + String.join("；", problems));
+            throw new IllegalArgumentException(date + " 發布前檢查失敗：" + String.join("；", problems));
         }
     }
 
     /**
-     * 撤回前檢查：當天已發布的路線上，只要有訂單已經開始配送（到站、送達、未簽收、失敗），就不能撤回。
+     * 撤回前檢查：當天已發布的路線上，只要有訂單已經開始配送（點交、到站、送達、未簽收、失敗），就不能撤回。
      *
      * <p>撤回會把路線翻回草稿，司機端只看已發布的路線，送到一半的司機手上的任務會直接消失。
+     * 點交也算開始：貨已經在車上，撤回重排會讓車上的貨跟系統的路線對不起來。
      * 已經出發後要換人，請走司機交接（EmergencyLeaveService）。</p>
      */
     public void assertCanWithdraw(LocalDate date) {
@@ -156,7 +156,8 @@ public class DispatchGuardService {
         }
         List<String> started = new ArrayList<>();
         for (OrdersEntity order : ordersDAO.findByRouteIdIn(publishedRouteIds)) {
-            if (order.getStatus() == OrderStatus.IN_DELIVERY
+            if (order.getStatus() == OrderStatus.LOADED
+                    || order.getStatus() == OrderStatus.IN_DELIVERY
                     || order.getStatus() == OrderStatus.COMPLETED
                     || order.getStatus() == OrderStatus.NO_SIGNATURE
                     || order.getStatus() == OrderStatus.FAILED) {
@@ -187,22 +188,22 @@ public class DispatchGuardService {
             return "當月班表尚未發布";
         }
         if (shift == null) {
-            return "今天未排班";
+            return "當天未排班";
         }
         if (shift.getShiftType() == ShiftType.WORK) {
             return null;
         }
         if (shift.getShiftType() == ShiftType.DAY_OFF) {
-            return "今天休假";
+            return "當天休假";
         }
         if (shift.getShiftType() == ShiftType.LEAVE) {
             if (shift.getChangeReason() == null || shift.getChangeReason().isBlank()) {
-                return "今天請假";
+                return "當天請假";
             }
-            return "今天請假（" + shift.getChangeReason() + "）";
+            return "當天請假（" + shift.getChangeReason() + "）";
         }
         // UNASSIGNED，以及日後新增、這裡還不認得的班次類型：一律當成不能出車
-        return "今天尚未安排";
+        return "當天尚未安排";
     }
 
     /** 訊息裡辨識路線：有車就用車牌，查不到車才退回路線編號 */

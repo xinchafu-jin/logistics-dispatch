@@ -83,8 +83,7 @@ public class RoutePlanMetricsService {
         List<RoutesEntity> routes = routesDAO.findByDate(date);
         for (RoutesEntity route : routes) {
             boolean hasActiveOrders = ordersDAO.findByRouteIdOrderBySequence(route.getId()).stream()
-                    .anyMatch(order -> order.getStatus() == com.example.backend.constants.OrderStatus.CONFIRMED
-                            || order.getStatus() == com.example.backend.constants.OrderStatus.IN_DELIVERY);
+                    .anyMatch(order -> order.getStatus().isActive());
             if (!hasActiveOrders) {
                 continue;
             }
@@ -101,8 +100,7 @@ public class RoutePlanMetricsService {
         RoutesEntity route = routesDAO.findById(routeId)
                 .orElseThrow(() -> new EntityNotFoundException("找不到路線，ID：" + routeId));
         boolean hasActiveOrders = ordersDAO.findByRouteIdOrderBySequence(route.getId()).stream()
-                .anyMatch(order -> order.getStatus() == com.example.backend.constants.OrderStatus.CONFIRMED
-                        || order.getStatus() == com.example.backend.constants.OrderStatus.IN_DELIVERY);
+                .anyMatch(order -> order.getStatus().isActive());
         PlanCalculation plan = calculatePlan(route, hasActiveOrders);
 
         RouteMetricsResponse response = new RouteMetricsResponse();
@@ -208,8 +206,7 @@ public class RoutePlanMetricsService {
         List<OrdersEntity> orders = ordersDAO.findByRouteIdOrderBySequence(route.getId());
         if (activeOnly) {
             orders = orders.stream()
-                    .filter(order -> order.getStatus() == com.example.backend.constants.OrderStatus.CONFIRMED
-                            || order.getStatus() == com.example.backend.constants.OrderStatus.IN_DELIVERY)
+                    .filter(order -> order.getStatus().isActive())
                     .toList();
         }
         if (orders.isEmpty()) {
@@ -320,8 +317,7 @@ public class RoutePlanMetricsService {
                 .orElseThrow(() -> new EntityNotFoundException(
                         "找不到路線倉庫，ID：" + route.getWarehouseId()));
         List<OrdersEntity> remaining = ordersDAO.findByRouteIdOrderBySequence(route.getId()).stream()
-                .filter(order -> order.getStatus() == com.example.backend.constants.OrderStatus.CONFIRMED
-                        || order.getStatus() == com.example.backend.constants.OrderStatus.IN_DELIVERY)
+                .filter(order -> order.getStatus().isActive())
                 .toList();
         Map<Long, OrdersEntity> firstOrderByStore = new LinkedHashMap<>();
         for (OrdersEntity order : remaining) {

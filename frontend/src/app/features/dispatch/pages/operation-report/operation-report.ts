@@ -87,6 +87,7 @@ export class OperationReport implements OnInit {
     const statuses: { status: OrderDto['status']; label: string; detail: string; tone: string }[] = [
       { status: 'COMPLETED', label: '已完成', detail: '正常簽收結案', tone: 'complete' },
       { status: 'IN_DELIVERY', label: '配送中', detail: '目前正在配送', tone: 'followup' },
+      { status: 'LOADED', label: '已點交', detail: '已在倉庫裝車，尚未抵達門市', tone: 'followup' },
       { status: 'FAILED', label: '配送失敗', detail: '需要異常處理', tone: 'exception' },
       { status: 'CONFIRMED', label: '待排車', detail: '等待調度安排', tone: 'pending' },
     ];

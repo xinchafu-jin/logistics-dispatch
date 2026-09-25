@@ -6,7 +6,7 @@ import com.example.backend.constants.RouteStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/** 司機與主管共用的臨時請假申請回應。 */
+/** 司機與主管共用的上班中特殊事由申請回應。 */
 public class EmergencyLeaveResponse {
     private final Long id;
     private final Long driverId;

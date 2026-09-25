@@ -19,6 +19,12 @@ public interface AttendanceRecordsDAO extends JpaRepository<AttendanceRecordsEnt
 
     boolean existsByDriverShiftId(Long driverShiftId);
 
+    boolean existsByDriverIdAndWorkDateBetweenAndLateExcusedTrue(
+            Long driverId,
+            LocalDate from,
+            LocalDate to
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from AttendanceRecordsEntity a where a.driverId = :driverId and a.workDate = :workDate")
     Optional<AttendanceRecordsEntity> findForUpdate(

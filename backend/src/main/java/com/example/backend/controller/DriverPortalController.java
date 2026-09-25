@@ -3,11 +3,14 @@ package com.example.backend.controller;
 import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverMessageResponse;
+import com.example.backend.dto.respones.DriverLeaveResponse;
+import com.example.backend.dto.respones.DriverLeaveHistoryResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.dto.respones.ExceptionCaseResponse;
+import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.dto.respones.PhotoUploadResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 /**
@@ -46,6 +50,7 @@ public class DriverPortalController {
     private final EmergencyLeaveService emergencyLeaveService;
     private final DeliveryPhotoStorageService deliveryPhotoStorageService;
     private final DriverMessagesService driverMessagesService;
+    private final DriverLeaveRequestService driverLeaveRequestService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -59,7 +64,8 @@ public class DriverPortalController {
             DriversService driversService,
             EmergencyLeaveService emergencyLeaveService,
             DeliveryPhotoStorageService deliveryPhotoStorageService,
-            DriverMessagesService driverMessagesService
+            DriverMessagesService driverMessagesService,
+            DriverLeaveRequestService driverLeaveRequestService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -73,6 +79,7 @@ public class DriverPortalController {
         this.emergencyLeaveService = emergencyLeaveService;
         this.deliveryPhotoStorageService = deliveryPhotoStorageService;
         this.driverMessagesService = driverMessagesService;
+        this.driverLeaveRequestService = driverLeaveRequestService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -153,6 +160,50 @@ public class DriverPortalController {
         return emergencyLeaveService.findMine(driverId(jwt));
     }
 
+    /** 倉庫點交：寫入實點箱數，相符轉為已點交，不符則建立異常與補送單。 */
+    @PostMapping("/loading")
+    public LoadingResponse loading(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody LoadingRequestDTO request) {
+        return deliveryService.load(driverId(jwt), request);
+    }
+
+    /** 在司機班表中送出一般請假；時間不填代表整天，兩個時間都有則代表部分時段。 */
+    @PostMapping("/leave-requests")
+    public DriverLeaveResponse requestLeave(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverLeaveRequestDTO request
+    ) {
+        return driverLeaveRequestService.submit(driverId(jwt), request);
+    }
+
+    /** 查詢自己的請假與主管處理結果；month 可省略，unreadOnly=true 只抓未讀通知。 */
+    @GetMapping("/leave-requests")
+    public List<DriverLeaveResponse> findMyLeaves(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
+            @RequestParam(defaultValue = "false") boolean unreadOnly
+    ) {
+        return driverLeaveRequestService.findMine(driverId(jwt), month, unreadOnly);
+    }
+
+    @PostMapping("/leave-requests/{id}/read")
+    public DriverLeaveResponse markLeaveResultRead(
+            @AuthenticationPrincipal Jwt jwt,
+            @org.springframework.web.bind.annotation.PathVariable Long id
+    ) {
+        return driverLeaveRequestService.markRead(driverId(jwt), id);
+    }
+
+    /** 司機只能查自己的請假單完整異動歷史。 */
+    @GetMapping("/leave-requests/{id}/history")
+    public List<DriverLeaveHistoryResponse> findMyLeaveHistory(
+            @AuthenticationPrincipal Jwt jwt,
+            @org.springframework.web.bind.annotation.PathVariable Long id
+    ) {
+        return driverLeaveRequestService.findMyHistory(driverId(jwt), id);
+    }
+
     /** 記錄司機抵達門市的時間。 */
     @PostMapping("/arrive")
     public DeliveryRecordResponse arrive(
@@ -209,6 +260,24 @@ public class DriverPortalController {
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody MileageRequestDTO request) {
         return mileageLogsService.end(driverId(jwt), request);
+    }
+
+    /** 補傳出車時的里程表照片；保留原本的 JSON 登記 API。 */
+    @PostMapping(value = "/mileage/start/photo", consumes = "multipart/form-data")
+    public MileageLogResponse uploadStartMileagePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return mileageLogsService.attachStartPhoto(driverId(jwt), file);
+    }
+
+    /** 補傳收車時的里程表照片；保留原本的 JSON 登記 API。 */
+    @PostMapping(value = "/mileage/end/photo", consumes = "multipart/form-data")
+    public MileageLogResponse uploadEndMileagePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return mileageLogsService.attachEndPhoto(driverId(jwt), file);
     }
 
     /** GPS 點較晚送達或 OSRM 暫時失敗時，重新結算今天已收車的里程。 */

@@ -910,6 +910,7 @@ public final class ReportResponses {
         private Double plannedKm;
         private Double plannedFuelCost;
         private Integer plannedWorkMinutes;
+        private Double systemKm;
         private Double actualKm;
         private Double differenceKm;
         private Double differencePercent;
@@ -918,6 +919,7 @@ public final class ReportResponses {
         private LocalDateTime tripEndAt;
         private Long tripDurationMinutes;
         private List<RouteOrder> deliveryOrder;
+        private List<RouteLegRow> routeLegs;
 
         public RouteRow() {
         }
@@ -1142,6 +1144,14 @@ public final class ReportResponses {
             this.plannedWorkMinutes = plannedWorkMinutes;
         }
 
+        public Double getSystemKm() {
+            return systemKm;
+        }
+
+        public void setSystemKm(Double systemKm) {
+            this.systemKm = systemKm;
+        }
+
         public Double getActualKm() {
             return actualKm;
         }
@@ -1205,6 +1215,71 @@ public final class ReportResponses {
         public void setDeliveryOrder(List<RouteOrder> deliveryOrder) {
             this.deliveryOrder = deliveryOrder;
         }
+
+        public List<RouteLegRow> getRouteLegs() {
+            return routeLegs;
+        }
+
+        public void setRouteLegs(List<RouteLegRow> routeLegs) {
+            this.routeLegs = routeLegs;
+        }
+    }
+
+    /** 路線報表中可對應訂單的單段實際系統里程。 */
+    public static class RouteLegRow {
+        private Integer sequence;
+        private String fromName;
+        private String toName;
+        private Long orderId;
+        private LocalDateTime startedAt;
+        private LocalDateTime endedAt;
+        private Long durationMinutes;
+        private Double systemKm;
+        private String calculationStatus;
+
+        public RouteLegRow() {
+        }
+
+        public RouteLegRow(
+                Integer sequence,
+                String fromName,
+                String toName,
+                Long orderId,
+                LocalDateTime startedAt,
+                LocalDateTime endedAt,
+                Long durationMinutes,
+                Double systemKm,
+                String calculationStatus
+        ) {
+            this.sequence = sequence;
+            this.fromName = fromName;
+            this.toName = toName;
+            this.orderId = orderId;
+            this.startedAt = startedAt;
+            this.endedAt = endedAt;
+            this.durationMinutes = durationMinutes;
+            this.systemKm = systemKm;
+            this.calculationStatus = calculationStatus;
+        }
+
+        public Integer getSequence() { return sequence; }
+        public void setSequence(Integer sequence) { this.sequence = sequence; }
+        public String getFromName() { return fromName; }
+        public void setFromName(String fromName) { this.fromName = fromName; }
+        public String getToName() { return toName; }
+        public void setToName(String toName) { this.toName = toName; }
+        public Long getOrderId() { return orderId; }
+        public void setOrderId(Long orderId) { this.orderId = orderId; }
+        public LocalDateTime getStartedAt() { return startedAt; }
+        public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
+        public LocalDateTime getEndedAt() { return endedAt; }
+        public void setEndedAt(LocalDateTime endedAt) { this.endedAt = endedAt; }
+        public Long getDurationMinutes() { return durationMinutes; }
+        public void setDurationMinutes(Long durationMinutes) { this.durationMinutes = durationMinutes; }
+        public Double getSystemKm() { return systemKm; }
+        public void setSystemKm(Double systemKm) { this.systemKm = systemKm; }
+        public String getCalculationStatus() { return calculationStatus; }
+        public void setCalculationStatus(String calculationStatus) { this.calculationStatus = calculationStatus; }
     }
 
     public static class RouteOrder {

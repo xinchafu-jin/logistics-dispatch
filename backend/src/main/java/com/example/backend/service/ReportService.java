@@ -20,6 +20,7 @@ import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
 import com.example.backend.entity.VehiclesEntity;
@@ -49,7 +50,7 @@ import java.util.stream.Collectors;
 public class ReportService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final String COMPLETION_DEFINITION =
-            "COMPLETED / (CONFIRMED + IN_DELIVERY + COMPLETED + NO_SIGNATURE + FAILED)；"
+            "COMPLETED / (CONFIRMED + LOADED + IN_DELIVERY + COMPLETED + NO_SIGNATURE + FAILED)；"
                     + "按配送日期分組，以查詢當下狀態計算；排除待確認與取消";
 
     private final ReportReadDAO reportReadDAO;
@@ -125,7 +126,8 @@ public class ReportService {
                 countStatus(orders, OrderStatus.PENDING_CONFIRM), unassigned.size(),
                 (int) orders.stream().filter(order -> order.getStatus() == OrderStatus.CONFIRMED
                         && order.getRouteId() != null).count(),
-                countStatus(orders, OrderStatus.IN_DELIVERY), completed,
+                // 已點交的貨已經上車，報表併進配送中，不另開一格
+                countStatus(orders, OrderStatus.IN_DELIVERY) + countStatus(orders, OrderStatus.LOADED), completed,
                 countStatus(orders, OrderStatus.FAILED), countStatus(orders, OrderStatus.CANCELLED),
                 published.size(),
                 (int) published.stream().map(RoutesEntity::getDriverId).filter(id -> id != null).distinct().count(),
@@ -248,6 +250,9 @@ public class ReportService {
         Map<Long, VehiclesEntity> vehicles = index(vehiclesDAO.findAll(), VehiclesEntity::getId);
         Map<Long, WarehousesEntity> warehouses = index(warehousesDAO.findAll(), WarehousesEntity::getId);
         Map<Long, StoresEntity> stores = index(storesDAO.findAll(), StoresEntity::getId);
+        Map<Long, List<RouteLegMileagesEntity>> routeLegsByRoute = reportReadDAO.routeLegMileages(
+                        selectedRoutes.stream().map(RoutesEntity::getId).toList())
+                .stream().collect(Collectors.groupingBy(RouteLegMileagesEntity::getRouteId));
         List<ReportResponses.RouteRow> rows = new ArrayList<>();
 
         for (RoutesEntity route : selectedRoutes) {
@@ -274,7 +279,7 @@ public class ReportService {
                             order.getId(), order.getOrderNumber(), order.getSequence(), order.getStoreId(),
                             storeName(stores, order.getStoreId()), order.getBoxCount(), order.getStatus().name()))
                     .toList();
-            rows.add(new ReportResponses.RouteRow(
+            ReportResponses.RouteRow row = new ReportResponses.RouteRow(
                     route.getId(), route.getDate(), route.getWarehouseId(),
                     warehouse == null ? null : warehouse.getName(), route.getVehicleId(),
                     vehicle == null ? null : vehicle.getPlateNumber(), route.getDriverId(),
@@ -285,7 +290,14 @@ public class ReportService {
                     countStatus(assigned, OrderStatus.NO_SIGNATURE),
                     plannedKm, route.getEstimatedFuelCost(), route.getEstimatedWorkMinutes(),
                     match.getActualKm(), difference, differencePercent, comparisonStatus,
-                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder));
+                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder);
+            List<RouteLegMileagesEntity> routeLegs = routeLegsByRoute.getOrDefault(route.getId(), List.of());
+            row.setRouteLegs(routeLegs.stream()
+                    .map(leg -> toRouteLegRow(leg, warehouse, stores)).toList());
+            if (!routeLegs.isEmpty() && routeLegs.stream().allMatch(leg -> leg.getSystemDistanceKm() != null)) {
+                row.setSystemKm(routeLegs.stream().mapToDouble(RouteLegMileagesEntity::getSystemDistanceKm).sum());
+            }
+            rows.add(row);
         }
         return new ReportResponses.Routes(range.getFrom(), range.getTo(),
                 "CURRENT_ROUTE_RECORD_NOT_PUBLISH_SNAPSHOT", rows);
@@ -795,6 +807,24 @@ public class ReportService {
         return (double) (log.getEndOdometer() - log.getStartOdometer());
     }
 
+    private static ReportResponses.RouteLegRow toRouteLegRow(
+            RouteLegMileagesEntity leg,
+            WarehousesEntity warehouse,
+            Map<Long, StoresEntity> stores
+    ) {
+        String fromName = leg.getFromType().name().equals("WAREHOUSE")
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getFromStoreId());
+        String toName = leg.getToType().name().equals("WAREHOUSE")
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getToStoreId());
+        Long durationMinutes = leg.getStartedAt() == null || leg.getEndedAt() == null
+                ? null : Duration.between(leg.getStartedAt(), leg.getEndedAt()).toMinutes();
+        return new ReportResponses.RouteLegRow(
+                leg.getSequence(), fromName, toName, leg.getOrderId(), leg.getStartedAt(), leg.getEndedAt(),
+                durationMinutes, leg.getSystemDistanceKm(), leg.getCalculationStatus());
+    }
+
     private Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder(List<OrdersEntity> orders) {
         return reportReadDAO.deliveriesForOrders(orders.stream().map(OrdersEntity::getId).toList())
                 .stream().collect(Collectors.groupingBy(DeliveryRecordsEntity::getOrderId));
@@ -839,7 +869,7 @@ public class ReportService {
     }
 
     private static boolean completionEligible(OrderStatus status) {
-        return status == OrderStatus.CONFIRMED || status == OrderStatus.IN_DELIVERY
+        return status.isActive()
                 || status == OrderStatus.COMPLETED || status == OrderStatus.NO_SIGNATURE
                 || status == OrderStatus.FAILED;
     }

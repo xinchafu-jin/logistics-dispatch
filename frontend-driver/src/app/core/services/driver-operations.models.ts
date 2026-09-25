@@ -96,6 +96,24 @@ export interface GpsRouteResponse {
   duration: number;
 }
 
+/** 倉庫點交：只填實點箱數，跟訂單箱數比對、決定成不成功的是後端 */
+export interface LoadingRequest {
+  orderId: number;
+  loadedBoxCount: number;
+  notes?: string;
+}
+
+/** 相符時 orderStatus 是 LOADED；不符時是 FAILED，並帶回異常單與明日補送單 */
+export interface LoadingResponse {
+  orderId: number;
+  orderStatus: DriverTaskOrderStatus;
+  loadedAt: string | null;
+  exceptionCaseId: number | null;
+  followUpOrderId: number | null;
+  followUpOrderNumber: string | null;
+  followUpDeliveryDate: string | null;
+}
+
 export interface ArriveRequest {
   orderId: number;
 }
@@ -217,6 +235,7 @@ export interface DriverTaskStop {
 export type DriverTaskOrderStatus =
   | 'PENDING_CONFIRM'
   | 'CONFIRMED'
+  | 'LOADED'
   | 'IN_DELIVERY'
   | 'COMPLETED'
   | 'CANCELLED'

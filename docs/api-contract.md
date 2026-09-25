@@ -281,7 +281,7 @@ Response:
 
 ```
 GET  /api/driver/tasks/today
-POST /api/driver/handover
+POST /api/driver/loading
 POST /api/driver/gps
 POST /api/driver/arrive
 POST /api/driver/deliver
@@ -293,9 +293,9 @@ POST /api/driver/mileage/end
 
 | 端點 | Request body |
 |---|---|
-| `/api/driver/handover` | `{ routeId, items: [{ orderId, expectedBoxCount, actualBoxCount }] }` |
+| `/api/driver/loading` | `{ orderId, loadedBoxCount, notes }`：倉庫點交，一次一張單。箱數相符轉 `LOADED`；不符則原單 `FAILED`，並建立異常單與明日補送單 |
 | `/api/driver/gps` | `{ lat, lng }` |
-| `/api/driver/arrive` | `{ orderId }` |
+| `/api/driver/arrive` | `{ orderId }`：訂單須為 `LOADED`（已點交） |
 | `/api/driver/deliver` | `{ orderId, boxCount, notes, photo }` |
 | `/api/driver/no-signature` | `{ orderId, photo }` |
 | `/api/driver/exception` | `{ category, description }` |

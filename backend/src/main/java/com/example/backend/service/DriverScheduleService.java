@@ -198,7 +198,7 @@ public class DriverScheduleService {
     }
 
     /**
-     * 主管將今天或未來的班次改為臨時請假；草稿及已發布班表都可使用。
+     * 主管將今天或未來的班次改為請假；草稿及已發布班表都可使用。
      * 若司機已打過上班卡，應保留原班次並以實際下班時間記錄提早離開。
      */
     public DriverShiftDTO markLeave(Long shiftId, String reason, Long version) {

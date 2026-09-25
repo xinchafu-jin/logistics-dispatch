@@ -13,11 +13,14 @@ public class MileageLogResponse {
     private LocalDate date;
     private Integer startOdometer;
     private Integer endOdometer;
+    private String startMileagePhotoUrl;
+    private String endMileagePhotoUrl;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Integer actualDistance;
     private Long actualDurationMinutes;
     private Double gpsDistanceKm;
+    private Integer vehicleCurrentOdometerKm;
     private String gpsDistanceStatus;
     private LocalDateTime mileageSettledAt;
     private Double vehicleCumulativeMileageKm;
@@ -46,6 +49,16 @@ public class MileageLogResponse {
     public Integer getEndOdometer() { return endOdometer; }
     public void setEndOdometer(Integer endOdometer) { this.endOdometer = endOdometer; }
 
+    public String getStartMileagePhotoUrl() { return startMileagePhotoUrl; }
+    public void setStartMileagePhotoUrl(String startMileagePhotoUrl) {
+        this.startMileagePhotoUrl = startMileagePhotoUrl;
+    }
+
+    public String getEndMileagePhotoUrl() { return endMileagePhotoUrl; }
+    public void setEndMileagePhotoUrl(String endMileagePhotoUrl) {
+        this.endMileagePhotoUrl = endMileagePhotoUrl;
+    }
+
     public LocalDateTime getStartTime() { return startTime; }
     public void setStartTime(LocalDateTime startTime) { this.startTime = startTime; }
 
@@ -62,6 +75,11 @@ public class MileageLogResponse {
 
     public Double getGpsDistanceKm() { return gpsDistanceKm; }
     public void setGpsDistanceKm(Double gpsDistanceKm) { this.gpsDistanceKm = gpsDistanceKm; }
+
+    public Integer getVehicleCurrentOdometerKm() { return vehicleCurrentOdometerKm; }
+    public void setVehicleCurrentOdometerKm(Integer vehicleCurrentOdometerKm) {
+        this.vehicleCurrentOdometerKm = vehicleCurrentOdometerKm;
+    }
 
     public String getGpsDistanceStatus() { return gpsDistanceStatus; }
     public void setGpsDistanceStatus(String gpsDistanceStatus) {

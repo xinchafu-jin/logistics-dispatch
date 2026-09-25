@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,6 +44,12 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
 
     boolean existsByDateAndDriverIdAndStatus(
             LocalDate date, Long driverId, RouteStatus status);
+
+    /** 看板日期列：一段日期內全部倉庫的路線。 */
+    List<RoutesEntity> findByDateBetween(LocalDate from, LocalDate to);
+
+    /** 看板日期列：區間前面還沒結案的那幾天的路線。 */
+    List<RoutesEntity> findByDateIn(Collection<LocalDate> dates);
 
 }
 

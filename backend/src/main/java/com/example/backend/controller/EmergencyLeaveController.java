@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/** 主管審核上班中臨時請假並完成路線交接。 */
+/** 主管審核上班中特殊事由離班並完成路線交接。 */
 @RestController
 @RequestMapping("/api/emergency-leave-requests")
 public class EmergencyLeaveController {

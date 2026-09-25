@@ -205,10 +205,10 @@
             <button
               type="button"
               class="weekday-preset"
-              (click)="selectWeekdayGroup([0, 6])"
+              (click)="selectWeekdayGroup([6])"
               [disabled]="saving()"
             >
-              週六、日
+              週六
             </button>
           </div>
 
@@ -236,7 +236,7 @@
               (click)="applyStandardWeek()"
               [disabled]="saving()"
             >
-              週一至五上班、週六日休假
+              週一至五上班、週六排休；週日固定公休
             </button>
           </div>
         </div>
@@ -259,7 +259,11 @@
               <tr>
                 <th scope="col" class="driver-column">司機</th>
                 @for (day of days(); track day.iso) {
-                  <th scope="col" [class.is-weekend]="day.isWeekend">
+                  <th
+                    scope="col"
+                    [class.is-weekend]="day.isWeekend"
+                    [class.is-sunday]="day.weekdayIndex === 0"
+                  >
                     <strong>{{ day.day }}</strong>
                     <span>{{ day.weekday }}</span>
                   </th>
@@ -274,8 +278,14 @@
                     <span>{{ row.driverAccount }}</span>
                   </th>
                   @for (entry of row.entries; track entry.day.iso) {
-                    <td [class.is-weekend]="entry.day.isWeekend">
-                      @if (entry.shift; as shift) {
+                    <td
+                      [class.is-weekend]="entry.day.isWeekend"
+                      [class.is-sunday]="entry.day.weekdayIndex === 0"
+                      [attr.aria-label]="entry.day.weekdayIndex === 0 ? '週日固定公休' : null"
+                    >
+                      @if (entry.day.weekdayIndex === 0) {
+                        <span class="fixed-holiday" aria-hidden="true"></span>
+                      } @else if (entry.shift; as shift) {
                         <button
                           type="button"
                           class="shift-cell"

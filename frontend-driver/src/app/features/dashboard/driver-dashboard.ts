@@ -217,6 +217,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly deliveryPhoto = signal<File | null>(null);
   protected readonly deliveryExceptionOpen = signal(false);
   protected readonly deliveryExceptionDescription = signal('');
+  protected readonly activeLoadingOrderId = signal<number | null>(null);
+  protected readonly loadingBoxCount = signal('');
+  protected readonly loadingNotes = signal('');
+  /** 箱數不符時先停一次讓司機再點一遍；改了箱數就要重新確認 */
+  protected readonly loadingMismatchPending = signal(false);
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
@@ -658,8 +663,13 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return this.hasCoordinates(stop);
   }
 
-  protected canMarkArrived(stop: DriverTaskStop): boolean {
+  /** 還沒在倉庫點交的單先點交；點交完才能按抵達（後端也會擋） */
+  protected canLoad(stop: DriverTaskStop): boolean {
     return stop.orderStatus === 'CONFIRMED';
+  }
+
+  protected canMarkArrived(stop: DriverTaskStop): boolean {
+    return stop.orderStatus === 'LOADED';
   }
 
   protected canCompleteDelivery(stop: DriverTaskStop): boolean {
@@ -669,7 +679,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected taskStatusLabel(status: DriverTaskOrderStatus): string {
     const labels: Record<DriverTaskOrderStatus, string> = {
       PENDING_CONFIRM: '待確認',
-      CONFIRMED: '待配送',
+      CONFIRMED: '待點交',
+      LOADED: '已點交',
       IN_DELIVERY: '配送中',
       COMPLETED: '已交貨',
       CANCELLED: '已取消',
@@ -730,6 +741,89 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected updateDeliveryExceptionDescription(event: Event): void {
     this.deliveryExceptionDescription.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected isLoadingActionOpen(stop: DriverTaskStop): boolean {
+    return this.activeLoadingOrderId() === stop.orderId;
+  }
+
+  protected openLoadingAction(stop: DriverTaskStop): void {
+    if (!this.canLoad(stop)) {
+      return;
+    }
+
+    this.closeDeliveryAction();
+    this.activeLoadingOrderId.set(stop.orderId);
+    this.loadingBoxCount.set(String(stop.expectedBoxCount));
+    this.loadingNotes.set('');
+    this.loadingMismatchPending.set(false);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+  }
+
+  protected closeLoadingAction(): void {
+    this.activeLoadingOrderId.set(null);
+    this.loadingBoxCount.set('');
+    this.loadingNotes.set('');
+    this.loadingMismatchPending.set(false);
+    this.taskActionError.set(null);
+  }
+
+  protected updateLoadingBoxCount(event: Event): void {
+    this.loadingBoxCount.set((event.target as HTMLInputElement).value);
+    this.loadingMismatchPending.set(false);
+  }
+
+  protected updateLoadingNotes(event: Event): void {
+    this.loadingNotes.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected submitLoading(stop: DriverTaskStop): void {
+    if (!this.canLoad(stop) || this.isTaskSubmitting()) {
+      return;
+    }
+
+    const rawCount = this.loadingBoxCount().trim();
+    const loadedBoxCount = Number(rawCount);
+    if (!rawCount || !Number.isInteger(loadedBoxCount) || loadedBoxCount < 0) {
+      this.taskActionError.set('請輸入 0 以上的整數箱數。');
+      return;
+    }
+    if (loadedBoxCount > stop.expectedBoxCount) {
+      this.taskActionError.set(`實點箱數不能多於應點的 ${stop.expectedBoxCount} 箱，多出來的請退回倉庫。`);
+      return;
+    }
+    // 箱數不符一送出就定案（原單配送失敗、改明天補送），所以第一次按先停下來讓司機確認
+    if (loadedBoxCount !== stop.expectedBoxCount && !this.loadingMismatchPending()) {
+      this.loadingMismatchPending.set(true);
+      this.taskActionError.set(null);
+      return;
+    }
+
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+
+    const notes = this.loadingNotes().trim() || undefined;
+    this.operations.loading({orderId: stop.orderId, loadedBoxCount, notes}).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeLoadingAction();
+        if (response.orderStatus === 'LOADED') {
+          this.taskActionMessage.set('點交完成，可以出發配送。');
+        } else {
+          const followUp = response.followUpOrderNumber
+            ? `，明日補送單 ${response.followUpOrderNumber}`
+            : '';
+          this.taskActionError.set(`箱數不符，已建立異常單${followUp}。這張單今天不配送。`);
+        }
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.taskActionError.set(this.getErrorMessage(error, '無法完成點交。'));
+        this.isTaskSubmitting.set(false);
+      },
+    });
   }
 
   protected arriveAtStop(stop: DriverTaskStop): void {
@@ -1317,7 +1411,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private applyDeliveryResponse(response: DeliveryRecordResponse): void {
+  /** 抵達、交貨、點交的回應都帶 orderId 與新狀態，只用這兩個欄位更新站點 */
+  private applyDeliveryResponse(response: Pick<DeliveryRecordResponse, 'orderId' | 'orderStatus'>): void {
     this.todayTasks.update((tasks) => {
       if (!tasks) {
         return null;

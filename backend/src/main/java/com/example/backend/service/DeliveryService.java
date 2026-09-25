@@ -12,8 +12,10 @@ import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.request.ArriveRequestDTO;
 import com.example.backend.dto.request.DeliverRequestDTO;
+import com.example.backend.dto.request.LoadingRequestDTO;
 import com.example.backend.dto.request.NoSignatureRequestDTO;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
+import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
@@ -30,7 +32,7 @@ import java.time.format.DateTimeFormatter;
 
 import static com.example.backend.constants.ValidMsg.*;
 
-/** 司機抵達、完成交貨與無人簽收的共用交易流程。 */
+/** 司機倉庫點交、抵達、完成交貨與無人簽收的共用交易流程。 */
 @Service
 @Transactional
 public class DeliveryService {
@@ -41,26 +43,70 @@ public class DeliveryService {
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;
     private final DriversDAO driversDAO;
+    private final RouteLegMileageService routeLegMileageService;
 
     public DeliveryService(
             DeliveryRecordsDAO deliveryRecordsDAO,
             ExceptionCasesDAO exceptionCasesDAO,
             OrdersDAO ordersDAO,
             RoutesDAO routesDAO,
-            DriversDAO driversDAO
+            DriversDAO driversDAO,
+            RouteLegMileageService routeLegMileageService
     ) {
         this.deliveryRecordsDAO = deliveryRecordsDAO;
         this.exceptionCasesDAO = exceptionCasesDAO;
         this.ordersDAO = ordersDAO;
         this.routesDAO = routesDAO;
         this.driversDAO = driversDAO;
+        this.routeLegMileageService = routeLegMileageService;
+    }
+
+    /** 倉庫點交：箱數相符轉為 LOADED；不符時原單 FAILED，並建立異常單與明日補送單。 */
+    public LoadingResponse load(Long driverId, LoadingRequestDTO request) {
+        LocalDateTime now = LocalDateTime.now(TAIPEI);
+        OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
+        // 連按兩次時，第二次進來單子已經是 LOADED 或 FAILED，會在這裡被擋下
+        requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_LOADING_STATUS_INVALID);
+
+        int expected = order.getBoxCount();
+        int loaded = request.getLoadedBoxCount();
+        // 點到的比單子多，是別張單的箱子混進來，退回倉庫即可，不算這張單的異常
+        if (loaded > expected) {
+            throw new IllegalArgumentException(DELIVERY_LOADING_OVER_COUNT.formatted(expected));
+        }
+
+        if (loaded == expected) {
+            order.setStatus(OrderStatus.LOADED);
+            order.setLoadedAt(now);
+            ordersDAO.save(order);
+            return new LoadingResponse(order.getId(), order.getStatus(), order.getLoadedAt(),
+                    null, null, null, null);
+        }
+
+        // 箱數不符比照無人簽收：原單今天結案，整張由明日補送單重送；主管在異常中心確認後，補送單才進待排車
+        OrdersEntity followUpOrder = createRedeliveryOrder(order, "LD", now.toLocalDate().plusDays(1));
+
+        ExceptionCasesEntity exceptionCase = new ExceptionCasesEntity();
+        exceptionCase.setOrderId(order.getId());
+        exceptionCase.setFollowUpOrderId(followUpOrder.getId());
+        // 異常中心只列已送進確認區的案件；設成現在，下一次排程或查詢就會送進去，主管當下就看得到
+        exceptionCase.setReviewAvailableAt(now);
+        exceptionCase.setType(ExceptionType.LOADING_MISMATCH);
+        exceptionCase.setDescription(loadingMismatchDescription(expected, loaded, request.getNotes()));
+        exceptionCase.setStatus(ExceptionStatus.OPEN);
+        exceptionCase = exceptionCasesDAO.save(exceptionCase);
+
+        order.setStatus(OrderStatus.FAILED);
+        ordersDAO.save(order);
+        return new LoadingResponse(order.getId(), order.getStatus(), null, exceptionCase.getId(),
+                followUpOrder.getId(), followUpOrder.getOrderNumber(), followUpOrder.getDeliveryDate());
     }
 
     /** 抵達門市後建立本次配送紀錄，訂單進入配送中。 */
     public DeliveryRecordResponse arrive(Long driverId, ArriveRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
-        requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_ARRIVE_STATUS_INVALID);
+        requireOrderStatus(order, OrderStatus.LOADED, DELIVERY_ARRIVE_STATUS_INVALID);
 
         if (deliveryRecordsDAO.findFirstByOrderIdOrderByIdDesc(order.getId())
                 .filter(this::isInProgress)
@@ -79,7 +125,9 @@ public class DeliveryService {
 
         order.setStatus(OrderStatus.IN_DELIVERY);
         ordersDAO.save(order);
-        return toResponse(deliveryRecordsDAO.save(record), order, null, null);
+        record = deliveryRecordsDAO.save(record);
+        routeLegMileageService.recordArrival(driverId, order, record, now);
+        return toResponse(record, order, null, null);
     }
 
     /** 完成交貨，保存實際箱數與備註並將訂單設為完成。 */
@@ -98,6 +146,7 @@ public class DeliveryService {
 
         DeliveryRecordsEntity record = findInProgressRecord(order.getId());
         record.setDeliveredAt(now);
+        record.setHandledAt(now);
         record.setExpectedBoxCount(order.getBoxCount());
         record.setDeliveredBoxCount(delivered);
         record.setShortageBoxCount(shortage);
@@ -133,9 +182,10 @@ public class DeliveryService {
         record.setPhotoUrl(trimToNull(request.getPhotoUrl()));
         record.setNotes(trimToNull(request.getNotes()));
         record.setNoSignature(true);
+        record.setHandledAt(now);
         record = deliveryRecordsDAO.save(record);
 
-        OrdersEntity followUpOrder = createNoSignatureFollowUpOrder(order, now.toLocalDate().plusDays(1));
+        OrdersEntity followUpOrder = createRedeliveryOrder(order, "NS", now.toLocalDate().plusDays(1));
 
         ExceptionCasesEntity exceptionCase = new ExceptionCasesEntity();
         exceptionCase.setOrderId(order.getId());
@@ -153,14 +203,16 @@ public class DeliveryService {
         return toResponse(record, order, exceptionCase.getId(), followUpOrder);
     }
 
-    private OrdersEntity createNoSignatureFollowUpOrder(
+    /** 整張原單改日重送。無人簽收（NS）與點交不符（LD）共用，單號前綴區分是哪一種。 */
+    private OrdersEntity createRedeliveryOrder(
             OrdersEntity sourceOrder,
+            String numberPrefix,
             LocalDate deliveryDate
     ) {
         int retryCount = valueOrZero(sourceOrder.getRetryCount()) + 1;
         OrdersEntity followUpOrder = new OrdersEntity();
-        followUpOrder.setOrderNumber(noSignatureOrderNumber(
-                sourceOrder.getId(), deliveryDate, retryCount));
+        followUpOrder.setOrderNumber(redeliveryOrderNumber(
+                numberPrefix, sourceOrder.getId(), deliveryDate, retryCount));
         followUpOrder.setStoreId(sourceOrder.getStoreId());
         followUpOrder.setWarehouseId(sourceOrder.getWarehouseId());
         followUpOrder.setSourceVendor(sourceOrder.getSourceVendor());
@@ -175,7 +227,8 @@ public class DeliveryService {
         return ordersDAO.save(followUpOrder);
     }
 
-    private String noSignatureOrderNumber(
+    private String redeliveryOrderNumber(
+            String prefix,
             Long sourceOrderId,
             LocalDate deliveryDate,
             int retryCount
@@ -183,7 +236,13 @@ public class DeliveryService {
         String compactDate = deliveryDate.format(DateTimeFormatter.BASIC_ISO_DATE).substring(2);
         String sourceId = Long.toString(sourceOrderId, 36).toUpperCase();
         String retry = Integer.toString(retryCount, 36).toUpperCase();
-        return "NS-" + compactDate + "-" + sourceId + "-" + retry;
+        return prefix + "-" + compactDate + "-" + sourceId + "-" + retry;
+    }
+
+    private String loadingMismatchDescription(int expected, int loaded, String notes) {
+        String description = DELIVERY_LOADING_MISMATCH_DESCRIPTION.formatted(expected, loaded);
+        String driverNotes = trimToNull(notes);
+        return driverNotes == null ? description : description + "；司機備註：" + driverNotes;
     }
 
     private Long createQualityExceptionIfNeeded(
