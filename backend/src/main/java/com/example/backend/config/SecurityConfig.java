@@ -63,7 +63,9 @@ public class SecurityConfig {
                                 "/uploads/driver-photos/**", "/uploads/delivery-photos/**").permitAll()
                         .requestMatchers("/api/driver/**")
                         .hasRole(AuthService.ROLE_DRIVER)
-                        .requestMatchers("/api/driver-schedules/**", "/api/fleet/**", "/api/emergency-leave-requests/**")
+                        .requestMatchers("/api/driver-schedules/**", "/api/fleet/**",
+                                "/api/emergency-leave-requests/**", "/api/leave-requests/**",
+                                "/api/admin-sticky-notes/**")
                         .hasRole(AuthService.ROLE_ADMIN)
                         .requestMatchers("/api/reports/**")
                         .hasRole(AuthService.ROLE_ADMIN)

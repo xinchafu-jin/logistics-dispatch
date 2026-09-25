@@ -1,6 +1,7 @@
 package com.example.backend.dto.request;
 
 import com.example.backend.constants.AttendanceStatus;
+import com.example.backend.constants.AttendancePunctualityStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,6 +28,12 @@ public class AttendanceRecordDTO {
     private BigDecimal totalWorkHours;
     private AttendanceStatus status;
     private Boolean gpsAllowed;
+    private AttendancePunctualityStatus punctualityStatus;
+    private Integer lateMinutes;
+    private Boolean lateExcused;
+    private Boolean leaveRequired;
+    private Integer leaveRequiredMinutes;
+    private Long coveredLeaveRequestId;
 
     public Long getId() {
         return id;
@@ -178,5 +185,24 @@ public class AttendanceRecordDTO {
 
     public void setGpsAllowed(Boolean gpsAllowed) {
         this.gpsAllowed = gpsAllowed;
+    }
+
+    public AttendancePunctualityStatus getPunctualityStatus() { return punctualityStatus; }
+    public void setPunctualityStatus(AttendancePunctualityStatus punctualityStatus) {
+        this.punctualityStatus = punctualityStatus;
+    }
+    public Integer getLateMinutes() { return lateMinutes; }
+    public void setLateMinutes(Integer lateMinutes) { this.lateMinutes = lateMinutes; }
+    public Boolean getLateExcused() { return lateExcused; }
+    public void setLateExcused(Boolean lateExcused) { this.lateExcused = lateExcused; }
+    public Boolean getLeaveRequired() { return leaveRequired; }
+    public void setLeaveRequired(Boolean leaveRequired) { this.leaveRequired = leaveRequired; }
+    public Integer getLeaveRequiredMinutes() { return leaveRequiredMinutes; }
+    public void setLeaveRequiredMinutes(Integer leaveRequiredMinutes) {
+        this.leaveRequiredMinutes = leaveRequiredMinutes;
+    }
+    public Long getCoveredLeaveRequestId() { return coveredLeaveRequestId; }
+    public void setCoveredLeaveRequestId(Long coveredLeaveRequestId) {
+        this.coveredLeaveRequestId = coveredLeaveRequestId;
     }
 }
