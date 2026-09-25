@@ -1,177 +1,300 @@
-<main class="login-page" [class.is-login-open]="showLoginForm()">
-  <section class="brand-panel" aria-label="系統資訊">
-    <div class="brand-content">
-      <app-brand-logo></app-brand-logo>
-      <h1>物流調度系統</h1>
-      <p class="brand-description">配送需求、運輸調度與即時配送管理。</p>
-    </div>
+<main class="login-page">
+  <!-- 左側極簡白點線台灣地圖背景層 (16:9) -->
+  <div class="minimal-bg-layer" aria-hidden="true">
+    <div class="taiwan-left-image"></div>
+    <div class="vignette-overlay"></div>
 
-    <p class="system-status">系統狀態：正常運作</p>
-  </section>
-
-  <section class="login-panel" aria-labelledby="login-title">
-    <div
-      class="login-content"
-      [attr.aria-hidden]="!showLoginForm()"
-      [attr.inert]="showLoginForm() ? null : ''"
-    >
-      <div class="login-heading">
-        <p class="section-label">系統登入</p>
-        <h2 id="login-title">
-          {{
-            resetStage() === 'identity'
-              ? '驗證帳號'
-              : resetStage() === 'password'
-                ? '設定新密碼'
-                : '歡迎回來'
-          }}
-        </h2>
-        <p>
-          {{
-            resetStage() === 'identity'
-              ? '輸入主管帳號與手機號碼以驗證身分。'
-              : resetStage() === 'password'
-                ? '設定 8 到 12 個字元的新密碼。'
-                : '登入物流後台，管理配送訂單、人車資源與營運狀況。'
-          }}
-        </p>
+    <!-- 圍繞台灣的動態旋轉裝飾環 (Rotating Orbital Lines) -->
+    <div class="taiwan-orbit-stage">
+      <div class="orbit-center-anchor">
+        <div class="orbit-ring ring-outer"></div>
+        <div class="orbit-ring ring-middle"></div>
+        <div class="orbit-ring ring-inner"></div>
+        <div class="orbit-cross-axis"></div>
+        <div class="orbit-satellite-dot dot-1"></div>
+        <div class="orbit-satellite-dot dot-2"></div>
       </div>
-
-      @if (resetStage() === 'identity') {
-        <form class="login-form" (submit)="verifyPasswordReset($event)" novalidate>
-          <div class="form-field">
-            <label for="reset-account">帳號</label>
-            <input
-              #resetAccountInput
-              id="reset-account"
-              type="text"
-              autocomplete="username"
-              [value]="resetAccount()"
-              [disabled]="isSubmitting()"
-              (input)="resetAccount.set(resetAccountInput.value)"
-            />
-          </div>
-          <div class="form-field">
-            <label for="reset-phone">手機號碼</label>
-            <input
-              #resetPhoneInput
-              id="reset-phone"
-              type="tel"
-              inputmode="numeric"
-              maxlength="10"
-              autocomplete="tel"
-              [value]="resetPhone()"
-              [disabled]="isSubmitting()"
-              (input)="resetPhone.set(resetPhoneInput.value)"
-            />
-          </div>
-          <button type="submit" [disabled]="isSubmitting()">
-            {{ isSubmitting() ? '驗證中...' : '驗證身分' }}
-          </button>
-          @if (resetError()) {
-            <p class="login-error" role="alert" aria-live="polite">{{ resetError() }}</p>
-          }
-        </form>
-        <button type="button" class="text-action" (click)="cancelPasswordReset()">返回登入</button>
-      } @else if (resetStage() === 'password') {
-        <form class="login-form" (submit)="submitPasswordReset($event)" novalidate>
-          <div class="form-field">
-            <label for="new-password">新密碼</label>
-            <input
-              #newPasswordInput
-              id="new-password"
-              type="password"
-              minlength="8"
-              maxlength="12"
-              autocomplete="new-password"
-              [value]="resetPassword()"
-              [disabled]="isSubmitting()"
-              (input)="resetPassword.set(newPasswordInput.value)"
-            />
-          </div>
-          <div class="form-field">
-            <label for="confirm-password">確認新密碼</label>
-            <input
-              #confirmPasswordInput
-              id="confirm-password"
-              type="password"
-              minlength="8"
-              maxlength="12"
-              autocomplete="new-password"
-              [value]="resetPasswordConfirmation()"
-              [disabled]="isSubmitting()"
-              (input)="resetPasswordConfirmation.set(confirmPasswordInput.value)"
-            />
-          </div>
-          <button type="submit" [disabled]="isSubmitting()">
-            {{ isSubmitting() ? '重設中...' : '重設密碼' }}
-          </button>
-          @if (resetError()) {
-            <p class="login-error" role="alert" aria-live="polite">{{ resetError() }}</p>
-          }
-        </form>
-        <button type="button" class="text-action" (click)="cancelPasswordReset()">返回登入</button>
-      } @else {
-        <p class="portal-description">物流後台帳號登入。</p>
-
-        <form class="login-form" (submit)="signIn($event)" novalidate>
-          <div class="form-field">
-            <label for="account">帳號</label>
-            <input
-              #accountInput
-              id="account"
-              type="text"
-              autocomplete="username"
-              placeholder="公司帳號或員工編號"
-              [value]="account()"
-              [disabled]="isSubmitting()"
-              (input)="account.set(accountInput.value)"
-            />
-          </div>
-
-          <div class="form-field">
-            <label for="password">密碼</label>
-            <input
-              #passwordInput
-              id="password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="輸入密碼"
-              [value]="password()"
-              [disabled]="isSubmitting()"
-              (input)="password.set(passwordInput.value)"
-            />
-          </div>
-
-          <button type="submit" [disabled]="isSubmitting()">
-            {{ isSubmitting() ? '登入中...' : '登入系統' }}
-          </button>
-
-          @if (loginError()) {
-            <p class="login-error" role="alert" aria-live="polite">{{ loginError() }}</p>
-          }
-          @if (loginNotice()) {
-            <p class="login-notice" role="status" aria-live="polite">{{ loginNotice() }}</p>
-          }
-        </form>
-
-        <button type="button" class="text-action" (click)="openPasswordReset()">忘記密碼</button>
-        <p class="support-text">帳號問題請聯絡系統管理員。</p>
-      }
     </div>
 
-    <div
-      class="weather-entry"
-      aria-live="polite"
-      [attr.aria-hidden]="showLoginForm()"
-      [attr.inert]="showLoginForm() ? '' : null"
-    >
-      <p class="weather-location">{{ weather().city }} · 今日配送天氣</p>
-      <span class="weather-icon" aria-hidden="true">{{ weather().icon }}</span>
-      <p class="weather-temperature">{{ weather().temperature }}°</p>
-      <p class="weather-condition">{{ weather().condition }}</p>
+    <!-- 多倉庫配送至全台門市的動態幹線網絡 (Multi-DC to Stores Dispatch Stream) -->
+    <!-- 地圖上純幾何線條與節點，無任何文字遮擋 -->
+    <div class="dispatch-network-stage">
+      <div class="dispatch-map-anchor">
+        <svg class="routes-flow-svg" viewBox="0 0 460 680" preserveAspectRatio="none">
+          <!-- 1. 跨倉幹線 (Inter-DC Trunk Lines, 北倉 <-> 中倉 <-> 南倉) -->
+          <g class="inter-dc-trunk">
+            <path class="trunk-base" d="M 280 180 Q 240 240 215 320 T 170 480" />
+            <path class="trunk-pulse" d="M 280 180 Q 240 240 215 320 T 170 480" />
+          </g>
 
-      <button class="open-login" type="button" (click)="openLogin()">登入系統</button>
+          <!-- 2. 各大倉輻射配送至轄區門市的靜態微細線 (Static Branches) -->
+          <g class="static-routes">
+            <!-- 北區大倉 (280, 180) -> 北部門市 -->
+            <path d="M 280 180 Q 305 155 320 140" />
+            <path d="M 280 180 Q 295 165 305 155" />
+            <path d="M 280 180 Q 310 190 330 200" />
+            <path d="M 280 180 Q 260 210 250 230" />
+
+            <!-- 中區大倉 (215, 320) -> 中部門市 -->
+            <path d="M 215 320 Q 225 295 235 275" />
+            <path d="M 215 320 Q 205 335 200 345" />
+            <path d="M 215 320 Q 235 340 245 360" />
+            <path d="M 215 320 Q 195 355 185 385" />
+
+            <!-- 南區大倉 (170, 480) -> 南部與花東門市 -->
+            <path d="M 170 480 Q 170 440 175 415" />
+            <path d="M 170 480 Q 160 465 160 455" />
+            <path d="M 170 480 Q 175 520 180 560" />
+            <path d="M 170 480 Q 225 480 265 490" />
+            <path d="M 170 480 Q 260 380 315 320" />
+          </g>
+
+          <!-- 3. 動態流動脈衝 (Flowing Pulses from multiple warehouses) -->
+          <g class="pulse-routes">
+            <!-- 北倉流向北區門市 -->
+            <path class="flow-line f-n1" d="M 280 180 Q 305 155 320 140" />
+            <path class="flow-line f-n2" d="M 280 180 Q 295 165 305 155" />
+            <path class="flow-line f-n3" d="M 280 180 Q 310 190 330 200" />
+            <path class="flow-line f-n4" d="M 280 180 Q 260 210 250 230" />
+
+            <!-- 中倉流向中區門市 -->
+            <path class="flow-line f-c1" d="M 215 320 Q 225 295 235 275" />
+            <path class="flow-line f-c2" d="M 215 320 Q 205 335 200 345" />
+            <path class="flow-line f-c3" d="M 215 320 Q 235 340 245 360" />
+            <path class="flow-line f-c4" d="M 215 320 Q 195 355 185 385" />
+
+            <!-- 南倉流向南區及東部門市 -->
+            <path class="flow-line f-s1" d="M 170 480 Q 170 440 175 415" />
+            <path class="flow-line f-s2" d="M 170 480 Q 160 465 160 455" />
+            <path class="flow-line f-s3" d="M 170 480 Q 175 520 180 560" />
+            <path class="flow-line f-s4" d="M 170 480 Q 225 480 265 490" />
+            <path class="flow-line f-s5" d="M 170 480 Q 260 380 315 320" />
+          </g>
+
+          <!-- 4. 全台一般門市節點 (Store Dots, 純幾何微光圓點) -->
+          <g class="store-points">
+            <!-- 北部門市 -->
+            <circle cx="320" cy="140" r="2.5" class="store-dot" />
+            <circle cx="305" cy="155" r="2.5" class="store-dot" />
+            <circle cx="330" cy="200" r="2.5" class="store-dot" />
+            <circle cx="250" cy="230" r="2.5" class="store-dot" />
+
+            <!-- 中部門市 -->
+            <circle cx="235" cy="275" r="2.5" class="store-dot" />
+            <circle cx="200" cy="345" r="2.5" class="store-dot" />
+            <circle cx="245" cy="360" r="2.5" class="store-dot" />
+            <circle cx="185" cy="385" r="2.5" class="store-dot" />
+
+            <!-- 南部與花東門市 -->
+            <circle cx="175" cy="415" r="2.5" class="store-dot" />
+            <circle cx="160" cy="455" r="2.5" class="store-dot" />
+            <circle cx="180" cy="560" r="2.5" class="store-dot" />
+            <circle cx="265" cy="490" r="2.5" class="store-dot" />
+            <circle cx="315" cy="320" r="2.5" class="store-dot" />
+          </g>
+
+          <!-- 5. 多大倉核心節點 (Warehouse DC Nodes, 顯著雙層同心圓環標記) -->
+          <g class="warehouse-dc-nodes">
+            <!-- 北區總倉 (DC North) -->
+            <g class="dc-node" transform="translate(280, 180)">
+              <circle r="12" class="dc-pulse-ring" />
+              <circle r="6" class="dc-outer-ring" />
+              <circle r="3" class="dc-inner-core" />
+            </g>
+
+            <!-- 中區大倉 (DC Central) -->
+            <g class="dc-node" transform="translate(215, 320)">
+              <circle r="12" class="dc-pulse-ring" />
+              <circle r="6" class="dc-outer-ring" />
+              <circle r="3" class="dc-inner-core" />
+            </g>
+
+            <!-- 南區大倉 (DC South) -->
+            <g class="dc-node" transform="translate(170, 480)">
+              <circle r="12" class="dc-pulse-ring" />
+              <circle r="6" class="dc-outer-ring" />
+              <circle r="3" class="dc-inner-core" />
+            </g>
+          </g>
+        </svg>
+      </div>
     </div>
-  </section>
+  </div>
+
+  <!-- 頂部極簡導覽列 -->
+  <header class="minimal-top-bar">
+    <div class="brand-item">
+      <app-brand-logo></app-brand-logo>
+    </div>
+  </header>
+
+  <!-- 佈局容器：左側乾淨純粹展示台灣地圖，右側放置半透明毛玻璃登入卡片 -->
+  <div class="login-split-stage">
+    <!-- 左側純視覺留白區 (無任何懸浮卡片干擾，呈現極致純粹感) -->
+    <div class="left-showcase-zone" aria-hidden="true"></div>
+
+    <!-- 右側：半透明黑色毛玻璃登入卡片 (Apple Glassmorphism) -->
+    <div class="right-login-zone">
+      <div class="glass-login-card">
+        <div class="card-header">
+          <span class="sub-label">Logistics Network</span>
+          <h1 class="main-title">
+            {{
+              resetStage() === 'identity'
+                ? '身分驗證'
+                : resetStage() === 'password'
+                  ? '設定新密碼'
+                  : '智慧物流管理平台'
+            }}
+          </h1>
+          <p class="desc-text">
+            {{
+              resetStage() === 'identity'
+                ? '輸入主管帳號與登記手機號碼以驗證身分。'
+                : resetStage() === 'password'
+                  ? '請設定 8 到 12 個字元的新安全密碼。'
+                  : '登入以存取多倉配送調度與全台門市履約系統。'
+            }}
+          </p>
+        </div>
+
+        <!-- 表單內容 -->
+        @if (resetStage() === 'identity') {
+          <form class="clean-form" (submit)="verifyPasswordReset($event)" novalidate>
+            <div class="form-group">
+              <label for="reset-account">帳號</label>
+              <input
+                #resetAccountInput
+                id="reset-account"
+                type="text"
+                autocomplete="username"
+                placeholder="請輸入帳號"
+                [value]="resetAccount()"
+                [disabled]="isSubmitting()"
+                (input)="resetAccount.set(resetAccountInput.value)"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="reset-phone">手機號碼</label>
+              <input
+                #resetPhoneInput
+                id="reset-phone"
+                type="tel"
+                inputmode="numeric"
+                maxlength="10"
+                autocomplete="tel"
+                placeholder="請輸入手機號碼"
+                [value]="resetPhone()"
+                [disabled]="isSubmitting()"
+                (input)="resetPhone.set(resetPhoneInput.value)"
+              />
+            </div>
+
+            <button type="submit" class="white-flat-button" [disabled]="isSubmitting()">
+              {{ isSubmitting() ? '驗證中...' : '繼續驗證' }}
+            </button>
+
+            @if (resetError()) {
+              <p class="status-alert error" role="alert" aria-live="polite">{{ resetError() }}</p>
+            }
+          </form>
+          <button type="button" class="minimal-link-button" (click)="cancelPasswordReset()">返回登入</button>
+        } @else if (resetStage() === 'password') {
+          <form class="clean-form" (submit)="submitPasswordReset($event)" novalidate>
+            <div class="form-group">
+              <label for="new-password">新密碼</label>
+              <input
+                #newPasswordInput
+                id="new-password"
+                type="password"
+                minlength="8"
+                maxlength="12"
+                autocomplete="new-password"
+                placeholder="8 至 12 個字元"
+                [value]="resetPassword()"
+                [disabled]="isSubmitting()"
+                (input)="resetPassword.set(newPasswordInput.value)"
+              />
+            </div>
+
+            <div class="form-group">
+              <label for="confirm-password">確認新密碼</label>
+              <input
+                #confirmPasswordInput
+                id="confirm-password"
+                type="password"
+                minlength="8"
+                maxlength="12"
+                autocomplete="new-password"
+                placeholder="再次輸入新密碼"
+                [value]="resetPasswordConfirmation()"
+                [disabled]="isSubmitting()"
+                (input)="resetPasswordConfirmation.set(confirmPasswordInput.value)"
+              />
+            </div>
+
+            <button type="submit" class="white-flat-button" [disabled]="isSubmitting()">
+              {{ isSubmitting() ? '更新中...' : '設定新密碼' }}
+            </button>
+
+            @if (resetError()) {
+              <p class="status-alert error" role="alert" aria-live="polite">{{ resetError() }}</p>
+            }
+          </form>
+          <button type="button" class="minimal-link-button" (click)="cancelPasswordReset()">返回登入</button>
+        } @else {
+          <form class="clean-form" (submit)="signIn($event)" novalidate>
+            <div class="form-group">
+              <label for="account">帳號</label>
+              <input
+                #accountInput
+                id="account"
+                type="text"
+                autocomplete="username"
+                placeholder="員工編號或電子郵件"
+                [value]="account()"
+                [disabled]="isSubmitting()"
+                (input)="account.set(accountInput.value)"
+              />
+            </div>
+
+            <div class="form-group">
+              <div class="label-row">
+                <label for="password">密碼</label>
+                <button type="button" class="forgot-password-link" (click)="openPasswordReset()">忘記密碼？</button>
+              </div>
+              <input
+                #passwordInput
+                id="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="輸入密碼"
+                [value]="password()"
+                [disabled]="isSubmitting()"
+                (input)="password.set(passwordInput.value)"
+              />
+            </div>
+
+            <!-- 純白色扁平化登入按鈕，黑色文字 (Apple aesthetic) -->
+            <button type="submit" class="white-flat-button" [disabled]="isSubmitting()">
+              @if (isSubmitting()) {
+                <span class="apple-spinner" aria-hidden="true"></span>
+                <span>登入中...</span>
+              } @else {
+                <span>登入</span>
+              }
+            </button>
+
+            @if (loginError()) {
+              <p class="status-alert error" role="alert" aria-live="polite">{{ loginError() }}</p>
+            }
+            @if (loginNotice()) {
+              <p class="status-alert notice" role="status" aria-live="polite">{{ loginNotice() }}</p>
+            }
+          </form>
+        }
+      </div>
+    </div>
+  </div>
 </main>
