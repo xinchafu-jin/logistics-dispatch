@@ -699,6 +699,7 @@ h2 {
   gap: 6px;
 }
 
+.task-loading-button,
 .task-arrive-button,
 .task-delivery-button {
   display: grid;
@@ -714,6 +715,8 @@ h2 {
   font-weight: 800;
 }
 
+// 點交與抵達都是該站當下的主要動作，用同一種強調樣式
+.task-loading-button,
 .task-arrive-button {
   border-color: #4b8f80;
   color: #d6f4e8;
@@ -1459,6 +1462,7 @@ dd {
   color: #226c5a;
 }
 
+.driver-app .task-loading-button,
 .driver-app .task-arrive-button {
   border-color: #70aa9c;
   color: #174c40;

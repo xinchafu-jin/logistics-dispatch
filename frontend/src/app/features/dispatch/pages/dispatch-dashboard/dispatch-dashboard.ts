@@ -262,7 +262,8 @@ export class DispatchDashboard implements OnInit {
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
     const waitingSchedule = orders.filter((order) => order.status === 'CONFIRMED').length;
-    const delivering = orders.filter((order) => order.status === 'IN_DELIVERY').length;
+    // 已點交的貨已經在車上，跟報表一樣算進配送中
+    const delivering = orders.filter((order) => order.status === 'IN_DELIVERY' || order.status === 'LOADED').length;
 
     return [
       `今日配送需求 ${orders.length} 筆`,
@@ -499,7 +500,8 @@ export class DispatchDashboard implements OnInit {
         order.deliveryDate === this.dispatchDate()
         && order.assignedDriverId != null
         && publishedDriverIds.has(order.assignedDriverId)
-        && (order.status === 'CONFIRMED' || order.status === 'IN_DELIVERY'),
+        // 少了 LOADED 的話，司機全部點交完出車後就會從即時地圖上消失
+        && (order.status === 'CONFIRMED' || order.status === 'LOADED' || order.status === 'IN_DELIVERY'),
       )
       .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER))
       .forEach((order) => {
@@ -902,8 +904,12 @@ export class DispatchDashboard implements OnInit {
         return '待確認';
       case 'CONFIRMED':
         return '待調度';
+      case 'LOADED':
+        return '已點交';
       case 'IN_DELIVERY':
         return '配送中';
+      case 'NO_SIGNATURE':
+        return '無人簽收';
       case 'COMPLETED':
         return '已完成';
       case 'FAILED':

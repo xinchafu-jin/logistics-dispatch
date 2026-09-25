@@ -385,7 +385,17 @@
                           <mat-icon aria-hidden="true">near_me</mat-icon>
                           <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
                         </button>
-                        @if (canMarkArrived(stop)) {
+                        @if (canLoad(stop)) {
+                          <button
+                            type="button"
+                            class="task-loading-button"
+                            (click)="openLoadingAction(stop)"
+                            [disabled]="isTaskSubmitting()"
+                          >
+                            <mat-icon aria-hidden="true">fact_check</mat-icon>
+                            <span>點交</span>
+                          </button>
+                        } @else if (canMarkArrived(stop)) {
                           <button
                             type="button"
                             class="task-arrive-button"
@@ -407,6 +417,65 @@
                           </button>
                         }
                       </div>
+                      @if (isLoadingActionOpen(stop)) {
+                        <section class="delivery-action-panel" aria-label="倉庫點交">
+                          <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
+                          <label>
+                            <span>實點箱數</span>
+                            <input
+                              type="number"
+                              inputmode="numeric"
+                              min="0"
+                              step="1"
+                              [max]="stop.expectedBoxCount"
+                              [value]="loadingBoxCount()"
+                              [disabled]="isTaskSubmitting()"
+                              (input)="updateLoadingBoxCount($event)"
+                            />
+                          </label>
+                          <label>
+                            <span>備註（選填）</span>
+                            <textarea
+                              rows="2"
+                              maxlength="500"
+                              placeholder="例如少了哪一箱、外箱破損"
+                              [value]="loadingNotes()"
+                              [disabled]="isTaskSubmitting()"
+                              (input)="updateLoadingNotes($event)"
+                            ></textarea>
+                          </label>
+                          @if (loadingMismatchPending()) {
+                            <p class="task-feedback is-error">
+                              實點 {{ loadingBoxCount() }} 箱，和應點的 {{ stop.expectedBoxCount }} 箱不符。
+                              送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
+                            </p>
+                          }
+                          <div class="delivery-action-buttons">
+                            <button
+                              type="button"
+                              class="delivery-complete-button"
+                              (click)="submitLoading(stop)"
+                              [disabled]="isTaskSubmitting()"
+                            >
+                              <mat-icon aria-hidden="true">fact_check</mat-icon>
+                              {{
+                                isTaskSubmitting()
+                                  ? '處理中...'
+                                  : loadingMismatchPending()
+                                    ? '確定送出'
+                                    : '確認點交'
+                              }}
+                            </button>
+                            <button
+                              type="button"
+                              class="delivery-cancel-button"
+                              (click)="closeLoadingAction()"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </section>
+                      }
                       @if (isDeliveryActionOpen(stop)) {
                         <section class="delivery-action-panel" aria-label="交貨處理">
                           <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>

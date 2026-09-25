@@ -24,8 +24,9 @@ import java.util.*;
 @Service
 @Transactional
 public class DispatchService {
+    // 路線上還沒結束的單。hasActiveOrders 靠它判斷司機是否已被別倉佔用，少了 LOADED 會把全點交完的司機當成空閒
     private static final Set<OrderStatus> VISIBLE_ROUTE_STATUSES =
-            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.IN_DELIVERY);
+            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.LOADED, OrderStatus.IN_DELIVERY);
 
     private final OrdersDAO ordersDAO;
     private final VehiclesDAO vehiclesDAO;

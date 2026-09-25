@@ -2,7 +2,6 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
-import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.ExceptionCasesDAO;
@@ -68,8 +67,7 @@ public class DriverExceptionService {
                 || !LocalDate.now(TAIPEI).equals(route.getDate())) {
             throw new IllegalArgumentException("只能回報本人今天已發布路線的異常");
         }
-        if (order.getStatus() != OrderStatus.CONFIRMED
-                && order.getStatus() != OrderStatus.IN_DELIVERY) {
+        if (!order.getStatus().isActive()) {
             throw new IllegalArgumentException("訂單已結案，不能新增配送異常：" + order.getStatus());
         }
 

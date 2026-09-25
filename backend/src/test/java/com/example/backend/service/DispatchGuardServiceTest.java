@@ -170,6 +170,18 @@ class DispatchGuardServiceTest {
     }
 
     @Test
+    void 撤回_已點交就擋下_貨已經在車上() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.LOADED).setStatus(RouteStatus.PUBLISHED);
+        OrdersEntity loaded = new OrdersEntity();
+        loaded.setOrderNumber("DO-002");
+        loaded.setStatus(OrderStatus.LOADED);
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(List.of(loaded));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> guard.assertCanWithdraw(DATE));
+        assertTrue(e.getMessage().contains("DO-002"), e.getMessage());
+    }
+
+    @Test
     void 撤回_還沒出發可以撤回() {
         givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setStatus(RouteStatus.PUBLISHED);
         OrdersEntity waiting = new OrdersEntity();

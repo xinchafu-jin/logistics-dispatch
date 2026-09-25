@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
 public class ReportService {
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private static final String COMPLETION_DEFINITION =
-            "COMPLETED / (CONFIRMED + IN_DELIVERY + COMPLETED + NO_SIGNATURE + FAILED)；"
+            "COMPLETED / (CONFIRMED + LOADED + IN_DELIVERY + COMPLETED + NO_SIGNATURE + FAILED)；"
                     + "按配送日期分組，以查詢當下狀態計算；排除待確認與取消";
 
     private final ReportReadDAO reportReadDAO;
@@ -125,7 +125,8 @@ public class ReportService {
                 countStatus(orders, OrderStatus.PENDING_CONFIRM), unassigned.size(),
                 (int) orders.stream().filter(order -> order.getStatus() == OrderStatus.CONFIRMED
                         && order.getRouteId() != null).count(),
-                countStatus(orders, OrderStatus.IN_DELIVERY), completed,
+                // 已點交的貨已經上車，報表併進配送中，不另開一格
+                countStatus(orders, OrderStatus.IN_DELIVERY) + countStatus(orders, OrderStatus.LOADED), completed,
                 countStatus(orders, OrderStatus.FAILED), countStatus(orders, OrderStatus.CANCELLED),
                 published.size(),
                 (int) published.stream().map(RoutesEntity::getDriverId).filter(id -> id != null).distinct().count(),
@@ -839,7 +840,7 @@ public class ReportService {
     }
 
     private static boolean completionEligible(OrderStatus status) {
-        return status == OrderStatus.CONFIRMED || status == OrderStatus.IN_DELIVERY
+        return status.isActive()
                 || status == OrderStatus.COMPLETED || status == OrderStatus.NO_SIGNATURE
                 || status == OrderStatus.FAILED;
     }

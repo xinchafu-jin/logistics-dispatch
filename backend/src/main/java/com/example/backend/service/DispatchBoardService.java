@@ -37,8 +37,15 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class DispatchBoardService {
 
-    private static final Set<OrderStatus> VISIBLE_ROUTE_STATUSES =
-            EnumSet.of(OrderStatus.CONFIRMED, OrderStatus.IN_DELIVERY);
+    /**
+     * 看板上路線要顯示的訂單。已完成、無人簽收、配送失敗也要回：路線派出後調度員要看得到送到哪裡，
+     * 只回待送的話，重新整理後送完的單就從格子裡消失了。
+     * 能不能改派是前端依狀態判斷（只有 CONFIRMED 能拖、會送進 reassign），後端 reassign 也會再擋。
+     * 取消的單不顯示，它已經不在這條路線上跑了。
+     */
+    private static final Set<OrderStatus> VISIBLE_ROUTE_STATUSES = EnumSet.of(
+            OrderStatus.CONFIRMED, OrderStatus.LOADED, OrderStatus.IN_DELIVERY,
+            OrderStatus.COMPLETED, OrderStatus.NO_SIGNATURE, OrderStatus.FAILED);
 
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;

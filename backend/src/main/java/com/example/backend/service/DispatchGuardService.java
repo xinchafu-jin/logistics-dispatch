@@ -96,8 +96,7 @@ public class DispatchGuardService {
             }
             List<OrdersEntity> orders = ordersDAO.findByRouteIdOrderBySequence(route.getId());
             List<OrdersEntity> activeOrders = orders.stream()
-                    .filter(order -> order.getStatus() == OrderStatus.CONFIRMED
-                            || order.getStatus() == OrderStatus.IN_DELIVERY)
+                    .filter(order -> order.getStatus().isActive())
                     .toList();
             if (activeOrders.isEmpty()) {
                 continue;
@@ -139,9 +138,10 @@ public class DispatchGuardService {
     }
 
     /**
-     * 撤回前檢查：當天已發布的路線上，只要有訂單已經開始配送（到站、送達、未簽收、失敗），就不能撤回。
+     * 撤回前檢查：當天已發布的路線上，只要有訂單已經開始配送（點交、到站、送達、未簽收、失敗），就不能撤回。
      *
      * <p>撤回會把路線翻回草稿，司機端只看已發布的路線，送到一半的司機手上的任務會直接消失。
+     * 點交也算開始：貨已經在車上，撤回重排會讓車上的貨跟系統的路線對不起來。
      * 已經出發後要換人，請走司機交接（EmergencyLeaveService）。</p>
      */
     public void assertCanWithdraw(LocalDate date) {
@@ -156,7 +156,8 @@ public class DispatchGuardService {
         }
         List<String> started = new ArrayList<>();
         for (OrdersEntity order : ordersDAO.findByRouteIdIn(publishedRouteIds)) {
-            if (order.getStatus() == OrderStatus.IN_DELIVERY
+            if (order.getStatus() == OrderStatus.LOADED
+                    || order.getStatus() == OrderStatus.IN_DELIVERY
                     || order.getStatus() == OrderStatus.COMPLETED
                     || order.getStatus() == OrderStatus.NO_SIGNATURE
                     || order.getStatus() == OrderStatus.FAILED) {

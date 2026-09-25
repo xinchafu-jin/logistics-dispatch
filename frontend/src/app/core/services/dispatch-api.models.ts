@@ -8,7 +8,9 @@ export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
   | 'PENDING_CONFIRM'
   | 'CONFIRMED'
+  | 'LOADED'
   | 'IN_DELIVERY'
+  | 'NO_SIGNATURE'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
@@ -20,7 +22,8 @@ export type ExceptionType =
   | 'DAMAGE'
   | 'SHORTAGE_AND_DAMAGE'
   | 'DRIVER_REPORT'
-  | 'PHONE_HANDLED';
+  | 'PHONE_HANDLED'
+  | 'LOADING_MISMATCH';
 export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';

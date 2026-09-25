@@ -12,5 +12,7 @@ public enum ExceptionType {
     /** 司機例外回報 */
     DRIVER_REPORT,
     /** 電話處理後補登 */
-    PHONE_HANDLED
+    PHONE_HANDLED,
+    /** 倉庫點交時實點箱數與應到箱數不符 */
+    LOADING_MISMATCH
 }
