@@ -4,6 +4,7 @@ import com.example.backend.dto.request.LeaveDecisionRequestDTO;
 import com.example.backend.dto.request.LeaveTypeCorrectionDTO;
 import com.example.backend.dto.request.PlannedPartialLeaveRequestDTO;
 import com.example.backend.dto.respones.DriverLeaveResponse;
+import com.example.backend.dto.respones.DriverLeaveBatchResponse;
 import com.example.backend.dto.respones.DriverLeaveHistoryResponse;
 import com.example.backend.dto.respones.DriverMonthlyLeaveSummaryResponse;
 import com.example.backend.service.DriverLeaveRequestService;
@@ -35,6 +36,11 @@ public class DriverLeaveRequestController {
     @GetMapping("/pending")
     public List<DriverLeaveResponse> findPending() {
         return service.findPending();
+    }
+
+    @GetMapping("/batches/pending")
+    public List<DriverLeaveBatchResponse> findPendingBatches() {
+        return service.findPendingBatches();
     }
 
     /** 主管班表左側司機名稱 hover 時，依月份取得狀態表。 */
@@ -70,6 +76,24 @@ public class DriverLeaveRequestController {
         return service.reject(id, request.getReason(), adminId(jwt), jwt.getSubject());
     }
 
+    @PatchMapping("/batches/{batchId}/approve")
+    public DriverLeaveBatchResponse approveBatch(
+            @PathVariable String batchId,
+            @Valid @RequestBody LeaveDecisionRequestDTO request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return service.approveBatch(batchId, request.getReason(), adminId(jwt), jwt.getSubject());
+    }
+
+    @PatchMapping("/batches/{batchId}/reject")
+    public DriverLeaveBatchResponse rejectBatch(
+            @PathVariable String batchId,
+            @Valid @RequestBody LeaveDecisionRequestDTO request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return service.rejectBatch(batchId, request.getReason(), adminId(jwt), jwt.getSubject());
+    }
+
     @PatchMapping("/{id}/type")
     public DriverLeaveResponse correctType(
             @PathVariable Long id,
@@ -77,6 +101,16 @@ public class DriverLeaveRequestController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return service.correctType(id, request.getLeaveType(), request.getReason(), adminId(jwt), jwt.getSubject());
+    }
+
+    @PatchMapping("/batches/{batchId}/type")
+    public DriverLeaveBatchResponse correctBatchType(
+            @PathVariable String batchId,
+            @Valid @RequestBody LeaveTypeCorrectionDTO request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return service.correctBatchType(
+                batchId, request.getLeaveType(), request.getReason(), adminId(jwt), jwt.getSubject());
     }
 
     @PostMapping("/planned-partial")

@@ -2,11 +2,9 @@ package com.example.backend.service;
 
 import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.constants.ShiftType;
-import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.AttendanceRecordsDAO;
 import com.example.backend.dao.DriverShiftsDAO;
 import com.example.backend.dao.DriversDAO;
-import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dto.request.DriverShiftDTO;
 import com.example.backend.dto.request.ScheduleMonthDTO;
@@ -36,20 +34,17 @@ public class DriverScheduleService {
     private final DriverShiftsDAO driverShiftsDAO;
     private final DriversDAO driversDAO;
     private final AttendanceRecordsDAO attendanceRecordsDAO;
-    private final RoutesDAO routesDAO;
 
     public DriverScheduleService(
             ScheduleMonthsDAO scheduleMonthsDAO,
             DriverShiftsDAO driverShiftsDAO,
             DriversDAO driversDAO,
-            AttendanceRecordsDAO attendanceRecordsDAO,
-            RoutesDAO routesDAO
+            AttendanceRecordsDAO attendanceRecordsDAO
     ) {
         this.scheduleMonthsDAO = scheduleMonthsDAO;
         this.driverShiftsDAO = driverShiftsDAO;
         this.driversDAO = driversDAO;
         this.attendanceRecordsDAO = attendanceRecordsDAO;
-        this.routesDAO = routesDAO;
     }
 
     /**
@@ -215,11 +210,6 @@ public class DriverScheduleService {
         if (month.getStatus() == ScheduleStatus.PUBLISHED && shift.getShiftType() != ShiftType.WORK) {
             throw new IllegalArgumentException("已發布班表只能將上班班次改為請假");
         }
-        if (routesDAO.existsByDateAndDriverIdAndStatus(
-                shift.getWorkDate(), shift.getDriverId(), RouteStatus.PUBLISHED)) {
-            throw new IllegalArgumentException("司機已有已發布路線，請先改派或撤回路線，再登記請假");
-        }
-
         shift.setShiftType(ShiftType.LEAVE);
         shift.setWorkStart(null);
         shift.setWorkEnd(null);
