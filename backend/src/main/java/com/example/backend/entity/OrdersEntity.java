@@ -2,6 +2,7 @@ package com.example.backend.entity;
 
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.OrderType;
+import com.example.backend.service.DispatchChangeEntityListener;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -9,6 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
+@EntityListeners(DispatchChangeEntityListener.class)
 @Table(name = "orders")
 public class OrdersEntity {
 
@@ -52,6 +54,10 @@ public class OrdersEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private OrderStatus status = OrderStatus.PENDING_CONFIRM;
+
+    /** 司機在倉庫點交成功的時間。轉成配送中以後仍保留，用來查當時有沒有點交過。 */
+    @Column
+    private LocalDateTime loadedAt;
 
     /** 一般訂單、補貨單或無人簽收後建立的重送單。 */
     @Enumerated(EnumType.STRING)
@@ -177,6 +183,14 @@ public class OrdersEntity {
 
     public void setStatus(OrderStatus status) {
         this.status = status;
+    }
+
+    public LocalDateTime getLoadedAt() {
+        return loadedAt;
+    }
+
+    public void setLoadedAt(LocalDateTime loadedAt) {
+        this.loadedAt = loadedAt;
     }
 
     public OrderType getOrderType() {

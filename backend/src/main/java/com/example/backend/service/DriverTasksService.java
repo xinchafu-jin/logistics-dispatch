@@ -1,7 +1,6 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.RouteStatus;
-import com.example.backend.constants.OrderStatus;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -82,8 +81,7 @@ public class DriverTasksService {
         }
 
         List<OrdersEntity> orders = new ArrayList<>(ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds)).stream()
-                .filter(order -> order.getStatus() == OrderStatus.CONFIRMED
-                        || order.getStatus() == OrderStatus.IN_DELIVERY)
+                .filter(order -> order.getStatus().isActive())
                 .toList());
         orders.sort(Comparator
                 .comparing(OrdersEntity::getRouteId)

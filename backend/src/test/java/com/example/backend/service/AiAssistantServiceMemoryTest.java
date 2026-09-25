@@ -22,7 +22,7 @@ class AiAssistantServiceMemoryTest {
     void 確認後在對話記憶寫入已確認的動作() {
         ChatMemory chatMemory = mock(ChatMemory.class);
         AiAssistantService service = new AiAssistantService(chatMemory, null, null, "http://unused", null, null,
-                null, null, null);
+                null, null, null, null, null);
 
         PendingActionResponse action = new PendingActionResponse();
         action.setType(AiActionType.ASSIGN_DRIVER);

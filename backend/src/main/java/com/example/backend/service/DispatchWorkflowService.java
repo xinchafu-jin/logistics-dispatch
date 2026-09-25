@@ -2,6 +2,7 @@ package com.example.backend.service;
 
 import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.dto.request.ReassignDTO;
+import com.example.backend.dto.respones.DispatchDayResponse;
 import com.example.backend.dto.respones.DispatchResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class DispatchWorkflowService {
     private final DispatchDraftService dispatchDraftService;
     private final RoutePlanMetricsService routePlanMetricsService;
     private final DispatchSlotService dispatchSlotService;
+    private final DispatchDayService dispatchDayService;
 
     public DispatchWorkflowService(
             DispatchService dispatchService,
@@ -36,7 +38,8 @@ public class DispatchWorkflowService {
             DispatchGuardService dispatchGuardService,
             DispatchDraftService dispatchDraftService,
             RoutePlanMetricsService routePlanMetricsService,
-            DispatchSlotService dispatchSlotService
+            DispatchSlotService dispatchSlotService,
+            DispatchDayService dispatchDayService
     ) {
         this.dispatchService = dispatchService;
         this.dispatchBoardService = dispatchBoardService;
@@ -44,6 +47,12 @@ public class DispatchWorkflowService {
         this.dispatchDraftService = dispatchDraftService;
         this.routePlanMetricsService = routePlanMetricsService;
         this.dispatchSlotService = dispatchSlotService;
+        this.dispatchDayService = dispatchDayService;
+    }
+
+    @Transactional(readOnly = true)
+    public List<DispatchDayResponse> getDays(LocalDate from, LocalDate to) {
+        return dispatchDayService.getDays(from, to);
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +76,7 @@ public class DispatchWorkflowService {
         dispatchGuardService.assertCanReplan(dto.getDate(), dto.getWarehouseId());
         DispatchSlotService.SlotPlan plan = dispatchSlotService.plan(dto.getDate(), dto.getWarehouseId(), dto.getSlots());
         dispatchService.optimize(dto.getDate(), dto.getWarehouseId(), plan.getVehicleIds(), plan.getDriverByVehicle(),
-                pinnedVehicleByOrder(dto.getSlots(), plan.getVehicleIds()), dto.isPinnedOnly());
+                pinnedVehicleByOrder(dto.getSlots(), plan.getVehicleIds()));
         DispatchResponse board = dispatchBoardService.getBoard(dto.getDate(), dto.getWarehouseId());
 
         List<String> notices = new ArrayList<>(plan.getNotices());
@@ -116,6 +125,14 @@ public class DispatchWorkflowService {
             dispatchService.reassign(dto);
         }
         return dispatchBoardService.getBoard(dto.getDate(), dto.getWarehouseId());
+    }
+
+    /**
+     * 只檢查不發布：AI 一次確認好幾天時，先每天都檢查過，全部通過才開始發布，
+     * 不必等到第三天被擋才發現、前兩天的 OSRM 也白算了。
+     */
+    public void assertCanPublish(LocalDate date) {
+        dispatchGuardService.assertCanPublish(date);
     }
 
     @Transactional

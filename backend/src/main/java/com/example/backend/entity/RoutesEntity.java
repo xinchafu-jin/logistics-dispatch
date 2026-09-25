@@ -1,6 +1,7 @@
 package com.example.backend.entity;
 
 import com.example.backend.constants.RouteStatus;
+import com.example.backend.service.DispatchChangeEntityListener;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -10,6 +11,7 @@ import java.time.LocalDate;
  * 本趟包含哪些訂單，由 OrdersEntity.routeId 指向此表，此處不存訂單清單。
  */
 @Entity
+@EntityListeners(DispatchChangeEntityListener.class)
 @Table(name = "routes")
 public class RoutesEntity {
 

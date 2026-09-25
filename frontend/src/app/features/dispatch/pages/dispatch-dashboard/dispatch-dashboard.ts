@@ -1,4 +1,7 @@
-import {DecimalPipe} from '@angular/common';
+import {
+  DecimalPipe,
+}
+  from '@angular/common';
 import {
   CdkDrag,
   CdkDragDrop,
@@ -10,12 +13,14 @@ import {
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
+import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
 import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
+import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {
+  DispatchDayDto,
   DispatchResultDto,
   DriverDto,
   DriverShiftDto,
@@ -88,22 +93,6 @@ interface BoardCard {
   storeCode: string;
   storeName: string;
   boxCount: number;
-  status: OrderStatus;
-}
-
-interface DispatchDayCard {
-  date: string;
-  dateLabel: string;
-  relativeLabel: string;
-  statusLabel: string;
-  isSelected: boolean;
-}
-
-interface DispatchAttentionItem {
-  key: string;
-  title: string;
-  detail: string;
-  kind: 'exception' | 'gps' | 'pending';
 }
 
 /**
@@ -141,7 +130,7 @@ interface BoardRoute {
   storeIds: number[];
 }
 
-function toBoardCard(source: RouteStopDto | UnassignedOrderDto, status: OrderStatus = 'CONFIRMED'): BoardCard {
+function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
   return {
     orderId: source.orderId,
     orderNumber: source.orderNumber,
@@ -149,7 +138,6 @@ function toBoardCard(source: RouteStopDto | UnassignedOrderDto, status: OrderSta
     storeCode: source.storeCode,
     storeName: source.storeName,
     boxCount: source.boxCount,
-    status,
   };
 }
 
@@ -161,6 +149,14 @@ interface DriverOption {
   takenNote: string | null;
   /** 班表上不能出車的原因（休假、請假…）。仍然可以選，選了車道會標紅框，派出時才擋 */
   scheduleNote: string | null;
+}
+
+/** 門市標籤的 cdkDragData，用來跟訂單卡片分開（見 ordersOnly） */
+const STORE_CHIP = 'store-chip';
+
+/** 兩個 id 清單的成員相同（不管順序） */
+function sameMembers(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((id) => b.includes(id));
 }
 
 /** 格子「加入門市」下拉的一個選項 */
@@ -179,6 +175,19 @@ interface VehicleOption {
   takenNote: string | null;
 }
 
+/** 已派出畫面右側「需要處理」的一項：配送異常、GPS 沒更新、還沒排進車的單 */
+interface AttentionItem {
+  key: string;
+  title: string;
+  detail: string;
+  kind: 'exception' | 'gps' | 'pending';
+}
+
+/** 還沒結束、司機還要跑的單。已點交的貨在車上，也算還沒送 */
+const UNFINISHED_ON_ROUTE: readonly OrderStatus[] = ['CONFIRMED', 'LOADED', 'IN_DELIVERY'];
+/** 送不成的單：點交不符（FAILED）與無人簽收，都會開補送單，主管要看得到 */
+const DELIVERY_PROBLEM: readonly OrderStatus[] = ['FAILED', 'NO_SIGNATURE'];
+
 @Component({
   selector: 'app-dispatch-dashboard',
   imports: [
@@ -191,6 +200,12 @@ interface VehicleOption {
 export class DispatchDashboard implements OnInit {
   readonly routes = signal<BoardRoute[]>([]);
   readonly unassigned = signal<BoardCard[]>([]);
+  /** 還沒確認的單（PENDING_CONFIRM）：不能拖，要先按確認才會進待排單 */
+  readonly pendingConfirm = signal<BoardCard[]>([]);
+  /** 正在確認的那張單，按鈕顯示「確認中…」並擋住連點 */
+  readonly confirmingOrderId = signal<number | null>(null);
+  /** 看板上方的日期列：今天起到最後一天有單的日期，加上之前還沒結案的日子（後端 /dispatch/days） */
+  readonly days = signal<DispatchDayDto[]>([]);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
   private readonly routeMetricsByRouteId = signal<ReadonlyMap<number, RouteMetricsDto>>(new Map());
@@ -199,15 +214,12 @@ export class DispatchDashboard implements OnInit {
   readonly boardError = signal('');
   /** 動作列選的排車條件，optimize / board / reassign 三支 API 共用同一組值 */
   readonly dispatchDate = signal(todayLocalDate());
-  readonly draggedLaneKey = signal<string | null>(null);
-  readonly confirmingOrderIds = signal<ReadonlySet<number>>(new Set());
   /** 0 代表倉庫清單還沒載回來，尚未決定預設倉庫 */
   readonly warehouseId = signal(0);
   readonly optimizing = signal(false);
-  /** 「套用門市訂單」送出中 */
-  readonly applyingStores = signal(false);
   private readonly api = inject(DispatchApiService);
   private readonly boardEvents = inject(DispatchBoardEventsService);
+  private readonly socket = inject(DriverChatSocketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
   // 按「＋」清空看板前的確認視窗，寫在 dispatch-dashboard.html 最下面的 <ng-template #clearBoardDialog>
@@ -227,10 +239,6 @@ export class DispatchDashboard implements OnInit {
   readonly loading = signal(true);
   readonly errorMessage = signal('');
   readonly updatedAt = signal('--:--');
-  /** 即時看板只同步訂單，避免背景更新干擾調度員正在拖曳的排車草稿。 */
-  readonly taskboardSyncing = signal(false);
-  readonly taskboardSyncError = signal('');
-  readonly taskboardLastSyncedAt = signal('--:--');
 
   // ── 常配編組 ──────────────────────────────────────────
   readonly templates = signal<TemplateDto[]>([]);
@@ -240,8 +248,9 @@ export class DispatchDashboard implements OnInit {
   readonly boardNotices = signal<string[]>([]);
   /** 格子 key 的流水號 */
   private slotSeq = 0;
-  /** 目前看板屬於哪個倉；換倉時不能沿用上一個倉排到一半的格子 */
+  /** 目前看板屬於哪個倉、哪一天；換倉或換日期時不能沿用排到一半的格子 */
   private boardWarehouseId = 0;
+  private boardDate = '';
   readonly templateName = signal('');
   readonly templateError = signal('');
   readonly templateBusy = signal(false);
@@ -254,129 +263,6 @@ export class DispatchDashboard implements OnInit {
   readonly published = computed(() =>
     this.routes().some((route) => route.routeStatus === 'PUBLISHED'),
   );
-  /** 發布後只顯示仍需配送或處理的車道；草稿維持完整編輯看板。 */
-  readonly visibleRoutes = computed(() =>
-    this.published()
-      ? this.routes().filter((route) => this.visibleRouteCards(route).length > 0)
-      : this.routes(),
-  );
-  readonly visibleUnassigned = computed(() =>
-    this.unassigned().filter((card) => {
-      const status = this.boardCardStatus(card);
-      return status !== 'COMPLETED' && status !== 'CANCELLED';
-    }),
-  );
-  readonly pendingConfirmationCards = computed(() =>
-    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'PENDING_CONFIRM'),
-  );
-  readonly readyToAssignCards = computed(() =>
-    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'CONFIRMED'),
-  );
-  readonly unassignedFailedCards = computed(() =>
-    this.visibleUnassigned().filter((card) => this.boardCardStatus(card) === 'FAILED'),
-  );
-  readonly publishedRoutes = computed(() =>
-    this.routes().filter(
-      (route) => route.routeStatus === 'PUBLISHED' && this.visibleRouteCards(route).length > 0,
-    ),
-  );
-  readonly dispatchAttention = computed<DispatchAttentionItem[]>(() => {
-    const items: DispatchAttentionItem[] = [];
-    for (const route of this.publishedRoutes()) {
-      for (const card of route.cards) {
-        if (this.boardCardStatus(card) === 'FAILED') {
-          items.push({
-            key: `order-${card.orderId}`,
-            title: `${card.orderNumber} 配送異常`,
-            detail: `${card.storeName} · ${this.boardCardStatusLabel(card)}`,
-            kind: 'exception',
-          });
-        }
-      }
-
-      if (route.driverId !== null) {
-        const ping = this.routeGpsPing(route);
-        const gpsAge = ping ? minutesAgo(ping.timestamp) : null;
-        if (gpsAge === null || gpsAge >= 10) {
-          items.push({
-            key: `gps-${route.driverId}`,
-            title: `${this.driverName(route.driverId)} GPS ${gpsAge === null ? '未回報' : '超過 10 分鐘未更新'}`,
-            detail: gpsAge === null ? '尚未收到有效的最新定位' : `最後回報於 ${gpsAge} 分鐘前`,
-            kind: 'gps',
-          });
-        }
-      }
-    }
-
-    for (const card of this.visibleUnassigned()) {
-      const waitingConfirmation = this.boardCardStatus(card) === 'PENDING_CONFIRM';
-      items.push({
-        key: `unassigned-${card.orderId}`,
-        title: `${card.orderNumber} ${waitingConfirmation ? '待人工確認' : '尚未排入車格'}`,
-        detail: `${card.storeName} · ${this.boardCardStatusLabel(card)}`,
-        kind: 'pending',
-      });
-    }
-
-    return items;
-  });
-  readonly pendingConfirmationCount = computed(() =>
-    this.orders().filter((order) =>
-      order.deliveryDate === this.dispatchDate() && order.status === 'PENDING_CONFIRM',
-    ).length,
-  );
-  readonly publishBlockedByPendingConfirmation = computed(
-    () => this.dispatchDate() === todayLocalDate() && this.pendingConfirmationCount() > 0,
-  );
-
-  readonly dispatchDays = computed<DispatchDayCard[]>(() => {
-    const grouped = new Map<string, OrderDto[]>();
-    for (const order of this.orders()) {
-      if (order.warehouseId !== this.warehouseId()) {
-        continue;
-      }
-      grouped.set(order.deliveryDate, [...(grouped.get(order.deliveryDate) ?? []), order]);
-    }
-
-    return [...grouped.entries()]
-      .filter(([, orders]) => orders.some((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED'))
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([date, orders]) => {
-        const active = orders.filter((order) => order.status !== 'COMPLETED' && order.status !== 'CANCELLED');
-        const completed = orders.filter((order) => order.status === 'COMPLETED').length;
-        const hasDelivery = active.some((order) => order.status === 'IN_DELIVERY');
-        const pending = active.filter((order) => order.status === 'PENDING_CONFIRM').length;
-        const failed = active.filter((order) => order.status === 'FAILED').length;
-        const unassigned = active.filter((order) =>
-          order.status === 'CONFIRMED' && (order.assignedDriverId == null || order.assignedVehicleId == null),
-        ).length;
-        let statusLabel = `草稿 · ${unassigned} 待排`;
-
-        if (date === this.dispatchDate() && this.published()) {
-          statusLabel = hasDelivery ? `配送中 · ${completed}/${orders.length}` : '已發布';
-        } else if (hasDelivery) {
-          statusLabel = `配送中 · ${completed}/${orders.length}`;
-        } else if (pending > 0) {
-          statusLabel = `待確認 · ${pending}`;
-        } else if (failed > 0) {
-          statusLabel = `需處理 · ${failed}`;
-        } else if (unassigned === 0) {
-          statusLabel = `草稿 · 已排 ${active.length}`;
-        } else {
-          statusLabel = `未排 · ${unassigned} 單`;
-        }
-
-        const [, month, day] = date.split('-').map(Number);
-        const dateLabel = `${month}/${day}`;
-        return {
-          date,
-          dateLabel,
-          relativeLabel: this.dayOffsetLabel(date),
-          statusLabel,
-          isSelected: date === this.dispatchDate(),
-        };
-      });
-  });
 
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
@@ -391,7 +277,8 @@ export class DispatchDashboard implements OnInit {
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
     const waitingSchedule = orders.filter((order) => order.status === 'CONFIRMED').length;
-    const delivering = orders.filter((order) => order.status === 'IN_DELIVERY').length;
+    // 已點交的貨已經在車上，跟報表一樣算進配送中
+    const delivering = orders.filter((order) => order.status === 'IN_DELIVERY' || order.status === 'LOADED').length;
 
     return [
       `今日配送需求 ${orders.length} 筆`,
@@ -403,7 +290,7 @@ export class DispatchDashboard implements OnInit {
   });
 
   /** 排車中或改派儲存中都不該再觸發排車 */
-  readonly busy = computed(() => this.optimizing() || this.applyingStores() || this.saving());
+  readonly busy = computed(() => this.optimizing() || this.saving());
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -453,7 +340,7 @@ export class DispatchDashboard implements OnInit {
     // 同一間門市當天可能有多張訂單，以 storeId 去重並加總箱數；
     // 不去重就是同一個座標疊好幾個圈，只點得到最上面那一個。
     const boxesByStore = new Map<number, number>();
-    for (const card of [...this.routes().flatMap((route) => this.visibleRouteCards(route)), ...this.visibleUnassigned()]) {
+    for (const card of [...this.routes().flatMap((route) => route.cards), ...this.unassigned()]) {
       boxesByStore.set(card.storeId, (boxesByStore.get(card.storeId) ?? 0) + card.boxCount);
     }
 
@@ -541,7 +428,6 @@ export class DispatchDashboard implements OnInit {
    * 跟門市不同，這個一開就是持續輪詢的背景請求，不該預設一直跑。
    */
   readonly showDriverPoints = signal(false);
-  readonly pollDriverLocations = computed(() => this.showDriverPoints() || this.published());
 
   toggleDriverPoints(checked: boolean): void {
     this.showDriverPoints.set(checked);
@@ -554,8 +440,11 @@ export class DispatchDashboard implements OnInit {
    * catchError 刻意放在「每次請求」這層而不是整條 pipe 外層 —— 放外層的話，
    * 一次 401 或後端重啟就會讓整條 stream complete，之後永遠不會再重試。
    */
+  /** 派出後的卡片要顯示每台車的定位，所以不只開圖層時要抓 */
+  private readonly needLivePings = computed(() => this.showDriverPoints() || this.published());
+
   private readonly livePings = toSignal(
-    toObservable(this.pollDriverLocations).pipe(
+    toObservable(this.needLivePings).pipe(
       switchMap((on) =>
         on
           ? timer(0, 30_000).pipe(
@@ -595,7 +484,8 @@ export class DispatchDashboard implements OnInit {
         order.deliveryDate === this.dispatchDate()
         && order.assignedDriverId != null
         && publishedDriverIds.has(order.assignedDriverId)
-        && (order.status === 'CONFIRMED' || order.status === 'IN_DELIVERY'),
+        // 少了 LOADED 的話，司機全部點交完出車後就會從即時地圖上消失
+        && (order.status === 'CONFIRMED' || order.status === 'LOADED' || order.status === 'IN_DELIVERY'),
       )
       .sort((left, right) => (left.sequence ?? Number.MAX_SAFE_INTEGER) - (right.sequence ?? Number.MAX_SAFE_INTEGER))
       .forEach((order) => {
@@ -644,6 +534,19 @@ export class DispatchDashboard implements OnInit {
     this.boardEvents.boardChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.reloadBoard());
+    // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
+    this.socket.boardPushes$
+      .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
+      .subscribe((push) => this.onBoardPush(push.date));
+    // 斷線期間的推播不會補發，重新連上時自己重查一次，免得畫面停在舊的狀態
+    this.socket.connected$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.loadDays();
+        if (this.warehouseId()) {
+          this.refreshOrdersAndBoard();
+        }
+      });
     timer(15_000, 15_000)
       .pipe(
         switchMap(() => this.api.getOrders().pipe(catchError(() => of<OrderDto[] | null>(null)))),
@@ -651,28 +554,9 @@ export class DispatchDashboard implements OnInit {
       )
       .subscribe((orders) => {
         if (orders) {
-          this.applyTaskboardOrders(orders);
+          this.applySyncedOrders(orders);
         }
       });
-  }
-
-  refreshTaskboard(): void {
-    if (this.taskboardSyncing()) {
-      return;
-    }
-
-    this.taskboardSyncing.set(true);
-    this.taskboardSyncError.set('');
-    this.api.getOrders().subscribe({
-      next: (orders) => {
-        this.applyTaskboardOrders(orders);
-        this.taskboardSyncing.set(false);
-      },
-      error: () => {
-        this.taskboardSyncError.set('暫時無法同步訂單狀態。');
-        this.taskboardSyncing.set(false);
-      },
-    });
   }
 
   onWarehouseChange(event: Event): void {
@@ -681,64 +565,210 @@ export class DispatchDashboard implements OnInit {
     this.reloadBoard();
   }
 
-  confirmPendingOrder(card: BoardCard): void {
-    const order = this.orders().find((item) => item.id === card.orderId);
-    if (!order?.id || order.status !== 'PENDING_CONFIRM' || this.confirmingOrderIds().has(order.id)) {
+  // ── 日期列 ────────────────────────────────────────────
+
+  /** 點日期列的一格：換看那一天。班表也要換成那天的，司機選單的紅框才會對 */
+  selectDay(date: string): void {
+    if (date === this.dispatchDate() || this.busy()) {
       return;
     }
-
-    this.confirmingOrderIds.update((ids) => new Set(ids).add(order.id!));
-    this.boardError.set('');
-    this.api.updateOrder(order.id, {...order, notes: order.notes ?? '', status: 'CONFIRMED'}).subscribe({
-      next: (updated) => {
-        this.applyTaskboardOrders(this.orders().map((item) => item.id === updated.id ? updated : item));
-        this.boardNotices.set([`${order.orderNumber} 已確認，可拖曳安排配送。`]);
-        this.reloadBoard();
-        this.confirmingOrderIds.update((ids) => {
-          const next = new Set(ids);
-          next.delete(order.id!);
-          return next;
-        });
-      },
-      error: (error: unknown) => {
-        this.boardError.set(`無法確認訂單：${describeError(error)}`);
-        this.confirmingOrderIds.update((ids) => {
-          const next = new Set(ids);
-          next.delete(order.id!);
-          return next;
-        });
-      },
-    });
-  }
-
-  selectDispatchDate(date: string): void {
-    if (date === this.dispatchDate() || this.saving() || this.publishing()) {
-      return;
-    }
-
     this.dispatchDate.set(date);
-    this.activeTemplateId.set(0);
-    this.templateName.set('');
-    this.boardWarehouseId = 0;
-    this.routes.set([]);
     this.boardNotices.set([]);
-    this.boardError.set('');
     this.publishError.set('');
     this.loadScheduleEligibility();
     this.reloadBoard();
   }
 
-  private dayOffsetLabel(date: string): string {
-    const [year, month, day] = date.split('-').map(Number);
-    const [todayYear, todayMonth, todayDay] = todayLocalDate().split('-').map(Number);
-    const offset = Math.round(
-      (Date.UTC(year, month - 1, day) - Date.UTC(todayYear, todayMonth - 1, todayDay)) / 86_400_000,
-    );
-    if (offset === 0) return '今天';
-    if (offset === 1) return '明天';
-    if (offset === 2) return '後天';
-    return `週${'日一二三四五六'[new Date(year, month - 1, day).getDay()]}`;
+  /** 日期列失敗不擋看板：看板本身照樣能用，只是少了切換日期的入口 */
+  private loadDays(): void {
+    this.api.getDispatchDays().subscribe({
+      next: (days) => this.days.set(days),
+      error: () => this.days.set([]),
+    });
   }
+
+  /**
+   * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
+   * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
+   */
+  private onBoardPush(date: string): void {
+    this.loadDays();
+    if (date === this.dispatchDate() && !this.busy()) {
+      this.refreshOrdersAndBoard();
+    }
+  }
+
+  /**
+   * 訂單和看板一起重查。看板靠 orders() 判斷每張單能不能拖（見 applyDispatchResult），
+   * 只重讀看板的話，剛確認或剛點交的單狀態還是舊的。
+   */
+  private refreshOrdersAndBoard(): void {
+    this.api.getOrders().subscribe({
+      next: (orders) => {
+        this.applySyncedOrders(orders);
+        this.reloadBoard();
+      },
+      error: () => this.reloadBoard(),
+    });
+  }
+
+  /** 日期列一格的標題：9/26，今天、明天、後天另外標出來 */
+  dayTitle(date: string): string {
+    const [, month, day] = date.split('-').map(Number);
+    const relative = this.relativeDayLabel(date);
+    return relative ? `${month}/${day} ${relative}` : `${month}/${day}`;
+  }
+
+  private relativeDayLabel(date: string): string {
+    const diff = Math.round(
+      (new Date(`${date}T00:00:00`).getTime() - new Date(`${todayLocalDate()}T00:00:00`).getTime()) / 86_400_000,
+    );
+    return ({[-1]: '昨天', 0: '今天', 1: '明天', 2: '後天'} as Record<number, string>)[diff] ?? '';
+  }
+
+  /** 日期列一格的狀態文字：狀態加上最需要知道的那個數字 */
+  dayStatusLabel(day: DispatchDayDto): string {
+    const unfinished = day.orderCount - day.finishedCount;
+    switch (day.status) {
+      case 'EMPTY':
+        return '沒有訂單';
+      case 'UNPLANNED':
+        return `未排 · ${day.orderCount} 單`;
+      case 'DRAFT':
+        return day.unassignedCount > 0 ? `草稿 · ${day.unassignedCount} 待排` : '草稿 · 已排完';
+      case 'PUBLISHED':
+        return day.unassignedCount > 0 ? `已發布 · +${day.unassignedCount} 待排` : '已發布';
+      case 'IN_PROGRESS':
+        return `配送中 · ${day.finishedCount}/${day.orderCount}`;
+      case 'CLOSED':
+        return '已結束';
+      case 'UNRESOLVED':
+        return `未結案 · ${unfinished} 單`;
+    }
+  }
+
+  /** 工具列的日期：今天、明天這種相對說法比日期好認 */
+  dispatchDateLabel(): string {
+    const relative = this.relativeDayLabel(this.dispatchDate());
+    return relative ? `${relative} ${this.dispatchDate()}` : this.dispatchDate();
+  }
+
+  // ── 待確認的單 ────────────────────────────────────────
+
+  /** 在看板上直接確認：確認後這張單會從待確認移到待排單，就能拖或自動排車 */
+  confirmPendingOrder(card: BoardCard): void {
+    if (this.confirmingOrderId() !== null) {
+      return;
+    }
+    this.confirmingOrderId.set(card.orderId);
+    this.boardError.set('');
+    this.api.confirmOrder(card.orderId).subscribe({
+      next: () => {
+        this.confirmingOrderId.set(null);
+        this.refreshOrdersAndBoard();
+      },
+      error: (error: unknown) => {
+        this.boardError.set(`確認 ${card.orderNumber} 失敗：${describeError(error)}`);
+        this.confirmingOrderId.set(null);
+      },
+    });
+  }
+
+  // ── 已派出：即時狀態 ──────────────────────────────────
+
+  /** 派出後的卡片只畫有單的路線；空格、排到一半的人車格在派出後沒有意義 */
+  readonly publishedRoutes = computed(() =>
+    this.routes().filter((route) => route.routeId > 0 && route.cards.length > 0),
+  );
+
+  /** 進度圓點：完成綠、送不成紅、下一站藍、還沒到的灰 */
+  routeProgressDotClass(route: BoardRoute, card: BoardCard): string {
+    const status = this.boardCardStatus(card);
+    if (status === 'COMPLETED') {
+      return 'is-complete';
+    }
+    if (DELIVERY_PROBLEM.includes(status)) {
+      return 'is-failed';
+    }
+    return this.routeNextCard(route)?.orderId === card.orderId ? 'is-current' : '';
+  }
+
+  routeProgressLabel(route: BoardRoute): string {
+    const done = route.cards.filter((card) => !UNFINISHED_ON_ROUTE.includes(this.boardCardStatus(card))).length;
+    return `${done}/${route.cards.length} 站`;
+  }
+
+  /** 下一站：照配送順序第一張還沒結束的單 */
+  private routeNextCard(route: BoardRoute): BoardCard | undefined {
+    return route.cards.find((card) => UNFINISHED_ON_ROUTE.includes(this.boardCardStatus(card)));
+  }
+
+  routeNextStop(route: BoardRoute): string {
+    return this.routeNextCard(route)?.storeName ?? '全部送完';
+  }
+
+  routeHasProblem(route: BoardRoute): boolean {
+    return route.cards.some((card) => DELIVERY_PROBLEM.includes(this.boardCardStatus(card)));
+  }
+
+  /**
+   * 後端只回工作中、而且 10 分鐘內有回報的司機，所以查不到就代表沒在回報。
+   * 還沒到配送日的路線司機根本還沒出門，不算異常。
+   */
+  routeGpsLabel(route: BoardRoute): string {
+    if (this.dispatchDate() !== todayLocalDate()) {
+      return '尚未出車';
+    }
+    const ping = this.livePings().find((item) => item.driverId === route.driverId);
+    return ping ? `GPS ${minutesAgo(ping.timestamp)} 分鐘前` : 'GPS 超過 10 分鐘未更新';
+  }
+
+  routeEtaLabel(route: BoardRoute): string {
+    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
+  }
+
+  routeRemainingKmLabel(route: BoardRoute): string {
+    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
+  /**
+   * 派出後右側「需要處理」：送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
+   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。
+   */
+  readonly dispatchAttention = computed<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+    const isToday = this.dispatchDate() === todayLocalDate();
+    const pingDrivers = new Set(this.livePings().map((ping) => ping.driverId));
+
+    for (const route of this.publishedRoutes()) {
+      for (const card of route.cards) {
+        if (DELIVERY_PROBLEM.includes(this.boardCardStatus(card))) {
+          items.push({
+            key: `order-${card.orderId}`,
+            title: `${card.orderNumber} ${this.boardCardStatusLabel(card)}`,
+            detail: `${route.plateNumber} · ${card.storeName}，補送單要到異常中心確認`,
+            kind: 'exception',
+          });
+        }
+      }
+      if (isToday && route.driverId !== null && this.routeNextCard(route) && !pingDrivers.has(route.driverId)) {
+        items.push({
+          key: `gps-${route.driverId}`,
+          title: `${this.driverName(route.driverId)} GPS 超過 10 分鐘未更新`,
+          detail: `${route.plateNumber} · 下一站 ${this.routeNextStop(route)}`,
+          kind: 'gps',
+        });
+      }
+    }
+
+    for (const card of this.pendingConfirm()) {
+      items.push({key: `confirm-${card.orderId}`, title: `${card.orderNumber} 待確認`, detail: card.storeName, kind: 'pending'});
+    }
+    for (const card of this.unassigned()) {
+      items.push({key: `pool-${card.orderId}`, title: `${card.orderNumber} 尚未排入車`, detail: card.storeName, kind: 'pending'});
+    }
+    return items;
+  });
 
   private loadDashboard(): void {
     this.loading.set(true);
@@ -780,11 +810,10 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  private applyTaskboardOrders(orders: OrderDto[]): void {
+  /** 背景同步回來的訂單：只換訂單（卡片狀態靠它），不動看板，避免干擾調度員正在拖曳的排車草稿 */
+  private applySyncedOrders(orders: OrderDto[]): void {
     this.orders.set(orders);
-    const syncedAt = this.formatCurrentTime();
-    this.taskboardLastSyncedAt.set(syncedAt);
-    this.updatedAt.set(syncedAt);
+    this.updatedAt.set(this.formatCurrentTime());
   }
 
   private formatCurrentTime(): string {
@@ -812,7 +841,7 @@ export class DispatchDashboard implements OnInit {
       .map((lane) => ({
         driverId: lane.driverId,
         vehicleId: lane.vehicleId,
-        orderIds: lane.cards.map((card) => card.orderId),
+        orderIds: lane.cards.filter((card) => this.isDispatchable(card)).map((card) => card.orderId),
       }));
     if (slots.length === 0) {
       this.boardError.set('先在格子裡選司機或車，再自動排車。');
@@ -839,14 +868,14 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 「套用門市訂單」：把每格門市在待排單的訂單拉進那格，交給後端只排這些單。
+   * 「套用門市訂單」：照每格門市清單的順序，把這些門市在待排單的訂單拉進那格，走 submitReassign 存檔。
    *
-   * 停靠順序由後端算（OSRM 實際道路距離 + OR-Tools），不用調度員排：
-   * 哪幾間門市今天有單每天都不一樣，最順的順序也跟著變，存死一個順序反而常常不是最佳解。
+   * 門市順序就是配送順序：reassign 照送出去的順序存、不重排（DispatchService.reassign），
+   * 所以調度員拖出來的、或按「排順序」算出來的門市順序，就是司機實際跑的順序。
+   * 要今天的最佳解就按「自動排車」，那邊 OR-Tools 會重排停靠順序。
    *
-   * 送 pinnedOnly，後端只排固定的單，其他待排單不動；格子原本就有的單也一起固定送出，
-   * 因為後端排之前會先清掉當天草稿，沒送的單會被退回待排單。
-   * 車裝滿就不再拉，剩下的留在待排單並提示；後端遇到固定的箱數超過容量會整批擋下。
+   * 只從待排單拉，別格的單不搶；這格原本的單也照門市順序重排，不在清單裡的門市（手動拖進來的）接在最後。
+   * 車裝滿就不再拉，剩下的留在待排單並提示。
    */
   applyStoreOrders(): void {
     if (this.busy() || this.published()) {
@@ -855,73 +884,110 @@ export class DispatchDashboard implements OnInit {
 
     const notices: string[] = [];
     const pool = [...this.unassigned()];
-    const orderIdsByLane = new Map<string, number[]>();
     let pulled = 0;
-    for (const lane of this.routes()) {
-      if (lane.vehicleId === null) {
-        if (lane.storeIds.length > 0) {
-          notices.push(`${this.templateSlotLabel(lane.driverId, lane.vehicleId)} 還沒選車，門市先不拉單`);
-        }
-        continue;
+    const lanes = this.routes().map((lane) => {
+      if (lane.storeIds.length === 0) {
+        return lane;
       }
-      const orderIds = lane.cards.map((card) => card.orderId);
-      if (!lane.isMaintenance && !lane.hasLockedStops) {
-        let room = lane.capacity - this.loadedBoxes(lane);
-        for (const storeId of lane.storeIds) {
-          const left: BoardCard[] = [];
-          for (const card of pool.filter((item) => item.storeId === storeId)) {
-            if (card.boxCount > room) {
-              left.push(card);
-              continue;
-            }
-            room -= card.boxCount;
-            orderIds.push(card.orderId);
-            pool.splice(pool.indexOf(card), 1);
-            pulled++;
+      if (lane.vehicleId === null || lane.isMaintenance || lane.hasLockedStops) {
+        const reason = lane.vehicleId === null ? '還沒選車' : lane.isMaintenance ? '車輛維修中' : '有配送中的訂單';
+        notices.push(`${this.templateSlotLabel(lane.driverId, lane.vehicleId)} ${reason}，門市先不拉單`);
+        return lane;
+      }
+      const cards = [...lane.cards];
+      let room = lane.capacity - this.loadedBoxes(lane);
+      for (const storeId of lane.storeIds) {
+        const left: BoardCard[] = [];
+        for (const card of pool.filter((item) => item.storeId === storeId)) {
+          if (card.boxCount > room) {
+            left.push(card);
+            continue;
           }
-          if (left.length > 0) {
-            notices.push(`${lane.plateNumber} 裝滿，${left[0].storeName} ${left.length} 張留在待排單`);
-          }
+          room -= card.boxCount;
+          cards.push(card);
+          pool.splice(pool.indexOf(card), 1);
+          pulled++;
+        }
+        if (left.length > 0) {
+          notices.push(`${lane.plateNumber} 裝滿，${left[0].storeName} ${left.length} 張留在待排單`);
         }
       }
-      if (orderIds.length > 0) {
-        orderIdsByLane.set(lane.slotKey, orderIds);
-      }
-    }
+      // sort 是穩定排序：同一間門市的單維持原本先後
+      const rank = (card: BoardCard) => {
+        const index = lane.storeIds.indexOf(card.storeId);
+        return index < 0 ? lane.storeIds.length : index;
+      };
+      cards.sort((x, y) => rank(x) - rank(y));
+      return {...lane, cards};
+    });
     if (pulled === 0) {
       this.boardNotices.set(notices);
       this.boardError.set('格子裡的門市今天沒有待排的訂單。先在格子裡加入門市，或確認待排單裡有這些門市的單。');
       return;
     }
 
-    // 只送有單的格子：沒單的格子送出去，後端會替它配車、排不到單又多一句「沒有排到訂單」，
-    // 沒送的人車格 applyDispatchResult 會原樣留在畫面上
-    const slots = this.routes()
-      .filter((lane) => orderIdsByLane.has(lane.slotKey))
-      .map((lane) => ({driverId: lane.driverId, vehicleId: lane.vehicleId, orderIds: orderIdsByLane.get(lane.slotKey)!}));
+    this.routes.set(lanes);
+    this.unassigned.set(pool);
+    this.boardNotices.set(notices);
+    this.submitReassign();
+  }
 
-    this.applyingStores.set(true);
+  /** 正在「排順序」的格子；同時只排一格，排的時候那格的門市不能改 */
+  readonly sequencingSlot = signal<string | null>(null);
+
+  /** 「排順序」：這格的門市交給後端，照從倉庫出發最順的跑法重排。不看訂單、不寫資料庫 */
+  sequenceLaneStores(route: BoardRoute): void {
+    if (route.storeIds.length < 2 || this.sequencingSlot() !== null) {
+      return;
+    }
+    const sent = [...route.storeIds];
+    this.sequencingSlot.set(route.slotKey);
     this.boardError.set('');
-    this.boardNotices.set([]);
-    this.api
-      .optimizeSlots({date: this.dispatchDate(), warehouseId: this.warehouseId(), slots, pinnedOnly: true})
-      .subscribe({
-        next: (result) => {
-          this.applyDispatchResult(result);
-          this.sortLaneStoresByRoute();
-          this.boardNotices.set([...notices, ...(result.notices ?? [])]);
-          this.applyingStores.set(false);
-        },
-        error: (error: unknown) => {
-          this.boardError.set(describeError(error));
-          this.applyingStores.set(false);
-        },
-      });
+    this.api.sequenceStores(this.warehouseId(), sent).subscribe({
+      next: ({storeIds}) => {
+        this.routes.update((lanes) =>
+          lanes.map((lane) =>
+            // 排的時候門市被改過（格子被清掉、換倉）就不套用，免得蓋掉新的內容
+            lane.slotKey === route.slotKey && sameMembers(lane.storeIds, sent) ? {...lane, storeIds} : lane,
+          ),
+        );
+        this.sequencingSlot.set(null);
+      },
+      error: (error: unknown) => {
+        this.boardError.set(describeError(error));
+        this.sequencingSlot.set(null);
+      },
+    });
+  }
+
+  /** 拖曳門市標籤調整順序 */
+  onStoreDrop(route: BoardRoute, event: CdkDragDrop<number[]>): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+    this.routes.update((lanes) =>
+      lanes.map((lane) => {
+        if (lane.slotKey !== route.slotKey) {
+          return lane;
+        }
+        const storeIds = [...lane.storeIds];
+        moveItemInArray(storeIds, event.previousIndex, event.currentIndex);
+        return {...lane, storeIds};
+      }),
+    );
   }
 
   /**
-   * 門市照後端排出來的停靠順序重排，今天沒單的門市接在最後、維持原本的先後。
-   * 這時按「儲存編組」，存進去的就是算好的順序，下次打開比較接近實際跑法。
+   * 看板整個包在 cdkDropListGroup 裡，所有 drop list 會自動互通。
+   * 門市標籤只能在自己那格排順序，訂單卡片也不能被拖進門市清單，兩邊各用一個 predicate 擋。
+   */
+  readonly ownStoreListOnly = (drag: CdkDrag, drop: CdkDropList) => drag.dropContainer === drop;
+  readonly ordersOnly = (drag: CdkDrag) => drag.data !== STORE_CHIP;
+  readonly storeChip = STORE_CHIP;
+
+  /**
+   * 自動排車後，門市照 OR-Tools 排出來的停靠順序重排，今天沒單的門市接在最後、維持原本的先後。
+   * 門市順序就是配送順序，兩邊要一致；這時按「儲存編組」，存進去的也是算好的順序。
    */
   private sortLaneStoresByRoute(): void {
     this.routes.update((lanes) =>
@@ -986,7 +1052,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 車道目前實際載運的箱數。拖曳後會變動，所以用卡片重算而不是用後端給的值 */
   loadedBoxes(route: BoardRoute): number {
-    return this.visibleRouteCards(route).reduce((sum, card) => sum + card.boxCount, 0);
+    return route.cards.reduce((sum, card) => sum + card.boxCount, 0);
   }
 
   /** 超過車輛容量，畫面上要標出來 */
@@ -995,14 +1061,16 @@ export class DispatchDashboard implements OnInit {
   }
 
   boardCardStatus(card: BoardCard): OrderStatus {
-    return this.orders().find((order) => order.id === card.orderId)?.status ?? card.status;
+    return this.orders().find((order) => order.id === card.orderId)?.status ?? 'CONFIRMED';
   }
 
-  visibleRouteCards(route: BoardRoute): BoardCard[] {
-    return route.cards.filter((card) => {
-      const status = this.boardCardStatus(card);
-      return status !== 'COMPLETED' && status !== 'CANCELLED';
-    });
+  /**
+   * 這張單還能不能改派：只有待送的可以。配送中、已完成、配送失敗的單照樣顯示在格子裡，
+   * 但不能拖，也不送進 reassign / 自動排車（後端只收 CONFIRMED，送了會整批擋下）。
+   * 不送也不會弄丟：後端重排時，有這種單的路線會原樣保留（DispatchService.clearExistingDraftRoutes）
+   */
+  isDispatchable(card: BoardCard): boolean {
+    return this.boardCardStatus(card) === 'CONFIRMED';
   }
 
   boardCardStatusLabel(card: BoardCard): string {
@@ -1023,58 +1091,6 @@ export class DispatchDashboard implements OnInit {
     return order?.itemDescription || order?.notes || '未填寫品項或備註';
   }
 
-  boardCardAddress(card: BoardCard): string {
-    return this.stores().find((item) => item.id === card.storeId)?.address ?? '未設定配送地址';
-  }
-
-  boardCardOrder(card: BoardCard): OrderDto | undefined {
-    return this.orders().find((item) => item.id === card.orderId);
-  }
-
-  routeProgressLabel(route: BoardRoute): string {
-    const stops = route.cards.filter((card) => this.boardCardStatus(card) !== 'CANCELLED');
-    const completed = stops.filter((card) => this.boardCardStatus(card) === 'COMPLETED').length;
-    const failed = stops.filter((card) => this.boardCardStatus(card) === 'FAILED').length;
-    return `${completed}/${stops.length} 站 · ${failed} 站異常`;
-  }
-
-  routeStopCount(route: BoardRoute): number {
-    return route.cards.filter((card) => this.boardCardStatus(card) !== 'CANCELLED').length;
-  }
-
-  routeNextStop(route: BoardRoute): string {
-    const next = route.cards.find((card) => {
-      const status = this.boardCardStatus(card);
-      return status === 'IN_DELIVERY' || status === 'FAILED' || status === 'CONFIRMED';
-    });
-    return next ? `${next.storeName} · ${next.orderNumber}` : '目前沒有待配送站點';
-  }
-
-  routeGpsPing(route: BoardRoute): GpsPingDto | undefined {
-    if (route.driverId === null) {
-      return undefined;
-    }
-    return this.livePings().find((ping) => ping.driverId === route.driverId);
-  }
-
-  routeGpsLabel(route: BoardRoute): string {
-    const ping = this.routeGpsPing(route);
-    if (!ping) {
-      return 'GPS 尚未回報';
-    }
-
-    const age = minutesAgo(ping.timestamp);
-    return Number.isFinite(age) ? `GPS ${age} 分鐘前` : 'GPS 時間無法判讀';
-  }
-
-  routeEtaLabel(route: BoardRoute): string {
-    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
-  }
-
-  routeRemainingDistanceLabel(route: BoardRoute): string {
-    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
-  }
-
   routeDriverStatus(route: BoardRoute): string {
     if (route.isMaintenance) {
       return '車輛維修中';
@@ -1083,20 +1099,19 @@ export class DispatchDashboard implements OnInit {
       return '待指派司機';
     }
 
-    const statuses = this.visibleRouteCards(route).map((card) => this.boardCardStatus(card));
-    if (statuses.includes('FAILED')) {
-      return '有異常';
-    }
+    const statuses = route.cards.map((card) => this.boardCardStatus(card));
     if (statuses.includes('IN_DELIVERY')) {
       return '配送中';
     }
-    if (statuses.includes('CONFIRMED')) {
-      return '待出發';
+    // 送過至少一站（完成、無人簽收、失敗都算），還有待送的就是在路上；待送的都沒了就是跑完了
+    const started = statuses.some(
+      (status) => status === 'COMPLETED' || status === 'NO_SIGNATURE' || status === 'FAILED',
+    );
+    // 已點交的貨還在車上沒送，跟還沒點交的一樣算待送
+    if (statuses.includes('CONFIRMED') || statuses.includes('LOADED')) {
+      return started ? '配送中' : '待出發';
     }
-    if (statuses.includes('PENDING_CONFIRM')) {
-      return '待確認';
-    }
-    if (statuses.includes('COMPLETED')) {
+    if (started) {
       return '已完成';
     }
 
@@ -1109,8 +1124,12 @@ export class DispatchDashboard implements OnInit {
         return '待確認';
       case 'CONFIRMED':
         return '待調度';
+      case 'LOADED':
+        return '已點交';
       case 'IN_DELIVERY':
         return '配送中';
+      case 'NO_SIGNATURE':
+        return '無人簽收';
       case 'COMPLETED':
         return '已完成';
       case 'FAILED':
@@ -1310,11 +1329,6 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    const draggedCard = event.previousContainer.data[event.previousIndex];
-    if (!draggedCard || this.boardCardStatus(draggedCard) === 'PENDING_CONFIRM') {
-      return;
-    }
-
     if (event.previousContainer === event.container) {
       moveItemInArray(event.container.data, event.previousIndex, event.currentIndex);
     } else {
@@ -1332,50 +1346,6 @@ export class DispatchDashboard implements OnInit {
     this.unassigned.update((cards) => [...cards]);
 
     this.submitReassign();
-  }
-
-  onLaneDragStart(event: DragEvent, route: BoardRoute): void {
-    if (this.published() || this.saving()) {
-      event.preventDefault();
-      return;
-    }
-    this.draggedLaneKey.set(route.slotKey);
-    event.dataTransfer?.setData('text/plain', route.slotKey);
-    if (event.dataTransfer) {
-      event.dataTransfer.effectAllowed = 'move';
-    }
-  }
-
-  onLaneDragOver(event: DragEvent): void {
-    if (this.draggedLaneKey()) {
-      event.preventDefault();
-      if (event.dataTransfer) {
-        event.dataTransfer.dropEffect = 'move';
-      }
-    }
-  }
-
-  onLaneDrop(event: DragEvent, target: BoardRoute): void {
-    const sourceKey = this.draggedLaneKey();
-    if (!sourceKey || sourceKey === target.slotKey || this.published() || this.saving()) {
-      return;
-    }
-
-    event.preventDefault();
-    this.routes.update((routes) => {
-      const reordered = [...routes];
-      const fromIndex = reordered.findIndex((route) => route.slotKey === sourceKey);
-      const toIndex = reordered.findIndex((route) => route.slotKey === target.slotKey);
-      if (fromIndex >= 0 && toIndex >= 0) {
-        moveItemInArray(reordered, fromIndex, toIndex);
-      }
-      return reordered;
-    });
-    this.draggedLaneKey.set(null);
-  }
-
-  onLaneDragEnd(): void {
-    this.draggedLaneKey.set(null);
   }
 
   /**
@@ -1401,7 +1371,11 @@ export class DispatchDashboard implements OnInit {
       },
       error: (err) => {
         console.error(err);
-        this.boardError.set('改派儲存失敗，已還原成伺服器上的狀態。');
+        // 後端的 guard 會說明擋下的原因（已發布、配送中…），有就顯示，不然使用者不知道要怎麼處理
+        const reason = err?.error?.message;
+        this.boardError.set(
+          reason ? `改派儲存失敗：${reason}（已還原成伺服器上的狀態）` : '改派儲存失敗，已還原成伺服器上的狀態。',
+        );
         // 本地畫面已經被改過了，重讀一次以伺服器為準，避免留下沒存進去的假象
         this.reloadBoard();
       },
@@ -1413,12 +1387,16 @@ export class DispatchDashboard implements OnInit {
       date: this.dispatchDate(),
       warehouseId: this.warehouseId(),
       routes: this.routes()
-        // 空車道不送：orderIds 有 @NotEmpty，而且沒載貨的車本來就不該有路線；有訂單的格子一定有車
-        .filter((route): route is BoardRoute & {vehicleId: number} => route.cards.length > 0 && route.vehicleId !== null)
+        // 只送待送的單；沒有待送單的格子不送：orderIds 有 @NotEmpty，沒載貨的車本來就不該有路線。
+        // 已完成、配送失敗的單不送，後端會保留它們所在的路線
+        .filter(
+          (route): route is BoardRoute & {vehicleId: number} =>
+            route.vehicleId !== null && route.cards.some((card) => this.isDispatchable(card)),
+        )
         .map((route) => ({
           vehicleId: route.vehicleId,
           driverId: route.driverId,
-          orderIds: route.cards.map((card) => card.orderId),
+          orderIds: route.cards.filter((card) => this.isDispatchable(card)).map((card) => card.orderId),
         })),
     };
   }
@@ -1434,15 +1412,9 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    if (this.publishBlockedByPendingConfirmation()) {
-      this.publishError.set(
-        `當天還有 ${this.pendingConfirmationCount()} 筆訂單待確認，請先在拖曳面板確認完成再發布。`,
-      );
-      return;
-    }
-
-    if (this.dispatchDate() !== todayLocalDate()) {
-      this.publishError.set('只能發布今天的配送任務。');
+    // 可以預先發布未來幾天；過去的日期發了司機也收不到（司機端只看當天）
+    if (this.dispatchDate() < todayLocalDate()) {
+      this.publishError.set('不能發布已經過去的日期。');
       return;
     }
 
@@ -1872,7 +1844,7 @@ export class DispatchDashboard implements OnInit {
 
     const shift = this.shiftsByDriverId().get(driverId);
     if (!shift) {
-      return '今天未排班';
+      return '當天未排班';
     }
 
     return this.shiftScheduleNote(shift.shiftType);
@@ -1883,11 +1855,11 @@ export class DispatchDashboard implements OnInit {
       case 'WORK':
         return null;
       case 'DAY_OFF':
-        return '今天休假';
+        return '當天休假';
       case 'LEAVE':
-        return '今天請假';
+        return '當天請假';
       case 'UNASSIGNED':
-        return '今天尚未安排';
+        return '當天尚未安排';
     }
   }
 
@@ -1933,6 +1905,12 @@ export class DispatchDashboard implements OnInit {
         .filter((order) => order.status === 'CONFIRMED')
         .map((order) => order.id),
     );
+    // 已點交、配送中的單：貨已經在車上，後端不讓撤回重排，所以有這種單的格子整格鎖住
+    const deliveringOrderIds = new Set(
+      this.orders()
+        .filter((order) => order.status === 'LOADED' || order.status === 'IN_DELIVERY')
+        .map((order) => order.id),
+    );
     const vehicleById = new Map(
       this.vehicles()
         .filter((vehicle): vehicle is VehicleDto & {id: number} => vehicle.id != null)
@@ -1942,9 +1920,11 @@ export class DispatchDashboard implements OnInit {
       const vehicle = vehicleById.get(vehicleId);
       return vehicle !== undefined && vehicle.warehouseId === this.warehouseId() && vehicle.status !== 'RETIRED';
     };
-    // 換倉時，上一個倉排到一半的格子不能帶過來
-    const previous = this.boardWarehouseId === this.warehouseId() ? this.routes() : [];
+    // 換倉或換日期時，排到一半的格子不能帶過來
+    const previous =
+      this.boardWarehouseId === this.warehouseId() && this.boardDate === result.date ? this.routes() : [];
     this.boardWarehouseId = this.warehouseId();
+    this.boardDate = result.date;
 
     const serverLanes: BoardRoute[] = result.routes
       .filter((route) => isBoardVehicle(route.vehicleId))
@@ -1963,12 +1943,11 @@ export class DispatchDashboard implements OnInit {
           driverId: route.driverId ?? null,
           totalDistance: route.totalDistance ?? 0,
           routeStatus: route.status ?? 'DRAFT',
-          hasLockedStops: routeStops.some((stop) => !dispatchableOrderIds.has(stop.orderId)),
+          hasLockedStops: routeStops.some((stop) => deliveringOrderIds.has(stop.orderId)),
           isMaintenance,
-          cards: (isMaintenance
-            ? routeStops
-            : routeStops.filter((stop) => dispatchableOrderIds.has(stop.orderId)))
-            .map((stop) => toBoardCard(stop, 'CONFIRMED')),
+          // 路線上的單全部顯示，包含配送中、已完成、配送失敗：派出後要看得到送到哪裡。
+          // 只有待送（CONFIRMED）的能拖、會送進 reassign，其他的只顯示（見 isDispatchable）
+          cards: routeStops.map(toBoardCard),
           // 門市清單只在畫面上，後端不知道；沿用原本那格的。只選司機的格子被後端配了車，要用司機對回去
           storeIds:
             (previous.find((lane) => lane.vehicleId === route.vehicleId) ??
@@ -2007,31 +1986,12 @@ export class DispatchDashboard implements OnInit {
         .filter((order) => dispatchableOrderIds.has(order.orderId))
         .map((order) => [order.orderId, order]),
     );
-    const pendingConfirmCards = this.orders()
-      .filter((order) =>
-        order.id != null
-        && order.deliveryDate === this.dispatchDate()
-        && order.warehouseId === this.warehouseId()
-        && order.status === 'PENDING_CONFIRM',
-      )
-      .map((order): BoardCard => {
-        const store = this.stores().find((item) => item.id === order.storeId);
-        return {
-          orderId: order.id!,
-          orderNumber: order.orderNumber,
-          storeId: order.storeId,
-          storeCode: store?.storeCode ?? '',
-          storeName: store?.name ?? `門市 #${order.storeId}`,
-          boxCount: order.boxCount,
-          status: order.status,
-        };
-      });
-    this.unassigned.set([
-      ...[...unassignedByOrderId.values()].map((order) => toBoardCard(order, 'CONFIRMED')),
-      ...pendingConfirmCards,
-    ]);
+    this.unassigned.set([...unassignedByOrderId.values()].map(toBoardCard));
+    this.pendingConfirm.set((result.pendingConfirmOrders ?? []).map(toBoardCard));
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
     this.loadRouteMetrics(this.routes());
+    // 排車、改派、發布都會改到這天的狀態；推播斷線時日期列也不會停在舊的
+    this.loadDays();
   }
 
   private loadRouteMetrics(routes: readonly BoardRoute[]): void {

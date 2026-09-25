@@ -17,6 +17,8 @@ import {
   GpsRouteResponse,
   EmergencyLeaveRequest,
   EmergencyLeaveResponse,
+  LoadingRequest,
+  LoadingResponse,
   MileageLogResponse,
   MileageRequest,
   NoSignatureRequest,
@@ -72,6 +74,10 @@ export class DriverOperationsService {
 
   getEmergencyLeaves(): Observable<EmergencyLeaveResponse[]> {
     return this.http.get<EmergencyLeaveResponse[]>('/api/driver/emergency-leave-requests');
+  }
+
+  loading(request: LoadingRequest): Observable<LoadingResponse> {
+    return this.http.post<LoadingResponse>('/api/driver/loading', request);
   }
 
   arrive(request: ArriveRequest): Observable<DeliveryRecordResponse> {

@@ -404,7 +404,9 @@ export class ReportHistory implements OnInit {
     return {
       PENDING_CONFIRM: '待確認',
       CONFIRMED: '待排車',
+      LOADED: '已點交',
       IN_DELIVERY: '配送中',
+      NO_SIGNATURE: '無人簽收',
       COMPLETED: '已完成',
       CANCELLED: '已取消',
       FAILED: '配送失敗',

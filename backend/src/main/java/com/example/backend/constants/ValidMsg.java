@@ -50,8 +50,14 @@ public final class ValidMsg {
     public static final String DELIVERY_BOX_COUNT_REQUIRED = "實際交貨箱數不能為空";
     public static final String DELIVERY_BOX_COUNT_MIN = "實際交貨箱數至少為 1";
     public static final String DELIVERY_NOTES_MAX_LENGTH = "交貨備註不能超過 500 字元";
+    public static final String LOADING_BOX_COUNT_REQUIRED = "點交箱數不能為空";
+    public static final String LOADING_BOX_COUNT_MIN = "點交箱數不能小於 0";
+    public static final String LOADING_NOTES_MAX_LENGTH = "點交備註不能超過 500 字元";
     public static final String DELIVERY_ALREADY_ARRIVED = "這張訂單已經登記抵達門市";
-    public static final String DELIVERY_ARRIVE_STATUS_INVALID = "目前訂單狀態不能登記抵達";
+    public static final String DELIVERY_ARRIVE_STATUS_INVALID = "只有已點交的訂單可以登記抵達";
+    public static final String DELIVERY_LOADING_STATUS_INVALID = "只有待點交的訂單可以點交";
+    public static final String DELIVERY_LOADING_OVER_COUNT = "實點箱數不能大於應到箱數 %d，多出來的箱子請退回倉庫";
+    public static final String DELIVERY_LOADING_MISMATCH_DESCRIPTION = "倉庫點交不符：應到 %d 箱，實點 %d 箱";
     public static final String DELIVERY_DELIVER_STATUS_INVALID = "訂單尚未登記抵達，不能完成交貨";
     public static final String DELIVERY_NO_SIGNATURE_STATUS_INVALID = "訂單尚未登記抵達，不能回報無人簽收";
     public static final String DELIVERY_BOX_COUNT_MISMATCH = "實際交貨箱數與訂單箱數不一致，預期 %d 箱";

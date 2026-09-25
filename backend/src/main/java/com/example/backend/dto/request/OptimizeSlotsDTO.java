@@ -22,12 +22,6 @@ public class OptimizeSlotsDTO {
     @NotNull
     private List<Slot> slots;
 
-    /**
-     * true＝「套用門市訂單」：只排格子裡固定的訂單（Slot.orderIds），其他待排單不動，
-     * 用途是讓 OR-Tools 幫每台車算出最順的停靠順序。false＝一般自動排車，待排單也一起分配。
-     */
-    private boolean pinnedOnly;
-
     public LocalDate getDate() {
         return date;
     }
@@ -50,14 +44,6 @@ public class OptimizeSlotsDTO {
 
     public void setSlots(List<Slot> slots) {
         this.slots = slots;
-    }
-
-    public boolean isPinnedOnly() {
-        return pinnedOnly;
-    }
-
-    public void setPinnedOnly(boolean pinnedOnly) {
-        this.pinnedOnly = pinnedOnly;
     }
 
     /** 一個格子：司機與車輛都可以是 null */

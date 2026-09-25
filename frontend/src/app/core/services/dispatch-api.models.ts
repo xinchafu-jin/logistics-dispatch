@@ -8,7 +8,9 @@ export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
   | 'PENDING_CONFIRM'
   | 'CONFIRMED'
+  | 'LOADED'
   | 'IN_DELIVERY'
+  | 'NO_SIGNATURE'
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
@@ -20,7 +22,8 @@ export type ExceptionType =
   | 'DAMAGE'
   | 'SHORTAGE_AND_DAMAGE'
   | 'DRIVER_REPORT'
-  | 'PHONE_HANDLED';
+  | 'PHONE_HANDLED'
+  | 'LOADING_MISMATCH';
 export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
@@ -352,6 +355,39 @@ export interface DispatchResultDto {
    * 後端尚未實作，所以是選填；沒有這個欄位時當成空陣列。
    */
   driversTakenElsewhere?: DriverTakenDto[];
+  /** 當天這一倉還沒確認的訂單（PENDING_CONFIRM）；確認後才會進 unassignedOrders */
+  pendingConfirmOrders?: UnassignedOrderDto[];
+}
+
+/**
+ * 看板日期列的一格：某一天全部倉庫合起來的狀態。後端每次依路線與訂單推算，不存資料庫。
+ * UNRESOLVED＝日期已過還有單沒結束；CLOSED＝全部訂單都已結束。
+ */
+export type DispatchDayStatus =
+  | 'EMPTY'
+  | 'UNPLANNED'
+  | 'DRAFT'
+  | 'PUBLISHED'
+  | 'IN_PROGRESS'
+  | 'CLOSED'
+  | 'UNRESOLVED';
+
+export interface DispatchDayDto {
+  /** yyyy-MM-dd */
+  date: string;
+  status: DispatchDayStatus;
+  /** 有效訂單數，不含取消的單 */
+  orderCount: number;
+  pendingConfirmCount: number;
+  /** 已確認、還沒排進路線 */
+  unassignedCount: number;
+  /** 已結束：完成、無人簽收、點交不符 */
+  finishedCount: number;
+}
+
+/** 看板推播：只說哪一天變了，收到後自己重查 /days、/board */
+export interface DispatchBoardPushDto {
+  date: string;
 }
 
 /** 當天已被其他倉庫排走的司機，附上排在哪裡好讓畫面說明原因 */
@@ -549,8 +585,6 @@ export interface OptimizeSlotsRequest {
    * orderIds 是格子裡已經有的訂單，自動排車時固定在這格的車上，只有待排單的訂單交給 OR-Tools 分配
    */
   slots: {driverId: number | null; vehicleId: number | null; orderIds: number[]}[];
-  /** true＝「套用門市訂單」：只排 orderIds 裡的單，其他待排單不動，OR-Tools 只負責排停靠順序 */
-  pinnedOnly?: boolean;
 }
 
 /* ── AI 調度助理 ───────────────────────────────────────────────

@@ -9,6 +9,7 @@ import {
   AiChatReply,
   AiChatRequest,
   AiPendingActionDto,
+  DispatchDayDto,
   DispatchResultDto,
   DriverAccountApplicationDto,
   DriverDto,
@@ -341,6 +342,11 @@ export class DispatchApiService {
     return this.http.post<OrderDto>(`${API_ROOT}/orders`, order);
   }
 
+  /** 確認訂單：PENDING_CONFIRM → CONFIRMED，確認後才能排車 */
+  confirmOrder(id: number): Observable<OrderDto> {
+    return this.http.patch<OrderDto>(`${API_ROOT}/orders/${id}`, {action: 'CONFIRM'});
+  }
+
   updateOrder(id: number, order: OrderDto): Observable<OrderDto> {
     return this.http.put<OrderDto>(`${API_ROOT}/orders/${id}`, order);
   }
@@ -391,6 +397,14 @@ export class DispatchApiService {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize/slots`, request);
   }
 
+  /**
+   * 排門市順序：從這個倉出發，這些門市一台車最順的跑法（OSRM 距離 + OR-Tools）。
+   * 只算順序，不看訂單、不寫資料庫。
+   */
+  sequenceStores(warehouseId: number, storeIds: number[]): Observable<{storeIds: number[]}> {
+    return this.http.post<{storeIds: number[]}>(`${API_ROOT}/dispatch/store-sequence`, {warehouseId, storeIds});
+  }
+
   reassignDispatch(request: ReassignRequest): Observable<DispatchResultDto> {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/reassign`, request);
   }
@@ -398,6 +412,21 @@ export class DispatchApiService {
   /**
    * 讀取某天已排定的路線，不會觸發重新排車。當天沒排過則 routes 為空陣列。
    */
+  /**
+   * 看板日期列：每一天全部倉庫的狀態與數量，另外附上之前還沒結案的日子。
+   * 不給 to 時後端會顯示到最後一天有單的日期（至少到後天）。
+   */
+  getDispatchDays(from?: string, to?: string): Observable<DispatchDayDto[]> {
+    let params = new HttpParams();
+    if (from) {
+      params = params.set('from', from);
+    }
+    if (to) {
+      params = params.set('to', to);
+    }
+    return this.http.get<DispatchDayDto[]>(`${API_ROOT}/dispatch/days`, {params});
+  }
+
   getDispatchBoard(date: string, warehouseId: number): Observable<DispatchResultDto> {
     const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
 

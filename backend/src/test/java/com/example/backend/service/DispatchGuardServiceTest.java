@@ -77,9 +77,11 @@ class DispatchGuardServiceTest {
 
         String message = publishFailure();
 
-        assertTrue(message.contains("TN-2001（王小明）：今天休假"), message);
-        assertTrue(message.contains("TN-2002（李大華）：今天請假（感冒）"), message);
-        assertTrue(message.contains("TN-2003（陳阿明）：今天尚未安排"), message);
+        // 可以預派未來幾天，訊息要說是哪一天，不能只寫「今天」
+        assertTrue(message.startsWith("2026-09-14 發布前檢查失敗："), message);
+        assertTrue(message.contains("TN-2001（王小明）：當天休假"), message);
+        assertTrue(message.contains("TN-2002（李大華）：當天請假（感冒）"), message);
+        assertTrue(message.contains("TN-2003（陳阿明）：當天尚未安排"), message);
     }
 
     @Test
@@ -87,7 +89,7 @@ class DispatchGuardServiceTest {
         givenDriver(1L, "王小明", true);
         givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED);
 
-        assertTrue(publishFailure().contains("TN-2001（王小明）：今天未排班"));
+        assertTrue(publishFailure().contains("TN-2001（王小明）：當天未排班"));
     }
 
     @Test
@@ -138,7 +140,7 @@ class DispatchGuardServiceTest {
         String message = publishFailure();
 
         assertTrue(message.contains("TN-2001 尚未指派司機"), message);
-        assertTrue(message.contains("TN-2002（李大華）：今天休假"), message);
+        assertTrue(message.contains("TN-2002（李大華）：當天休假"), message);
         assertTrue(message.contains("車輛 TN-2003 裝載 12 箱，超過容量 10 箱"), message);
     }
 
@@ -167,6 +169,18 @@ class DispatchGuardServiceTest {
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> guard.assertCanWithdraw(DATE));
         assertTrue(e.getMessage().contains("DO-001"), e.getMessage());
+    }
+
+    @Test
+    void 撤回_已點交就擋下_貨已經在車上() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.LOADED).setStatus(RouteStatus.PUBLISHED);
+        OrdersEntity loaded = new OrdersEntity();
+        loaded.setOrderNumber("DO-002");
+        loaded.setStatus(OrderStatus.LOADED);
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(List.of(loaded));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> guard.assertCanWithdraw(DATE));
+        assertTrue(e.getMessage().contains("DO-002"), e.getMessage());
     }
 
     @Test

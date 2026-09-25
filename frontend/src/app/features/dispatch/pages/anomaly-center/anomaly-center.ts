@@ -126,6 +126,7 @@ export class AnomalyCenter implements OnInit {
       SHORTAGE_AND_DAMAGE: '短少與毀損',
       DRIVER_REPORT: '司機回報',
       PHONE_HANDLED: '電話補登',
+      LOADING_MISMATCH: '點交不符',
     }[type];
   }
 

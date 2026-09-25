@@ -9,6 +9,7 @@ import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.dto.respones.DriverAvailabilityResponse;
 import com.example.backend.dto.respones.PendingActionResponse;
+import com.example.backend.dto.respones.TemplatesDTO;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -45,6 +46,8 @@ public class AiAssistantService {
     private final DispatchWorkflowService dispatchWorkflowService;
     private final DriversService driversService;
     private final WarehousesService warehousesService;
+    private final TemplatesService templatesService;
+    private final VehiclesService vehiclesService;
 
 
     public AiAssistantService(
@@ -56,12 +59,16 @@ public class AiAssistantService {
             DriverScheduleService driverScheduleService,
             DispatchWorkflowService dispatchWorkflowService,
             DriversService driversService,
-            WarehousesService warehousesService) {
+            WarehousesService warehousesService,
+            TemplatesService templatesService,
+            VehiclesService vehiclesService) {
         this.ordersService = ordersService;
         this.driverScheduleService = driverScheduleService;
         this.dispatchWorkflowService = dispatchWorkflowService;
         this.driversService = driversService;
         this.warehousesService = warehousesService;
+        this.templatesService = templatesService;
+        this.vehiclesService = vehiclesService;
         this.openAiChatModel = openAiChatModel;
         this.adminUsersService = adminUsersService;
         this.baseUrl = baseUrl;
@@ -121,7 +128,10 @@ public class AiAssistantService {
         return ChatClient.builder(chatModel)
                 .defaultSystem("你是物流調度系統的助理，用繁體中文，台灣圈用語簡潔回覆調度員關於班表、訂單、派車的查詢。" +
                         todayPrompt() +
-                        "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。")
+                        "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。" +
+                        "▎ 使用者指定某天用某個編組時，先用 listTemplates 確認編組名稱，再對每一天各呼叫一次 applyTemplate。" +
+                        "一次講好幾天但有某天沒說用哪個編組時，要先問清楚，不可自己挑。" +
+                        "applyTemplate 會直接改掉那天的草稿，套用後先用 getDispatchBoard 看結果，再提出換人、移單、發布等動作。")
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .defaultTools(this)
                 .build();
@@ -242,6 +252,19 @@ public class AiAssistantService {
             waiting.remove(next);
         }
 
+        // 全部日期先檢查完才開始發布：一次列出每天的問題，也不會前幾天的 OSRM 白算
+        List<String> problems = new ArrayList<>();
+        for (LocalDate date : publishDates) {
+            try {
+                dispatchWorkflowService.assertCanPublish(date);
+            } catch (IllegalArgumentException e) {
+                problems.add(e.getMessage());
+            }
+        }
+        if (!problems.isEmpty()) {
+            throw new IllegalArgumentException(String.join("\n", problems));
+        }
+
         for (LocalDate date : publishDates) {
             results.addAll(dispatchWorkflowService.publish(date));
         }
@@ -287,7 +310,9 @@ public class AiAssistantService {
         return false;
     }
 
-    /** 看板上目前有路線的司機；這組送出前，他們在資料庫裡都還掛在這個倉 */
+    /**
+     * 看板上目前有路線的司機；這組送出前，他們在資料庫裡都還掛在這個倉
+     */
     private Set<Long> heldDriverIds(DispatchResponse board) {
         Set<Long> driverIds = new HashSet<>();
         for (DispatchResponse.RouteResponse route : board.getRoutes()) {
@@ -298,7 +323,9 @@ public class AiAssistantService {
         return driverIds;
     }
 
-    /** 套完動作後，這組送出時要用的司機 */
+    /**
+     * 套完動作後，這組送出時要用的司機
+     */
     private Set<Long> neededDriverIds(ReassignDTO dto) {
         Set<Long> driverIds = new HashSet<>();
         for (ReassignDTO.RouteAssignment assignment : dto.getRoutes()) {
@@ -451,6 +478,44 @@ public class AiAssistantService {
                 + "：該車輛當天已無排線，可能在你確認前被重新排過，請重新確認");
     }
 
+
+    @Tool(description = "查詢編組清單。每個編組列出各格的倉庫、司機、車輛；格子只有人或只有車時，另一邊套用時自動處理")
+    List<String> listTemplates() {
+        Map<Long, String> warehouseNames = new HashMap<>();
+        for (WarehousesDTO warehouse : warehousesService.findAll()) {
+            warehouseNames.put(warehouse.getId(), warehouse.getName());
+        }
+        Map<Long, String> driverNames = new HashMap<>();
+        for (DriversDTO driver : driversService.findAll()) {
+            driverNames.put(driver.getId(), driver.getName());
+        }
+        Map<Long, String> plates = new HashMap<>();
+        for (VehiclesDTO vehicle : vehiclesService.findAll()) {
+            plates.put(vehicle.getId(), vehicle.getPlateNumber());
+        }
+
+        List<String> summaries = new ArrayList<>();
+        for (TemplatesDTO template : templatesService.findAll()) {
+            List<String> slots = new ArrayList<>();
+            for (TemplatesDTO.TemplateRouteResponse slot : template.getRoutes()) {
+                String driver = slot.getDriverId() == null ? "（未指定司機）" : driverNames.get(slot.getDriverId());
+                String vehicle = slot.getVehicleId() == null ? "（自動配車）" : plates.get(slot.getVehicleId());
+                slots.add(warehouseNames.get(slot.getWarehouseId()) + " · " + driver + " · " + vehicle);
+            }
+            summaries.add(template.getName() + "：" + (slots.isEmpty() ? "沒有任何格子" : String.join("；", slots)));
+        }
+        return summaries;
+    }
+
+    @Tool(description = "把編組套用到某一天：依編組的人車用 OR-Tools 重新排車，直接寫成那天的草稿（會取代那天那些倉原本的草稿），"
+            + "不會發布，司機也看不到。編組沒有的倉庫不受影響。已發布的日子會被擋下，要先撤回。")
+    String applyTemplate(
+            @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
+            @ToolParam(description = "編組名稱，必須是 listTemplates 回傳的完整名稱") String templateName,
+            ToolContext toolContext) {
+        String conversationId = (String) toolContext.getContext().get("conversationId");
+        return applyTemplateToDate(conversationId, LocalDate.parse(date), templateName);
+    }
 
     @Tool(description = "查詢倉庫清單，取得倉庫名稱與對應的 ID")
     List<WarehousesDTO> listWarehouses() {
@@ -657,6 +722,55 @@ public class AiAssistantService {
         List<PendingActionResponse> actions = addToPlan(conversationId, action);
         return "已加入待執行清單：" + action.getSummary() + "（" + date + " " + warehouseName
                 + "）。目前清單共 " + actions.size() + " 項，尚未執行，在畫面上確認後才會生效。";
+    }
+
+    /**
+     * 套用編組不走待執行清單：草稿隨時能重排、對司機沒有影響，直接寫入後面的動作才找得到路線。
+     * 發布仍然要調度員確認。
+     */
+    private String applyTemplateToDate(String conversationId, LocalDate date, String templateName) {
+        if (date.isBefore(LocalDate.now(TAIPEI))) {
+            throw new IllegalArgumentException("不能把編組套用到已經過去的日期：" + date);
+        }
+        // 清單裡那天的動作是照舊路線提出的，套用後路線整批換掉，那些動作就對不上了。
+        // 不替調度員刪清單，擋下來讓他自己決定
+        for (PendingActionResponse action : getPlan(conversationId)) {
+            if (date.equals(action.getDate())) {
+                throw new IllegalArgumentException(date + " 還有待確認的動作（" + action.getSummary()
+                        + "），請先在畫面上確認或刪除，再套用編組");
+            }
+        }
+
+        TemplatesDTO template = findTemplateByName(templateName);
+        List<DispatchResponse> boards = templatesService.applyToDate(template.getId(), date);
+
+        List<String> lines = new ArrayList<>();
+        lines.add("已把「" + template.getName() + "」套用到 " + date + "，寫成草稿，尚未發布：");
+        for (DispatchResponse board : boards) {
+            String line = board.getWarehouse().getName() + " 排出 " + board.getRoutes().size() + " 條路線";
+            if (!board.getUnassignedOrders().isEmpty()) {
+                line += "，" + board.getUnassignedOrders().size() + " 張單排不下留在待排單";
+            }
+            if (!board.getPendingConfirmOrders().isEmpty()) {
+                line += "，" + board.getPendingConfirmOrders().size() + " 張單還沒確認所以沒排";
+            }
+            if (!board.getNotices().isEmpty()) {
+                line += "。提醒：" + String.join("；", board.getNotices());
+            }
+            lines.add(line);
+        }
+        return String.join("\n", lines);
+    }
+
+    private TemplatesDTO findTemplateByName(String name) {
+        List<String> names = new ArrayList<>();
+        for (TemplatesDTO template : templatesService.findAll()) {
+            if (template.getName().equals(name)) {
+                return template;
+            }
+            names.add(template.getName());
+        }
+        throw new IllegalArgumentException("找不到編組「" + name + "」，目前有：" + String.join("、", names));
     }
 
     private Long findWarehouseIdByName(String name) {

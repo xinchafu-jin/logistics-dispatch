@@ -151,8 +151,10 @@ public class MileageLogsService {
 
         List<String> unfinishedOrders = ordersDAO.findByRouteIdOrderBySequence(mileage.getRouteId())
                 .stream()
+                // FAILED 也算結束：倉庫點交不符的單今天不出貨，已改由明日補送單處理
                 .filter(order -> order.getStatus() != OrderStatus.COMPLETED
-                        && order.getStatus() != OrderStatus.NO_SIGNATURE)
+                        && order.getStatus() != OrderStatus.NO_SIGNATURE
+                        && order.getStatus() != OrderStatus.FAILED)
                 .map(order -> order.getOrderNumber() + "(" + order.getStatus() + ")")
                 .toList();
         boolean approvedEmergencyHandover = emergencyLeaveRequestsDAO

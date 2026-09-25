@@ -7,6 +7,7 @@ import com.example.backend.dto.request.WarehousesDTO;
 import com.example.backend.dto.respones.DispatchResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.ai.chat.model.ToolContext;
 
 import java.time.LocalDate;
@@ -66,7 +67,7 @@ class AiAssistantServiceConfirmPlanTest {
         });
 
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                dispatchWorkflowService, driversService, warehousesService);
+                dispatchWorkflowService, driversService, warehousesService, null, null);
     }
 
     @Test
@@ -78,6 +79,51 @@ class AiAssistantServiceConfirmPlanTest {
         service.proposeAssignDriver(MONDAY, "桃園倉", "XYZ-001", "D003", toolContext);
 
         assertDoesNotThrow(() -> service.confirmPlan(CONVERSATION_ID));
+    }
+
+    @Test
+    void 多天發布_兩天都有問題_一次列出兩天而且一天都沒發() {
+        service.proposePublish(MONDAY, toolContext);
+        service.proposePublish(TUESDAY, toolContext);
+        doThrow(new IllegalArgumentException(MONDAY + " 發布前檢查失敗：ABC-001（王小明）：當天請假"))
+                .when(dispatchWorkflowService).assertCanPublish(LocalDate.parse(MONDAY));
+        doThrow(new IllegalArgumentException(TUESDAY + " 發布前檢查失敗：XYZ-001 尚未指派司機"))
+                .when(dispatchWorkflowService).assertCanPublish(LocalDate.parse(TUESDAY));
+
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> service.confirmPlan(CONVERSATION_ID));
+
+        assertTrue(e.getMessage().contains(MONDAY + " 發布前檢查失敗"), e.getMessage());
+        assertTrue(e.getMessage().contains(TUESDAY + " 發布前檢查失敗"), e.getMessage());
+        verify(dispatchWorkflowService, never()).publish(any());
+        // 沒確認成功，清單要留著讓調度員修正後再按一次
+        assertEquals(2, service.getPlan(CONVERSATION_ID).size());
+    }
+
+    @Test
+    void 多天發布_全部通過_每天只發一次() {
+        service.proposePublish(MONDAY, toolContext);
+        service.proposePublish(TUESDAY, toolContext);
+
+        service.confirmPlan(CONVERSATION_ID);
+
+        verify(dispatchWorkflowService, times(1)).publish(LocalDate.parse(MONDAY));
+        verify(dispatchWorkflowService, times(1)).publish(LocalDate.parse(TUESDAY));
+    }
+
+    @Test
+    void 換人先送出_再檢查能不能發布() {
+        givenBoard(MONDAY, 1L, "台北倉", 11L, "ABC-001", 3L, "王小明");
+        // 王小明請假改派李大華：要先換好人再檢查，否則檢查到的還是請假的王小明
+        service.proposeAssignDriver(MONDAY, "台北倉", "ABC-001", "D004", toolContext);
+        service.proposePublish(MONDAY, toolContext);
+
+        service.confirmPlan(CONVERSATION_ID);
+
+        InOrder order = inOrder(dispatchWorkflowService);
+        order.verify(dispatchWorkflowService).reassign(any());
+        order.verify(dispatchWorkflowService).assertCanPublish(LocalDate.parse(MONDAY));
+        order.verify(dispatchWorkflowService).publish(LocalDate.parse(MONDAY));
     }
 
     @Test

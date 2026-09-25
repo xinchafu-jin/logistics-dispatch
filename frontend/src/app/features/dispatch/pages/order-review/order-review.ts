@@ -20,7 +20,8 @@ type OrderReviewStatus =
   | '配送中'
   | '已完成'
   | '已取消'
-  | '配送失敗';
+  | '配送失敗'
+  | '無人簽收';
 type FilterKey = 'all' | OrderReviewStatus;
 type OrderFormMode = 'create' | 'edit' | null;
 
@@ -521,8 +522,12 @@ export class OrderReview implements OnInit {
         return '待總部確認';
       case 'CONFIRMED':
         return '待排車';
+      // 審單頁只看大階段：已點交的貨已經上車，歸在配送中
+      case 'LOADED':
       case 'IN_DELIVERY':
         return '配送中';
+      case 'NO_SIGNATURE':
+        return '無人簽收';
       case 'COMPLETED':
         return '已完成';
       case 'CANCELLED':

@@ -11,6 +11,7 @@ import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.dto.respones.ExceptionCaseResponse;
+import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.dto.respones.PhotoUploadResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
@@ -161,6 +162,14 @@ public class DriverPortalController {
     @GetMapping("/emergency-leave-requests")
     public List<EmergencyLeaveResponse> findMyEmergencyLeaves(@AuthenticationPrincipal Jwt jwt) {
         return emergencyLeaveService.findMine(driverId(jwt));
+    }
+
+    /** 倉庫點交：寫入實點箱數，相符轉為已點交，不符則建立異常與補送單。 */
+    @PostMapping("/loading")
+    public LoadingResponse loading(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody LoadingRequestDTO request) {
+        return deliveryService.load(driverId(jwt), request);
     }
 
     /** 在司機班表中送出一般請假；時間不填代表整天，兩個時間都有則代表部分時段。 */
