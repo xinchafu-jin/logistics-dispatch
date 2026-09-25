@@ -16,14 +16,6 @@
   line-height: 1.65;
 }
 
-.section-eyebrow {
-  margin: 0 0 7px;
-  color: var(--accent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-}
-
 .dispatch-ticker {
   display: grid;
   grid-template-columns: 118px minmax(0, 1fr);
@@ -127,264 +119,6 @@
   --mat-switch-label-text-color: #31584d;
 }
 
-.dispatch-workspace-overview {
-  display: grid;
-  gap: 16px;
-  padding-bottom: 8px;
-}
-
-.live-taskboard {
-  min-width: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.live-taskboard-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 15px 0;
-}
-
-.live-taskboard-header h3,
-.live-taskboard-header p {
-  margin: 0;
-}
-
-.live-taskboard-header h3 {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
-.live-taskboard-header p:not(.section-eyebrow) {
-  margin-top: 5px;
-  color: var(--subtle);
-  font-size: 0.6875rem;
-}
-
-.taskboard-refresh {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.taskboard-refresh mat-icon {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-}
-
-.taskboard-refresh:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.taskboard-sync-error {
-  margin: 0 0 12px;
-  color: #e58581;
-  font-size: 0.75rem;
-}
-
-.taskboard-columns {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(132px, 1fr));
-  gap: 8px;
-  padding: 0 0 10px;
-  overflow-x: auto;
-}
-
-.taskboard-column {
-  min-width: 132px;
-  border: 1px solid var(--border);
-  border-top: 3px solid #819993;
-  border-radius: 6px;
-  background: rgb(16 21 24 / 38%);
-}
-
-.taskboard-column > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 9px 10px;
-}
-
-.taskboard-column h4,
-.taskboard-column p {
-  margin: 0;
-}
-
-.taskboard-column h4 {
-  color: var(--text);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.taskboard-column > header p {
-  margin-top: 3px;
-  color: var(--subtle);
-  font-size: 0.625rem;
-}
-
-.taskboard-column > header span {
-  display: grid;
-  min-width: 20px;
-  height: 20px;
-  place-items: center;
-  color: var(--text);
-  border-radius: 50%;
-  background: rgb(255 255 255 / 9%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.6875rem;
-}
-
-.taskboard-pending {
-  border-top-color: #e4a74d;
-}
-
-.taskboard-confirmed {
-  border-top-color: #7194c4;
-}
-
-.taskboard-delivering {
-  border-top-color: var(--accent);
-}
-
-.taskboard-completed {
-  border-top-color: #70ad87;
-}
-
-.taskboard-failed {
-  border-top-color: #df7776;
-}
-
-.taskboard-cancelled {
-  border-top-color: #998c89;
-}
-
-.taskboard-routes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-  padding: 4px 0 16px;
-}
-
-.taskboard-route {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: rgb(16 21 24 / 38%);
-}
-
-.taskboard-route.is-delivering {
-  border-color: rgb(99 209 198 / 65%);
-}
-
-.taskboard-route > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.taskboard-route p,
-.taskboard-route strong,
-.taskboard-route small,
-.taskboard-route em {
-  margin: 0;
-}
-
-.taskboard-route > header p {
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.taskboard-route > header strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--accent);
-  font-size: 0.6875rem;
-}
-
-.taskboard-route > header > span {
-  color: var(--subtle);
-  font-size: 0.6875rem;
-  white-space: nowrap;
-}
-
-.taskboard-route-metrics {
-  display: flex;
-  gap: 12px;
-  padding: 9px 12px;
-  color: var(--muted);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.6875rem;
-}
-
-.taskboard-route ol {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 10px;
-  list-style: none;
-}
-
-.taskboard-route li {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 7px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 5px;
-}
-
-.taskboard-route li.is-current {
-  border-color: rgb(99 209 198 / 70%);
-  background: rgb(99 209 198 / 8%);
-}
-
-.taskboard-route li > span {
-  display: grid;
-  width: 20px;
-  height: 20px;
-  place-items: center;
-  color: var(--subtle);
-  border-radius: 50%;
-  background: rgb(255 255 255 / 8%);
-  font-size: 0.625rem;
-}
-
-.taskboard-route li strong,
-.taskboard-route li small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.taskboard-route li strong { color: var(--text); font-size: 0.75rem; }
-.taskboard-route li small { margin-top: 3px; color: var(--subtle); font-size: 0.625rem; }
-.taskboard-route li em { color: var(--muted); font-size: 0.625rem; font-style: normal; white-space: nowrap; }
-
-
 // The dashboard was originally composed for the dark workspace, so its panels
 // use dark translucent surfaces instead of the shared surface tokens. Keep the
 // map dark, but give the data panels a complete, readable light counterpart.
@@ -403,18 +137,6 @@
 @keyframes dispatch-ticker {
   to {
     transform: translateX(-50%);
-  }
-}
-
-@media (max-width: 1100px) {
-  .taskboard-columns {
-    grid-template-columns: repeat(6, 172px);
-  }
-}
-
-@media (max-width: 760px) {
-  .live-taskboard-header {
-    align-items: flex-start;
   }
 }
 
@@ -588,7 +310,14 @@
   margin-bottom: 0.5rem;
 }
 
+.lane-store-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
 .lane-store {
+  cursor: grab;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -609,6 +338,32 @@
     &:disabled {
       cursor: default;
     }
+  }
+}
+
+// 拖曳中的標籤：跟著滑鼠的那顆、原位置的佔位
+.lane-store.cdk-drag-preview {
+  background: var(--surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
+}
+
+.lane-store.cdk-drag-placeholder {
+  opacity: 0.35;
+}
+
+.lane-store-sort {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 }
 
@@ -651,6 +406,12 @@
   gap: 0.375rem;
   // 空車道也要能放得進去，沒有高度的話滑鼠根本進不了這個區域
   min-height: 72px;
+}
+
+// 已送達、配送中、配送失敗的單：照樣留在格子裡看進度，但不能拖，淡一點跟待送的單分開
+.board-card.is-done {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .board-card {

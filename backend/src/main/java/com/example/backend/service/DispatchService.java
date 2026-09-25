@@ -56,7 +56,7 @@ public class DispatchService {
     }
 
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds) {
-        return optimize(date, warehouseId, vehicleIds, Map.of(), Map.of(), false);
+        return optimize(date, warehouseId, vehicleIds, Map.of(), Map.of());
     }
 
     /**
@@ -66,13 +66,9 @@ public class DispatchService {
      * <p>pinnedVehicleByOrder（訂單 → 車）是調度員已經放進格子的單：OR-Tools 只能把它排在那台車上，
      * 而且一定要排（不能丟回待排單），停靠順序照樣由 OR-Tools 決定。
      * 這些單會先被 clearExistingDraftRoutes 解綁，所以本來就在下面撈的訂單裡，這裡只是加上限制。</p>
-     *
-     * <p>pinnedOnly 為 true 時只排固定的單（「套用門市訂單」），其他待排單留在待排單區，
-     * 這時 OR-Tools 做的事只剩替每台車排出最順的停靠順序。</p>
      */
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds,
-                                     Map<Long, Long> driverByVehicle, Map<Long, Long> pinnedVehicleByOrder,
-                                     boolean pinnedOnly) {
+                                     Map<Long, Long> driverByVehicle, Map<Long, Long> pinnedVehicleByOrder) {
         WarehousesEntity warehousesEntity =
                 warehousesDAO.findById(warehouseId).
                         orElseThrow(() -> new IllegalArgumentException("查無倉庫" + warehouseId));
@@ -83,12 +79,6 @@ public class DispatchService {
         List<OrdersEntity> orders =
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.CONFIRMED, warehouseId);
-        if (pinnedOnly) {
-            orders = orders.stream().filter(order -> pinnedVehicleByOrder.containsKey(order.getId())).toList();
-            if (orders.isEmpty()) {
-                throw new IllegalArgumentException("格子裡的門市今天都沒有待排的訂單");
-            }
-        }
         if (orders.isEmpty()) {
             throw new IllegalArgumentException("當天無已確認的訂單：" + date);
         }

@@ -552,8 +552,6 @@ export interface OptimizeSlotsRequest {
    * orderIds 是格子裡已經有的訂單，自動排車時固定在這格的車上，只有待排單的訂單交給 OR-Tools 分配
    */
   slots: {driverId: number | null; vehicleId: number | null; orderIds: number[]}[];
-  /** true＝「套用門市訂單」：只排 orderIds 裡的單，其他待排單不動，OR-Tools 只負責排停靠順序 */
-  pinnedOnly?: boolean;
 }
 
 /* ── AI 調度助理 ───────────────────────────────────────────────

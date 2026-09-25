@@ -2,10 +2,13 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.dto.request.ReassignDTO;
+import com.example.backend.dto.request.StoreSequenceDTO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.dto.respones.RouteMetricsResponse;
+import com.example.backend.dto.respones.StoreSequenceResponse;
 import com.example.backend.service.DispatchWorkflowService;
 import com.example.backend.service.RoutePlanMetricsService;
+import com.example.backend.service.StoreSequenceService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -26,13 +29,25 @@ public class DispatchController {
 
     private final DispatchWorkflowService dispatchWorkflowService;
     private final RoutePlanMetricsService routePlanMetricsService;
+    private final StoreSequenceService storeSequenceService;
 
     public DispatchController(
             DispatchWorkflowService dispatchWorkflowService,
-            RoutePlanMetricsService routePlanMetricsService
+            RoutePlanMetricsService routePlanMetricsService,
+            StoreSequenceService storeSequenceService
     ) {
         this.dispatchWorkflowService = dispatchWorkflowService;
         this.routePlanMetricsService = routePlanMetricsService;
+        this.storeSequenceService = storeSequenceService;
+    }
+
+    /**
+     * 排門市順序：編組格子裡的門市，從倉庫出發一台車最順的跑法。只算順序，不看訂單、不寫資料庫。
+     */
+    @PostMapping("/store-sequence")
+    public ResponseEntity<StoreSequenceResponse> storeSequence(@Valid @RequestBody StoreSequenceDTO dto) {
+        return ResponseEntity.ok(new StoreSequenceResponse(
+                storeSequenceService.sequence(dto.getWarehouseId(), dto.getStoreIds())));
     }
 
     /**

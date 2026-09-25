@@ -67,7 +67,7 @@ public class DispatchWorkflowService {
         dispatchGuardService.assertCanReplan(dto.getDate(), dto.getWarehouseId());
         DispatchSlotService.SlotPlan plan = dispatchSlotService.plan(dto.getDate(), dto.getWarehouseId(), dto.getSlots());
         dispatchService.optimize(dto.getDate(), dto.getWarehouseId(), plan.getVehicleIds(), plan.getDriverByVehicle(),
-                pinnedVehicleByOrder(dto.getSlots(), plan.getVehicleIds()), dto.isPinnedOnly());
+                pinnedVehicleByOrder(dto.getSlots(), plan.getVehicleIds()));
         DispatchResponse board = dispatchBoardService.getBoard(dto.getDate(), dto.getWarehouseId());
 
         List<String> notices = new ArrayList<>(plan.getNotices());

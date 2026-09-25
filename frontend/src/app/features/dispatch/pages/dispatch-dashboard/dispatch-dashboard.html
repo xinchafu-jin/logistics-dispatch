@@ -73,77 +73,6 @@
 
       <!-- 分頁內層：排車條件 + 編成盤面 -->
       <div class="tab-panel">
-        <section class="dispatch-workspace-overview" aria-label="今日調度重點">
-        @if (published()) {
-        <section class="live-taskboard" aria-labelledby="live-taskboard-title">
-          <header class="live-taskboard-header">
-            <div>
-              <p class="section-eyebrow">已派出任務</p>
-              <h3 id="live-taskboard-title">任務看板 · {{ publishedTemplateName() }}</h3>
-              <p>每 15 秒同步一次 · 最近同步 {{ taskboardLastSyncedAt() }}</p>
-            </div>
-            <button
-              type="button"
-              class="taskboard-refresh"
-              (click)="refreshTaskboard()"
-              [disabled]="taskboardSyncing()"
-            >
-              <mat-icon aria-hidden="true">refresh</mat-icon>
-              {{ taskboardSyncing() ? '同步中' : '同步' }}
-            </button>
-          </header>
-
-          @if (taskboardSyncError()) {
-            <p class="taskboard-sync-error">{{ taskboardSyncError() }}</p>
-          }
-
-          <div class="taskboard-columns" aria-label="今日訂單狀態">
-            @for (column of taskboardColumns(); track column.id) {
-              <section class="taskboard-column" [class]="'taskboard-' + column.id">
-                <header>
-                  <div>
-                    <h4>{{ column.label }}</h4>
-                    <p>{{ column.detail }}</p>
-                  </div>
-                  <span>{{ column.count }}</span>
-                </header>
-              </section>
-            }
-          </div>
-
-          <div class="taskboard-routes" aria-label="已派出司機任務">
-            @for (route of publishedTaskboardRoutes(); track route.routeId) {
-              <article class="taskboard-route" [class.is-delivering]="routeDriverStatus(route) === '配送中'">
-                <header>
-                  <div>
-                    <p>{{ driverName(route.driverId!) }} · {{ route.plateNumber }}</p>
-                    <strong>{{ routeDriverStatus(route) }}</strong>
-                  </div>
-                  <span>{{ taskboardRouteProgress(route) }}</span>
-                </header>
-                <div class="taskboard-route-metrics">
-                  <span>預估抵達 {{ taskboardEstimatedArrival(route) }}</span>
-                  <span>剩餘 {{ taskboardRemainingKm(route) }}</span>
-                </div>
-                <ol>
-                  @for (card of route.cards; track card.orderId) {
-                    <li [class.is-current]="boardCardStatus(card) === 'IN_DELIVERY'">
-                      <span>{{ $index + 1 }}</span>
-                      <div>
-                        <strong>{{ card.storeName }}</strong>
-                        <small>{{ card.orderNumber }} · {{ card.boxCount }} 箱</small>
-                      </div>
-                      <em>{{ boardCardStatusLabel(card) }}</em>
-                    </li>
-                  }
-                </ol>
-              </article>
-            }
-          </div>
-        </section>
-        }
-      </section>
-
       <section class="board-toolbar" aria-label="排車條件">
         <div class="toolbar-field toolbar-date">
           <span>配送日期</span>
@@ -187,9 +116,9 @@
           {{ templateBusy() ? '儲存中…' : '儲存編組' }}
         </button>
 
-        <!-- 把每格門市在待排單的訂單拉進那格，後端只排這些單並算出停靠順序；其他待排單不動 -->
+        <!-- 照每格門市的順序，把這些門市在待排單的訂單拉進那格並存檔；門市順序就是配送順序，其他待排單不動 -->
         <button type="button" class="toolbar-action" (click)="applyStoreOrders()" [disabled]="busy() || published()">
-          {{ applyingStores() ? '套用中…' : '套用門市訂單' }}
+          套用門市訂單
         </button>
 
         <!-- OR-Tools 只用格子裡的人車排；只選司機的格子由後端配車。格子裡已有的訂單固定在那台車，只有待排單的訂單交給 OR-Tools 分配，排不進去的留在待排單區 -->
@@ -322,24 +251,41 @@
                   }
                 </select>
 
-                <!-- 這格編組的門市：只記錄不動訂單，按「套用門市訂單」才拉單；沒選人或車的格子存不進編組，所以不顯示 -->
+                <!--
+                  這格編組的門市：只記錄不動訂單，按「套用門市訂單」才拉單；沒選人或車的格子存不進編組，所以不顯示。
+                  標籤的順序就是配送順序，可以拖曳調整，或按「排順序」交給後端算
+                -->
                 @if (route.driverId !== null || route.vehicleId !== null) {
                   <div class="lane-stores">
-                    @for (storeId of route.storeIds; track storeId) {
-                      <span class="lane-store">
-                        {{ storeName(storeId) }}
-                        @if (!published()) {
-                          <button
-                            type="button"
-                            (click)="removeLaneStore(route, storeId)"
-                            [disabled]="busy()"
-                            [attr.aria-label]="'移除 ' + storeName(storeId)"
-                          >×</button>
-                        }
-                      </span>
-                    }
+                    <div
+                      class="lane-store-chips"
+                      cdkDropList
+                      cdkDropListOrientation="mixed"
+                      [cdkDropListData]="route.storeIds"
+                      [cdkDropListDisabled]="busy() || published() || sequencingSlot() === route.slotKey"
+                      [cdkDropListEnterPredicate]="ownStoreListOnly"
+                      (cdkDropListDropped)="onStoreDrop(route, $event)"
+                    >
+                      @for (storeId of route.storeIds; track storeId) {
+                        <span class="lane-store" cdkDrag [cdkDragData]="storeChip">
+                          {{ storeName(storeId) }}
+                          @if (!published()) {
+                            <button
+                              type="button"
+                              (click)="removeLaneStore(route, storeId)"
+                              [disabled]="busy() || sequencingSlot() === route.slotKey"
+                              [attr.aria-label]="'移除 ' + storeName(storeId)"
+                            >×</button>
+                          }
+                        </span>
+                      }
+                    </div>
                     @if (!published()) {
-                      <select class="lane-store-add" [disabled]="busy()" (change)="addLaneStore(route, $event)">
+                      <select
+                        class="lane-store-add"
+                        [disabled]="busy() || sequencingSlot() === route.slotKey"
+                        (change)="addLaneStore(route, $event)"
+                      >
                         <option value="" selected>＋ 加入門市</option>
                         @for (option of storeOptions(route); track option.id) {
                           <option [value]="option.id" [disabled]="option.takenNote !== null">
@@ -349,6 +295,17 @@
                           </option>
                         }
                       </select>
+                      @if (route.storeIds.length >= 2) {
+                        <button
+                          type="button"
+                          class="lane-store-sort"
+                          (click)="sequenceLaneStores(route)"
+                          [disabled]="busy() || sequencingSlot() !== null"
+                          title="從倉庫出發，照實際道路距離排出最順的門市順序"
+                        >
+                          {{ sequencingSlot() === route.slotKey ? '排序中…' : '排順序' }}
+                        </button>
+                      }
                     }
                   </div>
                 }
@@ -358,10 +315,16 @@
                   cdkDropList
                   [cdkDropListData]="route.cards"
                   [cdkDropListDisabled]="saving() || published() || route.vehicleId === null || route.hasLockedStops || route.isMaintenance"
+                  [cdkDropListEnterPredicate]="ordersOnly"
                   (cdkDropListDropped)="onDrop($event)"
                 >
                   @for (card of route.cards; track card.orderId) {
-                    <article class="board-card" cdkDrag [cdkDragDisabled]="published() || route.isMaintenance || route.hasLockedStops">
+                    <article
+                      class="board-card"
+                      [class.is-done]="!isDispatchable(card)"
+                      cdkDrag
+                      [cdkDragDisabled]="published() || route.isMaintenance || route.hasLockedStops || !isDispatchable(card)"
+                    >
                       <header>
                         <span>#{{ $index + 1 }}</span>
                         <strong>{{ card.orderNumber }}</strong>
@@ -399,6 +362,7 @@
             cdkDropList
             [cdkDropListData]="unassigned()"
             [cdkDropListDisabled]="saving() || published()"
+            [cdkDropListEnterPredicate]="ordersOnly"
             (cdkDropListDropped)="onDrop($event)"
           >
             @for (card of unassigned(); track card.orderId) {

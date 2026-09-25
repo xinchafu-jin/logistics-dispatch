@@ -391,6 +391,14 @@ export class DispatchApiService {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/optimize/slots`, request);
   }
 
+  /**
+   * 排門市順序：從這個倉出發，這些門市一台車最順的跑法（OSRM 距離 + OR-Tools）。
+   * 只算順序，不看訂單、不寫資料庫。
+   */
+  sequenceStores(warehouseId: number, storeIds: number[]): Observable<{storeIds: number[]}> {
+    return this.http.post<{storeIds: number[]}>(`${API_ROOT}/dispatch/store-sequence`, {warehouseId, storeIds});
+  }
+
   reassignDispatch(request: ReassignRequest): Observable<DispatchResultDto> {
     return this.http.post<DispatchResultDto>(`${API_ROOT}/dispatch/reassign`, request);
   }
