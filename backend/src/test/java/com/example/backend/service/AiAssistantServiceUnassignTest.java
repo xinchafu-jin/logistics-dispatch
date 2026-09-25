@@ -49,7 +49,7 @@ class AiAssistantServiceUnassignTest {
 
         // 加入清單用不到模型、主管 Key、班表與訂單，給 null 即可
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                dispatchWorkflowService, driversService, warehousesService);
+                dispatchWorkflowService, driversService, warehousesService, null, null);
     }
 
     @Test

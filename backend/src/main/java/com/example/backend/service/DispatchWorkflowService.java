@@ -127,6 +127,14 @@ public class DispatchWorkflowService {
         return dispatchBoardService.getBoard(dto.getDate(), dto.getWarehouseId());
     }
 
+    /**
+     * 只檢查不發布：AI 一次確認好幾天時，先每天都檢查過，全部通過才開始發布，
+     * 不必等到第三天被擋才發現、前兩天的 OSRM 也白算了。
+     */
+    public void assertCanPublish(LocalDate date) {
+        dispatchGuardService.assertCanPublish(date);
+    }
+
     @Transactional
     public List<DispatchResponse> publish(LocalDate date) {
         dispatchGuardService.assertCanPublish(date);
