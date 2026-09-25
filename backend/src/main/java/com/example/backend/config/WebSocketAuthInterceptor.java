@@ -97,6 +97,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         if (isAdmin && destination.equals("/topic/admin/driver-messages")) {
             return;
         }
+        // 看板推播：哪一天的訂單、路線有變動
+        if (isAdmin && destination.equals("/topic/admin/dispatch-board")) {
+            return;
+        }
         // 私人頻道：Spring 只會把推給「自己名字」的訊息送進來，不用再比對是誰
         if (destination.equals("/user/queue/messages")) {
             return;

@@ -2,6 +2,7 @@ package com.example.backend.entity;
 
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.OrderType;
+import com.example.backend.service.DispatchChangeEntityListener;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -9,6 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
+@EntityListeners(DispatchChangeEntityListener.class)
 @Table(name = "orders")
 public class OrdersEntity {
 
