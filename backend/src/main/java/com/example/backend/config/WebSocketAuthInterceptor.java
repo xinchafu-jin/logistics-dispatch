@@ -94,7 +94,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
 
         // 所有管理員共用的廣播頻道
-        if (isAdmin && destination.equals("/topic/admin/driver-messages")) {
+        if (isAdmin && (destination.equals("/topic/admin/driver-messages")
+                || destination.equals("/topic/admin/leave-requests"))) {
             return;
         }
         // 看板推播：哪一天的訂單、路線有變動
@@ -102,7 +103,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             return;
         }
         // 私人頻道：Spring 只會把推給「自己名字」的訊息送進來，不用再比對是誰
-        if (destination.equals("/user/queue/messages")) {
+        if (destination.equals("/user/queue/messages")
+                || destination.equals("/user/queue/leave-requests")) {
             return;
         }
         throw new AccessDeniedException("不能訂閱 " + destination);

@@ -36,6 +36,9 @@
 .wide-table .table-row { display: grid; grid-template-columns: 130px repeat(4, minmax(100px, 1fr)); }
 .order-table .table-row { display: grid; grid-template-columns: 120px 170px 70px 180px repeat(4, 100px); }
 .route-table .table-row { display: grid; grid-template-columns: 110px 80px 130px 110px repeat(5, 100px); }
+.route-legs { display: grid; grid-template-columns: auto repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 14px; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--muted); background: rgb(99 209 198 / 4%); font-size: .75rem; }
+.route-legs strong { color: var(--text); }
+.route-legs small { color: var(--subtle); }
 .attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 90px repeat(5, 150px); }
 .vehicle-table .table-row, .warehouse-table .table-row, .store-table .table-row { display: grid; grid-template-columns: 160px repeat(8, 110px); }
 .exception-table .table-row { display: grid; grid-template-columns: 155px 120px 160px 90px 80px 220px 220px 110px; }

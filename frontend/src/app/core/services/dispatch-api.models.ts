@@ -355,6 +355,39 @@ export interface DispatchResultDto {
    * 後端尚未實作，所以是選填；沒有這個欄位時當成空陣列。
    */
   driversTakenElsewhere?: DriverTakenDto[];
+  /** 當天這一倉還沒確認的訂單（PENDING_CONFIRM）；確認後才會進 unassignedOrders */
+  pendingConfirmOrders?: UnassignedOrderDto[];
+}
+
+/**
+ * 看板日期列的一格：某一天全部倉庫合起來的狀態。後端每次依路線與訂單推算，不存資料庫。
+ * UNRESOLVED＝日期已過還有單沒結束；CLOSED＝全部訂單都已結束。
+ */
+export type DispatchDayStatus =
+  | 'EMPTY'
+  | 'UNPLANNED'
+  | 'DRAFT'
+  | 'PUBLISHED'
+  | 'IN_PROGRESS'
+  | 'CLOSED'
+  | 'UNRESOLVED';
+
+export interface DispatchDayDto {
+  /** yyyy-MM-dd */
+  date: string;
+  status: DispatchDayStatus;
+  /** 有效訂單數，不含取消的單 */
+  orderCount: number;
+  pendingConfirmCount: number;
+  /** 已確認、還沒排進路線 */
+  unassignedCount: number;
+  /** 已結束：完成、無人簽收、點交不符 */
+  finishedCount: number;
+}
+
+/** 看板推播：只說哪一天變了，收到後自己重查 /days、/board */
+export interface DispatchBoardPushDto {
+  date: string;
 }
 
 /** 當天已被其他倉庫排走的司機，附上排在哪裡好讓畫面說明原因 */

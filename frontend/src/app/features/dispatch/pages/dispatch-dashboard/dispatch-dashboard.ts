@@ -13,12 +13,14 @@ import {
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, forkJoin, of, switchMap, timer} from 'rxjs';
+import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
 import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
+import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {
+  DispatchDayDto,
   DispatchResultDto,
   DriverDto,
   DriverShiftDto,
@@ -173,6 +175,19 @@ interface VehicleOption {
   takenNote: string | null;
 }
 
+/** 已派出畫面右側「需要處理」的一項：配送異常、GPS 沒更新、還沒排進車的單 */
+interface AttentionItem {
+  key: string;
+  title: string;
+  detail: string;
+  kind: 'exception' | 'gps' | 'pending';
+}
+
+/** 還沒結束、司機還要跑的單。已點交的貨在車上，也算還沒送 */
+const UNFINISHED_ON_ROUTE: readonly OrderStatus[] = ['CONFIRMED', 'LOADED', 'IN_DELIVERY'];
+/** 送不成的單：點交不符（FAILED）與無人簽收，都會開補送單，主管要看得到 */
+const DELIVERY_PROBLEM: readonly OrderStatus[] = ['FAILED', 'NO_SIGNATURE'];
+
 @Component({
   selector: 'app-dispatch-dashboard',
   imports: [
@@ -185,6 +200,12 @@ interface VehicleOption {
 export class DispatchDashboard implements OnInit {
   readonly routes = signal<BoardRoute[]>([]);
   readonly unassigned = signal<BoardCard[]>([]);
+  /** 還沒確認的單（PENDING_CONFIRM）：不能拖，要先按確認才會進待排單 */
+  readonly pendingConfirm = signal<BoardCard[]>([]);
+  /** 正在確認的那張單，按鈕顯示「確認中…」並擋住連點 */
+  readonly confirmingOrderId = signal<number | null>(null);
+  /** 看板上方的日期列：今天起到最後一天有單的日期，加上之前還沒結案的日子（後端 /dispatch/days） */
+  readonly days = signal<DispatchDayDto[]>([]);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
   private readonly routeMetricsByRouteId = signal<ReadonlyMap<number, RouteMetricsDto>>(new Map());
@@ -198,6 +219,7 @@ export class DispatchDashboard implements OnInit {
   readonly optimizing = signal(false);
   private readonly api = inject(DispatchApiService);
   private readonly boardEvents = inject(DispatchBoardEventsService);
+  private readonly socket = inject(DriverChatSocketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
   // 按「＋」清空看板前的確認視窗，寫在 dispatch-dashboard.html 最下面的 <ng-template #clearBoardDialog>
@@ -226,8 +248,9 @@ export class DispatchDashboard implements OnInit {
   readonly boardNotices = signal<string[]>([]);
   /** 格子 key 的流水號 */
   private slotSeq = 0;
-  /** 目前看板屬於哪個倉；換倉時不能沿用上一個倉排到一半的格子 */
+  /** 目前看板屬於哪個倉、哪一天；換倉或換日期時不能沿用排到一半的格子 */
   private boardWarehouseId = 0;
+  private boardDate = '';
   readonly templateName = signal('');
   readonly templateError = signal('');
   readonly templateBusy = signal(false);
@@ -417,8 +440,11 @@ export class DispatchDashboard implements OnInit {
    * catchError 刻意放在「每次請求」這層而不是整條 pipe 外層 —— 放外層的話，
    * 一次 401 或後端重啟就會讓整條 stream complete，之後永遠不會再重試。
    */
+  /** 派出後的卡片要顯示每台車的定位，所以不只開圖層時要抓 */
+  private readonly needLivePings = computed(() => this.showDriverPoints() || this.published());
+
   private readonly livePings = toSignal(
-    toObservable(this.showDriverPoints).pipe(
+    toObservable(this.needLivePings).pipe(
       switchMap((on) =>
         on
           ? timer(0, 30_000).pipe(
@@ -508,6 +534,19 @@ export class DispatchDashboard implements OnInit {
     this.boardEvents.boardChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.reloadBoard());
+    // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
+    this.socket.boardPushes$
+      .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
+      .subscribe((push) => this.onBoardPush(push.date));
+    // 斷線期間的推播不會補發，重新連上時自己重查一次，免得畫面停在舊的狀態
+    this.socket.connected$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.loadDays();
+        if (this.warehouseId()) {
+          this.refreshOrdersAndBoard();
+        }
+      });
     timer(15_000, 15_000)
       .pipe(
         switchMap(() => this.api.getOrders().pipe(catchError(() => of<OrderDto[] | null>(null)))),
@@ -525,6 +564,211 @@ export class DispatchDashboard implements OnInit {
     this.boardNotices.set([]);
     this.reloadBoard();
   }
+
+  // ── 日期列 ────────────────────────────────────────────
+
+  /** 點日期列的一格：換看那一天。班表也要換成那天的，司機選單的紅框才會對 */
+  selectDay(date: string): void {
+    if (date === this.dispatchDate() || this.busy()) {
+      return;
+    }
+    this.dispatchDate.set(date);
+    this.boardNotices.set([]);
+    this.publishError.set('');
+    this.loadScheduleEligibility();
+    this.reloadBoard();
+  }
+
+  /** 日期列失敗不擋看板：看板本身照樣能用，只是少了切換日期的入口 */
+  private loadDays(): void {
+    this.api.getDispatchDays().subscribe({
+      next: (days) => this.days.set(days),
+      error: () => this.days.set([]),
+    });
+  }
+
+  /**
+   * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
+   * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
+   */
+  private onBoardPush(date: string): void {
+    this.loadDays();
+    if (date === this.dispatchDate() && !this.busy()) {
+      this.refreshOrdersAndBoard();
+    }
+  }
+
+  /**
+   * 訂單和看板一起重查。看板靠 orders() 判斷每張單能不能拖（見 applyDispatchResult），
+   * 只重讀看板的話，剛確認或剛點交的單狀態還是舊的。
+   */
+  private refreshOrdersAndBoard(): void {
+    this.api.getOrders().subscribe({
+      next: (orders) => {
+        this.applySyncedOrders(orders);
+        this.reloadBoard();
+      },
+      error: () => this.reloadBoard(),
+    });
+  }
+
+  /** 日期列一格的標題：9/26，今天、明天、後天另外標出來 */
+  dayTitle(date: string): string {
+    const [, month, day] = date.split('-').map(Number);
+    const relative = this.relativeDayLabel(date);
+    return relative ? `${month}/${day} ${relative}` : `${month}/${day}`;
+  }
+
+  private relativeDayLabel(date: string): string {
+    const diff = Math.round(
+      (new Date(`${date}T00:00:00`).getTime() - new Date(`${todayLocalDate()}T00:00:00`).getTime()) / 86_400_000,
+    );
+    return ({[-1]: '昨天', 0: '今天', 1: '明天', 2: '後天'} as Record<number, string>)[diff] ?? '';
+  }
+
+  /** 日期列一格的狀態文字：狀態加上最需要知道的那個數字 */
+  dayStatusLabel(day: DispatchDayDto): string {
+    const unfinished = day.orderCount - day.finishedCount;
+    switch (day.status) {
+      case 'EMPTY':
+        return '沒有訂單';
+      case 'UNPLANNED':
+        return `未排 · ${day.orderCount} 單`;
+      case 'DRAFT':
+        return day.unassignedCount > 0 ? `草稿 · ${day.unassignedCount} 待排` : '草稿 · 已排完';
+      case 'PUBLISHED':
+        return day.unassignedCount > 0 ? `已發布 · +${day.unassignedCount} 待排` : '已發布';
+      case 'IN_PROGRESS':
+        return `配送中 · ${day.finishedCount}/${day.orderCount}`;
+      case 'CLOSED':
+        return '已結束';
+      case 'UNRESOLVED':
+        return `未結案 · ${unfinished} 單`;
+    }
+  }
+
+  /** 工具列的日期：今天、明天這種相對說法比日期好認 */
+  dispatchDateLabel(): string {
+    const relative = this.relativeDayLabel(this.dispatchDate());
+    return relative ? `${relative} ${this.dispatchDate()}` : this.dispatchDate();
+  }
+
+  // ── 待確認的單 ────────────────────────────────────────
+
+  /** 在看板上直接確認：確認後這張單會從待確認移到待排單，就能拖或自動排車 */
+  confirmPendingOrder(card: BoardCard): void {
+    if (this.confirmingOrderId() !== null) {
+      return;
+    }
+    this.confirmingOrderId.set(card.orderId);
+    this.boardError.set('');
+    this.api.confirmOrder(card.orderId).subscribe({
+      next: () => {
+        this.confirmingOrderId.set(null);
+        this.refreshOrdersAndBoard();
+      },
+      error: (error: unknown) => {
+        this.boardError.set(`確認 ${card.orderNumber} 失敗：${describeError(error)}`);
+        this.confirmingOrderId.set(null);
+      },
+    });
+  }
+
+  // ── 已派出：即時狀態 ──────────────────────────────────
+
+  /** 派出後的卡片只畫有單的路線；空格、排到一半的人車格在派出後沒有意義 */
+  readonly publishedRoutes = computed(() =>
+    this.routes().filter((route) => route.routeId > 0 && route.cards.length > 0),
+  );
+
+  /** 進度圓點：完成綠、送不成紅、下一站藍、還沒到的灰 */
+  routeProgressDotClass(route: BoardRoute, card: BoardCard): string {
+    const status = this.boardCardStatus(card);
+    if (status === 'COMPLETED') {
+      return 'is-complete';
+    }
+    if (DELIVERY_PROBLEM.includes(status)) {
+      return 'is-failed';
+    }
+    return this.routeNextCard(route)?.orderId === card.orderId ? 'is-current' : '';
+  }
+
+  routeProgressLabel(route: BoardRoute): string {
+    const done = route.cards.filter((card) => !UNFINISHED_ON_ROUTE.includes(this.boardCardStatus(card))).length;
+    return `${done}/${route.cards.length} 站`;
+  }
+
+  /** 下一站：照配送順序第一張還沒結束的單 */
+  private routeNextCard(route: BoardRoute): BoardCard | undefined {
+    return route.cards.find((card) => UNFINISHED_ON_ROUTE.includes(this.boardCardStatus(card)));
+  }
+
+  routeNextStop(route: BoardRoute): string {
+    return this.routeNextCard(route)?.storeName ?? '全部送完';
+  }
+
+  routeHasProblem(route: BoardRoute): boolean {
+    return route.cards.some((card) => DELIVERY_PROBLEM.includes(this.boardCardStatus(card)));
+  }
+
+  /**
+   * 後端只回工作中、而且 10 分鐘內有回報的司機，所以查不到就代表沒在回報。
+   * 還沒到配送日的路線司機根本還沒出門，不算異常。
+   */
+  routeGpsLabel(route: BoardRoute): string {
+    if (this.dispatchDate() !== todayLocalDate()) {
+      return '尚未出車';
+    }
+    const ping = this.livePings().find((item) => item.driverId === route.driverId);
+    return ping ? `GPS ${minutesAgo(ping.timestamp)} 分鐘前` : 'GPS 超過 10 分鐘未更新';
+  }
+
+  routeEtaLabel(route: BoardRoute): string {
+    return this.formatEstimatedArrival(this.routeMetricsByRouteId().get(route.routeId)?.estimatedNextArrivalAt);
+  }
+
+  routeRemainingKmLabel(route: BoardRoute): string {
+    return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
+  }
+
+  /**
+   * 派出後右側「需要處理」：送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
+   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。
+   */
+  readonly dispatchAttention = computed<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+    const isToday = this.dispatchDate() === todayLocalDate();
+    const pingDrivers = new Set(this.livePings().map((ping) => ping.driverId));
+
+    for (const route of this.publishedRoutes()) {
+      for (const card of route.cards) {
+        if (DELIVERY_PROBLEM.includes(this.boardCardStatus(card))) {
+          items.push({
+            key: `order-${card.orderId}`,
+            title: `${card.orderNumber} ${this.boardCardStatusLabel(card)}`,
+            detail: `${route.plateNumber} · ${card.storeName}，補送單要到異常中心確認`,
+            kind: 'exception',
+          });
+        }
+      }
+      if (isToday && route.driverId !== null && this.routeNextCard(route) && !pingDrivers.has(route.driverId)) {
+        items.push({
+          key: `gps-${route.driverId}`,
+          title: `${this.driverName(route.driverId)} GPS 超過 10 分鐘未更新`,
+          detail: `${route.plateNumber} · 下一站 ${this.routeNextStop(route)}`,
+          kind: 'gps',
+        });
+      }
+    }
+
+    for (const card of this.pendingConfirm()) {
+      items.push({key: `confirm-${card.orderId}`, title: `${card.orderNumber} 待確認`, detail: card.storeName, kind: 'pending'});
+    }
+    for (const card of this.unassigned()) {
+      items.push({key: `pool-${card.orderId}`, title: `${card.orderNumber} 尚未排入車`, detail: card.storeName, kind: 'pending'});
+    }
+    return items;
+  });
 
   private loadDashboard(): void {
     this.loading.set(true);
@@ -1168,8 +1412,9 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    if (this.dispatchDate() !== todayLocalDate()) {
-      this.publishError.set('只能發布今天的配送任務。');
+    // 可以預先發布未來幾天；過去的日期發了司機也收不到（司機端只看當天）
+    if (this.dispatchDate() < todayLocalDate()) {
+      this.publishError.set('不能發布已經過去的日期。');
       return;
     }
 
@@ -1599,7 +1844,7 @@ export class DispatchDashboard implements OnInit {
 
     const shift = this.shiftsByDriverId().get(driverId);
     if (!shift) {
-      return '今天未排班';
+      return '當天未排班';
     }
 
     return this.shiftScheduleNote(shift.shiftType);
@@ -1610,11 +1855,11 @@ export class DispatchDashboard implements OnInit {
       case 'WORK':
         return null;
       case 'DAY_OFF':
-        return '今天休假';
+        return '當天休假';
       case 'LEAVE':
-        return '今天請假';
+        return '當天請假';
       case 'UNASSIGNED':
-        return '今天尚未安排';
+        return '當天尚未安排';
     }
   }
 
@@ -1675,9 +1920,11 @@ export class DispatchDashboard implements OnInit {
       const vehicle = vehicleById.get(vehicleId);
       return vehicle !== undefined && vehicle.warehouseId === this.warehouseId() && vehicle.status !== 'RETIRED';
     };
-    // 換倉時，上一個倉排到一半的格子不能帶過來
-    const previous = this.boardWarehouseId === this.warehouseId() ? this.routes() : [];
+    // 換倉或換日期時，排到一半的格子不能帶過來
+    const previous =
+      this.boardWarehouseId === this.warehouseId() && this.boardDate === result.date ? this.routes() : [];
     this.boardWarehouseId = this.warehouseId();
+    this.boardDate = result.date;
 
     const serverLanes: BoardRoute[] = result.routes
       .filter((route) => isBoardVehicle(route.vehicleId))
@@ -1740,8 +1987,11 @@ export class DispatchDashboard implements OnInit {
         .map((order) => [order.orderId, order]),
     );
     this.unassigned.set([...unassignedByOrderId.values()].map(toBoardCard));
+    this.pendingConfirm.set((result.pendingConfirmOrders ?? []).map(toBoardCard));
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
     this.loadRouteMetrics(this.routes());
+    // 排車、改派、發布都會改到這天的狀態；推播斷線時日期列也不會停在舊的
+    this.loadDays();
   }
 
   private loadRouteMetrics(routes: readonly BoardRoute[]): void {

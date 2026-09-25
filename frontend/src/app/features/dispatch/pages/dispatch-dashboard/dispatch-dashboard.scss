@@ -718,3 +718,381 @@
   margin: 0.5rem 0 0;
   padding-left: 1.25rem;
 }
+
+/* ── 日期列（樣式沿用 murse-main 的設計）────────────────────── */
+.dispatch-day-picker {
+  min-width: 0;
+  margin-top: 1rem;
+}
+
+.dispatch-day-strip {
+  display: grid;
+  grid-auto-columns: minmax(150px, 1fr);
+  grid-auto-flow: column;
+  gap: 0.625rem;
+  overflow-x: auto;
+  padding: 2px 1px 8px;
+}
+
+.dispatch-day-card {
+  display: flex;
+  min-width: 0;
+  min-height: 70px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+
+  &.is-selected {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  /* 日期已過還有單沒結束：紅框，處理完就會從日期列消失 */
+  &.is-unresolved {
+    border-color: rgb(214 79 79 / 58%);
+  }
+
+  &:disabled {
+    cursor: wait;
+  }
+}
+
+.dispatch-day-date {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.dispatch-day-status {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &[data-status='IN_PROGRESS'] {
+    color: #4f9be6;
+  }
+
+  &[data-status='PUBLISHED'],
+  &[data-status='CLOSED'] {
+    color: #65c27f;
+  }
+
+  &[data-status='UNRESOLVED'] {
+    color: #ef8179;
+  }
+}
+
+.dispatch-day-pending {
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgb(218 159 54 / 16%);
+  color: #e4a74d;
+  font-size: 0.625rem;
+}
+
+/* ── 待排單：待確認的單 ─────────────────────────────────── */
+.pending-group {
+  display: grid;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+
+  h5 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+}
+
+.pending-order-card {
+  cursor: default;
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+}
+
+.pending-confirm-button {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+
+  &:disabled {
+    cursor: wait;
+    opacity: 0.6;
+  }
+}
+
+/* ── 已派出：進度卡片、需要處理、圖例（樣式沿用 murse-main 的設計）── */
+.published-route-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.published-route-card {
+  min-width: 0;
+  padding: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+
+  &.has-exception {
+    border-color: rgb(214 79 79 / 58%);
+  }
+}
+
+.published-route-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+
+  strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 0.875rem;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+}
+
+.published-route-state {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: rgb(54 143 94 / 16%);
+  color: #65c27f;
+  font-size: 0.6875rem;
+
+  &.is-exception {
+    background: rgb(214 79 79 / 16%);
+    color: #ef8179;
+  }
+}
+
+.route-progress-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 12px;
+  margin: 0.75rem 0;
+}
+
+.route-progress-dot,
+.status-legend i {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+  background: #61696b;
+}
+
+.route-progress-dot.is-complete,
+.status-legend i.is-complete {
+  background: #2baa54;
+}
+
+.route-progress-dot.is-current,
+.status-legend i.is-current {
+  background: #1976d2;
+}
+
+.route-progress-dot.is-failed,
+.status-legend i.is-failed {
+  background: #d64545;
+}
+
+.route-live-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+
+  p {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 0.75rem;
+  }
+
+  span {
+    display: block;
+    margin-bottom: 0.125rem;
+    color: var(--muted);
+    font-size: 0.625rem;
+  }
+}
+
+.published-order-list {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+}
+
+.published-order-card {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+
+  &.is-failed {
+    border-color: rgb(214 79 79 / 58%);
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.375rem;
+  }
+
+  header strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.6875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  em {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 0.625rem;
+    font-style: normal;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.6875rem;
+  }
+}
+
+.dispatch-attention {
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+
+  h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    color: var(--text);
+    font-size: 0.875rem;
+  }
+
+  h4 span {
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+}
+
+.attention-item {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+
+  &.is-exception {
+    border-color: rgb(214 79 79 / 55%);
+  }
+
+  &.is-gps {
+    border-color: rgb(218 159 54 / 55%);
+  }
+
+  strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--text);
+    font-size: 0.75rem;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.6875rem;
+  }
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.6875rem;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    flex-basis: 9px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .dispatch-attention {
+    position: static;
+    max-height: none;
+  }
+
+  .published-route-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .published-route-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -102,7 +102,9 @@ class DeliveryServiceTest {
             return saved;
         });
 
-        service = new DeliveryService(deliveryRecordsDAO, exceptionCasesDAO, ordersDAO, routesDAO, driversDAO);
+        // 路段里程在抵達時記錄，屬於 RouteLegMileageService 自己的測試範圍，這裡只要不出錯就好
+        service = new DeliveryService(deliveryRecordsDAO, exceptionCasesDAO, ordersDAO, routesDAO, driversDAO,
+                mock(RouteLegMileageService.class));
     }
 
     @Test

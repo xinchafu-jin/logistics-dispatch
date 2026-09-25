@@ -46,7 +46,7 @@ public class DriverShiftsEntity {
     @Column(name = "overtime_minutes", nullable = false)
     private Integer legacyOvertimeMinutes = 0;
 
-    /** 主管最後一次修改班次時留下的原因，例如臨時請假。 */
+    /** 主管最後一次修改班次時留下的原因，例如特殊事由或正式請假。 */
     @Column(name = "change_reason", length = 255)
     private String changeReason;
 

@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.AttendanceStatus;
+import com.example.backend.constants.AttendancePunctualityStatus;
 import com.example.backend.constants.EmergencyLeaveStatus;
 import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.constants.ShiftType;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -81,6 +83,7 @@ public class AttendanceService {
         attendance.setClockInAt(now);
         attendance.setBreakUsed(false);
         attendance.setStatus(AttendanceStatus.WORKING);
+        applyPunctuality(attendance, shift, now);
         return toDTO(attendanceRecordsDAO.save(attendance), now);
     }
 
@@ -346,6 +349,12 @@ public class AttendanceService {
                 ? AttendanceStatus.WORKING : entity.getStatus());
         dto.setGpsAllowed(entity.getStatus() == AttendanceStatus.WORKING
                 || entity.getStatus() == AttendanceStatus.OVERTIME);
+        dto.setPunctualityStatus(entity.getPunctualityStatus());
+        dto.setLateMinutes(entity.getLateMinutes());
+        dto.setLateExcused(entity.getLateExcused());
+        dto.setLeaveRequired(entity.getLeaveRequired());
+        dto.setLeaveRequiredMinutes(entity.getLeaveRequiredMinutes());
+        dto.setCoveredLeaveRequestId(entity.getCoveredLeaveRequestId());
 
         long remaining = 0;
         if (entity.getStatus() == AttendanceStatus.ON_BREAK && entity.getBreakEndsAt() != null) {
@@ -353,6 +362,42 @@ public class AttendanceService {
         }
         dto.setRemainingBreakSeconds(remaining);
         return dto;
+    }
+
+    void applyPunctuality(
+            AttendanceRecordsEntity attendance,
+            DriverShiftsEntity shift,
+            LocalDateTime clockInAt
+    ) {
+        if (shift.getWorkStart() == null) {
+            return;
+        }
+        LocalDateTime scheduledStart = attendance.getWorkDate().atTime(shift.getWorkStart());
+        if (!clockInAt.isAfter(scheduledStart)) {
+            return;
+        }
+
+        long lateSeconds = Duration.between(scheduledStart, clockInAt).getSeconds();
+        int lateMinutes = Math.toIntExact((lateSeconds + 59) / 60);
+        attendance.setLateMinutes(lateMinutes);
+
+        if (lateMinutes > 30) {
+            attendance.setPunctualityStatus(AttendancePunctualityStatus.LEAVE_REQUIRED);
+            attendance.setLeaveRequired(true);
+            attendance.setLeaveRequiredMinutes(lateMinutes);
+            return;
+        }
+
+        YearMonth month = YearMonth.from(attendance.getWorkDate());
+        boolean monthlyExcuseUsed = attendanceRecordsDAO
+                .existsByDriverIdAndWorkDateBetweenAndLateExcusedTrue(
+                        attendance.getDriverId(), month.atDay(1), month.atEndOfMonth());
+        if (monthlyExcuseUsed) {
+            attendance.setPunctualityStatus(AttendancePunctualityStatus.LATE);
+        } else {
+            attendance.setPunctualityStatus(AttendancePunctualityStatus.LATE_EXCUSED);
+            attendance.setLateExcused(true);
+        }
     }
 
     private BigDecimal toHours(Integer minutes) {

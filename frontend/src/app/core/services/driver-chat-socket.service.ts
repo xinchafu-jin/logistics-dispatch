@@ -2,14 +2,17 @@ import {Injectable, inject, signal} from '@angular/core';
 import {Client, IMessage} from '@stomp/stompjs';
 import {Observable, Subject} from 'rxjs';
 import {AuthService} from '../auth/auth.service';
-import {DriverMessagePushDto} from './dispatch-api.models';
+import {DispatchBoardPushDto, DriverMessagePushDto} from './dispatch-api.models';
 
 /** 管理員共用的廣播頻道；要跟後端 DriverMessagesPushService.ADMIN_TOPIC、攔截器白名單一致 */
 const ADMIN_TOPIC = '/topic/admin/driver-messages';
+/** 看板推播：哪一天的訂單或路線變了；要跟後端 DispatchBoardPushService.ADMIN_TOPIC 一致 */
+const BOARD_TOPIC = '/topic/admin/dispatch-board';
 
 /**
  * 後台的 WebSocket 連線（STOMP）。只管「電話線」：撥號、報身分、訂閱、斷線重撥；
- * 收到推播要怎麼更新畫面，由 dispatch-shell 決定。
+ * 收到推播要怎麼更新畫面，聊天室由 dispatch-shell 決定、看板推播由 dispatch-dashboard 決定。
+ * 看板推播也走這一條，不另外開連線。
  *
  * 整個後台只能有一條連線，所以放 root。連線與斷線由 dispatch-shell 的生命週期控制：
  * 登入後的頁面都包在 dispatch-shell 裡，它存在的期間剛好就是登入的期間。
@@ -21,11 +24,14 @@ const ADMIN_TOPIC = '/topic/admin/driver-messages';
 export class DriverChatSocketService {
   private readonly authService = inject(AuthService);
   private readonly pushSubject = new Subject<DriverMessagePushDto>();
+  private readonly boardPushSubject = new Subject<DispatchBoardPushDto>();
   private readonly connectedSubject = new Subject<void>();
   private client: Client | null = null;
 
   /** 每收到一則推播發一次 */
   readonly pushes$: Observable<DriverMessagePushDto> = this.pushSubject.asObservable();
+  /** 每收到一則看板推播發一次（同一個交易改了很多筆，後端只推一則） */
+  readonly boardPushes$: Observable<DispatchBoardPushDto> = this.boardPushSubject.asObservable();
   /** 每次連上都發一次（第一次連上、斷線後重連都算），用來觸發補抓 */
   readonly connected$: Observable<void> = this.connectedSubject.asObservable();
   /** 目前是否連著；畫面想顯示「連線中斷」時用 */
@@ -54,6 +60,9 @@ export class DriverChatSocketService {
         // 先訂閱，再通知 dispatch-shell 補抓：順序反了，補抓完到訂閱成功之間的訊息會漏掉
         client.subscribe(ADMIN_TOPIC, (frame: IMessage) => {
           this.pushSubject.next(JSON.parse(frame.body) as DriverMessagePushDto);
+        });
+        client.subscribe(BOARD_TOPIC, (frame: IMessage) => {
+          this.boardPushSubject.next(JSON.parse(frame.body) as DispatchBoardPushDto);
         });
         this.isConnected.set(true);
         this.connectedSubject.next();

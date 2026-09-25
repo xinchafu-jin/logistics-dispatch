@@ -80,6 +80,18 @@ interface ReportPreview {
   storeDirectory: StoreDto[];
 }
 
+interface RouteLegReportRow {
+  sequence: number | null;
+  fromName: string | null;
+  toName: string | null;
+  orderId: number | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationMinutes: number | null;
+  systemKm: number | null;
+  calculationStatus: string | null;
+}
+
 const SHEETS: ReadonlyArray<{id: PreviewSheet; label: string; icon: string}> = [
   {id: 'overview', label: '營運總覽', icon: 'dashboard'},
   {id: 'orders', label: '訂單明細', icon: 'receipt_long'},
@@ -335,7 +347,24 @@ export class ReportHistory implements OnInit {
   }
 
   private routeExportRows(preview: ReportPreview): unknown[][] {
-    return [['日期', '路線', '倉庫', '司機', '車牌', '門市數', '訂單數', '箱數', '裝載率', '預估公里', '實際公里', '里程差異', '預估油費', '里程狀態'], ...this.rows(preview.routes, 'routes').map((row) => [row.date, row.routeId, row.warehouseName, row.driverName, row.plateNumber, row.distinctStores, row.orders, row.boxes, this.percent(row.plannedLoadRatePercent), row.plannedKm, row.actualKm, row.differenceKm, row.plannedFuelCost, row.mileageComparisonStatus])];
+    const routes = this.rows(preview.routes, 'routes');
+    const legs = routes.flatMap((route) => this.routeLegs(route).map((leg) => [
+      route['date'], route['routeId'], leg.sequence, leg.fromName, leg.toName, leg.orderId,
+      leg.startedAt, leg.endedAt, leg.durationMinutes, leg.systemKm, leg.calculationStatus,
+    ]));
+    return [
+      ['日期', '路線', '倉庫', '司機', '車牌', '門市數', '訂單數', '箱數', '裝載率', '預估公里', '系統公里', '實際公里', '里程差異', '預估油費', '里程狀態'],
+      ...routes.map((row) => [row['date'], row['routeId'], row['warehouseName'], row['driverName'], row['plateNumber'], row['distinctStores'], row['orders'], row['boxes'], this.percent(row['plannedLoadRatePercent']), row['plannedKm'], row['systemKm'], row['actualKm'], row['differenceKm'], row['plannedFuelCost'], row['mileageComparisonStatus']]),
+      [],
+      ['分段實際里程'],
+      ['日期', '路線', '段次', '出發地', '抵達地', '訂單 ID', '開始時間', '結束時間', '分鐘', '系統公里', '計算狀態'],
+      ...legs,
+    ];
+  }
+
+  protected routeLegs(row: ReportRow): RouteLegReportRow[] {
+    const legs = row['routeLegs'];
+    return Array.isArray(legs) ? legs.filter((leg): leg is RouteLegReportRow => typeof leg === 'object' && leg !== null) : [];
   }
 
   private attendanceExportRows(preview: ReportPreview): unknown[][] {

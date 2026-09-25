@@ -97,10 +97,14 @@
 .danger-action mat-icon,
 .icon-button mat-icon,
 .row-action mat-icon {
-  width: 15px;
-  height: 15px;
-  font-size: 15px;
-  line-height: 15px;
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
   stroke-width: 1.8;
 }
 

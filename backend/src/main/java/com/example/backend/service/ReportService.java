@@ -20,6 +20,7 @@ import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
 import com.example.backend.entity.VehiclesEntity;
@@ -249,6 +250,9 @@ public class ReportService {
         Map<Long, VehiclesEntity> vehicles = index(vehiclesDAO.findAll(), VehiclesEntity::getId);
         Map<Long, WarehousesEntity> warehouses = index(warehousesDAO.findAll(), WarehousesEntity::getId);
         Map<Long, StoresEntity> stores = index(storesDAO.findAll(), StoresEntity::getId);
+        Map<Long, List<RouteLegMileagesEntity>> routeLegsByRoute = reportReadDAO.routeLegMileages(
+                        selectedRoutes.stream().map(RoutesEntity::getId).toList())
+                .stream().collect(Collectors.groupingBy(RouteLegMileagesEntity::getRouteId));
         List<ReportResponses.RouteRow> rows = new ArrayList<>();
 
         for (RoutesEntity route : selectedRoutes) {
@@ -275,7 +279,7 @@ public class ReportService {
                             order.getId(), order.getOrderNumber(), order.getSequence(), order.getStoreId(),
                             storeName(stores, order.getStoreId()), order.getBoxCount(), order.getStatus().name()))
                     .toList();
-            rows.add(new ReportResponses.RouteRow(
+            ReportResponses.RouteRow row = new ReportResponses.RouteRow(
                     route.getId(), route.getDate(), route.getWarehouseId(),
                     warehouse == null ? null : warehouse.getName(), route.getVehicleId(),
                     vehicle == null ? null : vehicle.getPlateNumber(), route.getDriverId(),
@@ -286,7 +290,14 @@ public class ReportService {
                     countStatus(assigned, OrderStatus.NO_SIGNATURE),
                     plannedKm, route.getEstimatedFuelCost(), route.getEstimatedWorkMinutes(),
                     match.getActualKm(), difference, differencePercent, comparisonStatus,
-                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder));
+                    match.getStartAt(), match.getEndAt(), match.getDurationMinutes(), deliveryOrder);
+            List<RouteLegMileagesEntity> routeLegs = routeLegsByRoute.getOrDefault(route.getId(), List.of());
+            row.setRouteLegs(routeLegs.stream()
+                    .map(leg -> toRouteLegRow(leg, warehouse, stores)).toList());
+            if (!routeLegs.isEmpty() && routeLegs.stream().allMatch(leg -> leg.getSystemDistanceKm() != null)) {
+                row.setSystemKm(routeLegs.stream().mapToDouble(RouteLegMileagesEntity::getSystemDistanceKm).sum());
+            }
+            rows.add(row);
         }
         return new ReportResponses.Routes(range.getFrom(), range.getTo(),
                 "CURRENT_ROUTE_RECORD_NOT_PUBLISH_SNAPSHOT", rows);
@@ -794,6 +805,24 @@ public class ReportService {
             return null;
         }
         return (double) (log.getEndOdometer() - log.getStartOdometer());
+    }
+
+    private static ReportResponses.RouteLegRow toRouteLegRow(
+            RouteLegMileagesEntity leg,
+            WarehousesEntity warehouse,
+            Map<Long, StoresEntity> stores
+    ) {
+        String fromName = leg.getFromType().name().equals("WAREHOUSE")
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getFromStoreId());
+        String toName = leg.getToType().name().equals("WAREHOUSE")
+                ? warehouse == null ? null : warehouse.getName()
+                : storeName(stores, leg.getToStoreId());
+        Long durationMinutes = leg.getStartedAt() == null || leg.getEndedAt() == null
+                ? null : Duration.between(leg.getStartedAt(), leg.getEndedAt()).toMinutes();
+        return new ReportResponses.RouteLegRow(
+                leg.getSequence(), fromName, toName, leg.getOrderId(), leg.getStartedAt(), leg.getEndedAt(),
+                durationMinutes, leg.getSystemDistanceKm(), leg.getCalculationStatus());
     }
 
     private Map<Long, List<DeliveryRecordsEntity>> deliveryByOrder(List<OrdersEntity> orders) {

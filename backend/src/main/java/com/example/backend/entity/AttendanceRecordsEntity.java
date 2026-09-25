@@ -1,6 +1,7 @@
 package com.example.backend.entity;
 
 import com.example.backend.constants.AttendanceStatus;
+import com.example.backend.constants.AttendancePunctualityStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
@@ -55,6 +56,27 @@ public class AttendanceRecordsEntity {
 
     @Column(name = "total_work_minutes", nullable = false)
     private Integer totalWorkMinutes = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "punctuality_status", nullable = false, length = 30)
+    private AttendancePunctualityStatus punctualityStatus = AttendancePunctualityStatus.ON_TIME;
+
+    @Column(name = "late_minutes", nullable = false)
+    private Integer lateMinutes = 0;
+
+    /** 每位司機每月最多一筆 30 分鐘內遲到可標記為赦免。 */
+    @Column(name = "late_excused", nullable = false)
+    private Boolean lateExcused = false;
+
+    /** 超過表定上班時間 30 分鐘，需另補請假單；打卡本身不會被阻擋。 */
+    @Column(name = "leave_required", nullable = false)
+    private Boolean leaveRequired = false;
+
+    @Column(name = "leave_required_minutes", nullable = false)
+    private Integer leaveRequiredMinutes = 0;
+
+    @Column(name = "covered_leave_request_id")
+    private Long coveredLeaveRequestId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -166,6 +188,25 @@ public class AttendanceRecordsEntity {
 
     public void setTotalWorkMinutes(Integer totalWorkMinutes) {
         this.totalWorkMinutes = totalWorkMinutes;
+    }
+
+    public AttendancePunctualityStatus getPunctualityStatus() { return punctualityStatus; }
+    public void setPunctualityStatus(AttendancePunctualityStatus punctualityStatus) {
+        this.punctualityStatus = punctualityStatus;
+    }
+    public Integer getLateMinutes() { return lateMinutes; }
+    public void setLateMinutes(Integer lateMinutes) { this.lateMinutes = lateMinutes; }
+    public Boolean getLateExcused() { return lateExcused; }
+    public void setLateExcused(Boolean lateExcused) { this.lateExcused = lateExcused; }
+    public Boolean getLeaveRequired() { return leaveRequired; }
+    public void setLeaveRequired(Boolean leaveRequired) { this.leaveRequired = leaveRequired; }
+    public Integer getLeaveRequiredMinutes() { return leaveRequiredMinutes; }
+    public void setLeaveRequiredMinutes(Integer leaveRequiredMinutes) {
+        this.leaveRequiredMinutes = leaveRequiredMinutes;
+    }
+    public Long getCoveredLeaveRequestId() { return coveredLeaveRequestId; }
+    public void setCoveredLeaveRequestId(Long coveredLeaveRequestId) {
+        this.coveredLeaveRequestId = coveredLeaveRequestId;
     }
 
     public AttendanceStatus getStatus() {

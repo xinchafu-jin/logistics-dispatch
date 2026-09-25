@@ -30,7 +30,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
-/** 上班途中臨時請假、主管審核與同日路線交接。 */
+/** 上班中特殊事由離班、主管審核與同日路線交接。 */
 @Service
 @Transactional
 public class EmergencyLeaveService {
@@ -71,18 +71,18 @@ public class EmergencyLeaveService {
     public EmergencyLeaveResponse submit(Long driverId, String reason) {
         LocalDate today = LocalDate.now(TAIPEI);
         requireActiveDriver(driverId);
-        String normalizedReason = requireText(reason, "請填寫臨時請假原因");
+        String normalizedReason = requireText(reason, "請填寫特殊事由原因");
 
         // 鎖住當日出勤紀錄，避免同一位司機同時送出兩張待審申請。
         AttendanceRecordsEntity attendance = attendanceRecordsDAO.findForUpdate(driverId, today)
-                .orElseThrow(() -> new IllegalArgumentException("尚未打上班卡，不能申請上班中臨時請假"));
+                .orElseThrow(() -> new IllegalArgumentException("尚未打上班卡，不能申請上班中特殊事由離班"));
         AttendanceRecordDTO current = attendanceService.findToday(driverId).orElseThrow();
         if (!isWorking(current.getStatus())) {
-            throw new IllegalArgumentException("只有工作中或加班中的司機可以申請臨時請假");
+            throw new IllegalArgumentException("只有工作中或加班中的司機可以申請特殊事由離班");
         }
         if (requestsDAO.existsByDriverIdAndWorkDateAndStatus(
                 driverId, today, EmergencyLeaveStatus.PENDING)) {
-            throw new IllegalArgumentException("今天已有待主管審核的臨時請假申請");
+            throw new IllegalArgumentException("今天已有待主管審核的特殊事由申請");
         }
 
         List<RoutesEntity> routes = routesDAO.findByDateAndDriverIdAndStatusOrderByIdAsc(
@@ -152,11 +152,11 @@ public class EmergencyLeaveService {
             throw new IllegalArgumentException("接手司機須有已發布上班班次、已打卡且尚未被指派路線");
         }
         if (isReservedForPendingHandover(replacementDriverId, today)) {
-            throw new IllegalArgumentException("接手司機已被其他待交接的臨時請假保留");
+            throw new IllegalArgumentException("接手司機已被其他待交接的特殊事由申請保留");
         }
 
         RoutesEntity route = routesDAO.findForUpdate(request.getRouteId())
-                .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假的路線"));
+                .orElseThrow(() -> new EntityNotFoundException("找不到特殊事由申請的路線"));
         if (route.getStatus() != RouteStatus.PUBLISHED
                 || !today.equals(route.getDate())
                 || !request.getDriverId().equals(route.getDriverId())
@@ -225,12 +225,12 @@ public class EmergencyLeaveService {
         }
 
         RoutesEntity route = routesDAO.findForUpdate(routeId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假的路線"));
+                .orElseThrow(() -> new EntityNotFoundException("找不到特殊事由申請的路線"));
         if (route.getStatus() != RouteStatus.PUBLISHED
                 || !workDate.equals(route.getDate())
                 || !originalDriverId.equals(route.getDriverId())
                 || !request.getVehicleId().equals(route.getVehicleId())) {
-            throw new IllegalArgumentException("路線已異動，無法完成臨時請假交接");
+            throw new IllegalArgumentException("路線已異動，無法完成特殊事由交接");
         }
 
         List<OrdersEntity> orders = ordersDAO.findByRouteIdForUpdate(routeId);
@@ -299,25 +299,25 @@ public class EmergencyLeaveService {
         DriversEntity driver = driversDAO.findById(driverId)
                 .orElseThrow(() -> new EntityNotFoundException("找不到司機，ID：" + driverId));
         if (!Boolean.TRUE.equals(driver.getIsActive())) {
-            throw new IllegalArgumentException("司機已停職，不能參與臨時請假或接手");
+            throw new IllegalArgumentException("司機已停職，不能參與特殊事由離班或接手");
         }
         return driver;
     }
 
     private EmergencyLeaveRequestsEntity findPendingRequest(Long requestId) {
         EmergencyLeaveRequestsEntity request = requestsDAO.findById(requestId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假申請"));
+                .orElseThrow(() -> new EntityNotFoundException("找不到特殊事由申請"));
         if (request.getStatus() != EmergencyLeaveStatus.PENDING) {
-            throw new IllegalArgumentException("這筆臨時請假申請已審核");
+            throw new IllegalArgumentException("這筆特殊事由申請已審核");
         }
         return request;
     }
 
     private EmergencyLeaveRequestsEntity findPendingRequestForUpdate(Long requestId) {
         EmergencyLeaveRequestsEntity request = requestsDAO.findForUpdate(requestId)
-                .orElseThrow(() -> new EntityNotFoundException("找不到臨時請假申請"));
+                .orElseThrow(() -> new EntityNotFoundException("找不到特殊事由申請"));
         if (request.getStatus() != EmergencyLeaveStatus.PENDING) {
-            throw new IllegalArgumentException("這筆臨時請假申請已審核");
+            throw new IllegalArgumentException("這筆特殊事由申請已審核");
         }
         return request;
     }
