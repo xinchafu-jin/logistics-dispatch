@@ -100,6 +100,20 @@ input {
   font: inherit;
 }
 
+// ── 全域 mat-icon 基準對齊標準化 ──────────────────────────
+// 預設為 inline-flex 置中對齊，避免 inline-block 基準線偏移導致圖示下沉或切邊
+mat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+  letter-spacing: normal;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+}
+
 // ── 地圖上的倉庫／門市圖示 ──────────────────────────────
 // 必須放在全域：這些 DOM 是 Leaflet 的 divIcon 在執行期建出來的，
 // 身上沒有 Angular 的 _ngcontent 屬性，寫在元件 scss 裡選不到。
