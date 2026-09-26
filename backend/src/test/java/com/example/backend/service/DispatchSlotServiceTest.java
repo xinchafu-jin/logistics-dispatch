@@ -1,8 +1,11 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.VehicleStatus;
+import com.example.backend.dao.DriverShiftsDAO;
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
+import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dto.request.OptimizeSlotsDTO;
 import com.example.backend.entity.DriversEntity;
@@ -45,7 +48,9 @@ class DispatchSlotServiceTest {
         when(driversDAO.findAllById(any())).thenReturn(drivers);
         drivers.add(driver(1L, "王小明"));
         drivers.add(driver(2L, "李大華"));
-        service = new DispatchSlotService(vehiclesDAO, routesDAO, driversDAO);
+        // 這支測試只測 plan()（格子轉排車計畫），autoSlots 用到的 DAO 給空的 mock 即可
+        service = new DispatchSlotService(vehiclesDAO, routesDAO, driversDAO,
+                mock(OrdersDAO.class), mock(ScheduleMonthsDAO.class), mock(DriverShiftsDAO.class));
     }
 
     @Test

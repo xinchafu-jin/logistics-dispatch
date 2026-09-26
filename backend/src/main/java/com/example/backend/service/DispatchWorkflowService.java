@@ -74,12 +74,22 @@ public class DispatchWorkflowService {
     @Transactional
     public DispatchResponse optimizeSlots(OptimizeSlotsDTO dto) {
         dispatchGuardService.assertCanReplan(dto.getDate(), dto.getWarehouseId());
-        DispatchSlotService.SlotPlan plan = dispatchSlotService.plan(dto.getDate(), dto.getWarehouseId(), dto.getSlots());
+
+        // 格子全空：由系統挑這一倉需要的車數，配上當天能派的司機；產生的格子一樣交給 plan() 檢查
+        List<OptimizeSlotsDTO.Slot> slots = dto.getSlots();
+        List<String> notices = new ArrayList<>();
+        if (!hasFilledSlot(slots)) {
+            DispatchSlotService.AutoSlots auto = dispatchSlotService.autoSlots(dto.getDate(), dto.getWarehouseId());
+            slots = auto.getSlots();
+            notices.addAll(auto.getNotices());
+        }
+
+        DispatchSlotService.SlotPlan plan = dispatchSlotService.plan(dto.getDate(), dto.getWarehouseId(), slots);
         dispatchService.optimize(dto.getDate(), dto.getWarehouseId(), plan.getVehicleIds(), plan.getDriverByVehicle(),
-                pinnedVehicleByOrder(dto.getSlots(), plan.getVehicleIds()));
+                pinnedVehicleByOrder(slots, plan.getVehicleIds()));
         DispatchResponse board = dispatchBoardService.getBoard(dto.getDate(), dto.getWarehouseId());
 
-        List<String> notices = new ArrayList<>(plan.getNotices());
+        notices.addAll(plan.getNotices());
         Set<Long> routedVehicleIds = new HashSet<>();
         for (DispatchResponse.RouteResponse route : board.getRoutes()) {
             routedVehicleIds.add(route.getVehicleId());
@@ -102,6 +112,19 @@ public class DispatchWorkflowService {
      * <p>只固定到這次有出車的車：格子的車不能出（維修中、調倉），plan 已經略過那格並寫進 notices，
      * 那格的單就不固定，交給 OR-Tools 分給其他車，不然整次自動排車都會被一台出不了的車擋住。</p>
      */
+    /** 至少一格選了司機或車；前端沒填的格子也會送來，要逐格看 */
+    private boolean hasFilledSlot(List<OptimizeSlotsDTO.Slot> slots) {
+        if (slots == null) {
+            return false;
+        }
+        for (OptimizeSlotsDTO.Slot slot : slots) {
+            if (slot.getDriverId() != null || slot.getVehicleId() != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Map<Long, Long> pinnedVehicleByOrder(List<OptimizeSlotsDTO.Slot> slots, List<Long> dispatchedVehicleIds) {
         Map<Long, Long> pinned = new HashMap<>();
         for (OptimizeSlotsDTO.Slot slot : slots) {

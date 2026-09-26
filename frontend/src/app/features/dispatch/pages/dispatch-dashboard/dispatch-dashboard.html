@@ -167,6 +167,7 @@
             套用門市訂單
           </button>
 
+          <!-- OR-Tools 只用格子裡的人車排；只選司機的格子由後端配車；格子全空時後端自己挑需要的車數與當天能派的司機。格子裡已有的訂單固定在那台車，只有待排單的訂單交給 OR-Tools 分配，排不進去的留在待排單區 -->
           <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
             {{ optimizing() ? '排車中…' : '自動排車' }}
           </button>

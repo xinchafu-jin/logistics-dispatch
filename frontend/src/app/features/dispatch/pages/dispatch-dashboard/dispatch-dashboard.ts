@@ -942,7 +942,8 @@ export class DispatchDashboard implements OnInit {
       return;
     }
     // 以人為準：選了司機或車的格子才拿去排；只選司機的格子由後端配車。
-    // 格子裡已經有的訂單一起送，後端會把它們固定在這格的車上，不會被自動排車分到別台
+    // 格子裡已經有的訂單一起送，後端會把它們固定在這格的車上，不會被自動排車分到別台。
+    // 格子全空時送空陣列，後端會自己挑這一倉需要的車數，配上當天能派的司機（DispatchSlotService.autoSlots）
     const slots = this.routes()
       .filter((lane) => lane.driverId !== null || lane.vehicleId !== null)
       .map((lane) => ({
@@ -950,10 +951,6 @@ export class DispatchDashboard implements OnInit {
         vehicleId: lane.vehicleId,
         orderIds: lane.cards.filter((card) => this.isDispatchable(card)).map((card) => card.orderId),
       }));
-    if (slots.length === 0) {
-      this.boardError.set('先在格子裡選司機或車，再自動排車。');
-      return;
-    }
 
     this.optimizing.set(true);
     this.boardError.set('');
