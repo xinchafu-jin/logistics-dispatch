@@ -49,14 +49,29 @@ public class OsrmClient {
     }
 
 
+    /**
+     * 只要道路距離與車程：GPS 里程（每一對相鄰 GPS 點各打一次）、預估里程都用這支，一趟可能打上百次。
+     * overview=false 不回路線形狀，也不算轉彎，回應小、OSRM 也少做事；回傳的 Route 沒有 geometry 與 legs。
+     */
     public OsrmRouteResponse.Route route(double[] from, double[] to) {
+        return fetchRoute(from, to, "overview=false");
+    }
+
+    /**
+     * 司機導航用：overview＋geometries 是畫在地圖上的整條路線；steps 是逐一轉彎提示，沒加的話 legs 只會有出發、抵達兩步。
+     * 比 route() 重很多，只在司機要導航時打。
+     */
+    public OsrmRouteResponse.Route navigationRoute(double[] from, double[] to) {
+        return fetchRoute(from, to, "overview=full&geometries=geojson&steps=true");
+    }
+
+    private OsrmRouteResponse.Route fetchRoute(double[] from, double[] to, String query) {
         String coords = from[0] + "," + from[1] + ";" + to[0] + "," + to[1];
-        // 導航：overview＋geometries 是畫線用的整條路線；steps 是逐一轉彎提示，沒加的話 legs 只會有出發、抵達兩步
         OsrmRouteResponse osrmRouteResponse = restClient.get().
-                uri("/route/v1/driving/" + coords + "?overview=full&geometries=geojson&steps=true").
+                uri("/route/v1/driving/" + coords + "?" + query).
                 retrieve().body(OsrmRouteResponse.class);
         if (osrmRouteResponse == null || osrmRouteResponse.getRoutes() == null || osrmRouteResponse.getRoutes().isEmpty()) {
-            throw new IllegalStateException("OSRM 沒有回傳路線，請確認 geometries=geojson、steps=true 參數");
+            throw new IllegalStateException("OSRM 沒有回傳路線，請求參數：" + query);
         }
         return osrmRouteResponse.getRoutes().getFirst();
     }

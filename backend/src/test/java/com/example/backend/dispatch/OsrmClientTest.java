@@ -36,7 +36,7 @@ class OsrmClientTest {
         OsrmClient osrmClient = new OsrmClient("http://localhost:5001");
 
         // 高雄民生二路 → 鐵道二街，注意是 {經度, 緯度}
-        OsrmRouteResponse.Route route = osrmClient.route(
+        OsrmRouteResponse.Route route = osrmClient.navigationRoute(
                 new double[]{120.3014, 22.6273}, new double[]{120.3120, 22.6390});
 
         assertNotNull(route.getLegs(), "沒有 legs：Route 少了 legs 欄位或 setter");
@@ -45,6 +45,19 @@ class OsrmClientTest {
         assertEquals("depart", steps.getFirst().getManeuver().getType());
         assertEquals("arrive", steps.getLast().getManeuver().getType());
         assertEquals(2, steps.get(1).getManeuver().getLocation().length);
+    }
+
+    // 算里程用的 route() 只要距離：不能帶路線形狀與轉彎，GPS 里程一趟會打上百次
+    @Test
+    @DisabledIfEnvironmentVariable(named = "CI", matches = "true")
+    void routeForDistanceOnly() {
+        OsrmClient osrmClient = new OsrmClient("http://localhost:5001");
+
+        OsrmRouteResponse.Route route = osrmClient.route(
+                new double[]{120.3014, 22.6273}, new double[]{120.3120, 22.6390});
+
+        assertTrue(route.getDistance() > 0, "沒有道路距離");
+        assertNull(route.getGeometry(), "算距離不需要路線形狀，應該是 overview=false");
     }
 
 }

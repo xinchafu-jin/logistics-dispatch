@@ -20,7 +20,7 @@ public class GPSRouteService {
     public GPSRouteResponse findRoute(GPSRouteDTO gpsRouteDTO) {
         double[] from = {gpsRouteDTO.getFromLng(), gpsRouteDTO.getFromLat()};
         double[] to = {gpsRouteDTO.getToLng(), gpsRouteDTO.getToLat()};
-        OsrmRouteResponse.Route route = osrmClient.route(from, to);
+        OsrmRouteResponse.Route route = osrmClient.navigationRoute(from, to);
 
         double[][] coordinates = route.getGeometry().getCoordinates();
         double[][] path = new double[coordinates.length][2];

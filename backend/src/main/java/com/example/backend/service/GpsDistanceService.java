@@ -66,8 +66,10 @@ public class GpsDistanceService {
             }
             double straightMeters = haversineMeters(
                     previous.getLat(), previous.getLng(), current.getLat(), current.getLng());
+            // 離上一個採用的點不到 15 公尺：可能是停車時 GPS 在飄，先不算這一段，但起點（previous）不能往前推。
+            // 推了的話，GPS 點很密時（例如 10 秒一筆、塞車慢行）每一段都不到 15 公尺，
+            // 全部被丟掉、起點一路往前移，市區里程會被算成接近 0。不推則會累積到離起點 15 公尺以上才算一段
             if (straightMeters < MIN_MOVEMENT_METERS) {
-                previous = current;
                 continue;
             }
             double speedKph = straightMeters / seconds * 3.6;

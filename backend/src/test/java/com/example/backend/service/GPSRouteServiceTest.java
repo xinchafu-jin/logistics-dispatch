@@ -25,7 +25,7 @@ class GPSRouteServiceTest {
 
     @Test
     void 轉彎點座標要從經緯度反過來成緯度經度() {
-        when(osrmClient.route(any(), any())).thenReturn(route(
+        when(osrmClient.navigationRoute(any(), any())).thenReturn(route(
                 step("depart", null, null, "民生二路", 120.30139, 22.62732, 2),
                 step("turn", "left", null, "復興一路", 120.307854, 22.627515, 1182.4),
                 step("arrive", "left", null, "鐵道二街", 120.31201, 22.63915, 0)
@@ -48,7 +48,7 @@ class GPSRouteServiceTest {
     void 沒加steps參數時legs是null_回空清單不能炸() {
         OsrmRouteResponse.Route route = route();
         route.setLegs(null);
-        when(osrmClient.route(any(), any())).thenReturn(route);
+        when(osrmClient.navigationRoute(any(), any())).thenReturn(route);
 
         GPSRouteResponse response = service.findRoute(request());
 
@@ -73,7 +73,7 @@ class GPSRouteServiceTest {
 
     @Test
     void 非圓環的exit是null() {
-        when(osrmClient.route(any(), any())).thenReturn(route(
+        when(osrmClient.navigationRoute(any(), any())).thenReturn(route(
                 step("turn", "right", null, "長明街", 120.30871, 22.63816, 236)
         ));
 
