@@ -51,12 +51,12 @@ public class OsrmClient {
 
     public OsrmRouteResponse.Route route(double[] from, double[] to) {
         String coords = from[0] + "," + from[1] + ";" + to[0] + "," + to[1];
-        //導航：畫線給司機看
+        // 導航：overview＋geometries 是畫線用的整條路線；steps 是逐一轉彎提示，沒加的話 legs 只會有出發、抵達兩步
         OsrmRouteResponse osrmRouteResponse = restClient.get().
-                uri("/route/v1/driving/" + coords + "?overview=full&geometries=geojson").
+                uri("/route/v1/driving/" + coords + "?overview=full&geometries=geojson&steps=true").
                 retrieve().body(OsrmRouteResponse.class);
         if (osrmRouteResponse == null || osrmRouteResponse.getRoutes() == null || osrmRouteResponse.getRoutes().isEmpty()) {
-            throw new IllegalStateException("OSRM 沒有回傳，請確認 geometries=geojson 參數");
+            throw new IllegalStateException("OSRM 沒有回傳路線，請確認 geometries=geojson、steps=true 參數");
         }
         return osrmRouteResponse.getRoutes().getFirst();
     }

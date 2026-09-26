@@ -28,4 +28,23 @@ class OsrmClientTest {
         }
     }
 
+    // 同樣連本機 OSRM：確認網址參數（steps=true）和 legs／steps／maneuver 欄位名稱真的接得到資料。
+    // 參數打錯 OSRM 回 400；欄位名稱打錯 Jackson 不會報錯、只會是 null，這兩種都要靠真的打一次才抓得到
+    @Test
+    @DisabledIfEnvironmentVariable(named = "CI", matches = "true")
+    void routeWithSteps() {
+        OsrmClient osrmClient = new OsrmClient("http://localhost:5001");
+
+        // 高雄民生二路 → 鐵道二街，注意是 {經度, 緯度}
+        OsrmRouteResponse.Route route = osrmClient.route(
+                new double[]{120.3014, 22.6273}, new double[]{120.3120, 22.6390});
+
+        assertNotNull(route.getLegs(), "沒有 legs：Route 少了 legs 欄位或 setter");
+        List<OsrmRouteResponse.Route.Step> steps = route.getLegs().getFirst().getSteps();
+        assertTrue(steps.size() > 2, "只有出發、抵達兩步：網址沒帶 steps=true");
+        assertEquals("depart", steps.getFirst().getManeuver().getType());
+        assertEquals("arrive", steps.getLast().getManeuver().getType());
+        assertEquals(2, steps.get(1).getManeuver().getLocation().length);
+    }
+
 }
