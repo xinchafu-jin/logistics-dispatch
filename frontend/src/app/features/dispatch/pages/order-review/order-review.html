@@ -10,6 +10,15 @@
         <mat-icon aria-hidden="true">add</mat-icon>
         新增訂單
       </button>
+      <button
+        type="button"
+        class="button-secondary template-order-button"
+        title="下載可直接填寫並匯入的訂單 Excel 範本"
+        (click)="downloadImportTemplate()"
+      >
+        <mat-icon aria-hidden="true">download</mat-icon>
+        下載 Excel 範本
+      </button>
       <input
         type="file"
         accept=".xlsx,.xls,.csv"
@@ -253,6 +262,49 @@
             <span>貨物說明</span>
             <input type="text" [value]="orderForm().itemDescription" (input)="updateOrderText('itemDescription', $event)" />
           </label>
+          <section class="order-items-editor order-form__wide" aria-labelledby="order-items-title">
+            <header>
+              <div>
+                <span>商品明細</span>
+                <small id="order-items-title">有商品明細的訂單，司機出車前須逐項點交。</small>
+              </div>
+              <button type="button" class="icon-action" title="新增商品" aria-label="新增商品" (click)="addOrderItem()">
+                <mat-icon aria-hidden="true">add</mat-icon>
+                新增商品
+              </button>
+            </header>
+            <div class="order-item-list">
+              @for (item of orderForm().items ?? []; track item.id ?? $index; let index = $index) {
+                <article>
+                  <label>
+                    <span>商品名稱</span>
+                    <input type="text" maxlength="100" [value]="item.itemName" (input)="updateOrderItemText(index, 'itemName', $event)" />
+                  </label>
+                  <label>
+                    <span>商品代碼</span>
+                    <input type="text" maxlength="50" [value]="item.productCode" (input)="updateOrderItemText(index, 'productCode', $event)" />
+                  </label>
+                  <label>
+                    <span>數量</span>
+                    <input type="number" min="1" step="1" [value]="item.expectedQuantity" (input)="updateOrderItemQuantity(index, $event)" />
+                  </label>
+                  <label>
+                    <span>單位</span>
+                    <input type="text" maxlength="20" [value]="item.unit" (input)="updateOrderItemText(index, 'unit', $event)" />
+                  </label>
+                  <label class="order-item-note">
+                    <span>商品備註</span>
+                    <input type="text" maxlength="255" [value]="item.notes" (input)="updateOrderItemText(index, 'notes', $event)" />
+                  </label>
+                  <button type="button" class="item-remove-button" title="移除此商品" aria-label="移除此商品" (click)="removeOrderItem(index)">
+                    <mat-icon aria-hidden="true">close</mat-icon>
+                  </button>
+                </article>
+              } @empty {
+                <p>沒有商品明細的舊訂單可照原本的箱數方式點交；新增商品後，司機端會要求逐項核對。</p>
+              }
+            </div>
+          </section>
           <label class="order-form__wide">
             <span>備註</span>
             <textarea rows="3" [value]="orderForm().notes" (input)="updateOrderText('notes', $event)"></textarea>

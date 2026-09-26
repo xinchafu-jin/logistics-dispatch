@@ -6,9 +6,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static com.example.backend.constants.ValidMsg.*;
 
@@ -29,6 +31,10 @@ public class OrdersDTO {
 
     @Size(max = 255, message = ORDER_ITEM_DESCRIPTION_MAX_LENGTH)
     private String itemDescription;
+
+    /** 實際內容物明細；舊訂單可維持 null，新的訂單可傳多筆商品。 */
+    @Valid
+    private List<OrderItemDTO> items;
 
     @NotNull(message = ORDER_BOX_COUNT_REQUIRED)
     @Min(value = 1, message = ORDER_BOX_COUNT_MIN)
@@ -74,6 +80,9 @@ public class OrdersDTO {
 
     public String getItemDescription() { return itemDescription; }
     public void setItemDescription(String itemDescription) { this.itemDescription = itemDescription; }
+
+    public List<OrderItemDTO> getItems() { return items; }
+    public void setItems(List<OrderItemDTO> items) { this.items = items; }
 
     public Integer getBoxCount() { return boxCount; }
     public void setBoxCount(Integer boxCount) { this.boxCount = boxCount; }

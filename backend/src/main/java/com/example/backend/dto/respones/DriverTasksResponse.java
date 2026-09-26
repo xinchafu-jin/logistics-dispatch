@@ -4,6 +4,7 @@ import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -341,6 +342,10 @@ public class DriverTasksResponse {
         private Integer expectedBoxCount;
         private String itemDescription;
         private String orderNotes;
+        private LocalDateTime loadedAt;
+        private Boolean loadingRequired;
+        private Boolean itemChecklistCompleted;
+        private List<OrderItem> items;
         private Long storeId;
         private String storeCode;
         private String storeName;
@@ -363,6 +368,10 @@ public class DriverTasksResponse {
                 Integer expectedBoxCount,
                 String itemDescription,
                 String orderNotes,
+                LocalDateTime loadedAt,
+                Boolean loadingRequired,
+                Boolean itemChecklistCompleted,
+                List<OrderItem> items,
                 Long storeId,
                 String storeCode,
                 String storeName,
@@ -381,6 +390,10 @@ public class DriverTasksResponse {
             this.expectedBoxCount = expectedBoxCount;
             this.itemDescription = itemDescription;
             this.orderNotes = orderNotes;
+            this.loadedAt = loadedAt;
+            this.loadingRequired = loadingRequired;
+            this.itemChecklistCompleted = itemChecklistCompleted;
+            this.items = items;
             this.storeId = storeId;
             this.storeCode = storeCode;
             this.storeName = storeName;
@@ -447,6 +460,38 @@ public class DriverTasksResponse {
 
         public void setOrderNotes(String orderNotes) {
             this.orderNotes = orderNotes;
+        }
+
+        public LocalDateTime getLoadedAt() {
+            return loadedAt;
+        }
+
+        public void setLoadedAt(LocalDateTime loadedAt) {
+            this.loadedAt = loadedAt;
+        }
+
+        public Boolean getLoadingRequired() {
+            return loadingRequired;
+        }
+
+        public void setLoadingRequired(Boolean loadingRequired) {
+            this.loadingRequired = loadingRequired;
+        }
+
+        public Boolean getItemChecklistCompleted() {
+            return itemChecklistCompleted;
+        }
+
+        public void setItemChecklistCompleted(Boolean itemChecklistCompleted) {
+            this.itemChecklistCompleted = itemChecklistCompleted;
+        }
+
+        public List<OrderItem> getItems() {
+            return items;
+        }
+
+        public void setItems(List<OrderItem> items) {
+            this.items = items;
         }
 
         public Long getStoreId() {
@@ -527,6 +572,139 @@ public class DriverTasksResponse {
 
         public void setReceivingEnd(LocalTime receivingEnd) {
             this.receivingEnd = receivingEnd;
+        }
+    }
+
+    /** 司機在任務卡中看到並逐項勾選的訂單內容物。 */
+    public static class OrderItem {
+
+        private Long id;
+        private String productCode;
+        private String itemName;
+        private Integer expectedQuantity;
+        private String unit;
+        private Integer sequence;
+        private String notes;
+        private Integer loadedQuantity;
+        private Boolean checked;
+        private LocalDateTime checkedAt;
+        private String loadingNotes;
+
+        public OrderItem() {
+        }
+
+        public OrderItem(
+                Long id,
+                String productCode,
+                String itemName,
+                Integer expectedQuantity,
+                String unit,
+                Integer sequence,
+                String notes,
+                Integer loadedQuantity,
+                Boolean checked,
+                LocalDateTime checkedAt,
+                String loadingNotes
+        ) {
+            this.id = id;
+            this.productCode = productCode;
+            this.itemName = itemName;
+            this.expectedQuantity = expectedQuantity;
+            this.unit = unit;
+            this.sequence = sequence;
+            this.notes = notes;
+            this.loadedQuantity = loadedQuantity;
+            this.checked = checked;
+            this.checkedAt = checkedAt;
+            this.loadingNotes = loadingNotes;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public void setId(Long id) {
+            this.id = id;
+        }
+
+        public String getProductCode() {
+            return productCode;
+        }
+
+        public void setProductCode(String productCode) {
+            this.productCode = productCode;
+        }
+
+        public String getItemName() {
+            return itemName;
+        }
+
+        public void setItemName(String itemName) {
+            this.itemName = itemName;
+        }
+
+        public Integer getExpectedQuantity() {
+            return expectedQuantity;
+        }
+
+        public void setExpectedQuantity(Integer expectedQuantity) {
+            this.expectedQuantity = expectedQuantity;
+        }
+
+        public String getUnit() {
+            return unit;
+        }
+
+        public void setUnit(String unit) {
+            this.unit = unit;
+        }
+
+        public Integer getSequence() {
+            return sequence;
+        }
+
+        public void setSequence(Integer sequence) {
+            this.sequence = sequence;
+        }
+
+        public String getNotes() {
+            return notes;
+        }
+
+        public void setNotes(String notes) {
+            this.notes = notes;
+        }
+
+        public Integer getLoadedQuantity() {
+            return loadedQuantity;
+        }
+
+        public void setLoadedQuantity(Integer loadedQuantity) {
+            this.loadedQuantity = loadedQuantity;
+        }
+
+        public Boolean getChecked() {
+            return checked;
+        }
+
+        public void setChecked(Boolean checked) {
+            this.checked = checked;
+        }
+
+        public LocalDateTime getCheckedAt() {
+            return checkedAt;
+        }
+
+        public void setCheckedAt(LocalDateTime checkedAt) {
+            this.checkedAt = checkedAt;
+        }
+
+        public String getLoadingNotes() {
+            return loadingNotes;
+        }
+
+        public void setLoadingNotes(String loadingNotes) {
+            this.loadingNotes = loadingNotes;
         }
     }
 }

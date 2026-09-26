@@ -71,12 +71,8 @@
   gap: 16px;
 }
 
-.create-order-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
+.create-order-button,
+.template-order-button,
 .import-order-button {
   display: inline-flex;
   align-items: center;
@@ -84,6 +80,7 @@
 }
 
 .create-order-button mat-icon,
+.template-order-button mat-icon,
 .import-order-button mat-icon,
 .icon-action mat-icon,
 .modal-close mat-icon {
@@ -281,7 +278,6 @@
 
 .order-row.is-selected {
   background: rgb(99 209 198 / 8%);
-  box-shadow: inset 3px 0 var(--accent);
 }
 
 .order-row-main,
@@ -553,6 +549,95 @@
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.order-items-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.order-items-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.order-items-editor > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.order-items-editor > header span {
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.order-items-editor > header small,
+.order-item-list > p {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.order-items-editor .icon-action {
+  flex: 0 0 auto;
+  padding: 0 10px;
+}
+
+.order-item-list {
+  display: grid;
+  gap: 8px;
+}
+
+.order-item-list article {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.5fr) minmax(80px, 1fr) 72px 72px minmax(120px, 1.3fr) 32px;
+  align-items: end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.order-item-list label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.order-item-list label > span {
+  color: var(--subtle);
+  font-size: 0.625rem;
+}
+
+.item-remove-button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgb(184 85 67 / 35%);
+  border-radius: 5px;
+  color: #b85d4a;
+  background: transparent;
+  cursor: pointer;
+}
+
+.item-remove-button:hover,
+.item-remove-button:focus-visible {
+  background: rgb(184 85 67 / 10%);
+  outline: none;
+}
+
+.item-remove-button mat-icon {
+  width: 17px;
+  height: 17px;
+  font-size: 17px;
 }
 
 .order-form input,
@@ -909,6 +994,19 @@
 
   .detail-grid {
     gap: 16px 12px;
+  }
+
+  .order-item-list article {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .order-item-list .order-item-note {
+    grid-column: 1 / -1;
+  }
+
+  .item-remove-button {
+    grid-column: 2;
+    justify-self: end;
   }
 }
 

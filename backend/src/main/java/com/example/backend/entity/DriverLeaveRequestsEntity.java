@@ -1,6 +1,7 @@
 package com.example.backend.entity;
 
 import com.example.backend.constants.LeaveRequestStatus;
+import com.example.backend.constants.LeaveRequestMode;
 import com.example.backend.constants.LeaveSubmissionSource;
 import com.example.backend.constants.LeaveType;
 import jakarta.persistence.Column;
@@ -40,6 +41,14 @@ public class DriverLeaveRequestsEntity {
     @Column(name = "driver_shift_id", nullable = false)
     private Long driverShiftId;
 
+    /** 同一假別一次勾選多天時，共用相同群組編號。單日舊流程可為 null。 */
+    @Column(name = "batch_id", length = 36)
+    private String batchId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "request_mode", nullable = false, length = 30)
+    private LeaveRequestMode requestMode = LeaveRequestMode.TEMPORARY;
+
     @Column(name = "work_date", nullable = false)
     private LocalDate workDate;
 
@@ -64,6 +73,10 @@ public class DriverLeaveRequestsEntity {
 
     @Column(name = "request_reason", nullable = false, length = 500)
     private String requestReason;
+
+    /** 司機補請假時提供的佐證照片；照片選填，實體檔案由專用儲存服務管理。 */
+    @Column(name = "evidence_photo_url", length = 500)
+    private String evidencePhotoUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -131,6 +144,10 @@ public class DriverLeaveRequestsEntity {
     public void setDriverId(Long driverId) { this.driverId = driverId; }
     public Long getDriverShiftId() { return driverShiftId; }
     public void setDriverShiftId(Long driverShiftId) { this.driverShiftId = driverShiftId; }
+    public String getBatchId() { return batchId; }
+    public void setBatchId(String batchId) { this.batchId = batchId; }
+    public LeaveRequestMode getRequestMode() { return requestMode; }
+    public void setRequestMode(LeaveRequestMode requestMode) { this.requestMode = requestMode; }
     public LocalDate getWorkDate() { return workDate; }
     public void setWorkDate(LocalDate workDate) { this.workDate = workDate; }
     public LeaveType getRequestedLeaveType() { return requestedLeaveType; }
@@ -145,6 +162,8 @@ public class DriverLeaveRequestsEntity {
     public void setLeaveEnd(LocalTime leaveEnd) { this.leaveEnd = leaveEnd; }
     public String getRequestReason() { return requestReason; }
     public void setRequestReason(String requestReason) { this.requestReason = requestReason; }
+    public String getEvidencePhotoUrl() { return evidencePhotoUrl; }
+    public void setEvidencePhotoUrl(String evidencePhotoUrl) { this.evidencePhotoUrl = evidencePhotoUrl; }
     public LeaveRequestStatus getStatus() { return status; }
     public void setStatus(LeaveRequestStatus status) { this.status = status; }
     public LeaveSubmissionSource getSubmissionSource() { return submissionSource; }

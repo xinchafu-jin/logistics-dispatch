@@ -89,7 +89,7 @@ public class SecurityConfig {
     @Bean
     public SecretKey jwtSecretKey(@Value("${app.jwt.secret}") String secret) {
         if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
-            throw new IllegalStateException("JWT_SECRET 必須至少 32 bytes");
+            throw new IllegalStateException("APP_JWT_SECRET 必須至少 32 bytes");
         }
         return new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
     }

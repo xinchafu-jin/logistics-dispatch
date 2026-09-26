@@ -129,7 +129,7 @@
 
         @if (pendingEmergencyLeaves().length) {
           <section class="notification-section" aria-labelledby="emergency-leave-heading">
-            <h3 id="emergency-leave-heading">臨時請假</h3>
+            <h3 id="emergency-leave-heading">臨時離班接手安排</h3>
             @for (leave of pendingEmergencyLeaves(); track leave.id) {
               <article class="notification-item">
                 <div>
@@ -160,7 +160,29 @@
           </section>
         }
 
-        @if (!pendingApplications().length && !pendingEmergencyLeaves().length) {
+        @if (pendingTemporaryLeaveRequests().length) {
+          <section class="notification-section" aria-labelledby="temporary-leave-review-heading">
+            <h3 id="temporary-leave-review-heading">待審當日請假</h3>
+            @for (request of pendingTemporaryLeaveRequests(); track request.id) {
+              <article class="notification-item">
+                <div>
+                  <strong>{{ request.driverName }} · {{ request.workDate }}</strong>
+                  <span>{{ temporaryLeaveRequestLabel(request) }} · {{ temporaryLeaveRequestPeriod(request) }}</span>
+                  <small>{{ formatNotificationTime(request.requestedAt) }}</small>
+                </div>
+                <div class="notification-item__actions">
+                  <button
+                    type="button"
+                    class="notification-approve"
+                    (click)="openScheduleLeaveReview()"
+                  >前往班表審核</button>
+                </div>
+              </article>
+            }
+          </section>
+        }
+
+        @if (!pendingApplications().length && !pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length) {
           <p class="notification-empty">目前沒有需要主管處理的申請。</p>
         }
       }
@@ -287,6 +309,16 @@
       <header class="chat-panel__header">
         <h2>聊天室</h2>
         <div class="chat-panel__actions">
+          <button
+            type="button"
+            matButton
+            class="chat-panel__note-button"
+            aria-label="開啟備忘錄"
+            (click)="openStickyNotes()"
+          >
+            <mat-icon aria-hidden="true">sticky_note_2</mat-icon>
+            <span>備忘錄</span>
+          </button>
           <button
             type="button"
             matIconButton
@@ -533,4 +565,89 @@
     <button type="button" matButton [mat-dialog-close]="false">取消</button>
     <button type="button" matButton="filled" [mat-dialog-close]="true">執行</button>
   </mat-dialog-actions>
+</ng-template>
+
+<ng-template #stickyNotesDialog>
+  <div mat-dialog-title class="sticky-notes__header">
+    <h2>備忘錄 <span>{{ adminStickyNotes().length }}</span></h2>
+    <button type="button" matIconButton aria-label="關閉備忘錄" mat-dialog-close>
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </div>
+  <mat-dialog-content class="sticky-notes">
+    <form class="sticky-notes__form" (ngSubmit)="saveStickyNote()">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>標題（選填）</mat-label>
+        <input matInput maxlength="120" name="stickyNoteTitle" [(ngModel)]="stickyNoteTitle" />
+      </mat-form-field>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>備忘內容</mat-label>
+        <textarea
+          matInput
+          rows="3"
+          maxlength="2000"
+          required
+          name="stickyNoteContent"
+          [(ngModel)]="stickyNoteContent"
+        ></textarea>
+      </mat-form-field>
+      <div class="sticky-notes__form-actions">
+        @if (editingStickyNoteId() !== null) {
+          <button type="button" matButton (click)="cancelStickyNoteEdit()">取消編輯</button>
+        }
+        <button type="submit" matButton="filled" [disabled]="stickyNotesLoading() || stickyNoteSaving() || !stickyNoteContent().trim()">
+          {{ stickyNoteSaving() ? '送出中…' : editingStickyNoteId() !== null ? '儲存修改' : '送出備忘錄' }}
+        </button>
+      </div>
+    </form>
+
+    @if (stickyNotesError()) {
+      <p class="sticky-notes__error" role="alert">{{ stickyNotesError() }}</p>
+    }
+    @if (stickyNotesNotice()) {
+      <p class="sticky-notes__notice" role="status">{{ stickyNotesNotice() }}</p>
+    }
+
+    <section class="sticky-notes__list" aria-label="我的備忘錄">
+      @if (stickyNotesLoading()) {
+        <p class="sticky-notes__empty" role="status">載入中…</p>
+      } @else {
+        @for (note of adminStickyNotes(); track note.id; let index = $index) {
+          <article class="sticky-notes__item">
+            <header>
+              <div>
+                <div class="sticky-notes__item-meta">
+                  <span>第 {{ index + 1 }} 則</span>
+                  <small>{{ formatNotificationTime(note.updatedAt) }}</small>
+                </div>
+                <h3>{{ note.title || '未命名備忘錄' }}</h3>
+              </div>
+              <div class="sticky-notes__item-actions">
+                <button type="button" matIconButton [attr.aria-label]="'編輯：' + (note.title || '備忘錄')" (click)="editStickyNote(note)">
+                  <mat-icon aria-hidden="true">edit</mat-icon>
+                </button>
+                @if (deletingStickyNoteId() === note.id) {
+                  <button type="button" matButton class="sticky-notes__delete-confirm" [disabled]="stickyNoteDeleteBusy()" (click)="deleteStickyNote(note)">
+                    {{ stickyNoteDeleteBusy() ? '刪除中…' : '確定刪除' }}
+                  </button>
+                  <button type="button" matIconButton aria-label="取消刪除" [disabled]="stickyNoteDeleteBusy()" (click)="cancelStickyNoteDelete()">
+                    <mat-icon aria-hidden="true">close</mat-icon>
+                  </button>
+                } @else {
+                  <button type="button" matIconButton [attr.aria-label]="'刪除：' + (note.title || '備忘錄')" (click)="deleteStickyNote(note)">
+                    <mat-icon aria-hidden="true">delete_outline</mat-icon>
+                  </button>
+                }
+              </div>
+            </header>
+            <p>{{ note.content }}</p>
+          </article>
+        } @empty {
+          @if (!stickyNotesError()) {
+            <p class="sticky-notes__empty">目前沒有備忘錄</p>
+          }
+        }
+      }
+    </section>
+  </mat-dialog-content>
 </ng-template>

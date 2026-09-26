@@ -206,6 +206,9 @@ export class DispatchDashboard implements OnInit {
   readonly confirmingOrderId = signal<number | null>(null);
   /** 看板上方的日期列：今天起到最後一天有單的日期，加上之前還沒結案的日子（後端 /dispatch/days） */
   readonly days = signal<DispatchDayDto[]>([]);
+  /** 日期列跟著手指或滑鼠微移，放開時由 CSS 回彈，讓切日有明確的方向感。 */
+  readonly daySwipeOffset = signal(0);
+  readonly isDaySwipeDragging = signal(false);
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
   private readonly routeMetricsByRouteId = signal<ReadonlyMap<number, RouteMetricsDto>>(new Map());
@@ -258,11 +261,21 @@ export class DispatchDashboard implements OnInit {
   // ── 發布 ──────────────────────────────────────────────
   readonly publishing = signal(false);
   readonly publishError = signal('');
+  private readonly publishedDates = signal<ReadonlySet<string>>(new Set());
+  private daySwipe: {pointerId: number; startX: number; lastX: number} | null = null;
+  private suppressDayCardClickUntil = 0;
 
-  /** 當天這個倉只要有一條路線已發布，整體就視為已發布狀態 */
-  readonly published = computed(() =>
-    this.routes().some((route) => route.routeStatus === 'PUBLISHED'),
-  );
+  /** 發布是整天跨倉的動作；任何倉庫看到同一天已發布，就切成唯讀看板。 */
+  readonly published = computed(() => {
+    const date = this.dispatchDate();
+    const dayStatus = this.days().find((day) => day.date === date)?.status;
+    const dayWasPublished = ['PUBLISHED', 'IN_PROGRESS', 'CLOSED', 'UNRESOLVED'].includes(dayStatus ?? '');
+    return (
+      this.publishedDates().has(date) ||
+      dayWasPublished ||
+      this.routes().some((route) => route.routeStatus === 'PUBLISHED')
+    );
+  });
 
   readonly activeTemplate = computed(
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
@@ -289,8 +302,8 @@ export class DispatchDashboard implements OnInit {
     ];
   });
 
-  /** 排車中或改派儲存中都不該再觸發排車 */
-  readonly busy = computed(() => this.optimizing() || this.saving());
+  /** 排車、改派或發布進行中都先鎖住看板操作 */
+  readonly busy = computed(() => this.optimizing() || this.saving() || this.publishing());
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -579,6 +592,100 @@ export class DispatchDashboard implements OnInit {
     this.reloadBoard();
   }
 
+  /** 日期卡仍可直接點；拖曳完成後那一次 click 不應覆蓋手勢切換的目標日期。 */
+  selectDayFromCard(date: string): void {
+    if (performance.now() < this.suppressDayCardClickUntil) {
+      return;
+    }
+    this.selectDay(date);
+  }
+
+  /** 開始拖曳日期列。只接主要指標，避免雙指或右鍵誤切日期。 */
+  startDaySwipe(event: PointerEvent): void {
+    if (this.busy() || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) {
+      return;
+    }
+
+    const strip = event.currentTarget as HTMLElement;
+    strip.setPointerCapture(event.pointerId);
+    this.daySwipe = {pointerId: event.pointerId, startX: event.clientX, lastX: event.clientX};
+    this.daySwipeOffset.set(0);
+    this.isDaySwipeDragging.set(true);
+  }
+
+  /** 跟住拖曳但限制位移，短距離移動也要有明顯回饋。 */
+  moveDaySwipe(event: PointerEvent): void {
+    const swipe = this.daySwipe;
+    if (!swipe || swipe.pointerId !== event.pointerId) {
+      return;
+    }
+
+    swipe.lastX = event.clientX;
+    const distance = event.clientX - swipe.startX;
+    this.daySwipeOffset.set(Math.max(-96, Math.min(96, distance * 0.8)));
+    if (Math.abs(distance) > 2) {
+      event.preventDefault();
+    }
+  }
+
+  finishDaySwipe(event: PointerEvent): void {
+    this.completeDaySwipe(event, true);
+  }
+
+  cancelDaySwipe(event: PointerEvent): void {
+    this.completeDaySwipe(event, false);
+  }
+
+  /** 鍵盤方向和手勢一致：左邊是往下一天，右邊是往前一天。 */
+  handleDayPickerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'ArrowLeft') {
+      this.selectRelativeDay(1);
+    } else if (event.key === 'ArrowRight') {
+      this.selectRelativeDay(-1);
+    } else {
+      return;
+    }
+    event.preventDefault();
+  }
+
+  private completeDaySwipe(event: PointerEvent, shouldSelectDay: boolean): void {
+    const swipe = this.daySwipe;
+    if (!swipe || swipe.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const strip = event.currentTarget as HTMLElement;
+    if (strip.hasPointerCapture(event.pointerId)) {
+      strip.releasePointerCapture(event.pointerId);
+    }
+
+    const distance = swipe.lastX - swipe.startX;
+    this.daySwipe = null;
+    this.isDaySwipeDragging.set(false);
+    this.daySwipeOffset.set(0);
+
+    if (!shouldSelectDay || Math.abs(distance) < 28) {
+      return;
+    }
+
+    event.preventDefault();
+    this.suppressDayCardClickUntil = performance.now() + 350;
+    // 每次手勢只跨相鄰一天，避免拉長一點就跳過中間日期卡。
+    this.selectRelativeDay(distance < 0 ? 1 : -1);
+  }
+
+  private selectRelativeDay(direction: 1 | -1): void {
+    if (this.busy()) {
+      return;
+    }
+
+    const index = this.days().findIndex((day) => day.date === this.dispatchDate());
+    const next = this.days()[index + direction];
+    if (next) {
+      this.selectDay(next.date);
+    }
+  }
+
   /** 日期列失敗不擋看板：看板本身照樣能用，只是少了切換日期的入口 */
   private loadDays(): void {
     this.api.getDispatchDays().subscribe({
@@ -657,7 +764,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 在看板上直接確認：確認後這張單會從待確認移到待排單，就能拖或自動排車 */
   confirmPendingOrder(card: BoardCard): void {
-    if (this.confirmingOrderId() !== null) {
+    if (this.published() || this.busy() || this.confirmingOrderId() !== null) {
       return;
     }
     this.confirmingOrderId.set(card.orderId);
@@ -937,7 +1044,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 「排順序」：這格的門市交給後端，照從倉庫出發最順的跑法重排。不看訂單、不寫資料庫 */
   sequenceLaneStores(route: BoardRoute): void {
-    if (route.storeIds.length < 2 || this.sequencingSlot() !== null) {
+    if (this.published() || this.busy() || route.storeIds.length < 2 || this.sequencingSlot() !== null) {
       return;
     }
     const sent = [...route.storeIds];
@@ -962,7 +1069,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 拖曳門市標籤調整順序 */
   onStoreDrop(route: BoardRoute, event: CdkDragDrop<number[]>): void {
-    if (event.previousIndex === event.currentIndex) {
+    if (this.published() || this.busy() || event.previousIndex === event.currentIndex) {
       return;
     }
     this.routes.update((lanes) =>
@@ -1027,7 +1134,7 @@ export class DispatchDashboard implements OnInit {
     const select = event.target as HTMLSelectElement;
     const storeId = Number(select.value);
     select.value = '';
-    if (!storeId || this.published()) {
+    if (!storeId || this.published() || this.busy()) {
       return;
     }
     this.routes.update((lanes) =>
@@ -1040,7 +1147,7 @@ export class DispatchDashboard implements OnInit {
   }
 
   removeLaneStore(route: BoardRoute, storeId: number): void {
-    if (this.published()) {
+    if (this.published() || this.busy()) {
       return;
     }
     this.routes.update((lanes) =>
@@ -1278,7 +1385,7 @@ export class DispatchDashboard implements OnInit {
    * 因為 reassign 本來就會重建當天路線，司機沒跟著送就會被清掉。
    */
   onDriverChange(route: BoardRoute, event: Event): void {
-    if (this.saving() || this.published()) {
+    if (this.busy() || this.published()) {
       return;
     }
 
@@ -1300,7 +1407,7 @@ export class DispatchDashboard implements OnInit {
    * 有訂單的格子不能取消車，路線一定要有車。
    */
   onVehicleChange(route: BoardRoute, event: Event): void {
-    if (this.saving() || this.published()) {
+    if (this.busy() || this.published()) {
       return;
     }
 
@@ -1325,7 +1432,7 @@ export class DispatchDashboard implements OnInit {
   }
 
   onDrop(event: CdkDragDrop<BoardCard[]>): void {
-    if (this.saving() || this.published()) {
+    if (this.busy() || this.published()) {
       return;
     }
 
@@ -1355,6 +1462,10 @@ export class DispatchDashboard implements OnInit {
    * 但里程要等後端用 OSRM 算完回來才會正確。
    */
   private submitReassign(): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
+
     const request = this.buildReassignRequest();
 
     // 班表有問題照樣存：草稿允許紅框，派出時才擋（前端 publish 預檢＋後端 DispatchGuardService）
@@ -1408,7 +1519,7 @@ export class DispatchDashboard implements OnInit {
    * 錯誤訊息會指出是哪幾台車，直接顯示給調度員。
    */
   publish(): void {
-    if (this.publishing() || this.busy()) {
+    if (this.published() || this.busy()) {
       return;
     }
 
@@ -1462,25 +1573,11 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  /** 撤回後路線回到草稿，才能再排車；代價是保護消失，下次排車會被清掉重建。 */
-  withdraw(): void {
-    if (this.publishing() || this.busy()) {
-      return;
-    }
-
-    this.publishing.set(true);
-    this.publishError.set('');
-    this.api.withdrawDispatch(this.dispatchDate()).subscribe({
-      next: (boards) => this.applyMyBoard(boards),
-      error: (error: unknown) => {
-        this.publishError.set(describeError(error));
-        this.publishing.set(false);
-      },
-    });
-  }
-
-  /** 發布／撤回／套用編組都回傳跨倉的多包，挑出目前正在看的那一倉重繪 */
+  /** 發布回傳跨倉的多包，挑出目前正在看的那一倉重繪。 */
   private applyMyBoard(boards: DispatchResultDto[]): void {
+    const date = this.dispatchDate();
+    this.publishedDates.update((dates) => new Set(dates).add(date));
+    this.loadDays();
     const mine = boards.find((board) => board.warehouse.id === this.warehouseId());
     if (mine) {
       this.applyDispatchResult(mine);
@@ -1504,9 +1601,12 @@ export class DispatchDashboard implements OnInit {
    * 點分頁＝把編組的人車載進看板的格子。
    *
    * 只改畫面、不寫資料庫：編組是人車搭配的樣板，載進來之後要不要排車，由調度員按自動排車決定。
-   * 已派出的日子看板鎖定，分頁照樣能點開看、能編輯，只是不能載入，撤回後才能載入。
+   * 已發布日期的編組入口會隱藏，方法本身也會拒絕載入。
    */
   selectTemplate(templateId: number): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
     this.templateError.set('');
     this.activeTemplateId.set(templateId);
     this.loadActiveTemplateIntoBoard();
@@ -1522,11 +1622,11 @@ export class DispatchDashboard implements OnInit {
    */
   loadActiveTemplateIntoBoard(): void {
     const template = this.activeTemplate();
-    if (!template || this.saving()) {
+    if (!template || this.busy()) {
       return;
     }
     if (this.published()) {
-      this.templateError.set('今天已派出，看板鎖定中；撤回後才能載入編組。');
+      this.templateError.set('這天已發布，看板僅供查看。');
       return;
     }
 
@@ -1578,14 +1678,10 @@ export class DispatchDashboard implements OnInit {
    * 格子清成空的、訂單全部回待排單，人車直接在格子裡選，填名稱按「儲存編組」即可。
    *
    * 看板上有東西就先跳確認：清掉的是當天這個倉的草稿路線（訂單不會刪，回到待排單），
-   * 以及還沒訂單、只存在畫面上的人車格。已派出時看板鎖定，只切分頁不清。
+   * 以及還沒訂單、只存在畫面上的人車格。發布後不允許再進入新增編組流程。
    */
   openCreateTemplate(): void {
-    if (this.saving()) {
-      return;
-    }
-    if (this.published()) {
-      this.resetTemplateTab();
+    if (this.busy() || this.published()) {
       return;
     }
     if (!this.routes().some((lane) => this.isLaneFilled(lane))) {
@@ -1608,6 +1704,9 @@ export class DispatchDashboard implements OnInit {
 
   /** 送空的 reassign 讓後端清掉當天這個倉的草稿，再用回傳結果重畫看板 */
   private clearBoard(): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
     this.resetTemplateTab();
     this.boardError.set('');
     this.boardNotices.set([]);
@@ -1627,6 +1726,9 @@ export class DispatchDashboard implements OnInit {
   }
 
   updateTemplateName(event: Event): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
     this.templateName.set((event.target as HTMLInputElement).value);
   }
 
@@ -1650,7 +1752,7 @@ export class DispatchDashboard implements OnInit {
    * 判斷新增還是修改交給程式，調度員只要記得「排好就按儲存編組」。
    */
   saveTemplate(): void {
-    if (this.templateBusy()) {
+    if (this.templateBusy() || this.published() || this.busy()) {
       return;
     }
     const boardSlots = this.boardSlotsAsTemplate();
@@ -1668,6 +1770,9 @@ export class DispatchDashboard implements OnInit {
   }
 
   private createTemplate(routes: TemplateRouteRequest[]): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
     const name = this.templateName().trim();
     if (!name) {
       this.templateError.set('請填寫編組名稱。');
@@ -1699,6 +1804,10 @@ export class DispatchDashboard implements OnInit {
    * 所以其他倉的格子要原樣帶回去，不然存一次就被刪掉。
    */
   private confirmOverwriteTemplate(template: TemplateDto, boardSlots: TemplateRouteRequest[]): void {
+    if (this.published() || this.busy()) {
+      return;
+    }
+
     const otherWarehouseSlots: TemplateRouteRequest[] = template.routes
       .filter((slot) => slot.warehouseId !== this.warehouseId())
       .map((slot) => ({
@@ -1720,7 +1829,7 @@ export class DispatchDashboard implements OnInit {
     };
     this.dialog.open(this.saveTemplateDialog(), {data}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「儲存」才是 true
-      if (!ok) {
+      if (!ok || this.published() || this.busy()) {
         return;
       }
       this.templateBusy.set(true);
@@ -1748,7 +1857,7 @@ export class DispatchDashboard implements OnInit {
 
   deleteActiveTemplate(): void {
     const template = this.activeTemplate();
-    if (!template || this.templateBusy()) {
+    if (!template || this.templateBusy() || this.published() || this.busy()) {
       return;
     }
 

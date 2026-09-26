@@ -13,11 +13,13 @@ public class DriverPhotoResourceConfig implements WebMvcConfigurer {
     private final String driverPhotoLocation;
     private final String deliveryPhotoLocation;
     private final String mileagePhotoLocation;
+    private final String leaveEvidenceLocation;
 
     public DriverPhotoResourceConfig(
             @Value("${app.storage.driver-photos-dir:uploads/driver-photos}") String storageDirectory,
             @Value("${app.storage.delivery-photos-dir:uploads/delivery-photos}") String deliveryStorageDirectory,
-            @Value("${app.storage.mileage-photos-dir:uploads/mileage-photos}") String mileageStorageDirectory
+            @Value("${app.storage.mileage-photos-dir:uploads/mileage-photos}") String mileageStorageDirectory,
+            @Value("${app.storage.leave-evidence-dir:uploads/leave-evidence}") String leaveEvidenceDirectory
     ) {
         String location = Path.of(storageDirectory)
                 .toAbsolutePath()
@@ -32,6 +34,9 @@ public class DriverPhotoResourceConfig implements WebMvcConfigurer {
         String mileageLocation = Path.of(mileageStorageDirectory)
                 .toAbsolutePath().normalize().toUri().toString();
         this.mileagePhotoLocation = mileageLocation.endsWith("/") ? mileageLocation : mileageLocation + "/";
+        String leaveLocation = Path.of(leaveEvidenceDirectory)
+                .toAbsolutePath().normalize().toUri().toString();
+        this.leaveEvidenceLocation = leaveLocation.endsWith("/") ? leaveLocation : leaveLocation + "/";
     }
 
     @Override
@@ -44,6 +49,9 @@ public class DriverPhotoResourceConfig implements WebMvcConfigurer {
                 .setCachePeriod(3600);
         registry.addResourceHandler("/uploads/mileage-photos/**")
                 .addResourceLocations(mileagePhotoLocation)
+                .setCachePeriod(3600);
+        registry.addResourceHandler("/uploads/leave-evidence/**")
+                .addResourceLocations(leaveEvidenceLocation)
                 .setCachePeriod(3600);
     }
 }

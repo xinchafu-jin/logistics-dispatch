@@ -4,6 +4,7 @@ import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
 import com.example.backend.dto.respones.DriverMessageResponse;
 import com.example.backend.dto.respones.DriverLeaveResponse;
+import com.example.backend.dto.respones.DriverLeaveBatchResponse;
 import com.example.backend.dto.respones.DriverLeaveHistoryResponse;
 import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
@@ -49,6 +50,7 @@ public class DriverPortalController {
     private final DriversService driversService;
     private final EmergencyLeaveService emergencyLeaveService;
     private final DeliveryPhotoStorageService deliveryPhotoStorageService;
+    private final LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService;
     private final DriverMessagesService driverMessagesService;
     private final DriverLeaveRequestService driverLeaveRequestService;
 
@@ -64,6 +66,7 @@ public class DriverPortalController {
             DriversService driversService,
             EmergencyLeaveService emergencyLeaveService,
             DeliveryPhotoStorageService deliveryPhotoStorageService,
+            LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService,
             DriverMessagesService driverMessagesService,
             DriverLeaveRequestService driverLeaveRequestService
     ) {
@@ -78,6 +81,7 @@ public class DriverPortalController {
         this.driversService = driversService;
         this.emergencyLeaveService = emergencyLeaveService;
         this.deliveryPhotoStorageService = deliveryPhotoStorageService;
+        this.leaveEvidencePhotoStorageService = leaveEvidencePhotoStorageService;
         this.driverMessagesService = driverMessagesService;
         this.driverLeaveRequestService = driverLeaveRequestService;
     }
@@ -175,6 +179,34 @@ public class DriverPortalController {
             @Valid @RequestBody DriverLeaveRequestDTO request
     ) {
         return driverLeaveRequestService.submit(driverId(jwt), request);
+    }
+
+    /** 預排請假：同一假別可多選未來上班日，不同假別各自形成一組。 */
+    @PostMapping("/leave-requests/planned-batches")
+    public List<DriverLeaveBatchResponse> requestPlannedLeaveBatches(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverPlannedLeaveBatchRequestDTO request
+    ) {
+        return driverLeaveRequestService.submitPlannedBatches(driverId(jwt), request);
+    }
+
+    /** 針對過去整天未打卡的上班日，補送假別、原因及選填佐證照片。 */
+    @PostMapping("/leave-requests/makeup")
+    public DriverLeaveResponse requestMakeupLeave(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverMakeupLeaveRequestDTO request
+    ) {
+        return driverLeaveRequestService.submitMakeupLeave(driverId(jwt), request);
+    }
+
+    /** 先上傳補請假佐證照片，再把回傳網址放入 makeup 請求；照片不是必填。 */
+    @PostMapping(value = "/leave-requests/evidence-photo", consumes = "multipart/form-data")
+    public PhotoUploadResponse uploadLeaveEvidencePhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        driverId(jwt);
+        return new PhotoUploadResponse(leaveEvidencePhotoStorageService.store(file));
     }
 
     /** 查詢自己的請假與主管處理結果；month 可省略，unreadOnly=true 只抓未讀通知。 */

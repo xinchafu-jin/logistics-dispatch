@@ -835,6 +835,88 @@ h2 {
   resize: vertical;
 }
 
+.loading-item-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgb(120 207 185 / 28%);
+  border-radius: 6px;
+  background: rgb(7 29 27 / 42%);
+}
+
+.loading-item-list > header,
+.loading-item-list article {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.loading-item-list > header {
+  justify-content: space-between;
+}
+
+.loading-item-list > header strong {
+  color: #d6f4e8;
+  font-size: 12px;
+}
+
+.loading-item-list > header span {
+  color: #9eb8af;
+  font-size: 10px;
+}
+
+.loading-item-list article {
+  align-items: end;
+  padding-top: 8px;
+  border-top: 1px solid rgb(158 184 175 / 18%);
+}
+
+.loading-item-list article > label {
+  flex: 0 0 88px;
+}
+
+.loading-item-list article > .loading-item-check {
+  display: flex;
+  flex: 1 1 120px;
+  align-items: center;
+  gap: 8px;
+}
+
+.delivery-action-panel .loading-item-check input {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: #70d5ba;
+}
+
+.loading-item-check span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.loading-item-check strong,
+.loading-item-check small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loading-item-check strong {
+  color: #edf6f1;
+  font-size: 12px;
+}
+
+.loading-item-check small {
+  color: #9eb8af;
+  font-size: 10px;
+}
+
+.loading-item-list article > .loading-item-note {
+  flex-basis: 120px;
+}
+
 .delivery-action-panel input:focus,
 .delivery-action-panel textarea:focus,
 .mileage-form-row input:focus {
@@ -976,6 +1058,19 @@ h2 {
   font-size: 11px;
   line-height: 1.45;
 }
+
+.leave-request-form,.driver-leave-history article { display:grid; gap:8px; padding:10px; border:1px solid #30443d; border-radius:5px; }
+.leave-request-form { background:#0d1d1a; }
+.leave-request-form label { display:grid; gap:5px; }
+.leave-request-form input,.leave-request-form select,.leave-request-form textarea { width:100%; padding:8px; color:#e0eee8; background:#0d1d1a; border:1px solid #36534a; border-radius:5px; }
+.leave-time-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.leave-unread-summary { margin:0; color:#f0c779; }
+.driver-leave-history { display:grid; gap:8px; }
+.driver-leave-history article.is-unread { border-color:#bd934a; }
+.driver-leave-history article header,.leave-request-actions { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.driver-leave-history article small,.driver-leave-history article p,.leave-request-events p { margin:0; font-size:12px; overflow-wrap:anywhere; }
+.driver-leave-history .decision-reason { color:#f0d39b; }
+.leave-request-events { display:grid; gap:5px; padding-top:7px; border-top:1px solid #30443d; }
 
 .mileage-form-row {
   display: grid;
@@ -1270,6 +1365,20 @@ dd {
   background: #155247;
 }
 
+.leave-tab-count {
+  display: inline-grid !important;
+  min-width: 16px;
+  height: 16px;
+  place-items: center;
+  margin-left: 3px;
+  padding: 0 4px;
+  border-radius: 8px;
+  color: #173129;
+  background: #f0c779;
+  font-size: 9px;
+  line-height: 1;
+}
+
 .bottom-navigation button.is-active mat-icon {
   color: #82e0c8;
 }
@@ -1508,6 +1617,25 @@ dd {
   background: #ffffff;
 }
 
+.driver-app .loading-item-list {
+  border-color: #cde2da;
+  background: #f7fcfa;
+}
+
+.driver-app .loading-item-list > header strong,
+.driver-app .loading-item-check strong {
+  color: #1d392f;
+}
+
+.driver-app .loading-item-list > header span,
+.driver-app .loading-item-check small {
+  color: #617b72;
+}
+
+.driver-app .loading-item-list article {
+  border-color: #dceae5;
+}
+
 .driver-app .delivery-cancel-button {
   border-color: #bfd5cc;
   color: #42635a;
@@ -1542,6 +1670,18 @@ dd {
   border-color: #e0b1ad;
   color: #8a4a4a;
   background: #fbedeb;
+}
+
+@media (max-width: 520px) {
+  .loading-item-list article {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+  }
+
+  .loading-item-list article > .loading-item-check,
+  .loading-item-list article > .loading-item-note {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 380px) {

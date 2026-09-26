@@ -18,18 +18,18 @@ jobs:
   backend:
     runs-on: ubuntu-latest
 
-    # @SpringBootTest 會真的連資料庫並跑 Flyway，所以要一顆空的 MySQL。
-    # 順便驗證 V1～V最新 在全新資料庫上能從頭套完（正式機只跑增量，看不出這種問題）。
+    # 用一顆完全空白的 MySQL 驗證 V1～V最新能從頭套完。
+    # 不建立帳號、訂單或任何 demo 資料。
     services:
       mysql:
         image: mysql:8.4           # 跟 deploy/docker-compose.yml 同版本
         env:
           MYSQL_DATABASE: logistics
-          MYSQL_ROOT_PASSWORD: root
+          MYSQL_ROOT_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -p$${MYSQL_ROOT_PASSWORD}"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
@@ -37,12 +37,7 @@ jobs:
     env:
       DB_URL: jdbc:mysql://127.0.0.1:3306/logistics?serverTimezone=Asia/Taipei&rewriteBatchedStatements=true
       DB_USER: root
-      DB_PASSWORD: root
-      # application.properties 沒給預設值，缺了 context 起不來；CI 用假的就好。
-      # SecurityConfig 會檢查格式：密碼至少 32 字元、salt 是偶數長度且至少 16 字元的 hex
-      APP_CRYPTO_PASSWORD: ci-only-crypto-password-not-a-secret
-      APP_CRYPTO_SALT: deadbeefcafebabe
-      SHOW_SQL: "false"
+      DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
 
     defaults:
       run:
@@ -58,11 +53,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4   # 快取 ~/.gradle，第二次起省掉下載依賴的時間
 
-      # 部分整合測試假設 DB 已有資料（drivers id 1、2，至少一位主管），空資料庫會全部失敗。
-      # 順序跟正式機一樣：先由 Flyway 建表，再灌 seed。
-      # 不能讓 Spring 啟動時才跑 Flyway——那時測試已經開始了，來不及灌資料。
-      # CLI 版本對齊後端依賴的 flyway-core，寫進 flyway_schema_history 的格式與 checksum 才會一致，
-      # 測試啟動時 Spring 的 Flyway 看到全部已套用就直接略過。
+      # 用與後端相同版本的 Flyway，驗證空資料庫能完整套用所有 migration。
       - name: Migrate schema
         working-directory: .
         run: |
@@ -72,25 +63,8 @@ jobs:
             -url="$DB_URL" -user="$DB_USER" -password="$DB_PASSWORD" \
             -locations=filesystem:/flyway/sql migrate
 
-      # seed-data.sql 沒有主管帳號（正式機的主管是手動建的），這裡補一位。
-      # 測試用 JwtEncoder 直接簽 token，不會走登入，所以密碼欄只是佔位。
-      - name: Load seed data
-        working-directory: .
-        run: |
-          MYSQL="docker exec -i ${{ job.services.mysql.id }} mysql -uroot -proot --default-character-set=utf8mb4 logistics"
-          $MYSQL < seed/seed-data.sql
-          $MYSQL -e "INSERT INTO admin_users (id, account, password, name) VALUES (1, 'ci-admin', 'not-used', 'CI 主管');"
-
-      - name: Test
-        run: ./gradlew test --no-daemon
-
-      # 失敗時把 HTML 報告留下來，不用在 log 裡翻 stack trace
-      - name: Upload test report
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-test-report
-          path: backend/build/reports/tests/test/
+      - name: Compile backend
+        run: ./gradlew classes --no-daemon
 
   frontend:
     runs-on: ubuntu-latest

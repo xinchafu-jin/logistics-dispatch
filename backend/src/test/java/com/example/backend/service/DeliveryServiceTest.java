@@ -11,12 +11,14 @@ import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.request.ArriveRequestDTO;
+import com.example.backend.dto.request.LoadingItemDTO;
 import com.example.backend.dto.request.LoadingRequestDTO;
 import com.example.backend.dto.request.NoSignatureRequestDTO;
 import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
+import com.example.backend.entity.OrderItemsEntity;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.RoutesEntity;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -118,6 +121,60 @@ class DeliveryServiceTest {
         assertNull(response.getExceptionCaseId());
         assertNull(response.getFollowUpOrderId());
         verify(exceptionCasesDAO, never()).save(any());
+    }
+
+    @Test
+    void 有內容物的訂單_逐項勾選數量相符才完成點交() {
+        OrderItemsEntity milkTea = orderItem(601L, "奶茶", 3, "箱");
+        OrderItemsEntity blackTea = orderItem(602L, "紅茶", 5, "箱");
+        order.addItem(milkTea);
+        order.addItem(blackTea);
+        LoadingRequestDTO request = loading(12, null);
+        request.setItems(List.of(loadingItem(601L, true, 3), loadingItem(602L, true, 5)));
+
+        LoadingResponse response = service.load(DRIVER_ID, request);
+
+        assertEquals(OrderStatus.LOADED, response.getOrderStatus());
+        assertTrue(response.getItemChecklistCompleted());
+        assertEquals(2, response.getCheckedItemCount());
+        assertEquals(2, response.getTotalItemCount());
+        assertEquals(3, milkTea.getLoadedQuantity());
+        assertEquals(DRIVER_ID, milkTea.getCheckedByDriverId());
+        assertNotNull(milkTea.getCheckedAt());
+    }
+
+    @Test
+    void 有內容物但漏勾一項_不能點交上車() {
+        order.addItem(orderItem(601L, "奶茶", 3, "箱"));
+        order.addItem(orderItem(602L, "紅茶", 5, "箱"));
+        LoadingRequestDTO request = loading(12, null);
+        request.setItems(List.of(loadingItem(601L, true, 3)));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> service.load(DRIVER_ID, request));
+
+        assertTrue(exception.getMessage().contains("紅茶"), exception.getMessage());
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        verify(ordersDAO, never()).save(any());
+    }
+
+    @Test
+    void 內容物實點短少_建立點交異常並保留逐項結果() {
+        order.addItem(orderItem(601L, "奶茶", 3, "箱"));
+        order.addItem(orderItem(602L, "紅茶", 5, "箱"));
+        LoadingRequestDTO request = loading(12, "紅茶短少");
+        request.setItems(List.of(loadingItem(601L, true, 3), loadingItem(602L, true, 4)));
+
+        LoadingResponse response = service.load(DRIVER_ID, request);
+
+        assertEquals(OrderStatus.FAILED, response.getOrderStatus());
+        assertFalse(response.getItemChecklistCompleted());
+        assertEquals(1, response.getCheckedItemCount());
+        assertEquals(2, response.getTotalItemCount());
+        ArgumentCaptor<ExceptionCasesEntity> savedCase = ArgumentCaptor.forClass(ExceptionCasesEntity.class);
+        verify(exceptionCasesDAO).save(savedCase.capture());
+        assertTrue(savedCase.getValue().getDescription().contains("紅茶 應到 5箱、實點 4箱"),
+                savedCase.getValue().getDescription());
     }
 
     @Test
@@ -258,6 +315,24 @@ class DeliveryServiceTest {
         request.setLoadedBoxCount(loadedBoxCount);
         request.setNotes(notes);
         return request;
+    }
+
+    private OrderItemsEntity orderItem(long id, String name, int quantity, String unit) {
+        OrderItemsEntity item = new OrderItemsEntity();
+        item.setId(id);
+        item.setItemName(name);
+        item.setExpectedQuantity(quantity);
+        item.setUnit(unit);
+        item.setSequence((int) id);
+        return item;
+    }
+
+    private LoadingItemDTO loadingItem(long id, boolean checked, Integer loadedQuantity) {
+        LoadingItemDTO item = new LoadingItemDTO();
+        item.setOrderItemId(id);
+        item.setChecked(checked);
+        item.setLoadedQuantity(loadedQuantity);
+        return item;
     }
 
     private ArriveRequestDTO arrive() {

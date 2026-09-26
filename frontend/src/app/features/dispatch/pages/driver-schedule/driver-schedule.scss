@@ -128,6 +128,9 @@
 .editor-placeholder mat-icon {
   width: 17px;
   height: 17px;
+  flex: 0 0 17px;
+  font-size: 17px;
+  line-height: 17px;
 }
 
 .icon-button:hover:not(:disabled) {
@@ -508,6 +511,174 @@ select:disabled {
   overflow: hidden;
 }
 
+.leave-review-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--metal-edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.leave-review-panel > header,
+.leave-review-list article > header,
+.leave-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.leave-review-panel h3,
+.partial-leave-editor h4 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.leave-review-panel > header > span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.leave-review-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 10px;
+}
+
+.leave-review-list article {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.leave-review-list article > header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.leave-review-list article > header strong {
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.leave-review-list article > header span,
+.leave-review-list article > p,
+.leave-review-list article label > span,
+.leave-review-history {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+.leave-review-list article > header em {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 10px;
+  color: #8c641e;
+  background: rgb(217 161 76 / 14%);
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.leave-review-list article > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.leave-review-list article > label {
+  display: grid;
+  gap: 5px;
+}
+
+.leave-review-list textarea,
+.leave-review-list select,
+.partial-leave-editor textarea {
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 9px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.75rem;
+  resize: vertical;
+}
+
+.leave-review-list select {
+  min-height: 34px;
+  padding: 0 9px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.leave-review-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.leave-reject-action,
+.history-action {
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.leave-reject-action {
+  color: #a44e39;
+  border-color: rgb(184 85 67 / 35%);
+}
+
+.leave-reject-action:hover,
+.history-action:hover {
+  background: var(--hover);
+}
+
+.leave-review-empty,
+.leave-review-error {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.leave-review-error {
+  color: #b34c3b;
+}
+
+.leave-review-history {
+  display: grid;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.leave-review-history p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .schedule-grid-panel header,
 .shift-editor header {
   justify-content: space-between;
@@ -602,6 +773,192 @@ tbody .driver-column span {
   font-weight: 500;
 }
 
+.driver-name-trigger {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 8px 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.driver-name-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.driver-leave-tooltip {
+  position: fixed;
+  z-index: 100;
+  display: grid;
+  width: min(340px, calc(100vw - 24px));
+  max-height: min(320px, calc(100vh - 24px));
+  gap: 8px;
+  overflow: auto;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  background: color-mix(in srgb, var(--app-bg) 88%, transparent);
+  border: 1px solid var(--metal-edge);
+  border-radius: 6px;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 48%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: none;
+}
+
+.driver-leave-tooltip > strong {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.driver-leave-tooltip > small {
+  color: var(--muted);
+  font-size: 0.6875rem;
+}
+
+.driver-leave-tooltip article {
+  display: grid;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+}
+
+.driver-leave-tooltip article b {
+  color: var(--text);
+  font-size: 0.6875rem;
+}
+
+.driver-leave-tooltip article span,
+.driver-leave-tooltip article small {
+  color: var(--muted);
+  font-size: 0.625rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+td.has-leave-record .shift-cell {
+  background: rgb(217 161 76 / 7%);
+}
+
+.leave-cell-marker {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  color: #755014;
+  background: #f0c778;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.leave-cell-marker mat-icon {
+  width: 11px;
+  height: 11px;
+  font-size: 11px;
+  line-height: 11px;
+}
+
+.driver-leave-detail-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--metal-edge);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.driver-leave-detail-panel > header,
+.driver-leave-detail-list article > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.driver-leave-detail-panel h3 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.driver-leave-detail-panel > p,
+.driver-leave-detail-list > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.driver-leave-detail-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  gap: 10px;
+}
+
+.driver-leave-detail-list article {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.driver-leave-detail-list article header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.driver-leave-detail-list strong {
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.driver-leave-detail-list span,
+.driver-leave-detail-list p,
+.driver-leave-detail-list a {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.driver-leave-detail-list a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.driver-leave-detail-list em {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  color: #8c641e;
+  background: rgb(217 161 76 / 14%);
+  border-radius: 10px;
+  font-size: 0.625rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.driver-leave-detail-list em.is-approved {
+  color: #2d8a73;
+  background: rgb(99 209 198 / 12%);
+}
+
+.driver-leave-detail-list em.is-rejected {
+  color: #ad5147;
+  background: rgb(184 85 67 / 12%);
+}
+
 td.is-weekend,
 thead th.is-weekend {
   background: rgb(217 141 87 / 4%);
@@ -652,6 +1009,7 @@ thead th.is-sunday {
 .shift-cell.is-unassigned { color: #d5a6a0; }
 .missing-shift { color: var(--subtle); font-size: 0.75rem; }
 .no-shifts { padding: 28px; color: var(--muted); font-size: 0.8125rem; }
+.schedule-grid-scroll tbody td { position: relative; }
 
 .shift-editor {
   width: min(100%, 308px);
@@ -681,6 +1039,57 @@ thead th.is-sunday {
   display: grid;
   gap: 13px;
   padding: 18px;
+}
+
+.partial-leave-editor {
+  display: grid;
+  gap: 10px;
+  margin: 0 14px 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.partial-leave-editor .page-eyebrow {
+  margin-bottom: -6px;
+}
+
+.partial-leave-editor > p:not(.page-eyebrow) {
+  margin: -3px 0 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.partial-leave-editor label {
+  display: grid;
+  gap: 5px;
+}
+
+.partial-leave-editor label > span {
+  color: var(--field-label);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.partial-leave-editor select,
+.partial-leave-editor input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 9px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.partial-leave-editor .time-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .published-editor-note {

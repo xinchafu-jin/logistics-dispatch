@@ -8,9 +8,14 @@ import {MatInputModule} from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   DriverDto,
+  DriverLeaveHistoryDto,
+  DriverLeaveBatchDto,
+  DriverLeaveRequestDto,
+  DriverMonthlyLeaveSummaryDto,
   DriverShiftDto,
   DriverShiftUpdateRequest,
   ScheduleMonthDto,
+  LeaveType,
   ShiftType,
 } from '../../../../core/services/dispatch-api.models';
 
@@ -50,6 +55,13 @@ interface ShiftEditorForm {
   workEnd: string;
   overtimeMinutes: string;
   changeReason: string;
+}
+
+interface PlannedPartialLeaveForm {
+  leaveType: Exclude<LeaveType, 'ABSENT'>;
+  leaveStart: string;
+  leaveEnd: string;
+  reason: string;
 }
 
 const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
@@ -107,6 +119,41 @@ export class DriverSchedule implements OnInit {
   readonly scheduleMissing = signal(false);
   readonly errorMessage = signal('');
   readonly actionMessage = signal('');
+  readonly pendingLeaveRequests = signal<DriverLeaveRequestDto[]>([]);
+  readonly pendingLeaveBatches = signal<DriverLeaveBatchDto[]>([]);
+  readonly leaveReviewReasons = signal<Record<number, string>>({});
+  readonly leaveReviewErrors = signal<Record<number, string>>({});
+  readonly reviewingLeaveId = signal<number | null>(null);
+  readonly batchReviewReasons = signal<Record<string, string>>({});
+  readonly batchReviewErrors = signal<Record<string, string>>({});
+  readonly batchLeaveTypes = [
+    {value: 'SICK' as const, label: '病假'},
+    {value: 'ANNUAL' as const, label: '年假'},
+    {value: 'PERSONAL' as const, label: '事假'},
+    {value: 'SPECIAL' as const, label: '特殊事由'},
+    {value: 'MENSTRUAL' as const, label: '生理假'},
+    {value: 'BEREAVEMENT' as const, label: '喪假'},
+  ];
+  readonly batchTypeSelections = signal<Record<string, Exclude<LeaveType, 'ABSENT'>>>({});
+  readonly reviewingBatchId = signal<string | null>(null);
+  readonly leaveReviewLoading = signal(false);
+  readonly leaveReviewLoadError = signal('');
+  readonly expandedReviewHistoryId = signal<number | null>(null);
+  readonly leaveRequestHistories = signal<Record<number, DriverLeaveHistoryDto[]>>({});
+  readonly leaveHistoryErrors = signal<Record<number, string>>({});
+  readonly leaveHistoryLoadingIds = signal<number[]>([]);
+  readonly monthlyLeaveSummaries = signal<Record<number, DriverMonthlyLeaveSummaryDto>>({});
+  readonly monthlyLeaveLoadingIds = signal<number[]>([]);
+  readonly monthlyLeaveErrors = signal<Record<number, string>>({});
+  readonly hoveredDriverId = signal<number | null>(null);
+  readonly selectedLeaveDetailDriverId = signal<number | null>(null);
+  readonly leaveTooltipPosition = signal({top: 0, left: 0});
+  readonly plannedPartialLeaveForm = signal<PlannedPartialLeaveForm>({
+    leaveType: 'SPECIAL',
+    leaveStart: '',
+    leaveEnd: '',
+    reason: '',
+  });
   /** 預設先選週一至週五，主管最常用的週班規則只需要按一次即可套用。 */
   readonly selectedWeekdayIndexes = signal<number[]>([...workdayIndexes]);
   readonly selectedBatchDriverIds = signal<number[]>([]);
@@ -152,6 +199,12 @@ export class DriverSchedule implements OnInit {
       };
     });
   });
+  readonly hoveredDriver = computed<DriverScheduleRow | null>(() => {
+    const driverId = this.hoveredDriverId();
+    return driverId === null
+      ? null
+      : this.rows().find((row) => row.driverId === driverId) ?? null;
+  });
   readonly summary = computed(() => {
     const shifts = this.shifts();
     const regularDayShifts = shifts.filter((shift) => !this.isSundayDate(shift.workDate));
@@ -183,6 +236,8 @@ export class DriverSchedule implements OnInit {
   ngOnInit(): void {
     this.loadDrivers();
     this.loadMonth();
+    this.loadPendingLeaveRequests();
+    this.loadPendingLeaveBatches();
   }
 
   protected moveMonth(offset: number): void {
@@ -191,6 +246,7 @@ export class DriverSchedule implements OnInit {
     this.selectedMonth.set(
       `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`,
     );
+    this.monthlyLeaveSummaries.set({});
     this.resetSelection();
     this.loadMonth();
   }
@@ -204,6 +260,7 @@ export class DriverSchedule implements OnInit {
     }
 
     this.selectedMonth.set(month);
+    this.monthlyLeaveSummaries.set({});
     this.resetSelection();
     this.loadMonth();
   }
@@ -236,6 +293,8 @@ export class DriverSchedule implements OnInit {
     }
     this.loadDrivers();
     this.loadMonth();
+    this.loadPendingLeaveRequests();
+    this.loadPendingLeaveBatches();
   }
 
   protected isWeekdaySelected(weekdayIndex: number): boolean {
@@ -329,6 +388,333 @@ export class DriverSchedule implements OnInit {
     this.editorForm.set(this.toEditorForm(shift));
     this.errorMessage.set('');
     this.actionMessage.set('');
+  }
+
+  protected updateLeaveReviewReason(requestId: number, event: Event): void {
+    const reason = (event.target as HTMLTextAreaElement).value;
+    this.leaveReviewReasons.update((reasons) => ({...reasons, [requestId]: reason}));
+    this.leaveReviewErrors.update((errors) => ({...errors, [requestId]: ''}));
+  }
+
+  protected reviewLeaveRequest(
+    request: DriverLeaveRequestDto,
+    decision: 'approve' | 'reject',
+  ): void {
+    const reason = (this.leaveReviewReasons()[request.id] ?? '').trim();
+    if (!reason) {
+      this.leaveReviewErrors.update((errors) => ({
+        ...errors,
+        [request.id]: '請填寫給司機看的處理理由。',
+      }));
+      return;
+    }
+    if (this.reviewingLeaveId() !== null) {
+      return;
+    }
+
+    this.reviewingLeaveId.set(request.id);
+    this.leaveReviewErrors.update((errors) => ({...errors, [request.id]: ''}));
+    const operation = decision === 'approve'
+      ? this.api.approveLeaveRequest(request.id, reason)
+      : this.api.rejectLeaveRequest(request.id, reason);
+    operation.subscribe({
+      next: (updated) => {
+        this.pendingLeaveRequests.update((items) => items.filter((item) => item.id !== updated.id));
+        if (decision === 'approve' && updated.requestMode === 'PREPLANNED') {
+          this.loadMonth();
+        }
+        this.actionMessage.set(
+          decision === 'approve'
+            ? `${updated.driverName} ${updated.workDate} 的申請已核准，處理理由會同步給司機。`
+            : `${updated.driverName} ${updated.workDate} 的申請已退回，處理理由會同步給司機。`,
+        );
+        this.leaveReviewReasons.update((reasons) => {
+          const next = {...reasons};
+          delete next[request.id];
+          return next;
+        });
+        this.reviewingLeaveId.set(null);
+        this.reloadDriverMonthlyLeaveSummary(updated.driverId);
+      },
+      error: (error: unknown) => {
+        this.leaveReviewErrors.update((errors) => ({
+          ...errors,
+          [request.id]: this.readError(error, '請假審核未完成。'),
+        }));
+        this.reviewingLeaveId.set(null);
+      },
+    });
+  }
+
+  protected updateBatchReviewReason(batchId: string, event: Event): void {
+    const reason = (event.target as HTMLTextAreaElement).value;
+    this.batchReviewReasons.update((reasons) => ({...reasons, [batchId]: reason}));
+    this.batchReviewErrors.update((errors) => ({...errors, [batchId]: ''}));
+  }
+
+  protected selectedBatchLeaveType(batch: DriverLeaveBatchDto): Exclude<LeaveType, 'ABSENT'> {
+    return this.batchTypeSelections()[batch.batchId]
+      ?? batch.leaveType as Exclude<LeaveType, 'ABSENT'>;
+  }
+
+  protected updateBatchLeaveType(batchId: string, event: Event): void {
+    const leaveType = (event.target as HTMLSelectElement).value as Exclude<LeaveType, 'ABSENT'>;
+    this.batchTypeSelections.update((types) => ({...types, [batchId]: leaveType}));
+    this.batchReviewErrors.update((errors) => ({...errors, [batchId]: ''}));
+  }
+
+  protected correctLeaveBatchType(batch: DriverLeaveBatchDto): void {
+    const leaveType = this.selectedBatchLeaveType(batch);
+    const reason = (this.batchReviewReasons()[batch.batchId] ?? '').trim();
+    if (leaveType === batch.leaveType) {
+      this.batchReviewErrors.update((errors) => ({...errors, [batch.batchId]: '請先選擇不同的假別。'}));
+      return;
+    }
+    if (!reason) {
+      this.batchReviewErrors.update((errors) => ({
+        ...errors,
+        [batch.batchId]: '改假別前，請填寫會提供給司機的原因。',
+      }));
+      return;
+    }
+    if (this.reviewingBatchId() !== null) {
+      return;
+    }
+
+    this.reviewingBatchId.set(batch.batchId);
+    this.batchReviewErrors.update((errors) => ({...errors, [batch.batchId]: ''}));
+    this.api.correctLeaveBatchType(batch.batchId, leaveType, reason).subscribe({
+      next: (updated) => {
+        this.pendingLeaveBatches.update((items) =>
+          items.map((item) => item.batchId === updated.batchId ? updated : item),
+        );
+        this.batchTypeSelections.update((types) => {
+          const next = {...types};
+          delete next[batch.batchId];
+          return next;
+        });
+        this.batchReviewReasons.update((reasons) => {
+          const next = {...reasons};
+          delete next[batch.batchId];
+          return next;
+        });
+        this.actionMessage.set(`${updated.driverName} 的預排請假已改為${this.leaveTypeLabel(updated.leaveType)}。`);
+        this.reviewingBatchId.set(null);
+      },
+      error: (error: unknown) => {
+        this.batchReviewErrors.update((errors) => ({
+          ...errors,
+          [batch.batchId]: this.readError(error, '改假別未完成。'),
+        }));
+        this.reviewingBatchId.set(null);
+      },
+    });
+  }
+
+  protected reviewLeaveBatch(batch: DriverLeaveBatchDto, decision: 'approve' | 'reject'): void {
+    const reason = (this.batchReviewReasons()[batch.batchId] ?? '').trim();
+    if (!reason) {
+      this.batchReviewErrors.update((errors) => ({
+        ...errors,
+        [batch.batchId]: '請填寫給司機看的處理理由。',
+      }));
+      return;
+    }
+    if (this.reviewingBatchId() !== null) {
+      return;
+    }
+
+    this.reviewingBatchId.set(batch.batchId);
+    const operation = decision === 'approve'
+      ? this.api.approveLeaveBatch(batch.batchId, reason)
+      : this.api.rejectLeaveBatch(batch.batchId, reason);
+    operation.subscribe({
+      next: (updated) => {
+        this.pendingLeaveBatches.update((items) =>
+          items.filter((item) => item.batchId !== updated.batchId),
+        );
+        this.batchReviewReasons.update((reasons) => {
+          const next = {...reasons};
+          delete next[batch.batchId];
+          return next;
+        });
+        this.reloadDriverMonthlyLeaveSummary(updated.driverId);
+        if (decision === 'approve') {
+          this.loadMonth();
+        }
+        this.actionMessage.set(
+          decision === 'approve'
+            ? `${updated.driverName} 的 ${updated.workDates.length} 天預排請假已核准。`
+            : `${updated.driverName} 的預排請假已退回。`,
+        );
+        this.reviewingBatchId.set(null);
+      },
+      error: (error: unknown) => {
+        this.batchReviewErrors.update((errors) => ({
+          ...errors,
+          [batch.batchId]: this.readError(error, '預排請假審核未完成。'),
+        }));
+        this.reviewingBatchId.set(null);
+      },
+    });
+  }
+
+  protected toggleReviewHistory(request: DriverLeaveRequestDto): void {
+    if (this.expandedReviewHistoryId() === request.id) {
+      this.expandedReviewHistoryId.set(null);
+      return;
+    }
+    this.expandedReviewHistoryId.set(request.id);
+    if (this.leaveRequestHistories()[request.id]) {
+      return;
+    }
+    this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
+    this.leaveHistoryLoadingIds.update((ids) => [...ids, request.id]);
+    this.api.getLeaveRequestHistory(request.id).subscribe({
+      next: (events) => {
+        this.leaveRequestHistories.update((histories) => ({...histories, [request.id]: events}));
+        this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
+        this.leaveHistoryLoadingIds.update((ids) => ids.filter((id) => id !== request.id));
+      },
+      error: (error: unknown) => {
+        this.leaveHistoryErrors.update((errors) => ({
+          ...errors,
+          [request.id]: this.readError(error, '無法取得請假歷程。'),
+        }));
+        this.leaveHistoryLoadingIds.update((ids) => ids.filter((id) => id !== request.id));
+      },
+    });
+  }
+
+  protected updatePlannedLeaveField<K extends keyof PlannedPartialLeaveForm>(
+    field: K,
+    event: Event,
+  ): void {
+    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+    this.plannedPartialLeaveForm.update((form) => ({...form, [field]: target.value}));
+    this.errorMessage.set('');
+  }
+
+  protected createPlannedPartialLeave(): void {
+    const shift = this.selectedShift();
+    const form = this.plannedPartialLeaveForm();
+    const reason = form.reason.trim();
+    if (!shift || shift.shiftType !== 'WORK' || this.saving()) {
+      return;
+    }
+    if (!form.leaveStart || !form.leaveEnd || form.leaveEnd <= form.leaveStart || !reason) {
+      this.errorMessage.set('請確認預排假起訖時間有效，並填寫原因。');
+      return;
+    }
+
+    this.saving.set(true);
+    this.errorMessage.set('');
+    this.actionMessage.set('');
+    this.api.createPlannedPartialLeave({
+      driverId: shift.driverId,
+      workDate: shift.workDate,
+      leaveType: form.leaveType,
+      leaveStart: form.leaveStart,
+      leaveEnd: form.leaveEnd,
+      reason,
+    }).subscribe({
+      next: (request) => {
+        this.plannedPartialLeaveForm.update((value) => ({...value, reason: ''}));
+        this.actionMessage.set(`${request.driverName} ${request.workDate} 的部分時段預排假已建立。`);
+        this.saving.set(false);
+        this.reloadDriverMonthlyLeaveSummary(request.driverId);
+      },
+      error: (error: unknown) => {
+        this.errorMessage.set(this.readError(error, '無法建立部分時段預排假。'));
+        this.saving.set(false);
+      },
+    });
+  }
+
+  protected showDriverLeaveTooltip(driverId: number, event: MouseEvent | FocusEvent): void {
+    const target = event.currentTarget as HTMLElement | null;
+    if (target && typeof window !== 'undefined') {
+      const rect = target.getBoundingClientRect();
+      const width = Math.min(340, window.innerWidth - 24);
+      const gap = 8;
+      this.leaveTooltipPosition.set({
+        // 對齊司機所在列，往右覆蓋日期格；班表再靠近畫面底部也不改放到姓名上方。
+        top: Math.max(gap, rect.top),
+        left: Math.max(gap, Math.min(rect.right + gap, window.innerWidth - width - gap)),
+      });
+    }
+    this.hoveredDriverId.set(driverId);
+    this.loadDriverMonthlyLeaveSummary(driverId);
+  }
+
+  protected hideDriverLeaveTooltip(): void {
+    this.hoveredDriverId.set(null);
+  }
+
+  protected toggleDriverLeaveDetails(driverId: number): void {
+    this.selectedLeaveDetailDriverId.update((selected) => selected === driverId ? null : driverId);
+    this.loadDriverMonthlyLeaveSummary(driverId);
+  }
+
+  protected driverName(driverId: number): string {
+    return this.drivers().find((driver) => driver.id === driverId)?.name ?? `司機 #${driverId}`;
+  }
+
+  protected rosterLeaveRecordsForCell(driverId: number, workDate: string): DriverLeaveRequestDto[] {
+    return this.monthlyLeaveSummaries()[driverId]?.records.filter(
+      (request) => request.workDate === workDate && this.isRosterVisibleLeave(request),
+    ) ?? [];
+  }
+
+  protected isRosterVisibleLeave(request: DriverLeaveRequestDto): boolean {
+    return request.status === 'APPROVED'
+      && (request.requestMode === 'PREPLANNED' || request.requestMode === 'ADMIN_PLANNED_PARTIAL');
+  }
+
+  protected formatLeaveHistoryTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat('zh-TW', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  }
+
+  protected leaveTypeLabel(type: LeaveType): string {
+    return {
+      SICK: '病假',
+      ANNUAL: '年假',
+      PERSONAL: '事假',
+      SPECIAL: '特殊事由',
+      MENSTRUAL: '生理假',
+      BEREAVEMENT: '喪假',
+      ABSENT: '曠職',
+    }[type];
+  }
+
+  protected leaveModeLabel(request: DriverLeaveRequestDto): string {
+    return {
+      PREPLANNED: '預排請假',
+      TEMPORARY: '當日特殊事由',
+      MAKEUP: '事後補請',
+      SYSTEM_NO_SHOW: '待說明特殊事由',
+      ADMIN_PLANNED_PARTIAL: '主管預排時段假',
+    }[request.requestMode];
+  }
+
+  protected leaveStatusLabel(status: DriverLeaveRequestDto['status']): string {
+    return status === 'PENDING' ? '待審' : status === 'APPROVED' ? '已核准' : '已退回';
+  }
+
+  protected isLeaveHistoryLoading(requestId: number): boolean {
+    return this.leaveHistoryLoadingIds().includes(requestId);
+  }
+
+  protected isMonthlyLeaveLoading(driverId: number): boolean {
+    return this.monthlyLeaveLoadingIds().includes(driverId);
   }
 
   protected changeShiftType(event: Event): void {
@@ -499,6 +885,70 @@ export class DriverSchedule implements OnInit {
 
   protected formatTime(value: string | null): string {
     return value ? value.slice(0, 5) : '--:--';
+  }
+
+  private loadPendingLeaveRequests(): void {
+    this.leaveReviewLoading.set(true);
+    this.leaveReviewLoadError.set('');
+    this.api.getPendingLeaveRequests().subscribe({
+      next: (requests) => {
+        this.pendingLeaveRequests.set(
+          requests.filter((request) => !request.batchId).sort((left, right) =>
+            left.workDate.localeCompare(right.workDate)
+            || left.requestedAt.localeCompare(right.requestedAt),
+          ),
+        );
+        this.leaveReviewLoading.set(false);
+      },
+      error: (error: unknown) => {
+        this.leaveReviewLoadError.set(this.readError(error, '無法取得待審請假。'));
+        this.leaveReviewLoading.set(false);
+      },
+    });
+  }
+
+  private loadPendingLeaveBatches(): void {
+    this.api.getPendingLeaveBatches().subscribe({
+      next: (batches) => {
+        this.pendingLeaveBatches.set(
+          [...batches].sort((left, right) => left.requestedAt.localeCompare(right.requestedAt)),
+        );
+      },
+      error: (error: unknown) => {
+        this.leaveReviewLoadError.set(this.readError(error, '無法取得待審預排請假。'));
+      },
+    });
+  }
+
+  private loadDriverMonthlyLeaveSummary(driverId: number): void {
+    if (this.monthlyLeaveSummaries()[driverId] || this.isMonthlyLeaveLoading(driverId)) {
+      return;
+    }
+    this.monthlyLeaveLoadingIds.update((ids) => [...ids, driverId]);
+    this.monthlyLeaveErrors.update((errors) => ({...errors, [driverId]: ''}));
+    this.api.getDriverMonthlyLeaveSummary(driverId, this.selectedMonth()).subscribe({
+      next: (summary) => {
+        this.monthlyLeaveSummaries.update((items) => ({...items, [driverId]: summary}));
+        this.monthlyLeaveLoadingIds.update((ids) => ids.filter((id) => id !== driverId));
+      },
+      error: (error: unknown) => {
+        this.monthlyLeaveErrors.update((errors) => ({
+          ...errors,
+          [driverId]: this.readError(error, '無法取得本月請假摘要。'),
+        }));
+        this.monthlyLeaveLoadingIds.update((ids) => ids.filter((id) => id !== driverId));
+      },
+    });
+  }
+
+  private reloadDriverMonthlyLeaveSummary(driverId: number): void {
+    this.monthlyLeaveSummaries.update((items) => {
+      const next = {...items};
+      delete next[driverId];
+      return next;
+    });
+    this.monthlyLeaveErrors.update((errors) => ({...errors, [driverId]: ''}));
+    this.loadDriverMonthlyLeaveSummary(driverId);
   }
 
   private applyBatchRules(rules: readonly BatchRule[], successMessage: string): void {

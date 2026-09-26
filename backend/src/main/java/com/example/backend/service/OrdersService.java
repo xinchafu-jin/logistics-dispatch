@@ -6,7 +6,9 @@ import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.constants.OrderReviewAction;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.dto.request.OrderReviewRequestDTO;
+import com.example.backend.dto.request.OrderItemDTO;
 import com.example.backend.dto.request.OrdersDTO;
+import com.example.backend.entity.OrderItemsEntity;
 import com.example.backend.entity.OrdersEntity;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Order;
@@ -141,6 +143,7 @@ public class OrdersService {
         entity.setWarehouseId(dto.getWarehouseId());
         entity.setSourceVendor(dto.getSourceVendor());
         entity.setItemDescription(dto.getItemDescription());
+        applyItems(dto.getItems(), entity);
         entity.setBoxCount(dto.getBoxCount());
         entity.setNotes(dto.getNotes());
         entity.setDeliveryDate(dto.getDeliveryDate());
@@ -149,6 +152,26 @@ public class OrdersService {
         entity.setSequence(dto.getSequence());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
+        }
+    }
+
+    private void applyItems(List<OrderItemDTO> itemDTOs, OrdersEntity order) {
+        // 舊版呼叫端沒有 items 欄位時保留既有明細；明確傳 [] 才代表清空。
+        if (itemDTOs == null) {
+            return;
+        }
+        order.getItems().clear();
+        int fallbackSequence = 1;
+        for (OrderItemDTO itemDTO : itemDTOs) {
+            OrderItemsEntity item = new OrderItemsEntity();
+            item.setProductCode(trimToNull(itemDTO.getProductCode()));
+            item.setItemName(itemDTO.getItemName().trim());
+            item.setExpectedQuantity(itemDTO.getExpectedQuantity());
+            item.setUnit(itemDTO.getUnit().trim());
+            item.setSequence(itemDTO.getSequence() == null ? fallbackSequence : itemDTO.getSequence());
+            item.setNotes(trimToNull(itemDTO.getNotes()));
+            order.addItem(item);
+            fallbackSequence++;
         }
     }
 
@@ -176,6 +199,9 @@ public class OrdersService {
         }
         if (request.getItemDescription() != null) {
             entity.setItemDescription(request.getItemDescription().trim());
+        }
+        if (request.getItems() != null) {
+            applyItems(request.getItems(), entity);
         }
         if (request.getNotes() != null) {
             entity.setNotes(request.getNotes().trim());
@@ -223,6 +249,7 @@ public class OrdersService {
         dto.setWarehouseId(entity.getWarehouseId());
         dto.setSourceVendor(entity.getSourceVendor());
         dto.setItemDescription(entity.getItemDescription());
+        dto.setItems(entity.getItems().stream().map(this::toItemDTO).toList());
         dto.setBoxCount(entity.getBoxCount());
         dto.setNotes(entity.getNotes());
         dto.setDeliveryDate(entity.getDeliveryDate());
@@ -233,5 +260,25 @@ public class OrdersService {
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
+    }
+
+    private OrderItemDTO toItemDTO(OrderItemsEntity entity) {
+        OrderItemDTO dto = new OrderItemDTO();
+        dto.setId(entity.getId());
+        dto.setProductCode(entity.getProductCode());
+        dto.setItemName(entity.getItemName());
+        dto.setExpectedQuantity(entity.getExpectedQuantity());
+        dto.setUnit(entity.getUnit());
+        dto.setSequence(entity.getSequence());
+        dto.setNotes(entity.getNotes());
+        dto.setLoadedQuantity(entity.getLoadedQuantity());
+        dto.setCheckedAt(entity.getCheckedAt());
+        dto.setCheckedByDriverId(entity.getCheckedByDriverId());
+        dto.setLoadingNotes(entity.getLoadingNotes());
+        return dto;
+    }
+
+    private String trimToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

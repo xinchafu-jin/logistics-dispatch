@@ -20,6 +20,7 @@ public interface DriverLeaveRequestsDAO extends JpaRepository<DriverLeaveRequest
     List<DriverLeaveRequestsEntity> findByDriverIdAndWorkDateOrderByRequestedAtAsc(
             Long driverId, LocalDate workDate);
     List<DriverLeaveRequestsEntity> findByStatusOrderByRequestedAtAsc(LeaveRequestStatus status);
+    List<DriverLeaveRequestsEntity> findByBatchIdOrderByWorkDateAsc(String batchId);
     boolean existsByDriverIdAndWorkDateAndStatus(
             Long driverId, LocalDate workDate, LeaveRequestStatus status);
     boolean existsByDriverShiftIdAndSubmissionSource(
@@ -28,4 +29,17 @@ public interface DriverLeaveRequestsDAO extends JpaRepository<DriverLeaveRequest
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select request from DriverLeaveRequestsEntity request where request.id = :id")
     Optional<DriverLeaveRequestsEntity> findForUpdate(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from DriverLeaveRequestsEntity request "
+            + "where request.driverId = :driverId and request.workDate = :workDate "
+            + "order by request.requestedAt asc")
+    List<DriverLeaveRequestsEntity> findForUpdateByDriverIdAndWorkDate(
+            @Param("driverId") Long driverId,
+            @Param("workDate") LocalDate workDate);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select request from DriverLeaveRequestsEntity request "
+            + "where request.batchId = :batchId order by request.workDate asc")
+    List<DriverLeaveRequestsEntity> findBatchForUpdate(@Param("batchId") String batchId);
 }
