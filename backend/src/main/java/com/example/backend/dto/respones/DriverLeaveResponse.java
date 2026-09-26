@@ -1,6 +1,7 @@
 package com.example.backend.dto.respones;
 
 import com.example.backend.constants.LeaveRequestStatus;
+import com.example.backend.constants.LeaveRequestMode;
 import com.example.backend.constants.LeaveSubmissionSource;
 import com.example.backend.constants.LeaveType;
 
@@ -10,6 +11,8 @@ import java.time.LocalTime;
 
 public record DriverLeaveResponse(
         Long id,
+        String batchId,
+        LeaveRequestMode requestMode,
         Long driverId,
         String driverName,
         Long driverShiftId,
@@ -20,6 +23,7 @@ public record DriverLeaveResponse(
         LocalTime leaveStart,
         LocalTime leaveEnd,
         String requestReason,
+        String evidencePhotoUrl,
         LeaveRequestStatus status,
         LeaveSubmissionSource submissionSource,
         String decisionReason,

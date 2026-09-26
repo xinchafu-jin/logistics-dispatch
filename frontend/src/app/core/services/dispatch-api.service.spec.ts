@@ -57,6 +57,40 @@ describe('DispatchApiService', () => {
     request.flush([]);
   });
 
+  it('uses the administrator sticky-note CRUD endpoints', () => {
+    const note = {title: '回訪', content: '下午聯絡門市', color: '#dff3ee', sortOrder: 0};
+    service.getAdminStickyNotes().subscribe();
+    service.createAdminStickyNote(note).subscribe();
+    service.updateAdminStickyNote(9, {...note, content: '明早聯絡門市'}).subscribe();
+    service.deleteAdminStickyNote(9).subscribe();
+
+    const list = httpTesting.expectOne(
+      (request) => request.url === '/api/admin-sticky-notes' && request.method === 'GET',
+    );
+    expect(list.request.method).toBe('GET');
+    list.flush([]);
+
+    const create = httpTesting.expectOne(
+      (request) => request.url === '/api/admin-sticky-notes' && request.method === 'POST',
+    );
+    expect(create.request.method).toBe('POST');
+    expect(create.request.body).toEqual(note);
+    create.flush({id: 9, ...note, createdAt: '', updatedAt: '', version: 0});
+
+    const update = httpTesting.expectOne(
+      (request) => request.url === '/api/admin-sticky-notes/9' && request.method === 'PUT',
+    );
+    expect(update.request.method).toBe('PUT');
+    expect(update.request.body.content).toBe('明早聯絡門市');
+    update.flush({id: 9, ...note, content: '明早聯絡門市', createdAt: '', updatedAt: '', version: 1});
+
+    const remove = httpTesting.expectOne(
+      (request) => request.url === '/api/admin-sticky-notes/9' && request.method === 'DELETE',
+    );
+    expect(remove.request.method).toBe('DELETE');
+    remove.flush(null);
+  });
+
   it('reads due delivery exceptions and confirms one through the administrator contract', () => {
     service.getPendingExceptionConfirmations().subscribe((incidents) => expect(incidents).toEqual([]));
     service.confirmExceptionCase(47).subscribe();
@@ -118,6 +152,55 @@ describe('DispatchApiService', () => {
     expect(rejectLeave.request.method).toBe('PATCH');
     expect(rejectLeave.request.body).toEqual({ reason: '請補充請假原因' });
     rejectLeave.flush({ id: 32, status: 'REJECTED' });
+  });
+
+  it('uses the regular leave review, history, calendar, and partial-day contracts', () => {
+    const partial = {
+      driverId: 8,
+      workDate: '2026-09-28',
+      leaveType: 'ANNUAL' as const,
+      leaveStart: '13:00',
+      leaveEnd: '17:00',
+      reason: '家庭行程',
+    };
+
+    service.getPendingLeaveRequests().subscribe();
+    service.getDriverMonthlyLeaveSummary(8, '2026-09').subscribe();
+    service.getLeaveRequestHistory(23).subscribe();
+    service.approveLeaveRequest(23, '已安排代班').subscribe();
+    service.rejectLeaveRequest(24, '當日人力不足，請改期').subscribe();
+    service.createPlannedPartialLeave(partial).subscribe();
+
+    const pending = httpTesting.expectOne('/api/leave-requests/pending');
+    expect(pending.request.method).toBe('GET');
+    pending.flush([]);
+
+    const monthly = httpTesting.expectOne(
+      (request) =>
+        request.url === '/api/leave-requests/drivers/8/monthly' &&
+        request.params.get('month') === '2026-09',
+    );
+    expect(monthly.request.method).toBe('GET');
+    monthly.flush({ driverId: 8, month: '2026-09', records: [] });
+
+    const history = httpTesting.expectOne('/api/leave-requests/23/history');
+    expect(history.request.method).toBe('GET');
+    history.flush([]);
+
+    const approve = httpTesting.expectOne('/api/leave-requests/23/approve');
+    expect(approve.request.method).toBe('PATCH');
+    expect(approve.request.body).toEqual({ reason: '已安排代班' });
+    approve.flush({ id: 23, status: 'APPROVED', decisionReason: '已安排代班' });
+
+    const reject = httpTesting.expectOne('/api/leave-requests/24/reject');
+    expect(reject.request.method).toBe('PATCH');
+    expect(reject.request.body).toEqual({ reason: '當日人力不足，請改期' });
+    reject.flush({ id: 24, status: 'REJECTED', decisionReason: '當日人力不足，請改期' });
+
+    const createPartial = httpTesting.expectOne('/api/leave-requests/planned-partial');
+    expect(createPartial.request.method).toBe('POST');
+    expect(createPartial.request.body).toEqual(partial);
+    createPartial.flush({ id: 25, status: 'APPROVED', decisionReason: '主管預排' });
   });
 
   it('uses batch order, administrator, and per-driver GPS contracts', () => {

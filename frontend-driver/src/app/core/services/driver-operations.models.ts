@@ -1,4 +1,18 @@
 export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
+export type AttendancePunctualityStatus =
+  | 'ON_TIME'
+  | 'LATE_EXCUSED'
+  | 'LATE'
+  | 'LEAVE_REQUIRED'
+  | 'LEAVE_COVERED';
+export type LeaveType = 'SICK' | 'ANNUAL' | 'PERSONAL' | 'SPECIAL' | 'MENSTRUAL' | 'BEREAVEMENT' | 'ABSENT';
+export type LeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type LeaveRequestMode =
+  | 'PREPLANNED'
+  | 'TEMPORARY'
+  | 'MAKEUP'
+  | 'SYSTEM_NO_SHOW'
+  | 'ADMIN_PLANNED_PARTIAL';
 
 export interface AttendanceRecordDto {
   id: number;
@@ -13,6 +27,12 @@ export interface AttendanceRecordDto {
   remainingBreakSeconds: number;
   status: AttendanceStatus;
   gpsAllowed: boolean;
+  punctualityStatus?: AttendancePunctualityStatus | null;
+  lateMinutes?: number | null;
+  lateExcused?: boolean | null;
+  leaveRequired?: boolean | null;
+  leaveRequiredMinutes?: number | null;
+  coveredLeaveRequestId?: number | null;
   emergencyLeaveRequestId?: number | null;
   emergencyLeaveStatus?: EmergencyLeaveStatus | null;
   earlyClockOutAllowed?: boolean;
@@ -82,6 +102,91 @@ export interface EmergencyLeaveResponse {
   clockedOutAt: string | null;
 }
 
+export interface DriverLeaveRequest {
+  workDate: string;
+  leaveType: Exclude<LeaveType, 'ABSENT'>;
+  leaveStart?: string | null;
+  leaveEnd?: string | null;
+  reason: string;
+}
+
+export interface DriverLeaveRequestResponse {
+  id: number;
+  batchId: string | null;
+  requestMode: LeaveRequestMode;
+  driverId: number;
+  driverName: string;
+  driverShiftId: number;
+  workDate: string;
+  requestedLeaveType: LeaveType;
+  leaveType: LeaveType;
+  fullDay: boolean;
+  leaveStart: string | null;
+  leaveEnd: string | null;
+  requestReason: string;
+  evidencePhotoUrl: string | null;
+  status: LeaveRequestStatus;
+  submissionSource: 'DRIVER' | 'ADMIN' | 'SYSTEM';
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedByAdminId: number | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  typeChangeReason: string | null;
+  typeChangedAt: string | null;
+  typeChangedBy: string | null;
+  driverReadAt: string | null;
+  lastUpdatedAt: string;
+}
+
+export interface DriverPlannedLeaveGroupRequest {
+  leaveType: Exclude<LeaveType, 'ABSENT'>;
+  workDates: string[];
+  reason: string;
+}
+
+export interface DriverPlannedLeaveBatchRequest {
+  groups: DriverPlannedLeaveGroupRequest[];
+}
+
+export interface DriverLeaveBatchResponse {
+  batchId: string;
+  driverId: number;
+  driverName: string;
+  leaveType: LeaveType;
+  workDates: string[];
+  requestReason: string;
+  status: LeaveRequestStatus;
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  items: DriverLeaveRequestResponse[];
+}
+
+export interface DriverMakeupLeaveRequest {
+  workDate: string;
+  leaveType: Exclude<LeaveType, 'ABSENT'>;
+  reason: string;
+  evidencePhotoUrl?: string | null;
+}
+
+export interface DriverLeaveHistoryResponse {
+  id: number;
+  leaveRequestId: number;
+  driverId: number;
+  eventType: string;
+  actorType: 'DRIVER' | 'ADMIN' | 'SYSTEM';
+  actorId: number;
+  actorAccount: string;
+  oldStatus: LeaveRequestStatus | null;
+  newStatus: LeaveRequestStatus | null;
+  oldLeaveType: LeaveType | null;
+  newLeaveType: LeaveType | null;
+  reason: string | null;
+  occurredAt: string;
+}
+
 export interface GpsRouteRequest {
   fromLat: number;
   fromLng: number;
@@ -96,11 +201,20 @@ export interface GpsRouteResponse {
   duration: number;
 }
 
-/** 倉庫點交：只填實點箱數，跟訂單箱數比對、決定成不成功的是後端 */
+/** 倉庫點交的單一商品；每一項都要回傳是否核對與實點數量。 */
+export interface LoadingItemRequest {
+  orderItemId: number;
+  checked: boolean;
+  loadedQuantity?: number;
+  notes?: string;
+}
+
+/** 倉庫點交：箱數與商品明細皆由後端比對、決定點交結果。 */
 export interface LoadingRequest {
   orderId: number;
   loadedBoxCount: number;
   notes?: string;
+  items?: LoadingItemRequest[];
 }
 
 /** 相符時 orderStatus 是 LOADED；不符時是 FAILED，並帶回異常單與明日補送單 */
@@ -112,6 +226,21 @@ export interface LoadingResponse {
   followUpOrderId: number | null;
   followUpOrderNumber: string | null;
   followUpDeliveryDate: string | null;
+  checkedItemCount: number;
+  totalItemCount: number;
+  itemChecklistCompleted: boolean;
+  items: LoadingItemResult[];
+}
+
+export interface LoadingItemResult {
+  orderItemId: number;
+  itemName: string;
+  expectedQuantity: number;
+  loadedQuantity: number;
+  unit: string;
+  matched: boolean;
+  checkedAt: string | null;
+  notes: string | null;
 }
 
 export interface ArriveRequest {
@@ -220,6 +349,10 @@ export interface DriverTaskStop {
   expectedBoxCount: number;
   itemDescription: string | null;
   orderNotes: string | null;
+  loadedAt: string | null;
+  loadingRequired: boolean;
+  itemChecklistCompleted: boolean;
+  items: DriverTaskOrderItem[];
   storeId: number;
   storeCode: string;
   storeName: string;
@@ -230,6 +363,20 @@ export interface DriverTaskStop {
   phone: string | null;
   receivingStart: string | null;
   receivingEnd: string | null;
+}
+
+export interface DriverTaskOrderItem {
+  id: number;
+  productCode: string | null;
+  itemName: string;
+  expectedQuantity: number;
+  unit: string;
+  sequence: number;
+  notes: string | null;
+  loadedQuantity: number | null;
+  checked: boolean | null;
+  checkedAt: string | null;
+  loadingNotes: string | null;
 }
 
 export type DriverTaskOrderStatus =

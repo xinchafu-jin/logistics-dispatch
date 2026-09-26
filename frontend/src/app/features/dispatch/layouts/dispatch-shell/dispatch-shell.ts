@@ -24,7 +24,10 @@ import {MatBadgeModule} from '@angular/material/badge';
 import {BrandLogo} from '../../../../shared/ui/brand-logo/brand-logo';
 import {AuthService} from '../../../../core/auth/auth.service';
 import {
+  AdminStickyNoteDto,
+  AdminStickyNoteRequestDto,
   AiPendingActionDto,
+  DriverLeaveRequestDto,
   DriverAccountApplicationDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
@@ -87,6 +90,7 @@ export class DispatchShell implements OnInit {
   protected readonly pendingApplicationCount = signal(0);
   protected readonly pendingApplications = signal<DriverAccountApplicationDto[]>([]);
   protected readonly pendingEmergencyLeaves = signal<EmergencyLeaveDto[]>([]);
+  protected readonly pendingTemporaryLeaveRequests = signal<DriverLeaveRequestDto[]>([]);
   protected readonly selectedEmergencyLeave = signal<EmergencyLeaveDto | null>(null);
   protected readonly replacementCandidates = signal<EmergencyLeaveReplacementCandidateDto[]>([]);
   protected readonly selectedReplacementDriverId = signal<number | null>(null);
@@ -119,6 +123,16 @@ export class DispatchShell implements OnInit {
   protected readonly isSendingDriverMessage = signal(false);
   // 司機對話的錯誤訊息，空字串代表沒有錯誤
   protected readonly driverChatError = signal('');
+  protected readonly adminStickyNotes = signal<AdminStickyNoteDto[]>([]);
+  protected readonly stickyNotesLoading = signal(false);
+  protected readonly stickyNoteSaving = signal(false);
+  protected readonly stickyNotesError = signal('');
+  protected readonly stickyNotesNotice = signal('');
+  protected readonly stickyNoteTitle = signal('');
+  protected readonly stickyNoteContent = signal('');
+  protected readonly editingStickyNoteId = signal<number | null>(null);
+  protected readonly deletingStickyNoteId = signal<number | null>(null);
+  protected readonly stickyNoteDeleteBusy = signal(false);
   // 紅點：driverId → 司機發的、還沒被任何管理員讀的則數。沒有未讀的司機不在裡面
   protected readonly unreadByDriver = signal<Record<number, number>>({});
   // 大頭照載入失敗的司機；記下來改顯示名字第一個字，不然會一直顯示破圖
@@ -160,7 +174,9 @@ export class DispatchShell implements OnInit {
 
 
   protected readonly notificationCount = computed(
-    () => this.pendingApplicationCount() + this.pendingEmergencyLeaves().length,
+    () => this.pendingApplicationCount()
+      + this.pendingEmergencyLeaves().length
+      + this.pendingTemporaryLeaveRequests().length,
   );
 
   protected readonly aiPendingAction = signal<AiPendingActionDto[]>([]);
@@ -174,6 +190,7 @@ export class DispatchShell implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   // 確認執行視窗的內容，寫在 dispatch-shell.html 最下面的 <ng-template #confirmPlanDialog>
   private readonly confirmPlanDialog = viewChild.required<TemplateRef<unknown>>('confirmPlanDialog');
+  private readonly stickyNotesDialogTemplate = viewChild.required<TemplateRef<unknown>>('stickyNotesDialog');
 
   /**
    * 標頭顯示的分頁標題。來源是路由 data（app.routes.ts），各頁不再自己畫標題。
@@ -297,6 +314,31 @@ export class DispatchShell implements OnInit {
     this.notificationError.set('');
   }
 
+  protected openScheduleLeaveReview(): void {
+    this.closeNotifications();
+    void this.router.navigateByUrl('/dispatch/schedules');
+  }
+
+  protected temporaryLeaveRequestLabel(request: DriverLeaveRequestDto): string {
+    switch (request.requestMode) {
+      case 'TEMPORARY':
+        return '當日特殊事由';
+      case 'MAKEUP':
+        return '事後補請';
+      case 'SYSTEM_NO_SHOW':
+        return '待說明特殊事由';
+      default:
+        return '待審請假';
+    }
+  }
+
+  protected temporaryLeaveRequestPeriod(request: DriverLeaveRequestDto): string {
+    if (request.fullDay) {
+      return '整天';
+    }
+    return `${request.leaveStart?.slice(0, 5) ?? '--:--'} - ${request.leaveEnd?.slice(0, 5) ?? '--:--'}`;
+  }
+
   protected updateRejectionReason(event: Event): void {
     this.rejectionReason.set((event.target as HTMLTextAreaElement).value);
   }
@@ -372,11 +414,20 @@ export class DispatchShell implements OnInit {
       count: this.api.getPendingDriverAccountApplicationCount(),
       applications: this.api.getPendingDriverAccountApplications(),
       leaves: this.api.getPendingEmergencyLeaveRequests(),
+      leaveRequests: this.api.getPendingLeaveRequests(),
     }).subscribe({
-      next: ({count, applications, leaves}) => {
+      next: ({count, applications, leaves, leaveRequests}) => {
         this.pendingApplicationCount.set(count.count);
         this.pendingApplications.set(applications);
         this.pendingEmergencyLeaves.set(leaves);
+        this.pendingTemporaryLeaveRequests.set(
+          leaveRequests
+            .filter((request) =>
+              request.batchId === null
+              && ['TEMPORARY', 'MAKEUP', 'SYSTEM_NO_SHOW'].includes(request.requestMode),
+            )
+            .sort((left, right) => Date.parse(right.requestedAt) - Date.parse(left.requestedAt)),
+        );
         const selectedId = this.selectedEmergencyLeave()?.id;
         this.selectedEmergencyLeave.set(leaves.find((leave) => leave.id === selectedId) ?? null);
         this.isLoadingNotifications.set(false);
@@ -440,6 +491,125 @@ export class DispatchShell implements OnInit {
 
   protected toggleChatWidth(): void {
     this.chatView.update((view) => (view === 'wide' ? 'narrow' : 'wide'));
+  }
+
+  protected openStickyNotes(): void {
+    this.resetStickyNoteForm();
+    this.stickyNotesNotice.set('');
+    this.dialog.open(this.stickyNotesDialogTemplate(), {
+      width: '520px',
+      maxWidth: 'calc(100vw - 32px)',
+      maxHeight: 'min(80vh, 720px)',
+    });
+    this.loadAdminStickyNotes();
+  }
+
+  protected loadAdminStickyNotes(): void {
+    this.stickyNotesLoading.set(true);
+    this.stickyNotesError.set('');
+    this.api.getAdminStickyNotes().subscribe({
+      next: (notes) => {
+        this.adminStickyNotes.set(this.sortStickyNotesByNewest(notes));
+        this.stickyNotesLoading.set(false);
+      },
+      error: () => {
+        this.stickyNotesError.set('無法載入備忘錄，請稍後重試。');
+        this.stickyNotesLoading.set(false);
+      },
+    });
+  }
+
+  protected saveStickyNote(): void {
+    const content = this.stickyNoteContent().trim();
+    if (!content || this.stickyNoteSaving()) return;
+
+    const editingId = this.editingStickyNoteId();
+    const existing = editingId === null
+      ? undefined
+      : this.adminStickyNotes().find((note) => note.id === editingId);
+    const request: AdminStickyNoteRequestDto = {
+      title: this.stickyNoteTitle().trim() || null,
+      content,
+      color: existing?.color ?? null,
+      sortOrder: existing?.sortOrder ?? 0,
+    };
+
+    this.stickyNoteSaving.set(true);
+    this.stickyNotesError.set('');
+    const save = editingId === null
+      ? this.api.createAdminStickyNote(request)
+      : this.api.updateAdminStickyNote(editingId, request);
+    save.subscribe({
+      next: (saved) => {
+        this.adminStickyNotes.update((notes) => {
+          const updated = editingId === null
+            ? [...notes, saved]
+            : notes.map((note) => note.id === saved.id ? saved : note);
+          return this.sortStickyNotesByNewest(updated);
+        });
+        this.stickyNoteSaving.set(false);
+        this.resetStickyNoteForm();
+        this.stickyNotesNotice.set(editingId === null ? '備忘錄已新增。' : '備忘錄已更新。');
+      },
+      error: (error: HttpErrorResponse) => {
+        this.stickyNoteSaving.set(false);
+        this.stickyNotesError.set(error.error?.message ?? '備忘錄沒有儲存，請稍後重試。');
+      },
+    });
+  }
+
+  protected editStickyNote(note: AdminStickyNoteDto): void {
+    this.editingStickyNoteId.set(note.id);
+    this.stickyNoteTitle.set(note.title ?? '');
+    this.stickyNoteContent.set(note.content);
+    this.deletingStickyNoteId.set(null);
+    this.stickyNotesError.set('');
+  }
+
+  protected cancelStickyNoteEdit(): void {
+    this.resetStickyNoteForm();
+  }
+
+  protected deleteStickyNote(note: AdminStickyNoteDto): void {
+    if (this.stickyNoteDeleteBusy()) return;
+    if (this.deletingStickyNoteId() !== note.id) {
+      this.deletingStickyNoteId.set(note.id);
+      return;
+    }
+
+    this.stickyNoteDeleteBusy.set(true);
+    this.stickyNotesError.set('');
+    this.api.deleteAdminStickyNote(note.id).subscribe({
+      next: () => {
+        this.adminStickyNotes.update((notes) => notes.filter((item) => item.id !== note.id));
+        this.deletingStickyNoteId.set(null);
+        this.stickyNoteDeleteBusy.set(false);
+        if (this.editingStickyNoteId() === note.id) this.resetStickyNoteForm();
+        this.stickyNotesNotice.set('備忘錄已刪除。');
+      },
+      error: (error: HttpErrorResponse) => {
+        this.stickyNoteDeleteBusy.set(false);
+        this.stickyNotesError.set(error.error?.message ?? '備忘錄沒有刪除，請稍後重試。');
+      },
+    });
+  }
+
+  protected cancelStickyNoteDelete(): void {
+    this.deletingStickyNoteId.set(null);
+  }
+
+  private resetStickyNoteForm(): void {
+    this.editingStickyNoteId.set(null);
+    this.stickyNoteTitle.set('');
+    this.stickyNoteContent.set('');
+    this.deletingStickyNoteId.set(null);
+  }
+
+  private sortStickyNotesByNewest(notes: readonly AdminStickyNoteDto[]): AdminStickyNoteDto[] {
+    return [...notes].sort((left, right) => {
+      const updatedAt = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+      return Number.isNaN(updatedAt) || updatedAt === 0 ? right.id - left.id : updatedAt;
+    });
   }
 
   /**

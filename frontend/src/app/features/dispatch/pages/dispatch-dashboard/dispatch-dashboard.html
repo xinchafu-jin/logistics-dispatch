@@ -27,25 +27,42 @@
       [showDriverPoints]="showDriverPoints()"
       [routeLines]="routeLines()"
       [showRouteLines]="showRouteLines()"
+      [resizable]="true"
     />
-    <!-- 圖層開關疊在地圖右側（樣式見 .map-layer-controls）；放在 map-section 裡，才能以它為定位基準 -->
-    <div class="map-layer-controls" role="group" aria-label="地圖圖層">
-      <mat-slide-toggle [checked]="showMapPoints()" (change)="toggleMapPoints($event.checked)">
-        配送門市
-      </mat-slide-toggle>
-      <mat-slide-toggle [checked]="showDriverPoints()" (change)="toggleDriverPoints($event.checked)">
-        司機位置
-      </mat-slide-toggle>
-      <mat-slide-toggle [checked]="showRouteLines()" (change)="toggleRouteLines($event.checked)">
-        司機路線
-      </mat-slide-toggle>
-    </div>
+    <details class="map-layer-menu">
+      <summary aria-label="選擇地圖顯示項目" title="地圖顯示項目">
+        <mat-icon aria-hidden="true">layers</mat-icon>
+      </summary>
+      <div class="map-layer-menu-panel" role="group" aria-label="地圖顯示項目">
+        <mat-slide-toggle [checked]="showMapPoints()" (change)="toggleMapPoints($event.checked)">
+          配送門市
+        </mat-slide-toggle>
+        <mat-slide-toggle [checked]="showDriverPoints()" (change)="toggleDriverPoints($event.checked)">
+          司機位置
+        </mat-slide-toggle>
+        <mat-slide-toggle [checked]="showRouteLines()" (change)="toggleRouteLines($event.checked)">
+          司機路線
+        </mat-slide-toggle>
+      </div>
+    </details>
   </section>
 
   <!-- 日期列：今天起到最後一天有單的日期，加上之前還沒結案的日子（紅色）。點一格就換看那天 -->
   @if (days().length > 0) {
     <section class="dispatch-day-picker" aria-label="配送日期">
-      <div class="dispatch-day-strip" role="group" aria-label="選擇配送日期">
+      <div
+        class="dispatch-day-strip"
+        [class.is-dragging]="isDaySwipeDragging()"
+        [style.--day-swipe-offset.px]="daySwipeOffset()"
+        role="group"
+        tabindex="0"
+        aria-label="選擇配送日期；向左拖曳切換下一天，向右拖曳切換前一天"
+        (pointerdown)="startDaySwipe($event)"
+        (pointermove)="moveDaySwipe($event)"
+        (pointerup)="finishDaySwipe($event)"
+        (pointercancel)="cancelDaySwipe($event)"
+        (keydown)="handleDayPickerKeydown($event)"
+      >
         @for (day of days(); track day.date) {
           <button
             type="button"
@@ -54,7 +71,7 @@
             [class.is-unresolved]="day.status === 'UNRESOLVED'"
             [attr.aria-pressed]="day.date === dispatchDate()"
             [disabled]="busy()"
-            (click)="selectDay(day.date)"
+            (click)="selectDayFromCard(day.date)"
           >
             <span class="dispatch-day-date">{{ dayTitle(day.date) }}</span>
             <span class="dispatch-day-status" [attr.data-status]="day.status">{{ dayStatusLabel(day) }}</span>
@@ -68,32 +85,36 @@
   }
 
   <section class="template-tabs" aria-label="常配編組">
-    <div class="tab-strip" role="tablist">
-      @for (template of templates(); track template.id) {
+    @if (!published()) {
+      <div class="tab-strip" role="tablist">
+        @for (template of templates(); track template.id) {
+          <button
+            type="button"
+            role="tab"
+            class="tab"
+            [class.is-active]="activeTemplateId() === template.id"
+            [attr.aria-selected]="activeTemplateId() === template.id"
+            [disabled]="publishing()"
+            (click)="selectTemplate(template.id)"
+          >
+            {{ template.name }}
+          </button>
+        }
         <button
           type="button"
-          role="tab"
-          class="tab"
-          [class.is-active]="activeTemplateId() === template.id"
-          [attr.aria-selected]="activeTemplateId() === template.id"
-          (click)="selectTemplate(template.id)"
+          class="tab tab-add"
+          [class.is-active]="activeTemplateId() === 0"
+          [attr.aria-selected]="activeTemplateId() === 0"
+          [disabled]="publishing()"
+          (click)="openCreateTemplate()"
+          aria-label="不使用編組／新增編組"
         >
-          {{ template.name }}
+          ＋
         </button>
-      }
-      <button
-        type="button"
-        class="tab tab-add"
-        [class.is-active]="activeTemplateId() === 0"
-        [attr.aria-selected]="activeTemplateId() === 0"
-        (click)="openCreateTemplate()"
-        aria-label="不使用編組／新增編組"
-      >
-        ＋
-      </button>
-    </div>
+      </div>
+    }
 
-    @if (templateError()) {
+    @if (templateError() && !published()) {
       <p class="template-error">{{ templateError() }}</p>
     }
 
@@ -117,76 +138,63 @@
         </label>
 
         <!-- 沒選編組＝看板預設狀態，也就是新增編組：格子裡的人車填個名稱就能存。跟排車條件合在同一列 -->
-        @if (activeTemplateId() === 0) {
-          <label class="toolbar-field">
-            <span>編組名稱</span>
-            <input
-              type="text"
-              placeholder="例如：高雄左營常配線"
-              [value]="templateName()"
-              (input)="updateTemplateName($event)"
-            />
-          </label>
-        }
+        @if (!published()) {
+          @if (activeTemplateId() === 0) {
+            <label class="toolbar-field">
+              <span>編組名稱</span>
+              <input
+                type="text"
+                placeholder="例如：高雄左營常配線"
+                [value]="templateName()"
+                [disabled]="busy()"
+                (input)="updateTemplateName($event)"
+              />
+            </label>
+          }
 
-        <!-- 撐開中間的空間，讓後面的按鈕靠右 -->
-        <span class="toolbar-spacer"></span>
+          <span class="toolbar-spacer"></span>
 
-        <!-- 「＋」分頁是新增編組；編組分頁是用看板的人車覆蓋這個編組（會先跳確認框）。判斷在 saveTemplate() -->
-        <button
-          type="button"
-          class="toolbar-action"
-          (click)="saveTemplate()"
-          [disabled]="templateBusy()"
-        >
-          {{ templateBusy() ? '儲存中…' : '儲存編組' }}
-        </button>
-
-        <!-- 照每格門市的順序，把這些門市在待排單的訂單拉進那格並存檔；門市順序就是配送順序，其他待排單不動 -->
-        <button type="button" class="toolbar-action" (click)="applyStoreOrders()" [disabled]="busy() || published()">
-          套用門市訂單
-        </button>
-
-        <!-- OR-Tools 只用格子裡的人車排；只選司機的格子由後端配車。格子裡已有的訂單固定在那台車，只有待排單的訂單交給 OR-Tools 分配，排不進去的留在待排單區 -->
-        <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy() || published()">
-          {{ optimizing() ? '排車中…' : '自動排車' }}
-        </button>
-
-        <!-- 發布是路線層的開關：翻成 PUBLISHED 後司機端才查得到，也不會再被排車清掉 -->
-        @if (published()) {
           <button
             type="button"
-            class="template-secondary"
-            (click)="withdraw()"
-            [disabled]="publishing() || busy()"
+            class="toolbar-action"
+            (click)="saveTemplate()"
+            [disabled]="templateBusy() || busy()"
           >
-            {{ publishing() ? '撤回中…' : '撤回發布' }}
+            {{ templateBusy() ? '儲存中…' : '儲存編組' }}
           </button>
-        } @else {
+
+          <button type="button" class="toolbar-action" (click)="applyStoreOrders()" [disabled]="busy()">
+            套用門市訂單
+          </button>
+
+          <button type="button" class="toolbar-action" (click)="runOptimize()" [disabled]="busy()">
+            {{ optimizing() ? '排車中…' : '自動排車' }}
+          </button>
+
           <button
             type="button"
             class="toolbar-action"
             (click)="publish()"
-            [disabled]="publishing() || busy()"
+            [disabled]="busy()"
           >
             {{ publishing() ? '發布中…' : '發布' }}
           </button>
-        }
 
-        @if (activeTemplate()) {
-          <button
-            type="button"
-            class="toolbar-action toolbar-delete"
-            (click)="deleteActiveTemplate()"
-            [disabled]="templateBusy()"
-          >
-            刪除編組
-          </button>
+          @if (activeTemplate()) {
+            <button
+              type="button"
+              class="toolbar-action toolbar-delete"
+              (click)="deleteActiveTemplate()"
+              [disabled]="templateBusy() || busy()"
+            >
+              刪除編組
+            </button>
+          }
         }
       </section>
 
       @if (published()) {
-        <p class="board-status">已派出：每張卡片是一台車的即時進度，資料有變動會自動更新；要修改請先撤回。</p>
+        <p class="board-status">已派出：每張卡片是一台車的即時進度，資料有變動會自動更新；看板目前僅供查看。</p>
       }
       @if (publishError()) {
         <p class="board-error">{{ publishError() }}</p>
@@ -358,7 +366,7 @@
                         <em>{{ boardCardStatusLabel(card) }}</em>
                       </header>
                       <h5>{{ card.storeName }}</h5>
-                      <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                      <p>{{ card.boxCount }} 箱 · 可收貨時間 {{ boardCardDeliveryWindow(card) }}</p>
                       <small>{{ boardCardDescription(card) }}</small>
                     </article>
                   } @empty {
@@ -416,7 +424,7 @@
                           <strong>#{{ $index + 1 }} {{ card.orderNumber }} · {{ card.storeName }}</strong>
                           <em>{{ boardCardStatusLabel(card) }}</em>
                         </header>
-                        <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                        <p>{{ card.boxCount }} 箱 · 可收貨時間 {{ boardCardDeliveryWindow(card) }}</p>
                       </article>
                     }
                   </div>
@@ -469,7 +477,7 @@
                     </button>
                   </header>
                   <h5>{{ card.storeName }}</h5>
-                  <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                  <p>{{ card.boxCount }} 箱 · 可收貨時間 {{ boardCardDeliveryWindow(card) }}</p>
                   <small>{{ boardCardDescription(card) }}</small>
                 </article>
               }
@@ -494,7 +502,7 @@
                   <em>{{ boardCardStatusLabel(card) }}</em>
                 </header>
                 <h5>{{ card.storeName }}</h5>
-                <p>{{ card.boxCount }} 箱 · 收貨 {{ boardCardDeliveryWindow(card) }}</p>
+                <p>{{ card.boxCount }} 箱 · 可收貨時間 {{ boardCardDeliveryWindow(card) }}</p>
                 <small>{{ boardCardDescription(card) }}</small>
               </article>
             } @empty {

@@ -64,6 +64,26 @@ describe('OrderImportService', () => {
     });
   });
 
+  it('下載的範本可以直接填寫並重新匯入', async () => {
+    const template = await service.createTemplateBlob();
+    const result = await service.parse(
+      new File([template], '訂單匯入範本.xlsx', { type: template.type }),
+      context,
+    );
+
+    expect(result.errorRows).toEqual([]);
+    expect(result.validRows).toHaveLength(1);
+    expect(result.validRows[0].data).toMatchObject({
+      orderNumber: 'SO-20260101-001',
+      storeId: 11,
+      warehouseId: 21,
+      sourceVendor: '好食品',
+      itemDescription: '常溫飲料',
+      boxCount: 12,
+      deliveryDate: '2026-01-01',
+    });
+  });
+
   it('Excel 的日期格不會因為時區差一天', async () => {
     const result = await service.parse(
       toFile([HEADER, ['SO-002', 'ST-001', 'WH-001', '冷藏', 1, new Date(2026, 0, 5), '']]),

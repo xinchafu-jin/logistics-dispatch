@@ -103,6 +103,52 @@ describe('DriverOperationsService', () => {
     leavesRequest.flush([]);
   });
 
+  it('uses the general leave request, unread, read, and history contracts', () => {
+    const leave = {
+      workDate: '2026-09-28',
+      leaveType: 'ANNUAL' as const,
+      reason: '家庭行程',
+    };
+
+    service.submitLeaveRequest(leave).subscribe();
+    service.getLeaveRequests().subscribe();
+    service.getLeaveRequests(undefined, true).subscribe();
+    service.markLeaveRequestRead(23).subscribe();
+    service.getLeaveRequestHistory(23).subscribe();
+
+    const create = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/leave-requests' && request.method === 'POST',
+    );
+    expect(create.request.method).toBe('POST');
+    expect(create.request.body).toEqual(leave);
+    create.flush({ id: 23, status: 'PENDING', requestReason: '家庭行程' });
+
+    const list = httpTesting.expectOne(
+      (request) =>
+        request.url === '/api/driver/leave-requests' &&
+        request.method === 'GET' &&
+        !request.params.has('unreadOnly'),
+    );
+    expect(list.request.method).toBe('GET');
+    list.flush([]);
+
+    const unread = httpTesting.expectOne(
+      (request) =>
+        request.url === '/api/driver/leave-requests' && request.params.get('unreadOnly') === 'true',
+    );
+    expect(unread.request.method).toBe('GET');
+    unread.flush([]);
+
+    const markRead = httpTesting.expectOne('/api/driver/leave-requests/23/read');
+    expect(markRead.request.method).toBe('POST');
+    expect(markRead.request.body).toEqual({});
+    markRead.flush({ id: 23, driverReadAt: '2026-09-27T10:00:00' });
+
+    const history = httpTesting.expectOne('/api/driver/leave-requests/23/history');
+    expect(history.request.method).toBe('GET');
+    history.flush([]);
+  });
+
   it('uses the delivery and mileage endpoints with the backend request shapes', () => {
     service.loading({ orderId: 41, loadedBoxCount: 11, notes: '少一箱' }).subscribe();
     service.arrive({ orderId: 41 }).subscribe();

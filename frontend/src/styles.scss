@@ -36,8 +36,6 @@ body {
   margin: 0;
   height: 100%;
 }
-@import 'leaflet/dist/leaflet.css';
-
 :root {
   font-family:
     'Noto Sans TC',
@@ -115,7 +113,7 @@ mat-icon {
 }
 
 // ── 地圖上的倉庫／門市圖示 ──────────────────────────────
-// 必須放在全域：這些 DOM 是 Leaflet 的 divIcon 在執行期建出來的，
+// 必須放在全域：這些 DOM 是 MapLibre Marker 在執行期建出來的，
 // 身上沒有 Angular 的 _ngcontent 屬性，寫在元件 scss 裡選不到。
 .map-badge {
   display: flex;
@@ -136,13 +134,38 @@ mat-icon {
 
 // 倉庫沿用側欄的暖色提示，門市沿用主色，跟原本的圓點配色一致
 .map-badge--warehouse {
+  width: 34px;
+  height: 34px;
   color: #e0ad76;
   border-color: #e0ad76;
 }
 
 .map-badge--store {
+  width: 26px;
+  height: 26px;
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.fleet-driver-marker {
+  position: relative;
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #0f8d75;
+  box-shadow: 0 2px 8px rgb(6 56 47 / 34%);
+}
+
+.fleet-driver-marker::before {
+  width: 0;
+  height: 0;
+  border-right: 6px solid transparent;
+  border-bottom: 12px solid #fff;
+  border-left: 6px solid transparent;
+  content: '';
 }
 
 .dispatch-layout.is-light-theme app-resource-overview {
@@ -228,4 +251,132 @@ mat-icon {
   // 日期區間中間的「–」
   --mat-datepicker-range-input-separator-color: var(--muted);
   min-width: 0;
+}
+
+.chat-panel__note-button {
+  min-width: 0;
+  padding-inline: 10px;
+}
+
+.chat-panel__note-button mat-icon {
+  margin-right: 4px;
+}
+
+.sticky-notes__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 12px;
+}
+
+.sticky-notes__header h2 {
+  margin: 0;
+}
+
+.sticky-notes__header h2 span {
+  display: inline-grid;
+  min-width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  padding: 0 6px;
+  place-items: center;
+  color: var(--button-text);
+  background: var(--accent);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  vertical-align: middle;
+}
+
+.sticky-notes__form {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--metal-edge);
+}
+
+.sticky-notes__form mat-form-field {
+  width: 100%;
+}
+
+.sticky-notes__form-actions,
+.sticky-notes__item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.sticky-notes__error {
+  margin: 12px 0 0;
+  color: #e9877b;
+}
+
+.sticky-notes__notice {
+  margin: 12px 0 0;
+  color: var(--accent);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.sticky-notes__list {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0 4px;
+}
+
+.sticky-notes__item {
+  padding: 13px;
+  background: var(--surface);
+  border: 1px solid var(--metal-edge);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+}
+
+.sticky-notes__item header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sticky-notes__item h3 {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 0.9375rem;
+}
+
+.sticky-notes__item-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sticky-notes__item-meta span {
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+.sticky-notes__item small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.sticky-notes__item p {
+  margin: 8px 0 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.sticky-notes__empty {
+  margin: 16px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sticky-notes__delete-confirm {
+  color: #c34f45;
 }

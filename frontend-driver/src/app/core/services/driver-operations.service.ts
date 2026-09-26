@@ -7,6 +7,12 @@ import {
   DeliverRequest,
   DeliveryRecordResponse,
   DriverExceptionRequest,
+  DriverLeaveHistoryResponse,
+  DriverLeaveBatchResponse,
+  DriverMakeupLeaveRequest,
+  DriverPlannedLeaveBatchRequest,
+  DriverLeaveRequest,
+  DriverLeaveRequestResponse,
   DriverMessageDto,
   DriverMessageRequest,
   DriverProfileDto,
@@ -70,6 +76,41 @@ export class DriverOperationsService {
 
   submitEmergencyLeave(request: EmergencyLeaveRequest): Observable<EmergencyLeaveResponse> {
     return this.http.post<EmergencyLeaveResponse>('/api/driver/emergency-leave-requests', request);
+  }
+
+  submitLeaveRequest(request: DriverLeaveRequest): Observable<DriverLeaveRequestResponse> {
+    return this.http.post<DriverLeaveRequestResponse>('/api/driver/leave-requests', request);
+  }
+
+  submitPlannedLeaveBatches(
+    request: DriverPlannedLeaveBatchRequest,
+  ): Observable<DriverLeaveBatchResponse[]> {
+    return this.http.post<DriverLeaveBatchResponse[]>('/api/driver/leave-requests/planned-batches', request);
+  }
+
+  submitMakeupLeave(request: DriverMakeupLeaveRequest): Observable<DriverLeaveRequestResponse> {
+    return this.http.post<DriverLeaveRequestResponse>('/api/driver/leave-requests/makeup', request);
+  }
+
+  uploadLeaveEvidencePhoto(file: File): Observable<PhotoUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<PhotoUploadResponse>('/api/driver/leave-requests/evidence-photo', formData);
+  }
+
+  getLeaveRequests(month?: string, unreadOnly = false): Observable<DriverLeaveRequestResponse[]> {
+    let params = new HttpParams();
+    if (month) params = params.set('month', month);
+    if (unreadOnly) params = params.set('unreadOnly', true);
+    return this.http.get<DriverLeaveRequestResponse[]>('/api/driver/leave-requests', {params});
+  }
+
+  markLeaveRequestRead(id: number): Observable<DriverLeaveRequestResponse> {
+    return this.http.post<DriverLeaveRequestResponse>(`/api/driver/leave-requests/${id}/read`, {});
+  }
+
+  getLeaveRequestHistory(id: number): Observable<DriverLeaveHistoryResponse[]> {
+    return this.http.get<DriverLeaveHistoryResponse[]>(`/api/driver/leave-requests/${id}/history`);
   }
 
   getEmergencyLeaves(): Observable<EmergencyLeaveResponse[]> {

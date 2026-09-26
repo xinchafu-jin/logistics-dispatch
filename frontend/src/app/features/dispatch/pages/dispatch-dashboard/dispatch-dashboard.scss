@@ -99,23 +99,58 @@
   min-width: 0;
 }
 
-// 圖層開關疊在地圖右上、「N 位已定位司機」下方；避開右下角的縮放鈕。
-// 外觀跟地圖標頭的小卡一致（淺色半透明底），不跟著後台深淺主題變，因為底下永遠是淺色地圖
-.map-layer-controls {
+// 圖層選單固定在地圖右上；內容沿用地圖上的淺色控制面板。
+.map-layer-menu {
   position: absolute;
-  top: 60px;
+  top: 14px;
   right: 14px;
-  z-index: 1;
+  z-index: 3;
+}
+
+.map-layer-menu summary {
   display: grid;
-  gap: 6px;
-  padding: 10px 12px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
   border: 1px solid rgb(203 221 214 / 92%);
   border-radius: 6px;
   background: rgb(250 253 251 / 92%);
   box-shadow: 0 4px 12px rgb(20 52 42 / 12%);
+  color: #31584d;
+  cursor: pointer;
+  list-style: none;
+  backdrop-filter: blur(8px);
+}
+
+.map-layer-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.map-layer-menu summary mat-icon {
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+.map-layer-menu summary:focus-visible {
+  outline: 3px solid #0b7c6b;
+  outline-offset: 2px;
+}
+
+.map-layer-menu-panel {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  display: grid;
+  min-width: 190px;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgb(203 221 214 / 92%);
+  border-radius: 6px;
+  background: rgb(250 253 251 / 96%);
+  box-shadow: 0 8px 20px rgb(20 52 42 / 18%);
   backdrop-filter: blur(8px);
   font-size: 0.75rem;
-  // 深色主題下 Material 的標籤是淺色字，疊在淺色小卡上會看不到，固定成地圖標頭的字色
   --mat-switch-label-text-color: #31584d;
 }
 
@@ -719,7 +754,7 @@
   padding-left: 1.25rem;
 }
 
-/* ── 日期列（樣式沿用 murse-main 的設計）────────────────────── */
+/* ── 日期列：日期完整並排，拖曳時整列跟著移動 ─────────────────── */
 .dispatch-day-picker {
   min-width: 0;
   margin-top: 1rem;
@@ -731,7 +766,34 @@
   grid-auto-flow: column;
   gap: 0.625rem;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: 2px 1px 8px;
+  scroll-padding-inline: 1px;
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  scrollbar-color: var(--border) transparent;
+  scrollbar-width: thin;
+  touch-action: pan-y;
+  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+  -webkit-overflow-scrolling: touch;
+
+  &.is-dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+    transform: translateX(var(--day-swipe-offset));
+    transition: none;
+    user-select: none;
+  }
+
+  &:not(.is-dragging) {
+    cursor: grab;
+  }
+
+  &:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+  }
 }
 
 .dispatch-day-card {
@@ -749,11 +811,18 @@
   color: var(--text);
   cursor: pointer;
   font: inherit;
+  scroll-snap-align: start;
   text-align: left;
 
   &.is-selected {
     border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 1px var(--accent);
+  }
+
+  &:focus-visible {
+    z-index: 6;
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
   }
 
   /* 日期已過還有單沒結束：紅框，處理完就會從日期列消失 */
@@ -799,6 +868,12 @@
   background: rgb(218 159 54 / 16%);
   color: #e4a74d;
   font-size: 0.625rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dispatch-day-card {
+    transition: none;
+  }
 }
 
 /* ── 待排單：待確認的單 ─────────────────────────────────── */

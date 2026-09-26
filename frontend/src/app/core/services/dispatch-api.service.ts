@@ -2,6 +2,8 @@ import {HttpClient, HttpParams} from '@angular/common/http';
 import {Injectable, inject} from '@angular/core';
 import {Observable} from 'rxjs';
 import {
+  AdminStickyNoteDto,
+  AdminStickyNoteRequestDto,
   AdminUserCreateRequest,
   AdminUserDto,
   AiApiKeyRequest,
@@ -13,6 +15,10 @@ import {
   DispatchResultDto,
   DriverAccountApplicationDto,
   DriverDto,
+  DriverLeaveHistoryDto,
+  DriverLeaveBatchDto,
+  DriverLeaveRequestDto,
+  DriverMonthlyLeaveSummaryDto,
   DriverMessageDto,
   DriverMessageRequest,
   DriverMessageSummaryDto,
@@ -25,6 +31,7 @@ import {
   FuelPriceDto,
   GpsPingDto,
   LeaveRequest,
+  LeaveType,
   OrderDto,
   ReassignRequest,
   ReportCollectionDto,
@@ -39,6 +46,7 @@ import {
   VehicleDto,
   WarehouseDto,
   OptimizeSlotsRequest,
+  PlannedPartialLeaveRequestDto,
 } from './dispatch-api.models';
 
 const API_ROOT = '/api';
@@ -103,6 +111,71 @@ export class DispatchApiService {
       `${API_ROOT}/driver-schedules/shifts/${shiftId}/leave`,
       request,
     );
+  }
+
+  getPendingLeaveRequests(): Observable<DriverLeaveRequestDto[]> {
+    return this.http.get<DriverLeaveRequestDto[]>(`${API_ROOT}/leave-requests/pending`);
+  }
+
+  getPendingLeaveBatches(): Observable<DriverLeaveBatchDto[]> {
+    return this.http.get<DriverLeaveBatchDto[]>(`${API_ROOT}/leave-requests/batches/pending`);
+  }
+
+  getDriverMonthlyLeaveSummary(driverId: number, month: string): Observable<DriverMonthlyLeaveSummaryDto> {
+    const params = new HttpParams().set('month', month);
+    return this.http.get<DriverMonthlyLeaveSummaryDto>(
+      `${API_ROOT}/leave-requests/drivers/${driverId}/monthly`,
+      {params},
+    );
+  }
+
+  getLeaveRequestHistory(requestId: number): Observable<DriverLeaveHistoryDto[]> {
+    return this.http.get<DriverLeaveHistoryDto[]>(`${API_ROOT}/leave-requests/${requestId}/history`);
+  }
+
+  approveLeaveRequest(requestId: number, reason: string): Observable<DriverLeaveRequestDto> {
+    return this.http.patch<DriverLeaveRequestDto>(
+      `${API_ROOT}/leave-requests/${requestId}/approve`,
+      {reason},
+    );
+  }
+
+  rejectLeaveRequest(requestId: number, reason: string): Observable<DriverLeaveRequestDto> {
+    return this.http.patch<DriverLeaveRequestDto>(
+      `${API_ROOT}/leave-requests/${requestId}/reject`,
+      {reason},
+    );
+  }
+
+  approveLeaveBatch(batchId: string, reason: string): Observable<DriverLeaveBatchDto> {
+    return this.http.patch<DriverLeaveBatchDto>(
+      `${API_ROOT}/leave-requests/batches/${encodeURIComponent(batchId)}/approve`,
+      {reason},
+    );
+  }
+
+  rejectLeaveBatch(batchId: string, reason: string): Observable<DriverLeaveBatchDto> {
+    return this.http.patch<DriverLeaveBatchDto>(
+      `${API_ROOT}/leave-requests/batches/${encodeURIComponent(batchId)}/reject`,
+      {reason},
+    );
+  }
+
+  correctLeaveBatchType(
+    batchId: string,
+    leaveType: Exclude<LeaveType, 'ABSENT'>,
+    reason: string,
+  ): Observable<DriverLeaveBatchDto> {
+    return this.http.patch<DriverLeaveBatchDto>(
+      `${API_ROOT}/leave-requests/batches/${encodeURIComponent(batchId)}/type`,
+      {leaveType, reason},
+    );
+  }
+
+  createPlannedPartialLeave(
+    request: PlannedPartialLeaveRequestDto,
+  ): Observable<DriverLeaveRequestDto> {
+    return this.http.post<DriverLeaveRequestDto>(`${API_ROOT}/leave-requests/planned-partial`, request);
   }
 
   getRouteMetrics(routeId: number): Observable<RouteMetricsDto> {
@@ -446,18 +519,6 @@ export class DispatchApiService {
     return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, {params});
   }
 
-  /**
-   * 撤回發布：PUBLISHED 翻回 DRAFT。
-   *
-   * 撤回本身不刪東西，但路線會重新落入排車的清除範圍 ——
-   * 撤回後再排車，這批路線就會被整批刪掉重建。
-   */
-  withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
-    const params = new HttpParams().set('date', date);
-
-    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, {params});
-  }
-
   // ── 常配編組 ──────────────────────────────────────────
 
   getTemplates(): Observable<TemplateDto[]> {
@@ -583,6 +644,24 @@ export class DispatchApiService {
   /** 紅點：每位司機有幾則未讀。只列有未讀的司機，用 driverId 對到司機名單 */
   getDriverMessageSummary(): Observable<DriverMessageSummaryDto[]> {
     return this.http.get<DriverMessageSummaryDto[]>(`${API_ROOT}/drivers/messages/summary`);
+  }
+
+  // ── 主管備忘錄 ────────────────────────────────────────
+
+  getAdminStickyNotes(): Observable<AdminStickyNoteDto[]> {
+    return this.http.get<AdminStickyNoteDto[]>(`${API_ROOT}/admin-sticky-notes`);
+  }
+
+  createAdminStickyNote(request: AdminStickyNoteRequestDto): Observable<AdminStickyNoteDto> {
+    return this.http.post<AdminStickyNoteDto>(`${API_ROOT}/admin-sticky-notes`, request);
+  }
+
+  updateAdminStickyNote(id: number, request: AdminStickyNoteRequestDto): Observable<AdminStickyNoteDto> {
+    return this.http.put<AdminStickyNoteDto>(`${API_ROOT}/admin-sticky-notes/${id}`, request);
+  }
+
+  deleteAdminStickyNote(id: number): Observable<void> {
+    return this.http.delete<void>(`${API_ROOT}/admin-sticky-notes/${id}`);
   }
 
   private reportParams(query: ReportQuery): HttpParams {

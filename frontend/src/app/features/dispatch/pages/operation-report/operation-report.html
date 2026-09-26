@@ -1,23 +1,16 @@
 <main class="operation-report-page">
-  <section class="page-intro" aria-label="營運報表">
-    <div>
-      <p class="page-eyebrow">營運報表</p>
-      <p>檢視本期配送量、完成率與異常狀態。</p>
-    </div>
-
-    <div class="report-period" role="group" aria-label="報表期間">
-      @for (period of periods; track period.id) {
-        <button
-          type="button"
-          [class.is-active]="activePeriod() === period.id"
-          [attr.aria-pressed]="activePeriod() === period.id"
-          (click)="setPeriod(period.id)"
-        >
-          {{ period.label }}
-        </button>
-      }
-      <span>{{ report().range }}</span>
-    </div>
+  <section class="report-period" role="group" aria-label="報表期間">
+    @for (period of periods; track period.id) {
+      <button
+        type="button"
+        [class.is-active]="activePeriod() === period.id"
+        [attr.aria-pressed]="activePeriod() === period.id"
+        (click)="setPeriod(period.id)"
+      >
+        {{ period.label }}
+      </button>
+    }
+    <span>{{ report().range }}</span>
   </section>
 
   @if (loading()) {

@@ -3,6 +3,15 @@ export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
 export type ScheduleStatus = 'DRAFT' | 'PUBLISHED';
 export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
+export type LeaveType = 'SICK' | 'ANNUAL' | 'PERSONAL' | 'SPECIAL' | 'MENSTRUAL' | 'BEREAVEMENT' | 'ABSENT';
+export type LeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type LeaveSubmissionSource = 'DRIVER' | 'ADMIN' | 'SYSTEM';
+export type LeaveRequestMode =
+  | 'PREPLANNED'
+  | 'TEMPORARY'
+  | 'MAKEUP'
+  | 'SYSTEM_NO_SHOW'
+  | 'ADMIN_PLANNED_PARTIAL';
 /** 路線的發布狀態。訂單層沒有「已發布」，發布是路線層的事。 */
 export type RouteStatus = 'DRAFT' | 'PUBLISHED';
 export type OrderStatus =
@@ -189,6 +198,86 @@ export interface DriverShiftUpdateRequest {
   changeReason: string;
 }
 
+/** 一般請假申請與主管處理結果；requestReason 和 decisionReason 分開顯示。 */
+export interface DriverLeaveRequestDto {
+  id: number;
+  batchId: string | null;
+  requestMode: LeaveRequestMode;
+  driverId: number;
+  driverName: string;
+  driverShiftId: number;
+  workDate: string;
+  requestedLeaveType: LeaveType;
+  leaveType: LeaveType;
+  fullDay: boolean;
+  leaveStart: string | null;
+  leaveEnd: string | null;
+  requestReason: string;
+  evidencePhotoUrl: string | null;
+  status: LeaveRequestStatus;
+  submissionSource: LeaveSubmissionSource;
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedByAdminId: number | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  typeChangeReason: string | null;
+  typeChangedAt: string | null;
+  typeChangedBy: string | null;
+  driverReadAt: string | null;
+  lastUpdatedAt: string;
+}
+
+/** 同一司機、同假別、多個日期的預排請假，主管只能整組核准或退回。 */
+export interface DriverLeaveBatchDto {
+  batchId: string;
+  driverId: number;
+  driverName: string;
+  leaveType: LeaveType;
+  workDates: string[];
+  requestReason: string;
+  status: LeaveRequestStatus;
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  items: DriverLeaveRequestDto[];
+}
+
+export interface DriverLeaveHistoryDto {
+  id: number;
+  leaveRequestId: number;
+  driverId: number;
+  eventType: string;
+  actorType: LeaveSubmissionSource;
+  actorId: number;
+  actorAccount: string;
+  oldStatus: LeaveRequestStatus | null;
+  newStatus: LeaveRequestStatus | null;
+  oldLeaveType: LeaveType | null;
+  newLeaveType: LeaveType | null;
+  reason: string | null;
+  occurredAt: string;
+}
+
+export interface DriverMonthlyLeaveSummaryDto {
+  driverId: number;
+  driverName: string;
+  month: string;
+  hasLeaveRecords: boolean;
+  emptyMessage: string | null;
+  records: DriverLeaveRequestDto[];
+}
+
+export interface PlannedPartialLeaveRequestDto {
+  driverId: number;
+  workDate: string;
+  leaveType: Exclude<LeaveType, 'ABSENT'>;
+  leaveStart: string;
+  leaveEnd: string;
+  reason: string;
+}
+
 /** 對應 PATCH /api/driver-schedules/shifts/{shiftId}/leave。 */
 export interface LeaveRequest {
   reason: string;
@@ -320,6 +409,8 @@ export interface OrderDto {
   warehouseId: number;
   sourceVendor?: string;
   itemDescription?: string;
+  /** 結構化商品明細；舊訂單沒有明細時可能是 null 或空陣列。 */
+  items?: OrderItemDto[] | null;
   boxCount: number;
   notes: string;
   deliveryDate: string;
@@ -329,6 +420,21 @@ export interface OrderDto {
   sequence?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** 一張訂單的單一商品，送出時不帶 id 的項目會由後端建立。 */
+export interface OrderItemDto {
+  id?: number;
+  productCode?: string;
+  itemName: string;
+  expectedQuantity: number;
+  unit: string;
+  sequence?: number;
+  notes?: string;
+  loadedQuantity?: number | null;
+  checkedAt?: string | null;
+  checkedByDriverId?: number | null;
+  loadingNotes?: string | null;
 }
 
 /**
@@ -659,6 +765,26 @@ export interface DriverMessageRequest {
 export interface DriverMessageSummaryDto {
   driverId: number;
   unreadCount: number;
+}
+
+/** 後端 AdminStickyNoteResponse：登入主管自己的備忘錄，不綁定司機對話。 */
+export interface AdminStickyNoteDto {
+  id: number;
+  title: string | null;
+  content: string;
+  color: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+/** POST/PUT /api/admin-sticky-notes 的請求內容。 */
+export interface AdminStickyNoteRequestDto {
+  title: string | null;
+  content: string;
+  color: string | null;
+  sortOrder: number;
 }
 
 /** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */

@@ -6,28 +6,12 @@ import {
   ViewChild,
   signal, input, effect,
 } from '@angular/core';
-import * as L from 'leaflet';
+import {MatIconModule} from '@angular/material/icon';
+import type * as maplibregl from 'maplibre-gl';
 
-const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-/**
- * 做一個圓形文字徽章。Leaflet 的 divIcon 不會經過 Angular 的元件生命週期，
- * 因此不放外來 SVG 圖示，直接以「倉／店」區分標記。
- *
- * divIcon 是 DOM 不是 canvas，所以顏色交給 scss 的 .map-badge 管，
- * 不必像 circleMarker 那樣把色碼寫死在 TS 裡。
- */
-function badgeIcon(kind: 'warehouse' | 'store', size: number): L.DivIcon {
-  const label = kind === 'warehouse' ? '倉' : '店';
-
-  return L.divIcon({
-    className: '',   // 清掉 leaflet 預設的白底方框
-    html: `<span class="map-badge map-badge--${kind}" aria-hidden="true">${label}</span>`,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],      // 徽章中心對準座標
-    tooltipAnchor: [0, -size / 2],
-  });
-}
+const OPEN_FREE_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+const FLEET_ROUTE_SOURCE_ID = 'dispatch-fleet-routes';
+const FLEET_ROUTE_LAYER_ID = 'dispatch-fleet-route-lines';
 
 /** 地圖上的一個點。倉庫與門市共用同一個型別，差別只在畫出來的樣式 */
 export interface MapPoint {
@@ -44,7 +28,7 @@ export interface MapPoint {
 export interface RouteLine {
   id: number;                   // routeId，同時決定配色
   label: string;                // tooltip：司機名
-  points: [number, number][];   // [緯度, 經度]，Leaflet 順序
+  points: [number, number][];   // [緯度, 經度]
 }
 
 /**
@@ -55,7 +39,7 @@ const ROUTE_LINE_COLORS = ['#7aa2f7', '#f7768e', '#bb9af7', '#e0af68', '#2ac3de'
 
 @Component({
   selector: 'app-live-fleet-map',
-  imports: [],
+  imports: [MatIconModule],
   templateUrl: './live-fleet-map.html',
   styleUrl: './live-fleet-map.scss',
 })
@@ -78,14 +62,15 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   readonly routeLines = input<RouteLine[]>([]);
   /** 路線圖層開關 */
   readonly showRouteLines = input(false);
-  private map?: L.Map;
+  readonly resizable = input(false);
+  protected readonly mapHeight = signal(430);
+  protected readonly isResizingMap = signal(false);
+  private maplibre: typeof import('maplibre-gl') | null = null;
+  private map?: maplibregl.Map;
   private resizeObserver?: ResizeObserver;
-  private markerLayer?: L.LayerGroup;
-  /**
-   * 路線自己一層，不跟 markerLayer 共用：markerLayer 每次重畫都整層 clearLayers()，
-   * 混在一起的話點一更新（司機位置每 30 秒一次）就會把線一併清掉。
-   */
-  private lineLayer?: L.LayerGroup;
+  private pointMarkers: maplibregl.Marker[] = [];
+  private pointPopups: maplibregl.Popup[] = [];
+  private routeHoverPopup?: maplibregl.Popup;
   /**
    * 地圖是否已建立。用 signal 而不是判斷 this.map，是因為 effect 會早於
    * ngAfterViewInit 執行：那時直接 return 掉之後 input 沒再變動，effect 就不會再跑，
@@ -94,6 +79,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   private readonly mapReady = signal(false);
   /** 已自動框過範圍的倉庫 id，0 代表還沒框過。換倉庫才重框，理由見 fitOnce */
   private fittedWarehouseId = 0;
+  private resizeStart: {pointerY: number; height: number} | null = null;
 
   constructor() {
     effect(() => {
@@ -117,43 +103,113 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
+    void this.initializeMap();
+  }
+
+  private async initializeMap(): Promise<void> {
     const canvas = this.mapCanvas?.nativeElement;
     if (!canvas) {
       return;
     }
 
-    this.map = L.map(canvas, {
-      attributionControl: false,
-      zoomControl: false,
-      preferCanvas: true,
-    }).setView([22.6273, 120.3014], 13);
-
-    L.tileLayer(OSM_TILE_URL, {
-      attribution: '&copy; OpenStreetMap contributors',
+    await this.loadMapLibreStyles();
+    const maplibregl = await import('maplibre-gl');
+    maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+    this.maplibre = maplibregl;
+    this.map = new maplibregl.Map({
+      container: canvas,
+      center: [120.3014, 22.6273],
+      zoom: 12,
       maxZoom: 19,
-      subdomains: 'abc',
-    }).addTo(this.map);
-    L.control.zoom({position: 'bottomright'}).addTo(this.map);
+      maxPitch: 0,
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: false,
+      pitchWithRotate: false,
+      attributionControl: {},
+      style: OPEN_FREE_MAP_STYLE,
+    });
+    this.map.addControl(
+      new maplibregl.NavigationControl({showCompass: true, showZoom: false, visualizePitch: false}),
+      'top-left',
+    );
 
     this.resizeObserver = new ResizeObserver(() => {
       const activeMap = this.map;
       if (activeMap?.getContainer().isConnected) {
-        activeMap.invalidateSize();
+        activeMap.resize();
       }
     });
     this.resizeObserver.observe(canvas);
-    requestAnimationFrame(() => this.map?.invalidateSize());
-    this.mapReady.set(true);
+    requestAnimationFrame(() => this.map?.resize());
+    this.map.once('load', () => this.mapReady.set(true));
+  }
+
+  private loadMapLibreStyles(): Promise<void> {
+    if (document.querySelector('link[data-maplibre-style]')) return Promise.resolve();
+
+    return new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/maplibre/maplibre-gl.css';
+      link.dataset['maplibreStyle'] = '';
+      link.onload = () => resolve();
+      link.onerror = () => reject(new Error('MapLibre 樣式載入失敗'));
+      document.head.append(link);
+    });
   }
 
   ngOnDestroy(): void {
     this.resizeObserver?.disconnect();
+    this.routeHoverPopup?.remove();
+    this.pointMarkers.forEach((marker) => marker.remove());
+    this.pointPopups.forEach((popup) => popup.remove());
     this.map?.remove();
     this.map = undefined;
   }
 
+  protected startMapResize(event: PointerEvent): void {
+    if (!this.resizable()) return;
+    event.preventDefault();
+    this.resizeStart = {pointerY: event.clientY, height: this.mapHeight()};
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    this.isResizingMap.set(true);
+  }
+
+  protected resizeMap(event: PointerEvent): void {
+    if (!this.resizeStart) return;
+    this.mapHeight.set(this.clampMapHeight(this.resizeStart.height + event.clientY - this.resizeStart.pointerY));
+  }
+
+  protected finishMapResize(event: PointerEvent): void {
+    const handle = event.currentTarget as HTMLElement;
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    this.resizeStart = null;
+    this.isResizingMap.set(false);
+  }
+
+  protected adjustMapHeight(event: KeyboardEvent): void {
+    const step = 40;
+    if (event.key === 'ArrowDown') this.mapHeight.update((height) => this.clampMapHeight(height + step));
+    else if (event.key === 'ArrowUp') this.mapHeight.update((height) => this.clampMapHeight(height - step));
+    else if (event.key === 'Home') this.mapHeight.set(300);
+    else if (event.key === 'End') this.mapHeight.set(this.maxMapHeight());
+    else return;
+    event.preventDefault();
+  }
+
+  protected maxMapHeight(): number {
+    return typeof window === 'undefined'
+      ? 760
+      : Math.max(430, Math.min(760, Math.floor(window.innerHeight * 0.75)));
+  }
+
+  private clampMapHeight(height: number): number {
+    return Math.max(300, Math.min(this.maxMapHeight(), height));
+  }
+
   /**
-   * 重畫倉庫與門市。
+   * 重畫倉庫、門市與司機標記。
    *
    * 整層清掉重建，不逐點比對差異 —— 一個倉一天的門市是十位數等級，重畫成本可以忽略，
    * 但省下維護「哪些點該新增／移除」的狀態，拖曳改派時也不會殘留舊點。
@@ -170,45 +226,24 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.markerLayer ??= L.layerGroup().addTo(map);
-    this.markerLayer.clearLayers();
+    this.pointMarkers.forEach((marker) => marker.remove());
+    this.pointPopups.forEach((popup) => popup.remove());
+    this.pointMarkers = [];
+    this.pointPopups = [];
 
-    // 倉庫與門市用 divIcon 圖示，不用 L.marker() 的預設圖釘：
-    // 預設圖釘的 icon 圖片路徑是相對 leaflet.css 解析的，打包後常 404，
-    // 畫面沒有點但不一定看得到錯誤。divIcon 是自己給的 HTML，不碰圖檔。
     if (visible && warehouse) {
-      L.marker([warehouse.lat, warehouse.lng], {
-        icon: badgeIcon('warehouse', 34),
-        keyboard: false,
-      })
-        .bindTooltip(`倉庫｜${this.escapeTooltip(warehouse.label)}`, {direction: 'top'})
-        .addTo(this.markerLayer);
+      this.addPointMarker(warehouse, 'warehouse', `倉庫｜${warehouse.label}`);
     }
 
     if (visible) {
       for (const store of stores) {
-        L.marker([store.lat, store.lng], {
-          icon: badgeIcon('store', 26),
-          keyboard: false,
-        })
-          .bindTooltip(this.tooltipContent(store), {direction: 'top'})
-          .addTo(this.markerLayer);
+        this.addPointMarker(store, 'store', this.tooltipContent(store));
       }
     }
 
-    // 司機維持 circleMarker：位置每 30 秒重畫一次，向量圈畫在 canvas 上比較省，
-    // 而且一個小圓點在圖示之間反而好認。顏色只能寫死，canvas 碰不到 CSS 變數。
     if (driversVisible) {
       for (const driver of driverPoints) {
-        L.circleMarker([driver.lat, driver.lng], {
-          radius: 7,
-          weight: 3,
-          color: '#7ee787',
-          fillColor: '#0b0e0f',
-          fillOpacity: 0.85,
-        })
-          .bindTooltip(`司機｜${this.tooltipContent(driver)}`, {direction: 'top'})
-          .addTo(this.markerLayer);
+        this.addPointMarker(driver, 'driver', `司機｜${this.tooltipContent(driver)}`);
       }
     }
 
@@ -217,6 +252,31 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     if (visible) {
       this.fitOnce(map, warehouse, stores);
     }
+  }
+
+  private addPointMarker(point: MapPoint, kind: 'warehouse' | 'store' | 'driver', content: string): void {
+    const maplibregl = this.maplibre;
+    const map = this.map;
+    if (!maplibregl || !map) return;
+
+    const element = document.createElement('span');
+    element.className = kind === 'driver'
+      ? 'fleet-driver-marker'
+      : `map-badge map-badge--${kind}`;
+    if (kind !== 'driver') element.textContent = kind === 'warehouse' ? '倉' : '店';
+    element.setAttribute('aria-hidden', 'true');
+
+    const popup = new maplibregl.Popup({closeButton: false, closeOnClick: false, offset: 16})
+      .setHTML(content);
+    const marker = new maplibregl.Marker({element, anchor: 'center'})
+      .setLngLat([point.lng, point.lat])
+      .addTo(map);
+    element.addEventListener('mouseenter', () => {
+      if (!popup.isOpen()) popup.addTo(map);
+    });
+    element.addEventListener('mouseleave', () => popup.remove());
+    this.pointMarkers.push(marker);
+    this.pointPopups.push(popup);
   }
 
   private tooltipContent(point: MapPoint): string {
@@ -237,7 +297,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   }
 
   /**
-   * 重畫司機路線。
+   * 更新司機路線 GeoJSON 圖層。
    *
    * 直線連點，不走實際道路 —— 線會穿過建物與港灣，長度也不等於里程，
    * 畫面上要標距離請用看板算出來的 totalDistance。
@@ -248,25 +308,51 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       return;
     }
 
-    this.lineLayer ??= L.layerGroup().addTo(map);
-    this.lineLayer.clearLayers();
-    if (!visible) {
+    const features = visible
+      ? lines.filter((line) => line.points.length >= 2).map((line, index) => ({
+        type: 'Feature' as const,
+        properties: {label: line.label, color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length]},
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: line.points.map(([lat, lng]) => [lng, lat]),
+        },
+      }))
+      : [];
+    const data = {type: 'FeatureCollection' as const, features};
+    const source = map.getSource(FLEET_ROUTE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+    if (source) {
+      source.setData(data);
       return;
     }
 
-    lines.forEach((line, index) => {
-      // 一個點連不成線，補上倉庫後至少要兩點才畫
-      if (line.points.length < 2) {
-        return;
-      }
+    map.addSource(FLEET_ROUTE_SOURCE_ID, {type: 'geojson', data});
+    map.addLayer({
+      id: FLEET_ROUTE_LAYER_ID,
+      type: 'line',
+      source: FLEET_ROUTE_SOURCE_ID,
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 3,
+        'line-opacity': 0.85,
+      },
+      layout: {'line-cap': 'round', 'line-join': 'round'},
+    });
+    this.bindRouteHover(map);
+  }
 
-      L.polyline(line.points, {
-        color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length],
-        weight: 3,
-        opacity: 0.85,
-      })
-        .bindTooltip(line.label, {sticky: true})
-        .addTo(this.lineLayer!);
+  private bindRouteHover(map: maplibregl.Map): void {
+    map.on('mousemove', FLEET_ROUTE_LAYER_ID, (event) => {
+      const feature = event.features?.[0];
+      if (!feature) return;
+      const label = String(feature.properties?.['label'] ?? '');
+      this.routeHoverPopup ??= new this.maplibre!.Popup({closeButton: false, closeOnClick: false, offset: 8});
+      this.routeHoverPopup.setLngLat(event.lngLat).setText(label).addTo(map);
+      map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', FLEET_ROUTE_LAYER_ID, () => {
+      this.routeHoverPopup?.remove();
+      map.getCanvas().style.cursor = '';
     });
   }
 
@@ -276,7 +362,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
    * 每次重畫都 fitBounds 的話，拖一張卡片地圖就跳回全景，使用者放大在看的區域會被蓋掉；
    * 圖層關掉再打開也一樣。換倉庫才需要重新框。
    */
-  private fitOnce(map: L.Map, warehouse: MapPoint | null, stores: MapPoint[]): void {
+  private fitOnce(map: maplibregl.Map, warehouse: MapPoint | null, stores: MapPoint[]): void {
     const points = warehouse ? [warehouse, ...stores] : stores;
     const warehouseId = warehouse?.id ?? 0;
     if (points.length === 0 || warehouseId === this.fittedWarehouseId) {
@@ -284,10 +370,10 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     this.fittedWarehouseId = warehouseId;
-    map.fitBounds(
-      L.latLngBounds(points.map((point) => [point.lat, point.lng] as L.LatLngTuple)),
-      {padding: [56, 56], maxZoom: 14},
-    );
+    const coordinates = points.map((point) => [point.lng, point.lat] as [number, number]);
+    const bounds = new this.maplibre!.LngLatBounds(coordinates[0], coordinates[0]);
+    coordinates.slice(1).forEach((coordinate) => bounds.extend(coordinate));
+    map.fitBounds(bounds, {padding: 56, maxZoom: 14});
   }
 
 }

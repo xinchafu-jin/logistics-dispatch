@@ -9,6 +9,7 @@ import {
 } from '../../../../core/services/order-import.service';
 import {
   OrderDto,
+  OrderItemDto,
   OrderStatus as BackendOrderStatus,
   StoreDto,
   WarehouseDto,
@@ -92,10 +93,22 @@ function emptyOrder(storeId = 0, warehouseId = 0): OrderDto {
     warehouseId,
     sourceVendor: '',
     itemDescription: '',
+    items: [],
     boxCount: 1,
     notes: '',
     deliveryDate: todayLocalDate(),
     status: 'PENDING_CONFIRM',
+  };
+}
+
+function emptyOrderItem(sequence: number): OrderItemDto {
+  return {
+    productCode: '',
+    itemName: '',
+    expectedQuantity: 1,
+    unit: '件',
+    sequence,
+    notes: '',
   };
 }
 
@@ -212,7 +225,10 @@ export class OrderReview implements OnInit {
   }
 
   openEditOrder(order: DeliveryOrder): void {
-    this.orderForm.set({ ...order.raw });
+    this.orderForm.set({
+      ...order.raw,
+      items: (order.raw.items ?? []).map((item) => ({...item})),
+    });
     this.editingOrderId.set(order.backendId);
     this.formError.set('');
     this.activeForm.set('edit');
@@ -244,6 +260,48 @@ export class OrderReview implements OnInit {
     this.orderForm.update((order) => ({ ...order, status }));
   }
 
+  addOrderItem(): void {
+    this.orderForm.update((order) => ({
+      ...order,
+      items: [...(order.items ?? []), emptyOrderItem((order.items?.length ?? 0) + 1)],
+    }));
+  }
+
+  removeOrderItem(index: number): void {
+    this.orderForm.update((order) => ({
+      ...order,
+      items: (order.items ?? [])
+        .filter((_, itemIndex) => itemIndex !== index)
+        .map((item, itemIndex) => ({...item, sequence: itemIndex + 1})),
+    }));
+  }
+
+  updateOrderItemText(
+    index: number,
+    field: 'productCode' | 'itemName' | 'unit' | 'notes',
+    event: Event,
+  ): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.orderForm.update((order) => ({
+      ...order,
+      items: (order.items ?? []).map((item, itemIndex) =>
+        itemIndex === index ? {...item, [field]: value} : item,
+      ),
+    }));
+    this.formError.set('');
+  }
+
+  updateOrderItemQuantity(index: number, event: Event): void {
+    const expectedQuantity = Number((event.target as HTMLInputElement).value);
+    this.orderForm.update((order) => ({
+      ...order,
+      items: (order.items ?? []).map((item, itemIndex) =>
+        itemIndex === index ? {...item, expectedQuantity} : item,
+      ),
+    }));
+    this.formError.set('');
+  }
+
   submitOrder(): void {
     const order = this.orderForm();
     const editingId = this.editingOrderId();
@@ -268,12 +326,29 @@ export class OrderReview implements OnInit {
       return;
     }
 
+    const items = (order.items ?? []).map((item, index) => ({
+      ...item,
+      productCode: item.productCode?.trim() || undefined,
+      itemName: item.itemName.trim(),
+      unit: item.unit.trim(),
+      notes: item.notes?.trim() || undefined,
+      sequence: index + 1,
+    }));
+    const invalidItem = items.find((item) =>
+      !item.itemName || !item.unit || !Number.isInteger(item.expectedQuantity) || item.expectedQuantity < 1,
+    );
+    if (invalidItem) {
+      this.formError.set('每一項商品都要填名稱、單位，以及至少 1 的數量。');
+      return;
+    }
+
+    const payload: OrderDto = {...order, items};
     this.isSaving.set(true);
     this.formError.set('');
     const request =
       this.activeForm() === 'edit' && editingId !== null
-        ? this.api.updateOrder(editingId, order)
-        : this.api.createOrder(order);
+        ? this.api.updateOrder(editingId, payload)
+        : this.api.createOrder(payload);
 
     request.subscribe({
       next: (savedOrder) => {

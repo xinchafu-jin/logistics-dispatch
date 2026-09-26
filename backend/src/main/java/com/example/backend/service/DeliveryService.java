@@ -12,6 +12,7 @@ import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.request.ArriveRequestDTO;
 import com.example.backend.dto.request.DeliverRequestDTO;
+import com.example.backend.dto.request.LoadingItemDTO;
 import com.example.backend.dto.request.LoadingRequestDTO;
 import com.example.backend.dto.request.NoSignatureRequestDTO;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
@@ -19,6 +20,7 @@ import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriversEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
+import com.example.backend.entity.OrderItemsEntity;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.EntityNotFoundException;
@@ -29,6 +31,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.example.backend.constants.ValidMsg.*;
 
@@ -75,12 +82,15 @@ public class DeliveryService {
             throw new IllegalArgumentException(DELIVERY_LOADING_OVER_COUNT.formatted(expected));
         }
 
-        if (loaded == expected) {
+        List<LoadingResponse.ItemResult> itemResults = validateAndRecordItems(
+                order, driverId, request.getItems(), now);
+        boolean itemContentsMatched = itemResults.stream().allMatch(LoadingResponse.ItemResult::getMatched);
+
+        if (loaded == expected && itemContentsMatched) {
             order.setStatus(OrderStatus.LOADED);
             order.setLoadedAt(now);
             ordersDAO.save(order);
-            return new LoadingResponse(order.getId(), order.getStatus(), order.getLoadedAt(),
-                    null, null, null, null);
+            return loadingResponse(order, null, null, itemResults);
         }
 
         // 箱數不符比照無人簽收：原單今天結案，整張由明日補送單重送；主管在異常中心確認後，補送單才進待排車
@@ -92,14 +102,14 @@ public class DeliveryService {
         // 異常中心只列已送進確認區的案件；設成現在，下一次排程或查詢就會送進去，主管當下就看得到
         exceptionCase.setReviewAvailableAt(now);
         exceptionCase.setType(ExceptionType.LOADING_MISMATCH);
-        exceptionCase.setDescription(loadingMismatchDescription(expected, loaded, request.getNotes()));
+        exceptionCase.setDescription(loadingMismatchDescription(
+                expected, loaded, request.getNotes(), itemResults));
         exceptionCase.setStatus(ExceptionStatus.OPEN);
         exceptionCase = exceptionCasesDAO.save(exceptionCase);
 
         order.setStatus(OrderStatus.FAILED);
         ordersDAO.save(order);
-        return new LoadingResponse(order.getId(), order.getStatus(), null, exceptionCase.getId(),
-                followUpOrder.getId(), followUpOrder.getOrderNumber(), followUpOrder.getDeliveryDate());
+        return loadingResponse(order, exceptionCase, followUpOrder, itemResults);
     }
 
     /** 抵達門市後建立本次配送紀錄，訂單進入配送中。 */
@@ -224,6 +234,7 @@ public class DeliveryService {
         followUpOrder.setOrderType(OrderType.REDELIVERY);
         followUpOrder.setParentOrderId(sourceOrder.getId());
         followUpOrder.setRetryCount(retryCount);
+        copyItems(sourceOrder, followUpOrder);
         return ordersDAO.save(followUpOrder);
     }
 
@@ -239,8 +250,23 @@ public class DeliveryService {
         return prefix + "-" + compactDate + "-" + sourceId + "-" + retry;
     }
 
-    private String loadingMismatchDescription(int expected, int loaded, String notes) {
+    private String loadingMismatchDescription(
+            int expected,
+            int loaded,
+            String notes,
+            List<LoadingResponse.ItemResult> itemResults
+    ) {
         String description = DELIVERY_LOADING_MISMATCH_DESCRIPTION.formatted(expected, loaded);
+        String itemMismatch = itemResults.stream()
+                .filter(item -> !item.getMatched())
+                .map(item -> "%s 應到 %d%s、實點 %d%s".formatted(
+                        item.getItemName(), item.getExpectedQuantity(), item.getUnit(),
+                        item.getLoadedQuantity(), item.getUnit()))
+                .reduce((left, right) -> left + "；" + right)
+                .orElse(null);
+        if (itemMismatch != null) {
+            description += "；內容物不符：" + itemMismatch;
+        }
         String driverNotes = trimToNull(notes);
         return driverNotes == null ? description : description + "；司機備註：" + driverNotes;
     }
@@ -294,7 +320,109 @@ public class DeliveryService {
         followUpOrder.setOrderType(OrderType.REPLENISHMENT);
         followUpOrder.setParentOrderId(sourceOrder.getId());
         followUpOrder.setRetryCount(retryCount);
+        copyItems(sourceOrder, followUpOrder);
         return ordersDAO.save(followUpOrder);
+    }
+
+    private List<LoadingResponse.ItemResult> validateAndRecordItems(
+            OrdersEntity order,
+            Long driverId,
+            List<LoadingItemDTO> requestedItems,
+            LocalDateTime checkedAt
+    ) {
+        List<OrderItemsEntity> expectedItems = order.getItems();
+        if (expectedItems.isEmpty()) {
+            if (requestedItems != null && !requestedItems.isEmpty()) {
+                throw new IllegalArgumentException("這張訂單沒有可點交的內容物明細");
+            }
+            return List.of();
+        }
+        if (requestedItems == null || requestedItems.isEmpty()) {
+            throw new IllegalArgumentException("請先逐項勾選並核對訂單內容物");
+        }
+
+        Map<Long, LoadingItemDTO> requestedById = new HashMap<>();
+        for (LoadingItemDTO requested : requestedItems) {
+            if (requested.getOrderItemId() == null) {
+                throw new IllegalArgumentException("點交商品 ID 不能為空");
+            }
+            if (requestedById.put(requested.getOrderItemId(), requested) != null) {
+                throw new IllegalArgumentException("同一個商品不能重複點交，ID：" + requested.getOrderItemId());
+            }
+        }
+
+        Set<Long> expectedIds = new HashSet<>();
+        for (OrderItemsEntity item : expectedItems) {
+            expectedIds.add(item.getId());
+            LoadingItemDTO requested = requestedById.get(item.getId());
+            if (requested == null || !Boolean.TRUE.equals(requested.getChecked())) {
+                throw new IllegalArgumentException("請先勾選並核對商品：" + item.getItemName());
+            }
+            int actual = requested.getLoadedQuantity() == null
+                    ? item.getExpectedQuantity() : requested.getLoadedQuantity();
+            if (actual > item.getExpectedQuantity()) {
+                throw new IllegalArgumentException("商品「" + item.getItemName() + "」實點數量不能大於應到數量 "
+                        + item.getExpectedQuantity() + item.getUnit());
+            }
+        }
+        if (!expectedIds.equals(requestedById.keySet())) {
+            throw new IllegalArgumentException("點交內容包含不屬於這張訂單的商品");
+        }
+
+        return expectedItems.stream().map(item -> {
+            LoadingItemDTO requested = requestedById.get(item.getId());
+            int actual = requested.getLoadedQuantity() == null
+                    ? item.getExpectedQuantity() : requested.getLoadedQuantity();
+            item.setLoadedQuantity(actual);
+            item.setCheckedAt(checkedAt);
+            item.setCheckedByDriverId(driverId);
+            item.setLoadingNotes(trimToNull(requested.getNotes()));
+            return new LoadingResponse.ItemResult(
+                    item.getId(),
+                    item.getItemName(),
+                    item.getExpectedQuantity(),
+                    actual,
+                    item.getUnit(),
+                    actual == item.getExpectedQuantity(),
+                    checkedAt,
+                    item.getLoadingNotes()
+            );
+        }).toList();
+    }
+
+    private LoadingResponse loadingResponse(
+            OrdersEntity order,
+            ExceptionCasesEntity exceptionCase,
+            OrdersEntity followUpOrder,
+            List<LoadingResponse.ItemResult> items
+    ) {
+        int checkedItemCount = (int) items.stream().filter(LoadingResponse.ItemResult::getMatched).count();
+        return new LoadingResponse(
+                order.getId(),
+                order.getStatus(),
+                order.getLoadedAt(),
+                exceptionCase == null ? null : exceptionCase.getId(),
+                followUpOrder == null ? null : followUpOrder.getId(),
+                followUpOrder == null ? null : followUpOrder.getOrderNumber(),
+                followUpOrder == null ? null : followUpOrder.getDeliveryDate(),
+                checkedItemCount,
+                items.size(),
+                checkedItemCount == items.size(),
+                items
+        );
+    }
+
+    private void copyItems(OrdersEntity sourceOrder, OrdersEntity targetOrder) {
+        for (OrderItemsEntity source : sourceOrder.getItems()) {
+            OrderItemsEntity copy = new OrderItemsEntity();
+            copy.setProductCode(source.getProductCode());
+            copy.setItemName(source.getItemName());
+            copy.setExpectedQuantity(source.getExpectedQuantity());
+            copy.setUnit(source.getUnit());
+            copy.setSequence(source.getSequence());
+            copy.setNotes(source.getNotes());
+            targetOrder.addItem(copy);
+        }
     }
 
     private OrdersEntity findAuthorizedOrderForUpdate(Long driverId, Long orderId, LocalDate today) {

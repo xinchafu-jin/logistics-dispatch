@@ -5,6 +5,7 @@ import com.example.backend.constants.StoreStatus;
 import com.example.backend.dao.StoresDAO;
 import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.request.OrdersBatchDto;
+import com.example.backend.dto.request.OrderItemDTO;
 import com.example.backend.dto.request.OrdersDTO;
 import com.example.backend.dto.respones.OrderImportValidationResponse;
 import org.springframework.stereotype.Service;
@@ -94,6 +95,38 @@ public class OrderImportService {
         length(row.getSourceVendor(), 100, rowNumber, "sourceVendor", errors);
         length(row.getItemDescription(), 255, rowNumber, "itemDescription", errors);
         length(row.getNotes(), 500, rowNumber, "notes", errors);
+        validateItems(row.getItems(), rowNumber, errors);
+    }
+
+    private void validateItems(
+            List<OrderItemDTO> items,
+            int rowNumber,
+            List<OrderImportValidationResponse.RowError> errors
+    ) {
+        if (items == null) {
+            return;
+        }
+        for (int index = 0; index < items.size(); index++) {
+            OrderItemDTO item = items.get(index);
+            String field = "items[" + index + "]";
+            if (item == null || item.getItemName() == null || item.getItemName().isBlank()) {
+                errors.add(new OrderImportValidationResponse.RowError(
+                        rowNumber, field + ".itemName", "商品名稱不能為空"));
+                continue;
+            }
+            if (item.getExpectedQuantity() == null || item.getExpectedQuantity() < 1) {
+                errors.add(new OrderImportValidationResponse.RowError(
+                        rowNumber, field + ".expectedQuantity", "商品數量必須大於 0"));
+            }
+            if (item.getUnit() == null || item.getUnit().isBlank()) {
+                errors.add(new OrderImportValidationResponse.RowError(
+                        rowNumber, field + ".unit", "商品單位不能為空"));
+            }
+            length(item.getProductCode(), 50, rowNumber, field + ".productCode", errors);
+            length(item.getItemName(), 100, rowNumber, field + ".itemName", errors);
+            length(item.getUnit(), 20, rowNumber, field + ".unit", errors);
+            length(item.getNotes(), 255, rowNumber, field + ".notes", errors);
+        }
     }
 
     private void length(
@@ -114,6 +147,7 @@ public class OrderImportService {
         target.setWarehouseId(source.getWarehouseId());
         target.setSourceVendor(source.getSourceVendor());
         target.setItemDescription(source.getItemDescription());
+        target.setItems(source.getItems());
         target.setBoxCount(source.getBoxCount());
         target.setNotes(source.getNotes());
         target.setDeliveryDate(source.getDeliveryDate());

@@ -1,9 +1,12 @@
 package com.example.backend.dto.request;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+
+import java.util.List;
 
 import static com.example.backend.constants.ValidMsg.DELIVERY_ORDER_ID_POSITIVE;
 import static com.example.backend.constants.ValidMsg.DELIVERY_ORDER_ID_REQUIRED;
@@ -25,6 +28,13 @@ public class LoadingRequestDTO {
 
     @Size(max = 500, message = LOADING_NOTES_MAX_LENGTH)
     private String notes;
+
+    /**
+     * 訂單有結構化內容物時，前端把畫面上每一項的勾選與實點數量送回來。
+     * 舊訂單沒有內容物明細時可不傳。
+     */
+    @Valid
+    private List<LoadingItemDTO> items;
 
     public Long getOrderId() {
         return orderId;
@@ -48,5 +58,13 @@ public class LoadingRequestDTO {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public List<LoadingItemDTO> getItems() {
+        return items;
+    }
+
+    public void setItems(List<LoadingItemDTO> items) {
+        this.items = items;
     }
 }

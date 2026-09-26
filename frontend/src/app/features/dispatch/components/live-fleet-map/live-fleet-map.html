@@ -1,21 +1,41 @@
-<section class="live-fleet-map" aria-labelledby="fleet-map-title">
+<section
+  class="live-fleet-map"
+  [class.is-resizable]="resizable()"
+  [class.is-resizing]="isResizingMap()"
+  [style.height.px]="resizable() ? mapHeight() : null"
+  aria-labelledby="fleet-map-title"
+>
   <div class="fleet-map-stage">
     <header class="fleet-map-header">
       <div>
-        <p class="fleet-map-eyebrow">車隊監控</p>
         <h3 id="fleet-map-title">高雄配送區域地圖</h3>
       </div>
-      <span class="fleet-map-count">{{ driverPoints().length }} 位已定位司機</span>
     </header>
 
     <div #mapCanvas class="fleet-map-canvas" aria-label="高雄配送區域地圖"></div>
 
-    <p class="fleet-map-attribution">
-      &copy;
-      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
-        >OpenStreetMap</a
-      >
-    </p>
   </div>
+
+  @if (resizable()) {
+    <div
+      class="fleet-map-resize-handle"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="調整地圖高度"
+      title="拖曳調整地圖高度；也可用上下方向鍵"
+      tabindex="0"
+      aria-valuemin="300"
+      [attr.aria-valuemax]="maxMapHeight()"
+      [attr.aria-valuenow]="mapHeight()"
+      [attr.aria-valuetext]="'地圖高度 ' + mapHeight() + ' 像素'"
+      (pointerdown)="startMapResize($event)"
+      (pointermove)="resizeMap($event)"
+      (pointerup)="finishMapResize($event)"
+      (pointercancel)="finishMapResize($event)"
+      (keydown)="adjustMapHeight($event)"
+    >
+      <mat-icon aria-hidden="true">drag_handle</mat-icon>
+    </div>
+  }
 
 </section>
