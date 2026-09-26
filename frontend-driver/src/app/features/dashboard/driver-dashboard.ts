@@ -51,6 +51,7 @@ import {
   DriverTaskStop,
   DriverTaskOrderStatus,
   DriverTasksResponse,
+  GpsRouteStep,
 } from '../../core/services/driver-operations.models';
 import {DriverOperationsService} from '../../core/services/driver-operations.service';
 import {DriverWeather, DriverWeatherService} from '../../core/services/driver-weather.service';
@@ -165,6 +166,144 @@ function bearingInDegrees(from: MapPosition, to: MapPosition): number {
 const OFF_ROUTE_METERS = 70;
 const OFF_ROUTE_STREAK = 3;
 const RECALC_COOLDOWN_MS = 15_000;
+
+// ── 逐一轉彎提示 ─────────────────────────────────────────
+// 轉彎點離剩下的路線多近才算「還在前面」。OSRM 的轉彎點本身就是路線上的頂點，留一點誤差給切路線的位置
+const STEP_ON_ROUTE_METERS = 20;
+// 「轉完了」的判斷：曾經開到轉彎點這麼近……
+const STEP_APPROACH_METERS = 25;
+// ……之後又離開這麼遠。兩個都要成立，停紅燈時 GPS 飄動才不容易被當成已經轉過
+const STEP_DEPART_METERS = 20;
+// 離終點這麼近就算抵達
+const ARRIVE_METERS = 30;
+// 進到這個距離內念「即將左轉…」
+const NEAR_ANNOUNCE_METERS = 80;
+const VOICE_GUIDANCE_STORAGE_KEY = 'driver.voiceGuidance';
+
+/**
+ * 轉彎點相對司機的位置。remainingRoute 是已經切掉走過部分的路線，第一個點就在司機附近。
+ *
+ * alongRouteMeters：沿著剩下的路線開到轉彎點的距離。直線距離在彎路上會偏短，所以沿路線累加；
+ *   轉彎點不在剩下的路線上時退回直線距離。
+ * onRemainingRoute：轉彎點還在剩下的路線上；false 代表那一段已經被切掉，也就是開過去了。
+ */
+export function measureStepProgress(
+  here: MapPosition,
+  remainingRoute: MapPosition[],
+  target: MapPosition,
+): { alongRouteMeters: number; onRemainingRoute: boolean } {
+  if (remainingRoute.length === 0) {
+    return {alongRouteMeters: distanceInMeters(here, target), onRemainingRoute: false};
+  }
+
+  let travelled = distanceInMeters(here, remainingRoute[0]);
+  for (let i = 0; i < remainingRoute.length; i++) {
+    if (i > 0) {
+      travelled += distanceInMeters(remainingRoute[i - 1], remainingRoute[i]);
+    }
+    // 從前面往後找第一個靠近的點：路線繞回同一個路口時，才不會對到後面那一次
+    let gap = distanceInMeters(remainingRoute[i], target);
+    if (gap <= STEP_ON_ROUTE_METERS) {
+      // 20 公尺內的第一個點不一定是轉彎點本身（路線點很密時會提早 20 公尺停下），
+      // 繼續往前走到最接近的那個點，再補上剩下的直線距離
+      while (i + 1 < remainingRoute.length) {
+        const nextGap = distanceInMeters(remainingRoute[i + 1], target);
+        if (nextGap >= gap) {
+          break;
+        }
+        travelled += distanceInMeters(remainingRoute[i], remainingRoute[i + 1]);
+        gap = nextGap;
+        i++;
+      }
+      return {alongRouteMeters: travelled + gap, onRemainingRoute: true};
+    }
+  }
+  return {alongRouteMeters: distanceInMeters(here, target), onRemainingRoute: false};
+}
+
+/**
+ * 這個轉彎是否已經轉過，兩個條件任一成立就算：
+ * 1. 轉彎點已經不在剩下的路線上：那一段被切掉了。GPS 剛好沒取到轉彎附近的點（跳點、隧道）也抓得到。
+ * 2. 曾經開到轉彎點附近，現在又離開一段：轉完了。只看「夠近就換下一步」的話，
+ *    起點常出現的迴轉點（OSRM 的 continue＋uturn）就在腳下，一開始就會被跳過。
+ */
+export function isStepPassed(distanceNow: number, closestSoFar: number, onRemainingRoute: boolean): boolean {
+  if (!onRemainingRoute) {
+    return true;
+  }
+  return closestSoFar <= STEP_APPROACH_METERS && distanceNow >= closestSoFar + STEP_DEPART_METERS;
+}
+
+/** 提示列上的距離；20 公尺內直接說「即將」，數字跳動只會干擾 */
+export function formatManeuverDistance(meters: number): string {
+  if (meters < 20) {
+    return '即將';
+  }
+  if (meters >= 1_000) {
+    return `${(meters / 1_000).toFixed(1)} 公里`;
+  }
+  if (meters >= 100) {
+    return `${Math.round(meters / 10) * 10} 公尺`;
+  }
+  return `${Math.round(meters / 5) * 5} 公尺`;
+}
+
+/** 轉彎動作對應的 Material Icons 圖示；台灣靠右行駛，迴轉一律往左 */
+export function maneuverIcon(step: Pick<GpsRouteStep, 'type' | 'modifier'>): string {
+  const modifier = step.modifier ?? '';
+  const toLeft = modifier.includes('left');
+  switch (step.type) {
+    case 'arrive':
+      return 'flag';
+    case 'depart':
+      return 'navigation';
+    case 'roundabout':
+    case 'rotary':
+    case 'exit roundabout':
+    case 'exit rotary':
+      return toLeft ? 'roundabout_left' : 'roundabout_right';
+    case 'fork':
+      return toLeft ? 'fork_left' : 'fork_right';
+    case 'on ramp':
+    case 'off ramp':
+      return toLeft ? 'ramp_left' : 'ramp_right';
+    case 'merge':
+      return 'merge';
+  }
+  switch (modifier) {
+    case 'uturn':
+      return 'u_turn_left';
+    case 'left':
+      return 'turn_left';
+    case 'right':
+      return 'turn_right';
+    case 'slight left':
+      return 'turn_slight_left';
+    case 'slight right':
+      return 'turn_slight_right';
+    case 'sharp left':
+      return 'turn_sharp_left';
+    case 'sharp right':
+      return 'turn_sharp_right';
+    default:
+      return 'straight';
+  }
+}
+
+/** 路名換了但不用轉彎（直行）；這種步驟不念「即將…」，司機什麼都不用做 */
+function isStraightThrough(step: GpsRouteStep): boolean {
+  return (step.type === 'new name' || step.type === 'continue')
+    && (step.modifier === null || step.modifier === 'straight');
+}
+
+/** 語音開關記在這台手機上；讀不到（無痕模式、被封鎖）就用預設的開啟 */
+function readVoiceGuidancePreference(): boolean {
+  try {
+    return localStorage.getItem(VOICE_GUIDANCE_STORAGE_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
 
 @Component({
   selector: 'app-driver-dashboard',
@@ -403,6 +542,22 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isNavigating = signal(false);
   private offRouteStreak = 0;
   private lastRecalcAt = 0;
+  // ── 逐一轉彎提示（資料來自後端 /api/driver/route 的 steps）──
+  protected readonly navigationSteps = signal<GpsRouteStep[]>([]);
+  // 目前提示的是第幾步；第 0 步是「出發」，位置就在起點，所以從第 1 步開始
+  protected readonly currentStepIndex = signal(0);
+  // 沿路線開到下一個轉彎點還有幾公尺；還沒收到 GPS 時是 null
+  protected readonly distanceToManeuver = signal<number | null>(null);
+  protected readonly hasArrived = signal(false);
+  protected readonly currentManeuver = computed(
+    () => this.navigationSteps()[this.currentStepIndex()] ?? null,
+  );
+  protected readonly voiceGuidanceEnabled = signal(readVoiceGuidancePreference());
+  // 這一步目前為止離轉彎點最近的直線距離，給 isStepPassed 判斷「開近又離開＝轉完了」
+  private closestToStep = Infinity;
+  // 已經念過「300 公尺後…」／「即將…」的是第幾步，同一步不重複念
+  private announcedStepIndex = -1;
+  private announcedNearStepIndex = -1;
   private mapLocationWatchId: number | null = null;
   private attendanceSheetPointerId: number | null = null;
   private attendanceSheetPointerStartY: number | null = null;
@@ -2069,7 +2224,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       style: OPEN_FREE_MAP_STYLE,
     });
     this.driverMap.addControl(
-      new maplibregl.NavigationControl({showCompass: true, showZoom: false, visualizePitch: false}),
+      new maplibregl.NavigationControl({showCompass: true, showZoom: true, visualizePitch: false}),
       'top-left',
     );
 
@@ -2151,6 +2306,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.destinationPopup = null;
       this.setNavigationRoute([]);
       this.routeLatLng = [];
+      this.resetNavigationSteps([]);
       this.routeDistanceScale = 1;
       this.routeDurationSecondsPerMeter = null;
       this.navigationRouteState.set('idle');
@@ -2386,9 +2542,15 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.navigationDistanceMeters.set(res.distance);
         this.navigationDurationSeconds.set(res.duration);
         this.navigationRouteState.set('ready');
+        // 偏航重算也會走到這裡：轉彎清單和「目前第幾步」要跟新路線一起換掉，不然會提示舊路線的轉彎
+        this.resetNavigationSteps(res.steps ?? []);
+        if (this.isNavigating() && this.currentMapLocation) {
+          this.updateManeuverProgress(this.currentMapLocation);
+        }
         this.renderNavigationMap(animate);
       },
       error: (res) => {
+        this.resetNavigationSteps([]);
         this.routeLatLng = [];
         this.routeDistanceScale = 1;
         this.routeDurationSecondsPerMeter = null;
@@ -2412,10 +2574,15 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.attendanceSheetDragOffset.set(0);
     this.isNavigating.set(true);
     this.offRouteStreak = 0;
+    // 從頭開始提示：預覽時可能已經走了一段，重新從第一個轉彎算，也讓第一句語音重新念
+    this.resetNavigationSteps(this.navigationSteps());
     if (this.currentMapLocation) {
       this.showMapLocation(this.currentMapLocation, true, this.lastMovementHeading);
+      // 第一句語音要在按下「開始導航」的這次點擊裡念：iOS Safari 只允許使用者操作觸發的第一次發聲
+      this.updateManeuverProgress(this.currentMapLocation);
     } else {
       this.focusNavigationOrigin();
+      this.speak('開始導航');
     }
     this.renderNavigationMap(false);
     void this.requestWakeLock();
@@ -2424,8 +2591,126 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected stopNavigation(): void {
     this.isNavigating.set(false);
     this.offRouteStreak = 0;
+    this.cancelSpeech();
     this.renderNavigationMap(false);
     void this.releaseWakeLock();
+  }
+
+  protected toggleVoiceGuidance(): void {
+    const enabled = !this.voiceGuidanceEnabled();
+    this.voiceGuidanceEnabled.set(enabled);
+    try {
+      localStorage.setItem(VOICE_GUIDANCE_STORAGE_KEY, enabled ? 'on' : 'off');
+    } catch {
+      // 存不了（無痕模式）就只在這次有效，不影響導航
+    }
+    if (!enabled) {
+      this.cancelSpeech();
+    }
+  }
+
+  protected maneuverIconFor(step: GpsRouteStep): string {
+    return maneuverIcon(step);
+  }
+
+  protected maneuverDistanceLabel(): string {
+    const distance = this.distanceToManeuver();
+    return distance === null ? '定位中' : formatManeuverDistance(distance);
+  }
+
+  /** 換新路線（或清空）時從頭來：第 0 步「出發」就在起點，直接從第 1 步提示 */
+  private resetNavigationSteps(steps: GpsRouteStep[]): void {
+    this.navigationSteps.set(steps);
+    this.currentStepIndex.set(steps.length > 1 ? 1 : 0);
+    this.distanceToManeuver.set(null);
+    this.hasArrived.set(false);
+    this.closestToStep = Infinity;
+    this.announcedStepIndex = -1;
+    this.announcedNearStepIndex = -1;
+  }
+
+  /**
+   * 每收到一次導航中的 GPS 位置：算到下一個轉彎點的距離，轉過了就換下一步，並在該念的時候念語音。
+   * 要在 routeLatLng 切掉走過的部分之後呼叫，measureStepProgress 才判斷得出轉彎點是不是已經被切掉。
+   */
+  private updateManeuverProgress(here: MapPosition): void {
+    const steps = this.navigationSteps();
+    if (steps.length === 0 || this.hasArrived()) {
+      return;
+    }
+
+    let index = this.currentStepIndex();
+    // 一次 GPS 更新可能跨過好幾個很近的轉彎（連續轉彎、GPS 跳點），所以一路往後推到還沒轉的那一步
+    for (;;) {
+      const step = steps[index];
+      const target: MapPosition = [step.lng, step.lat];
+      const {alongRouteMeters, onRemainingRoute} = measureStepProgress(here, this.routeLatLng, target);
+      this.closestToStep = Math.min(this.closestToStep, distanceInMeters(here, target));
+
+      if (step.type === 'arrive') {
+        this.distanceToManeuver.set(alongRouteMeters);
+        if (alongRouteMeters <= ARRIVE_METERS) {
+          this.hasArrived.set(true);
+          this.speak('已抵達目的地');
+          return;
+        }
+        this.announceManeuver(index, step, alongRouteMeters);
+        return;
+      }
+
+      const isLastStep = index >= steps.length - 1;
+      if (!isLastStep && isStepPassed(distanceInMeters(here, target), this.closestToStep, onRemainingRoute)) {
+        index++;
+        this.currentStepIndex.set(index);
+        this.closestToStep = Infinity;
+        continue;
+      }
+
+      this.distanceToManeuver.set(alongRouteMeters);
+      this.announceManeuver(index, step, alongRouteMeters);
+      return;
+    }
+  }
+
+  /**
+   * 每一步最多念兩次：
+   * 1. 剛變成「下一個轉彎」時念一次，遠的話帶距離：「300 公尺後，左轉進入復興一路」
+   * 2. 開到 80 公尺內再提醒一次：「即將左轉進入復興一路」；直行不用做事，不念
+   * 剛變成下一步時就已經在 80 公尺內（兩個轉彎很近），直接念提示本身，不再另外念「即將」
+   */
+  private announceManeuver(index: number, step: GpsRouteStep, distance: number): void {
+    if (this.announcedStepIndex !== index) {
+      this.announcedStepIndex = index;
+      if (distance > NEAR_ANNOUNCE_METERS) {
+        this.speak(`${formatManeuverDistance(distance)}後，${step.instruction}`);
+      } else {
+        this.announcedNearStepIndex = index;
+        this.speak(step.instruction);
+      }
+      return;
+    }
+
+    if (distance <= NEAR_ANNOUNCE_METERS && this.announcedNearStepIndex !== index && !isStraightThrough(step)) {
+      this.announcedNearStepIndex = index;
+      this.speak(`即將${step.instruction}`);
+    }
+  }
+
+  /** 用瀏覽器內建的語音合成念提示；新的一句會打斷還沒念完的舊句，免得排隊念過時的距離 */
+  private speak(text: string): void {
+    if (!this.voiceGuidanceEnabled() || typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-TW';
+    window.speechSynthesis.speak(utterance);
+  }
+
+  private cancelSpeech(): void {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
   }
 
   private focusNavigationOrigin(): void {
@@ -2453,6 +2738,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.routeLatLng = this.routeLatLng.slice(index);
       this.updateRemainingRouteMetrics(here);
     }
+    // 偏離路線時也更新：距離會變大，等上面的偏航重算換新路線；轉彎清單在 fetchRoute 裡跟著換
+    this.updateManeuverProgress(here);
     this.showMapLocation(here, false, heading);
 
     if (

@@ -199,6 +199,27 @@ export interface GpsRouteResponse {
   path: [number, number][];
   distance: number;
   duration: number;
+  /** 逐一轉彎提示，依行駛順序：第一步是出發、最後一步是抵達。舊版後端沒有這個欄位 */
+  steps?: GpsRouteStep[];
+}
+
+/** 一個轉彎動作。對應後端 GPSRouteResponse.Step */
+export interface GpsRouteStep {
+  /** OSRM 的動作類型：turn、continue、new name、fork、merge、on ramp、off ramp、roundabout、depart、arrive… */
+  type: string;
+  /** 方向：left、right、slight left、sharp right、straight、uturn；沒有時是 null */
+  modifier: string | null;
+  /** 轉進去之後的路名；沒有路名是空字串 */
+  name: string;
+  /** 後端組好的中文提示，例如「左轉進入復興一路」；距離由前端依即時位置補上 */
+  instruction: string;
+  /** 轉彎點 */
+  lat: number;
+  lng: number;
+  /** 轉彎後到下一個轉彎點的距離，公尺 */
+  distance: number;
+  /** 圓環第幾個出口；不是圓環是 null */
+  exit: number | null;
 }
 
 /** 倉庫點交的單一商品；每一項都要回傳是否核對與實點數量。 */

@@ -1,5 +1,10 @@
 <main class="driver-app">
-  <section class="map-surface" [class.is-hidden]="activeTab() !== 'map'" aria-label="司機地圖">
+  <section
+    class="map-surface"
+    [class.is-hidden]="activeTab() !== 'map'"
+    [class.is-navigating]="isNavigating()"
+    aria-label="司機地圖"
+  >
     <div #driverMap class="driver-map"></div>
   </section>
 
@@ -47,6 +52,28 @@
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
+      <!-- 轉彎提示列：只在導航中、而且後端有回轉彎資料時顯示；右邊讓出位置給聊天、定位按鈕 -->
+      @if (isNavigating() && currentManeuver(); as step) {
+        <section class="turn-banner" [class.is-arrived]="hasArrived()" aria-label="轉彎提示">
+          <mat-icon class="turn-banner__icon" aria-hidden="true">{{ maneuverIconFor(step) }}</mat-icon>
+          <div class="turn-banner__text">
+            <strong>{{ hasArrived() ? '已抵達' : maneuverDistanceLabel() }}</strong>
+            <!-- 只有提示文字換了才讓螢幕閱讀器念；距離每秒在變，放進 aria-live 會一直念 -->
+            <span aria-live="polite">{{ step.instruction }}</span>
+          </div>
+          <button
+            type="button"
+            matIconButton
+            class="turn-banner__voice"
+            (click)="toggleVoiceGuidance()"
+            [attr.aria-pressed]="voiceGuidanceEnabled()"
+            [attr.aria-label]="voiceGuidanceEnabled() ? '關閉語音提示' : '開啟語音提示'"
+            [title]="voiceGuidanceEnabled() ? '關閉語音提示' : '開啟語音提示'"
+          >
+            <mat-icon aria-hidden="true">{{ voiceGuidanceEnabled() ? 'volume_up' : 'volume_off' }}</mat-icon>
+          </button>
+        </section>
+      }
       <div class="map-quick-actions">
         <button
           type="button"

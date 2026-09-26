@@ -150,6 +150,12 @@
   top: env(safe-area-inset-top);
 }
 
+// 導航中地圖會一直自動轉成車頭朝上，指北針點了也會在下一次 GPS 更新被蓋掉；
+// 而且左上角的位置要讓給轉彎提示列，所以導航時先藏起來
+:host ::ng-deep .driver-app .map-surface.is-navigating .maplibregl-ctrl-top-left {
+  display: none;
+}
+
 :host ::ng-deep .driver-app .maplibregl-ctrl-bottom-right {
   bottom: calc(156px + env(safe-area-inset-bottom));
 }
@@ -1880,4 +1886,67 @@ button:disabled {
 
 .schedule-state.is-error {
   color: #a14c2e;
+}
+
+// ── 轉彎提示列 ─────────────────────────────────────────
+// 疊在地圖最上方，跟右側的聊天／定位按鈕同一條水平線；right 讓出按鈕的寬度（44px）加間距。
+// 用實心綠底白字：開車時一眼要看得清楚，不跟淺色面板混在一起
+.turn-banner {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 52px;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 8px 6px 8px 12px;
+  border-radius: 10px;
+  color: #fff;
+  background: #087c6b;
+  box-shadow: 0 8px 20px rgb(8 50 42 / 28%);
+}
+
+.turn-banner.is-arrived {
+  background: #1d67ad;
+}
+
+.turn-banner__icon {
+  width: 40px;
+  height: 40px;
+  font-size: 40px;
+  line-height: 40px;
+}
+
+.turn-banner__text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.turn-banner__text strong {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.turn-banner__text span {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.92;
+}
+
+.turn-banner__voice {
+  // 司機端沒有套 mat.theme()，圖示按鈕的顏色要自己給；綠底上用白色
+  --mat-icon-button-icon-color: #fff;
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
 }
