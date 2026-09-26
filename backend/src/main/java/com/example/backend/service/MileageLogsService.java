@@ -104,13 +104,11 @@ public class MileageLogsService {
         }
         VehiclesEntity vehicle = vehiclesDAO.findByIdForUpdate(route.getVehicleId())
                 .orElseThrow(() -> new EntityNotFoundException("找不到已發布路線的車輛，ID：" + route.getVehicleId()));
-        if (vehicle.getCurrentOdometerKm() == null) {
-            vehicle.setCurrentOdometerKm(request.getOdometer());
-            vehiclesDAO.save(vehicle);
-        } else if (!vehicle.getCurrentOdometerKm().equals(request.getOdometer())) {
-            throw new IllegalArgumentException("出車總里程必須與系統車輛總里程一致，目前為 "
-                    + vehicle.getCurrentOdometerKm() + " km");
-        }
+        // 車子在兩趟之間可能被開走（加油、保養、別人借用），讀數跟上一趟收車不同是正常的，照司機填的記、不擋；
+        // 差額就是系統外里程，從同一台車前後兩筆里程紀錄算得出來。
+        // 一定要寫回車輛：收車時 updateCurrentOdometer 只在車輛讀數等於這趟出車讀數時才更新，不寫回會改成在收車時被擋。
+        vehicle.setCurrentOdometerKm(request.getOdometer());
+        vehiclesDAO.save(vehicle);
 
         MileageLogsEntity mileage = new MileageLogsEntity();
         mileage.setDriverId(driverId);
