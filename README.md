@@ -4,16 +4,14 @@
 
 系統定位：**決策輔助系統**，排車演算法／AI 只產出建議，最終排定與發布權在後台人員。
 
-## 線上 Demo
+## 線上環境
 
-| | 網址 | 測試帳號 |
-|---|---|---|
-| 後台（調度） | https://dispatch.xinchafujin.com | `admin` / `Dispatch2026` |
-| 司機端（PWA） | https://driver.xinchafujin.com | `D001` / `driver123` |
+| | 網址 |
+|---|---|
+| 後台（調度） | https://dispatch.xinchafujin.com |
+| 司機端（PWA） | https://driver.xinchafujin.com |
 
-司機端支援「加到主畫面」，安裝後以全螢幕 PWA 執行，並可離線開啟。
-
-> 公開的 demo 環境，帳密為測試用途，資料會定期重置。
+帳號由管理者另行建立；儲存庫不保留可登入的帳密或 demo 資料。
 
 ## 部署
 
@@ -68,7 +66,6 @@ logistics-dispatch/
 ├── frontend/               Angular
 ├── backend/                Spring Boot（Gradle），含排車引擎模組
 ├── osrm/                   OSRM 設定與啟動說明（資料檔不進版控）
-├── seed/                   測試資料產生腳本
 └── .gitignore
 ```
 

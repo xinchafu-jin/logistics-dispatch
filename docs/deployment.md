@@ -45,12 +45,8 @@ implementation 'org.flywaydb:flyway-mysql'
 > 但**沒有任何東西去啟動它**——應用程式正常啟動、完全不報錯、
 > 資料表一張都不會建。這個失敗模式非常安靜，很難聯想到是依賴少了一個。
 
-建立 `backend/src/main/resources/db/migration/V1__baseline.sql`，
-內容取自 `seed/schema.sql`，但：
-
-> **必須刪掉全部 18 個 `DROP TABLE` 敘述。**
-> `seed/schema.sql` 是「先刪後建」的本機重置腳本，
-> 直接在正式機執行等於把所有資料清空。
+`backend/src/main/resources/db/migration/V1__baseline.sql` 是全新資料庫的起始結構。
+正式環境只能透過 Flyway 執行 `V*__*.sql` migration，不應手動執行重置或 demo 資料腳本。
 
 之後每次改 entity 欄位就新增 `V2__xxx.sql`、`V3__xxx.sql`，不要改動已套用過的檔案。
 
@@ -65,19 +61,18 @@ spring.jpa.show-sql=${SHOW_SQL:false}
 management.endpoints.web.exposure.include=health
 ```
 
-DB 帳密目前寫死在檔案且已進 git，正式機必須能用環境變數覆寫。
+資料庫設定僅從環境變數或未納入版控的 `backend/.env` 讀取；正式機必須設定實際值。
 `show-sql=true` 上線會把 log 灌爆。
 
 ## 0-3 移除 crypto 預設值
 
-`SecurityConfig.java` 的 `aiApiKeyEncryptor` 有 `todo 暫時加預設啟動`，
-正式環境改成必填（移除 `:預設值`）。漏設環境變數時會安靜地用開發預設值加密，
-比啟動失敗更難查。
+AI Key 加密設定僅從環境變數或未納入版控的 `backend/.env` 讀取。
+正式環境必須提供 `APP_CRYPTO_PASSWORD` 與 `APP_CRYPTO_SALT`，不能使用開發預設值。
 
 ## 0-4 準備三組 secret
 
 ```bash
-openssl rand -base64 48   # JWT_SECRET
+openssl rand -base64 48   # APP_JWT_SECRET
 openssl rand -base64 36   # APP_CRYPTO_PASSWORD
 openssl rand -hex 8       # APP_CRYPTO_SALT（16 位 hex）
 ```
@@ -161,7 +156,7 @@ GRANT ALL PRIVILEGES ON logistics.* TO 'logistics'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-**不要手動匯入 `seed/schema.sql`**，表結構交給 Flyway 在後端第一次啟動時建立。
+不要手動匯入資料庫 SQL；表結構交給 Flyway 在後端第一次啟動時建立。
 
 ## 2-4 OSRM（縮小路網以省記憶體）
 
@@ -172,9 +167,8 @@ FLUSH PRIVILEGES;
 sudo mkdir -p /opt/osrm && cd /opt/osrm
 sudo wget https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
 
-# 切出台南範圍（bbox：西,南,東,北）
-# seed-data.sql 的實際座標範圍：經度 120.16~120.33、緯度 22.96~23.12，
-# 這裡各留約 0.1 度邊界，讓路徑規劃有繞路空間。
+# 依正式倉庫與門市座標切出服務範圍（bbox：西,南,東,北），
+# 並在四周保留足夠邊界，讓路徑規劃有繞路空間。
 sudo osmium extract -b 120.05,22.85,120.45,23.25 \
   taiwan-latest.osm.pbf -o demo.osm.pbf
 
@@ -183,8 +177,7 @@ sudo docker run -t -v /opt/osrm:/data ghcr.io/project-osrm/osrm-backend osrm-par
 sudo docker run -t -v /opt/osrm:/data ghcr.io/project-osrm/osrm-backend osrm-customize /data/demo.osrm
 ```
 
-bbox 必須涵蓋 `seed-data.sql` 裡所有門市與倉庫的座標，否則路徑會算不出來。
-測試資料是**台南地區**（2 個倉庫、10 間門市、5 台車、3 位司機、21 張訂單），不是雙北。
+bbox 必須涵蓋正式門市與倉庫的座標，否則路徑會算不出來。
 之後要換全台，把 `demo` 換回 `taiwan-latest` 重跑即可，程式端無須改動。
 
 常駐啟動：
@@ -223,10 +216,10 @@ DB_URL=jdbc:mysql://localhost:3306/logistics?serverTimezone=Asia/Taipei&useSSL=f
 DB_USER=logistics
 DB_PASSWORD=<階段 2-3 設的密碼>
 OSRM_BASE_URL=http://localhost:5001
-JWT_SECRET=<階段 0-4 產生的>
+APP_JWT_SECRET=<階段 0-4 產生的>
 APP_CRYPTO_PASSWORD=<階段 0-4 產生的，不可再更改>
 APP_CRYPTO_SALT=<階段 0-4 產生的，不可再更改>
-AI_API_KEY=
+OPENAI_API_KEY=
 SHOW_SQL=false
 ```
 
@@ -382,7 +375,7 @@ ssh $VM 'journalctl -u backend -f'
 
 ## 3-4 建立第一個管理員（必要步驟）
 
-> `seed-data.sql` **沒有任何管理員資料**，而 `/api/admin-users/**` 需要 ADMIN 權限才能呼叫。
+> Flyway 只建立資料表，而 `/api/admin-users/**` 需要 ADMIN 權限才能呼叫。
 > 全新資料庫是「沒有管理員，也無法透過 API 建立管理員」的死結，
 > 第一個帳號**只能手動用 SQL 塞進去**。
 
@@ -399,18 +392,7 @@ INSERT INTO admin_users (account, name, password, ...)
 VALUES ('admin', '系統管理員', '<上面產生的雜湊>', ...);
 ```
 
-## 3-5 灌 demo 資料
-
-```bash
-scp seed/seed-data.sql $VM:/tmp/
-ssh $VM 'mysql -u logistics -p logistics < /tmp/seed-data.sql'
-```
-
-> `seed-data.sql` 的司機密碼明文是 `driver123`，且已寫在 repo 註解裡。
-> demo 用途可以接受（本來就是給面試官試用的），
-> 但**管理員密碼務必另外設強的**，不要沿用任何測試值。
-
-## 3-6 驗收
+## 3-5 驗收
 
 ```bash
 curl -f https://dispatch.xinchafujin.com/actuator/health

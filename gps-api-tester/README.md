@@ -73,7 +73,7 @@ node .\node_modules\vinext\dist\cli.js dev --host localhost
 2. 按「取得 Driver Token」。
 3. 登入成功後會顯示司機名稱、帳號與 Driver ID。
 
-如果資料庫已匯入原始 seed，可嘗試 `D001 / driver123`；實際帳密仍以目前資料庫為準。
+請使用管理者建立的有效司機帳號；本專案不提供或記錄測試帳密。
 
 ### 3. 確認出勤
 

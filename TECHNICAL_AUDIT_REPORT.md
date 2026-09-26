@@ -105,7 +105,7 @@ graph LR
 graph TD
     subgraph 安全隱患排查
         S1[🚨 忘記密碼身分驗證極度薄弱<br>只需帳號+手機號碼即可重設]
-        S2[🚨 JWT Secret 具預設明文密鑰<br>未強制生產環境覆寫檢驗]
+        S2[⚠️ JWT Secret 需在部署環境提供<br>並在啟動時驗證非空]
         S3[⚠️ 登入無防暴力破解機制<br>無 Rate Limiting / 鎖定次數]
         S4[⚠️ 權限白名單漏洞<br>driver-forgot-password 端點遺漏]
         S5[⚠️ 未明確設定路徑授權規則<br>部分 API 退化至 anyRequest]
@@ -115,8 +115,8 @@ graph TD
 - 🚨 **【高危險】忘記密碼認證極度薄弱（Account Takeover Risk）**：
   - 在 `AdminUsersService.resetForgottenPassword` 與 `DriversService.resetForgottenPassword` 中，重設密碼**僅比對 `account` 與 `phone` 是否吻合**，完全不需要發送 SMS 簡訊驗證碼、Email 驗證碼或出示舊密碼。
   - **後果**：攻擊者或離職員工只要知道同事的手機號碼，就能任意竄改管理員或司機的登入密碼，直接奪取帳號控制權！
-- 🚨 **【高危險】預設 JWT Secret 與弱密鑰風險**：
-  - `application.properties` 中預設密鑰為 `dev-only-change-this-jwt-secret-before-deploying-2026`。雖然有環境變數佔位符，但如果部署時未強制覆寫，外部攻擊者可利用該已知密鑰自行簽發 `role: "ADMIN"` 的合法 JWT Token，完全繞過後台登入驗證。
+- ⚠️ **JWT Secret 部署檢查**：
+  - 此版本的 `application.properties` 不保留 JWT 預設值，僅由環境變數提供。部署流程仍應在啟動時驗證該值非空且符合強度要求，避免設定遺漏。
 - ⚠️ **登入與密碼重設缺乏防暴力破解機制（No Rate Limiting）**：
   - `/api/auth/**` 端點無請求頻率限制（Rate Limiting）與錯誤次數鎖定機制，攻擊者可發動字典攻擊爆破帳號與手機號碼。
 - ⚠️ **SecurityConfig 與 Controller 權限不一致**：
@@ -141,8 +141,8 @@ graph TD
    - **現狀**：只憑帳號 + 手機即可重設密碼。
    - **修正**：引入驗證碼機制（SMS OTP / Email Token）或由管理員後台人工重設密碼。
 2. 🔴 **安全漏洞：生產環境 JWT 密鑰與敏感配置防護**
-   - **現狀**：存在預設 JWT Secret，且啟動時未強校驗。
-   - **修正**：在 `SecurityConfig` 或 Application 啟動檢查中，偵測若為生產環境且使用預設 Secret 時強制阻止 Application 啟動。
+   - **現狀**：敏感設定已移出版控，但啟動時尚未強制驗證 JWT Secret 非空。
+   - **修正**：在 `SecurityConfig` 或 Application 啟動檢查中，於正式環境缺少 JWT Secret 時強制阻止 Application 啟動。
 3. 🔴 **功能缺失：前後端功能斷層與 501 殘留**
    - **現狀**：`ExceptionController`、`ReportController`、司機端異常回報全部回傳 501；部分前端呼叫的 API（司機請假、帳號審核）後端完全不存在。
    - **修正**：補齊 `ExceptionService` 與 `ReportService` 邏輯，或將前端尚未實作的入口按鈕隱藏/降級，避免司機與調度員操作時遭遇非預期報錯。

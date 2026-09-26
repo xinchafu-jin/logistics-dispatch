@@ -1,7 +1,7 @@
 -- 依 entity 補齊資料表結構。
 --
--- 背景：下面這些表與欄位在 entity 裡早就在用，卻從來沒有進 migration（V1 只涵蓋建立當時的
--- seed/schema.sql）。各環境的資料庫是各自手動補的，狀態不一致：有的表已經存在、有的還沒有，
+-- 背景：下面這些表與欄位在 entity 裡早就在用，卻從來沒有進 migration（V1 只涵蓋最初的
+-- 建表結構）。各環境的資料庫是各自手動補的，狀態不一致：有的表已經存在、有的還沒有，
 -- 同一張表也可能缺後來才加的欄位。所以這支 migration 每一步都先檢查再做，重複執行也不會出錯：
 --   表：CREATE TABLE IF NOT EXISTS
 --   欄位：information_schema 查不到才 ADD COLUMN（MySQL 8.4 沒有 ADD COLUMN IF NOT EXISTS）
