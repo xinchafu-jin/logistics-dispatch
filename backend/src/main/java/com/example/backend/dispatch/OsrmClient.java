@@ -58,6 +58,17 @@ public class OsrmClient {
     }
 
     /**
+     * 發布時存預定路線用：要完整的道路形狀（畫後台地圖、比對偏離），但不需要轉彎步驟。
+     * 一次同時拿到距離、車程與形狀，發布時每一段打這一支就夠，不用再另外打 route()。
+     *
+     * <p>一定要 overview=full：OSRM 預設的 simplified 在彎路上會直接連直線跨過去
+     * （實測 2.45 公里的路完整 84 點、簡化只剩 9 點），拿來比對偏離會把照著路開的司機判成偏離。</p>
+     */
+    public OsrmRouteResponse.Route routeGeometry(double[] from, double[] to) {
+        return fetchRoute(from, to, "overview=full&geometries=geojson");
+    }
+
+    /**
      * 司機導航用：overview＋geometries 是畫在地圖上的整條路線；steps 是逐一轉彎提示，沒加的話 legs 只會有出發、抵達兩步。
      * 比 route() 重很多，只在司機要導航時打。
      */

@@ -5,6 +5,7 @@ import com.example.backend.dto.request.ReassignDTO;
 import com.example.backend.dto.request.StoreSequenceDTO;
 import com.example.backend.dto.respones.DispatchDayResponse;
 import com.example.backend.dto.respones.DispatchResponse;
+import com.example.backend.dto.respones.PlannedPathResponse;
 import com.example.backend.dto.respones.RouteMetricsResponse;
 import com.example.backend.dto.respones.StoreSequenceResponse;
 import com.example.backend.service.DispatchWorkflowService;
@@ -138,5 +139,19 @@ public class DispatchController {
     @GetMapping("/routes/{routeId}/metrics")
     public ResponseEntity<RouteMetricsResponse> routeMetrics(@PathVariable Long routeId) {
         return ResponseEntity.ok(routePlanMetricsService.getMetrics(routeId));
+    }
+
+    /**
+     * 後台地圖沿實際道路畫已發布的路線：這一天、這個倉庫每條路線各段的道路形狀（發布時存的）。
+     *
+     * <p>不放進 /board：看板每次推播都會重抓，形狀一條路線就有數十 KB，而且發布後不會再變，
+     * 前端只在已發布的路線有變動時才抓這支。</p>
+     */
+    @GetMapping("/planned-paths")
+    public ResponseEntity<List<PlannedPathResponse>> plannedPaths(
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam("warehouseId") Long warehouseId
+    ) {
+        return ResponseEntity.ok(routePlanMetricsService.getPlannedPaths(date, warehouseId));
     }
 }

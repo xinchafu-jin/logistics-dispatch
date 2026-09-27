@@ -107,12 +107,8 @@ public class DispatchWorkflowService {
     }
 
     /**
-     * 格子裡已經有的訂單固定在那格的車上。
-     *
-     * <p>只固定到這次有出車的車：格子的車不能出（維修中、調倉），plan 已經略過那格並寫進 notices，
-     * 那格的單就不固定，交給 OR-Tools 分給其他車，不然整次自動排車都會被一台出不了的車擋住。</p>
+     * 至少一格選了司機或車；前端沒填的格子也會送來，要逐格看
      */
-    /** 至少一格選了司機或車；前端沒填的格子也會送來，要逐格看 */
     private boolean hasFilledSlot(List<OptimizeSlotsDTO.Slot> slots) {
         if (slots == null) {
             return false;
@@ -125,6 +121,12 @@ public class DispatchWorkflowService {
         return false;
     }
 
+    /**
+     * 格子裡已經有的訂單固定在那格的車上。
+     *
+     * <p>只固定到這次有出車的車：格子的車不能出（維修中、調倉），plan 已經略過那格並寫進 notices，
+     * 那格的單就不固定，交給 OR-Tools 分給其他車，不然整次自動排車都會被一台出不了的車擋住。</p>
+     */
     private Map<Long, Long> pinnedVehicleByOrder(List<OptimizeSlotsDTO.Slot> slots, List<Long> dispatchedVehicleIds) {
         Map<Long, Long> pinned = new HashMap<>();
         for (OptimizeSlotsDTO.Slot slot : slots) {
@@ -170,6 +172,8 @@ public class DispatchWorkflowService {
     public List<DispatchResponse> withdraw(LocalDate date) {
         dispatchGuardService.assertCanWithdraw(date);
         dispatchService.withdraw(date);
+        // 路線變回草稿後可能被重排，預定形狀要一起刪；重新發布時 calculateAndStore 會重算
+        routePlanMetricsService.deletePlannedPaths(date);
         return dispatchBoardService.getBoards(date);
     }
 }

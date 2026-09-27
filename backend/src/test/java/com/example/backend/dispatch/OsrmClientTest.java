@@ -60,4 +60,22 @@ class OsrmClientTest {
         assertNull(route.getGeometry(), "算距離不需要路線形狀，應該是 overview=false");
     }
 
+    // 發布時存預定路線用：要完整形狀（不能是 OSRM 預設的簡化版），但不要轉彎步驟
+    @Test
+    @DisabledIfEnvironmentVariable(named = "CI", matches = "true")
+    void routeGeometryHasFullShapeWithoutSteps() {
+        OsrmClient osrmClient = new OsrmClient("http://localhost:5001");
+
+        OsrmRouteResponse.Route route = osrmClient.routeGeometry(
+                new double[]{120.3014, 22.6273}, new double[]{120.3120, 22.6390});
+
+        assertTrue(route.getDistance() > 0, "沒有道路距離");
+        assertNotNull(route.getGeometry(), "沒有路線形狀：參數少了 overview=full&geometries=geojson");
+        // 這段路完整形狀實測 84 點、簡化版只有 9 點；超過 30 點代表拿到的是完整形狀
+        assertTrue(route.getGeometry().getCoordinates().length > 30,
+                "形狀點太少，可能是簡化版：" + route.getGeometry().getCoordinates().length);
+        boolean hasSteps = route.getLegs().stream().anyMatch(leg -> leg.getSteps() != null && !leg.getSteps().isEmpty());
+        assertFalse(hasSteps, "存預定路線不需要轉彎步驟");
+    }
+
 }
