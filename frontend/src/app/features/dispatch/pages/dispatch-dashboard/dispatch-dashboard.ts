@@ -13,7 +13,7 @@ import {
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
+import {catchError, debounceTime, forkJoin, map, of, startWith, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
@@ -27,7 +27,10 @@ import {
   GpsPingDto,
   OrderDto,
   OrderStatus,
+  PlannedPathDto,
   ReassignRequest,
+  RouteDeviationDto,
+  RouteDeviationPushDto,
   RouteMetricsDto,
   RouteStatus,
   RouteStopDto,
@@ -174,12 +177,13 @@ interface VehicleOption {
   takenNote: string | null;
 }
 
-/** 已派出畫面右側「需要處理」的一項：配送異常、GPS 沒更新、還沒排進車的單 */
+/** 已派出畫面右側「需要處理」的一項：偏離路線、配送異常、GPS 沒更新、還沒排進車的單 */
 interface AttentionItem {
   key: string;
   title: string;
   detail: string;
-  kind: 'exception' | 'gps' | 'pending';
+  /** deviation＝偏離提示，deviation-alarm＝偏離超過 10 分鐘升級的警報 */
+  kind: 'deviation' | 'deviation-alarm' | 'exception' | 'gps' | 'pending';
 }
 
 /** 還沒結束、司機還要跑的單。已點交的貨在車上，也算還沒送 */
@@ -379,9 +383,51 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 各司機的配送路線：倉庫出發，依派車順序直線連到各門市。
+   * 什麼時候要重抓道路形狀：看板上的日期、倉庫、已發布路線與各自的站點，任一個變了才重抓。
    *
-   * 順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
+   * 不跟著看板一起抓：派出後每送完一站就有推播、看板就重讀一次，但發布後形狀不會變，
+   * 一起抓等於一直重複下載同樣的幾百 KB。
+   * 撤回後改了路線再發布，路線 id 或站點會不同，key 就跟著變；沒改就重新發布，形狀本來就一樣。
+   * 日期、倉庫取 dispatchResult()（看板實際顯示的那包），不取 dispatchDate()：
+   * 切換日期時看板還沒讀回來，那時抓的會是新日期的形狀配上舊日期的路線。
+   */
+  private readonly plannedPathsKey = computed(() => {
+    const result = this.dispatchResult();
+    const publishedRoutes = this.routes()
+      .filter((route) => route.routeStatus === 'PUBLISHED' && route.routeId > 0)
+      .map((route) => `${route.routeId}:${route.cards.map((card) => card.storeId).join('-')}`);
+    if (!result || publishedRoutes.length === 0) {
+      return '';
+    }
+    return `${result.date}|${result.warehouse.id}|${publishedRoutes.join(',')}`;
+  });
+
+  /**
+   * 已發布路線的道路形狀（發布時後端存的），key 是 routeId；null＝還沒抓回來。
+   * 路線圖層關著就不抓；抓失敗就當作都沒有形狀，路線退回直線，不影響看板其他部分。
+   */
+  private readonly plannedPathByRoute = toSignal(
+    toObservable(computed(() => (this.showRouteLines() ? this.plannedPathsKey() : ''))).pipe(
+      switchMap((key) => {
+        const result = this.dispatchResult();
+        if (!key || !result) {
+          return of(new Map<number, PlannedPathDto>());
+        }
+        return this.api.getPlannedPaths(result.date, result.warehouse.id).pipe(
+          map((paths) => new Map(paths.map((path) => [path.routeId, path]))),
+          catchError(() => of(new Map<number, PlannedPathDto>())),
+          startWith(null),
+        );
+      }),
+    ),
+    {initialValue: null},
+  );
+
+  /**
+   * 各司機的配送路線：有道路形狀就沿實際道路畫（倉庫 → 各門市 → 回倉），
+   * 沒有就退回倉庫出發、依派車順序直線連到各門市。
+   *
+   * 直線的順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
    * （moveItemInArray / transferArrayItem），sequence 要等 reassign 回來才更新，
    * 照 sequence 畫會跟看板上看到的順序對不上。
    *
@@ -403,28 +449,43 @@ export class DispatchDashboard implements OnInit {
         .filter((driver) => driver.id != null)
         .map((driver) => [driver.id!, driver.name]),
     );
+    const plannedPathByRoute = this.plannedPathByRoute();
+    // 形狀還在抓：先不畫，不然會先閃一下直線才換成道路線
+    if (plannedPathByRoute === null) {
+      return [];
+    }
 
     const lines: RouteLine[] = [];
     for (const route of this.routes()) {
       if (route.routeStatus !== 'PUBLISHED' || route.driverId === null || route.cards.length === 0) {
         continue;
       }
+      const label = `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`;
 
-      const points: [number, number][] = [[warehouse.lat, warehouse.lng]];
+      const plannedPath = plannedPathByRoute.get(route.routeId);
+      if (plannedPath) {
+        // 各段頭尾相接（上一段的終點＝下一段的起點），直接串成一條線，重複的那一點不影響畫圖
+        lines.push({
+          id: route.routeId,
+          label,
+          coordinates: plannedPath.legs.flatMap((leg) => leg.path),
+          followsRoad: true,
+        });
+        continue;
+      }
+
+      // 沒有道路形狀：假資料腳本直接寫成已發布、V8 上線前發布的，或抓形狀失敗
+      const coordinates: [number, number][] = [[warehouse.lng, warehouse.lat]];
       for (const card of route.cards) {
         const store = storeById.get(card.storeId);
         // 沒座標的門市跳過，理由同 mapStores：0 或 undefined 會把線拉到幾內亞灣
         if (!store?.lat || !store?.lng) {
           continue;
         }
-        points.push([store.lat, store.lng]);
+        coordinates.push([store.lng, store.lat]);
       }
 
-      lines.push({
-        id: route.routeId,
-        label: `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`,
-        points,
-      });
+      lines.push({id: route.routeId, label, coordinates, followsRoad: false});
     }
 
     return lines;
@@ -462,6 +523,18 @@ export class DispatchDashboard implements OnInit {
     ),
     {initialValue: [] as GpsPingDto[]},
   );
+
+  // ── 偏離預定路線 ──────────────────────────────────────
+
+  /**
+   * 進行中的偏離，key 是偏離紀錄 id。打開看板、WebSocket 重新連上時整批重抓（loadActiveDeviations），
+   * 之間靠推播更新（applyDeviationPush）；推播在斷線期間會漏，所以以重抓的結果為準。
+   * 不分日期、倉庫，全部都留著；要顯示時才篩出這個看板上的路線。
+   */
+  private readonly activeDeviations = signal<ReadonlyMap<number, RouteDeviationDto>>(new Map());
+
+  /** 「已偏離幾分鐘」要跟著時間走：每 30 秒變一次，讀它的 computed 就會重算，不必等推播 */
+  private readonly clock = toSignal(timer(0, 30_000).pipe(map(() => Date.now())), {initialValue: Date.now()});
 
   /**
    * 地圖上的司機點。GPS 回報只有 driverId，姓名要拿 drivers() 補回來。
@@ -506,10 +579,13 @@ export class DispatchDashboard implements OnInit {
         .map((route) => [route.driverId!, route]),
     );
     const metricsByRoute = this.routeMetricsByRouteId();
+    const deviationByDriver = new Map(
+      [...this.activeDeviations().values()].map((deviation) => [deviation.driverId, deviation]),
+    );
 
     return this.livePings()
       .filter((ping) => activeOrdersByDriver.has(ping.driverId))
-      .map((ping) => {
+      .map((ping): MapPoint => {
         const order = activeOrdersByDriver.get(ping.driverId)!;
         const route = routeByDriver.get(ping.driverId);
         const metrics = route ? metricsByRoute.get(route.routeId) : undefined;
@@ -520,6 +596,11 @@ export class DispatchDashboard implements OnInit {
           `預估油耗 ${this.formatFuel(metrics?.gpsEstimatedFuelLiters)}`,
           `${storesById.get(order.storeId)?.name ?? `門市 #${order.storeId}`} · ${minutesAgo(ping.timestamp)} 分鐘前回報`,
         ];
+        const deviation = deviationByDriver.get(ping.driverId);
+        if (deviation) {
+          // 放第一行：滑過去第一眼就看到。分鐘數跟著 30 秒一次的 GPS 輪詢重畫
+          details.unshift(`偏離路線 ${minutesAgo(deviation.startedAt)} 分鐘${deviation.escalatedAt ? '（警報）' : ''}`);
+        }
         return {
           id: ping.driverId,
           label: nameById.get(ping.driverId) ?? `司機 #${ping.driverId}`,
@@ -527,6 +608,7 @@ export class DispatchDashboard implements OnInit {
           details,
           lat: ping.lat,
           lng: ping.lng,
+          alert: deviation ? (deviation.escalatedAt ? 'alarm' : 'notice') : undefined,
         };
       });
   });
@@ -543,11 +625,17 @@ export class DispatchDashboard implements OnInit {
     this.socket.boardPushes$
       .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
       .subscribe((push) => this.onBoardPush(push.date));
+    // 偏離推播直接套用、不用 debounce：每一則都帶完整的那筆紀錄，不必回頭重查
+    this.loadActiveDeviations();
+    this.socket.routeDeviationPushes$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((push) => this.applyDeviationPush(push));
     // 斷線期間的推播不會補發，重新連上時自己重查一次，免得畫面停在舊的狀態
     this.socket.connected$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.loadDays();
+        this.loadActiveDeviations();
         if (this.warehouseId()) {
           this.refreshOrdersAndBoard();
         }
@@ -831,11 +919,11 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 派出後右側「需要處理」：送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
-   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。
+   * 派出後右側「需要處理」：偏離路線的司機、送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
+   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。偏離最急，排最前面，警報又排在提示前面。
    */
   readonly dispatchAttention = computed<AttentionItem[]>(() => {
-    const items: AttentionItem[] = [];
+    const items: AttentionItem[] = [...this.deviationAttention()];
     const isToday = this.dispatchDate() === todayLocalDate();
     const pingDrivers = new Set(this.livePings().map((ping) => ping.driverId));
 
@@ -868,6 +956,67 @@ export class DispatchDashboard implements OnInit {
     }
     return items;
   });
+
+  /** 這個看板上的路線正在偏離的司機；別的倉庫、別天的路線不在這裡顯示 */
+  private readonly deviationAttention = computed<AttentionItem[]>(() => {
+    // 讀 clock() 只是為了每 30 秒重算一次「已偏離幾分鐘」
+    this.clock();
+    const routeById = new Map(this.publishedRoutes().map((route) => [route.routeId, route]));
+    return [...this.activeDeviations().values()]
+      .filter((deviation) => routeById.has(deviation.routeId))
+      .sort((left, right) =>
+        Number(right.escalatedAt !== null) - Number(left.escalatedAt !== null)
+        || left.startedAt.localeCompare(right.startedAt))
+      .map((deviation) => {
+        const route = routeById.get(deviation.routeId)!;
+        const alarm = deviation.escalatedAt !== null;
+        return {
+          key: `deviation-${deviation.id}`,
+          title: `${this.driverName(deviation.driverId)} 偏離路線 ${minutesAgo(deviation.startedAt)} 分鐘${alarm ? '（警報）' : ''}`,
+          detail: `${route.plateNumber} · ${this.deviationLegLabel(route, deviation.legSequence)}`
+            + ` · 開始時離路線 ${Math.round(deviation.startDistanceMeters)} 公尺`,
+          kind: alarm ? 'deviation-alarm' : 'deviation',
+        };
+      });
+  });
+
+  /**
+   * 偏離的那一段要開往哪裡。段的切法跟後端發布時存預定路線一樣：倉庫 → 各門市（同一門市只算一站，照派車順序）→ 回倉，
+   * 所以第 N 段的終點就是去掉重複門市後的第 N 間；超過門市數就是回倉那一段。
+   */
+  private deviationLegLabel(route: BoardRoute, legSequence: number): string {
+    const storeNames: string[] = [];
+    const seenStoreIds = new Set<number>();
+    for (const card of route.cards) {
+      if (!seenStoreIds.has(card.storeId)) {
+        seenStoreIds.add(card.storeId);
+        storeNames.push(card.storeName);
+      }
+    }
+    const destination = storeNames[legSequence - 1];
+    return destination ? `往 ${destination}` : '回倉途中';
+  }
+
+  private loadActiveDeviations(): void {
+    this.api.getActiveRouteDeviations().subscribe({
+      next: (deviations) => this.activeDeviations.set(new Map(deviations.map((deviation) => [deviation.id, deviation]))),
+      // 抓失敗就保留原本的：只是警報可能不是最新，不影響看板其他部分，下次重新連線會再抓
+      error: () => undefined,
+    });
+  }
+
+  /** STARTED、ESCALATED 放進清單（同一筆就換成新的），ENDED 拿掉 */
+  private applyDeviationPush(push: RouteDeviationPushDto): void {
+    this.activeDeviations.update((current) => {
+      const next = new Map(current);
+      if (push.type === 'ENDED') {
+        next.delete(push.deviation.id);
+      } else {
+        next.set(push.deviation.id, push.deviation);
+      }
+      return next;
+    });
+  }
 
   private loadDashboard(): void {
     this.loading.set(true);

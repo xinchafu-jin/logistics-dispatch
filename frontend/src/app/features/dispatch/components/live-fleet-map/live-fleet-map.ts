@@ -11,7 +11,10 @@ import type * as maplibregl from 'maplibre-gl';
 
 const OPEN_FREE_MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
 const FLEET_ROUTE_SOURCE_ID = 'dispatch-fleet-routes';
+/** 沿實際道路的線（實線） */
 const FLEET_ROUTE_LAYER_ID = 'dispatch-fleet-route-lines';
+/** 沒有道路形狀、退回門市之間直線的線（虛線） */
+const FLEET_ROUTE_STRAIGHT_LAYER_ID = 'dispatch-fleet-route-straight-lines';
 
 /** 地圖上的一個點。倉庫與門市共用同一個型別，差別只在畫出來的樣式 */
 export interface MapPoint {
@@ -22,13 +25,17 @@ export interface MapPoint {
   details?: string[];
   lat: number;
   lng: number;
+  /** 只有司機點會用：偏離預定路線中，notice＝提示（橘）、alarm＝已升級的警報（紅、閃爍） */
+  alert?: 'notice' | 'alarm';
 }
 
 /** 一位司機當天的配送路線，倉庫出發依派車順序連到各門市 */
 export interface RouteLine {
-  id: number;                   // routeId，同時決定配色
-  label: string;                // tooltip：司機名
-  points: [number, number][];   // [緯度, 經度]
+  id: number;                        // routeId
+  label: string;                     // tooltip：司機名
+  coordinates: [number, number][];   // [經度, 緯度]：GeoJSON 的順序，後端存的道路形狀就是這個順序，不用轉
+  /** true＝沿實際道路（發布時存的形狀）；false＝沒有形狀，門市之間的直線 */
+  followsRoad: boolean;
 }
 
 /**
@@ -261,7 +268,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
 
     const element = document.createElement('span');
     element.className = kind === 'driver'
-      ? 'fleet-driver-marker'
+      ? `fleet-driver-marker${point.alert ? ` fleet-driver-marker--${point.alert}` : ''}`
       : `map-badge map-badge--${kind}`;
     if (kind !== 'driver') element.textContent = kind === 'warehouse' ? '倉' : '店';
     element.setAttribute('aria-hidden', 'true');
@@ -299,8 +306,9 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   /**
    * 更新司機路線 GeoJSON 圖層。
    *
-   * 直線連點，不走實際道路 —— 線會穿過建物與港灣，長度也不等於里程，
-   * 畫面上要標距離請用看板算出來的 totalDistance。
+   * 有道路形狀的（發布時後端存的）沿實際道路畫實線；沒有的退回門市之間的直線、畫成虛線 ——
+   * 直線會穿過建物與港灣，長度也不等於里程，畫成虛線讓調度員一眼看出那不是實際要走的路。
+   * 兩種線共用一個 source，用兩個圖層的 filter 分開，因為虛線樣式要設在圖層上。
    */
   private drawLines(lines: RouteLine[], visible: boolean): void {
     const map = this.map;
@@ -309,13 +317,14 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     const features = visible
-      ? lines.filter((line) => line.points.length >= 2).map((line, index) => ({
+      ? lines.filter((line) => line.coordinates.length >= 2).map((line, index) => ({
         type: 'Feature' as const,
-        properties: {label: line.label, color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length]},
-        geometry: {
-          type: 'LineString' as const,
-          coordinates: line.points.map(([lat, lng]) => [lng, lat]),
+        properties: {
+          label: line.followsRoad ? line.label : `${line.label}（直線示意，沒有道路形狀）`,
+          color: ROUTE_LINE_COLORS[index % ROUTE_LINE_COLORS.length],
+          followsRoad: line.followsRoad,
         },
+        geometry: {type: 'LineString' as const, coordinates: line.coordinates},
       }))
       : [];
     const data = {type: 'FeatureCollection' as const, features};
@@ -331,6 +340,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       id: FLEET_ROUTE_LAYER_ID,
       type: 'line',
       source: FLEET_ROUTE_SOURCE_ID,
+      filter: ['==', ['get', 'followsRoad'], true],
       paint: {
         'line-color': ['get', 'color'],
         'line-width': 3,
@@ -338,11 +348,27 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       },
       layout: {'line-cap': 'round', 'line-join': 'round'},
     });
-    this.bindRouteHover(map);
+    map.addLayer({
+      id: FLEET_ROUTE_STRAIGHT_LAYER_ID,
+      type: 'line',
+      source: FLEET_ROUTE_SOURCE_ID,
+      filter: ['==', ['get', 'followsRoad'], false],
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 3,
+        'line-opacity': 0.85,
+        // 單位是線寬的倍數：2 倍長的線段、2 倍長的空白
+        'line-dasharray': [2, 2],
+      },
+      // 圓頭會把短短的虛線段補成一顆顆圓點，虛線用平頭
+      layout: {'line-cap': 'butt', 'line-join': 'round'},
+    });
+    this.bindRouteHover(map, FLEET_ROUTE_LAYER_ID);
+    this.bindRouteHover(map, FLEET_ROUTE_STRAIGHT_LAYER_ID);
   }
 
-  private bindRouteHover(map: maplibregl.Map): void {
-    map.on('mousemove', FLEET_ROUTE_LAYER_ID, (event) => {
+  private bindRouteHover(map: maplibregl.Map, layerId: string): void {
+    map.on('mousemove', layerId, (event) => {
       const feature = event.features?.[0];
       if (!feature) return;
       const label = String(feature.properties?.['label'] ?? '');
@@ -350,7 +376,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
       this.routeHoverPopup.setLngLat(event.lngLat).setText(label).addTo(map);
       map.getCanvas().style.cursor = 'pointer';
     });
-    map.on('mouseleave', FLEET_ROUTE_LAYER_ID, () => {
+    map.on('mouseleave', layerId, () => {
       this.routeHoverPopup?.remove();
       map.getCanvas().style.cursor = '';
     });

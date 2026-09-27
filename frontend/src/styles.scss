@@ -168,6 +168,33 @@ mat-icon {
   content: '';
 }
 
+/* 偏離預定路線：提示橘、警報紅（顏色同看板「需要處理」的 GPS、異常）。警報外圈持續擴散，眼角就看得到 */
+.fleet-driver-marker--notice {
+  background: #da9f36;
+}
+
+.fleet-driver-marker--alarm {
+  background: #d64f4f;
+  animation: fleet-driver-alarm 1.2s ease-out infinite;
+}
+
+@keyframes fleet-driver-alarm {
+  from {
+    box-shadow: 0 0 0 0 rgb(214 79 79 / 60%);
+  }
+
+  to {
+    box-shadow: 0 0 0 14px rgb(214 79 79 / 0%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fleet-driver-marker--alarm {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(214 79 79 / 45%);
+  }
+}
+
 .dispatch-layout.is-light-theme app-resource-overview {
   .summary-card,
   .resource-list-panel,

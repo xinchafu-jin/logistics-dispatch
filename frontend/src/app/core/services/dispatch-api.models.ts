@@ -311,6 +311,21 @@ export interface RouteMetricsDto {
   fuelStatus: string | null;
 }
 
+/** 對應 GET /api/dispatch/planned-paths：一條已發布路線各段的預定道路形狀（發布時後端存的） */
+export interface PlannedPathDto {
+  routeId: number;
+  /** 依行駛順序：倉庫 → 各門市 → 回倉 */
+  legs: PlannedPathLegDto[];
+}
+
+export interface PlannedPathLegDto {
+  sequence: number;
+  /** null＝回倉那一段 */
+  toStoreId: number | null;
+  /** [[經度, 緯度], ...]：GeoJSON／MapLibre 的順序，直接當 LineString 的 coordinates */
+  path: [number, number][];
+}
+
 export type BackendReportPeriod = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'CUSTOM';
 
 export interface ReportQuery {
@@ -494,6 +509,33 @@ export interface DispatchDayDto {
 /** 看板推播：只說哪一天變了，收到後自己重查 /days、/board */
 export interface DispatchBoardPushDto {
   date: string;
+}
+
+export type RouteDeviationEndReason = 'BACK_ON_ROUTE' | 'DELIVERING' | 'ON_BREAK' | 'TRIP_ENDED' | 'OFF_DUTY';
+
+/** 對應 GET /api/fleet/route-deviations 與偏離推播裡的 deviation：一次偏離預定路線 */
+export interface RouteDeviationDto {
+  id: number;
+  routeId: number;
+  driverId: number;
+  /** 偏離的是第幾段：倉庫 → 第一站是 1，最後一段是回倉 */
+  legSequence: number;
+  /** 確定偏離（連續第 3 筆超過 200 公尺）的時間 */
+  startedAt: string;
+  startLat: number;
+  startLng: number;
+  startDistanceMeters: number;
+  /** 有值＝偏離超過 10 分鐘、已升級成警報；null＝提示 */
+  escalatedAt: string | null;
+  /** 有值＝已結束（進行中清單不會出現，只有 ENDED 推播會帶） */
+  endedAt: string | null;
+  endReason: RouteDeviationEndReason | null;
+}
+
+/** /topic/admin/route-deviations 的推播：STARTED、ESCALATED 要更新清單，ENDED 要從清單拿掉 */
+export interface RouteDeviationPushDto {
+  type: 'STARTED' | 'ESCALATED' | 'ENDED';
+  deviation: RouteDeviationDto;
 }
 
 /** 當天已被其他倉庫排走的司機，附上排在哪裡好讓畫面說明原因 */

@@ -33,10 +33,12 @@ import {
   LeaveRequest,
   LeaveType,
   OrderDto,
+  PlannedPathDto,
   ReassignRequest,
   ReportCollectionDto,
   ReportQuery,
   ReportSummaryDto,
+  RouteDeviationDto,
   RouteMetricsDto,
   ScheduleMonthDto,
   StoreDto,
@@ -180,6 +182,13 @@ export class DispatchApiService {
 
   getRouteMetrics(routeId: number): Observable<RouteMetricsDto> {
     return this.http.get<RouteMetricsDto>(`${API_ROOT}/dispatch/routes/${routeId}/metrics`);
+  }
+
+  /** 這一天、這個倉庫已發布路線的道路形狀；沒存形狀的路線不在回傳裡，畫的時候退回直線 */
+  getPlannedPaths(date: string, warehouseId: number): Observable<PlannedPathDto[]> {
+    const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
+
+    return this.http.get<PlannedPathDto[]>(`${API_ROOT}/dispatch/planned-paths`, {params});
   }
 
   getLatestFuelPrice(): Observable<FuelPriceDto> {
@@ -562,6 +571,11 @@ export class DispatchApiService {
    */
   getLiveFleet(): Observable<GpsPingDto[]> {
     return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/live`);
+  }
+
+  /** 進行中的偏離預定路線；打開看板、WebSocket 重新連上時抓，之間靠推播更新 */
+  getActiveRouteDeviations(): Observable<RouteDeviationDto[]> {
+    return this.http.get<RouteDeviationDto[]>(`${API_ROOT}/fleet/route-deviations`);
   }
 
   getFleetDriverLatest(driverId: number): Observable<GpsPingDto> {

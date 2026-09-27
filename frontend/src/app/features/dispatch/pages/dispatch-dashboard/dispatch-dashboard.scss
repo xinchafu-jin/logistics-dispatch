@@ -1119,6 +1119,18 @@
     border-color: rgb(218 159 54 / 55%);
   }
 
+  // 偏離路線排在最上面，左邊加一條色帶，跟下面的異常、GPS 分得開
+  &.is-deviation {
+    border-color: rgb(218 159 54 / 55%);
+    border-left: 3px solid #da9f36;
+  }
+
+  &.is-deviation-alarm {
+    border-color: rgb(214 79 79 / 55%);
+    border-left: 3px solid #d64f4f;
+    background: rgb(214 79 79 / 10%);
+  }
+
   strong {
     display: block;
     overflow-wrap: anywhere;

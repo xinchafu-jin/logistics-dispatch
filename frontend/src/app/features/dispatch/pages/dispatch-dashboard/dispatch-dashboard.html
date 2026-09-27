@@ -445,11 +445,17 @@
         </div>
 
         @if (published()) {
-          <!-- 派出後右側換成「需要處理」：送不成的單、沒在回報 GPS 的司機、還沒排進車的單 -->
+          <!-- 派出後右側換成「需要處理」：偏離路線的司機、送不成的單、沒在回報 GPS 的司機、還沒排進車的單 -->
           <aside class="dispatch-attention" aria-labelledby="dispatch-attention-title">
             <h4 id="dispatch-attention-title">需要處理 <span>{{ dispatchAttention().length }}</span></h4>
             @for (item of dispatchAttention(); track item.key) {
-              <article class="attention-item" [class.is-exception]="item.kind === 'exception'" [class.is-gps]="item.kind === 'gps'">
+              <article
+                class="attention-item"
+                [class.is-deviation]="item.kind === 'deviation'"
+                [class.is-deviation-alarm]="item.kind === 'deviation-alarm'"
+                [class.is-exception]="item.kind === 'exception'"
+                [class.is-gps]="item.kind === 'gps'"
+              >
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.detail }}</p>
               </article>
