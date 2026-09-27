@@ -150,6 +150,8 @@ public class DispatchDayService {
         DispatchDayResponse response = new DispatchDayResponse();
         response.setDate(date);
         response.setStatus(resolveStatus(date, today, routes, orders));
+        // 配送中／已結案／未結案只描述訂單進度，不能拿來判斷撤回後是否可編輯。
+        response.setPublished(routes.stream().anyMatch(route -> route.getStatus() == RouteStatus.PUBLISHED));
         response.setOrderCount(orders.size());
         response.setPendingConfirmCount(pendingConfirm);
         response.setUnassignedCount(unassigned);

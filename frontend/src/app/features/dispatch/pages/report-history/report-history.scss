@@ -39,7 +39,14 @@
 .route-legs { display: grid; grid-template-columns: auto repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 14px; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--muted); background: rgb(99 209 198 / 4%); font-size: .75rem; }
 .route-legs strong { color: var(--text); }
 .route-legs small { color: var(--subtle); }
-.attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 90px repeat(5, 150px); }
+.attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 150px repeat(4, 170px) 100px 240px; }
+.trip-table .table-row { display: grid; grid-template-columns: 110px 130px 170px 90px repeat(2, 170px) 130px 100px 160px; }
+.warehouse-performance-table .table-row { display: grid; grid-template-columns: 180px repeat(7, 170px); }
+.performance-summary { display: flex; flex-wrap: wrap; gap: 15px 28px; margin-bottom: 14px; font-size: 1rem; }
+.performance-summary b { color: var(--accent); font-size: 1.25rem; }
+.performance-note { color: var(--muted); font-size: .9rem; line-height: 1.6; }
+.planning-details { margin-top: 22px; }
+.planning-details summary { cursor: pointer; padding: 12px 0; color: var(--muted); font-size: .95rem; }
 .vehicle-table .table-row, .warehouse-table .table-row, .store-table .table-row { display: grid; grid-template-columns: 160px repeat(8, 110px); }
 .exception-table .table-row { display: grid; grid-template-columns: 155px 120px 160px 90px 80px 220px 220px 110px; }
 .exception-summary { gap: 22px; margin-bottom: 14px; color: var(--muted); font-size: .8125rem; }

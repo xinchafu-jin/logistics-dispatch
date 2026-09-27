@@ -12,6 +12,7 @@ public class RouteMetricsResponse {
     private Long driverId;
     private Long vehicleId;
     private Double plannedKm;
+    private VehicleMaintenanceSummary maintenance;
     private Integer plannedDriveMinutes;
     private Integer plannedTotalMinutes;
     private Double plannedFuelLiters;
@@ -74,6 +75,9 @@ public class RouteMetricsResponse {
     public void setPlannedKm(Double plannedKm) {
         this.plannedKm = plannedKm;
     }
+
+    public VehicleMaintenanceSummary getMaintenance() { return maintenance; }
+    public void setMaintenance(VehicleMaintenanceSummary maintenance) { this.maintenance = maintenance; }
 
     public Integer getPlannedDriveMinutes() {
         return plannedDriveMinutes;

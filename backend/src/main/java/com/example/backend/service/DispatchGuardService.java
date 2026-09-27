@@ -107,17 +107,22 @@ public class DispatchGuardService {
 
             if (route.getDriverId() == null) {
                 problems.add(label + " 尚未指派司機");
-            } else if (monthPublished) {
-                // 月班表沒發布的情況上面已經整體列過，有發布才逐位檢查司機當天的班次
+            } else {
                 DriversEntity driver = driversEntityMap.get(route.getDriverId());
-                DriverShiftsEntity shift = shiftsEntityMap.get(route.getDriverId());
-                String reason = scheduleProblem(driver, shift, monthPublished);
-                if (reason != null) {
-                    String who = label;
-                    if (driver != null) {
-                        who = label + "（" + driver.getName() + "）";
+                if (driver != null && !Objects.equals(route.getWarehouseId(), driver.getWarehouseId())) {
+                    problems.add(label + "：司機 " + driver.getName() + " 不屬於這個倉庫，請重新指派司機");
+                }
+                if (monthPublished) {
+                    // 月班表沒發布的情況上面已經整體列過，有發布才逐位檢查司機當天的班次
+                    DriverShiftsEntity shift = shiftsEntityMap.get(route.getDriverId());
+                    String reason = scheduleProblem(driver, shift, monthPublished);
+                    if (reason != null) {
+                        String who = label;
+                        if (driver != null) {
+                            who = label + "（" + driver.getName() + "）";
+                        }
+                        problems.add(who + "：" + reason);
                     }
-                    problems.add(who + "：" + reason);
                 }
             }
 
@@ -138,11 +143,13 @@ public class DispatchGuardService {
     }
 
     /**
-     * 撤回前檢查：當天已發布的路線上，只要有訂單已經開始配送（點交、到站、送達、未簽收、失敗），就不能撤回。
+     * 撤回只阻擋尚有貨物在車上的任務（已點交、配送中）。
      *
      * <p>撤回會把路線翻回草稿，司機端只看已發布的路線，送到一半的司機手上的任務會直接消失。
      * 點交也算開始：貨已經在車上，撤回重排會讓車上的貨跟系統的路線對不起來。
      * 已經出發後要換人，請走司機交接（EmergencyLeaveService）。</p>
+     * <p>已完成、未簽收與失敗是結案紀錄，不應阻止其餘待送訂單撤回。
+     * 撤回不修改訂單；重排也必須保留這些訂單原本的人車與配送紀錄。</p>
      */
     public void assertCanWithdraw(LocalDate date) {
         List<Long> publishedRouteIds = new ArrayList<>();
@@ -157,16 +164,13 @@ public class DispatchGuardService {
         List<String> started = new ArrayList<>();
         for (OrdersEntity order : ordersDAO.findByRouteIdIn(publishedRouteIds)) {
             if (order.getStatus() == OrderStatus.LOADED
-                    || order.getStatus() == OrderStatus.IN_DELIVERY
-                    || order.getStatus() == OrderStatus.COMPLETED
-                    || order.getStatus() == OrderStatus.NO_SIGNATURE
-                    || order.getStatus() == OrderStatus.FAILED) {
+                    || order.getStatus() == OrderStatus.IN_DELIVERY) {
                 started.add(order.getOrderNumber());
             }
         }
         if (!started.isEmpty()) {
-            throw new IllegalArgumentException("已有訂單開始配送，不能撤回（" + String.join("、", started)
-                    + "）；要換人請使用司機交接");
+            throw new IllegalArgumentException("尚有已點交或配送中的貨物，不能直接撤回（" + String.join("、", started)
+                    + "）；請先完成貨物交接。已完成訂單不會阻擋撤回");
         }
     }
 

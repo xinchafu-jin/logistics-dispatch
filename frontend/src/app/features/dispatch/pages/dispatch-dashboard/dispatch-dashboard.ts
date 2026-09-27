@@ -13,8 +13,10 @@ import {
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
+import {catchError, debounceTime, forkJoin, map, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
+import {VehicleMaintenancePanel} from '../../components/vehicle-maintenance-panel/vehicle-maintenance-panel';
+import {VehicleMaintenanceNotice} from '../../components/vehicle-maintenance-notice/vehicle-maintenance-notice';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
 import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
@@ -38,6 +40,7 @@ import {
   TemplateRouteRequest,
   UnassignedOrderDto,
   VehicleDto,
+  VehicleMaintenanceSummary,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
@@ -191,7 +194,7 @@ const DELIVERY_PROBLEM: readonly OrderStatus[] = ['FAILED', 'NO_SIGNATURE'];
 @Component({
   selector: 'app-dispatch-dashboard',
   imports: [
-    LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
+    VehicleMaintenancePanel, VehicleMaintenanceNotice, LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
     MatSlideToggleModule, MatIconModule, MatButtonModule, MatDialogModule,
   ],
   templateUrl: './dispatch-dashboard.html',
@@ -212,6 +215,7 @@ export class DispatchDashboard implements OnInit {
   /** 當天已被其他倉庫排走的司機。後端還沒回這個欄位時是空陣列 */
   readonly driversTakenElsewhere = signal<DriverTakenDto[]>([]);
   private readonly routeMetricsByRouteId = signal<ReadonlyMap<number, RouteMetricsDto>>(new Map());
+  private metricsRequestVersion = 0;
   /** 改派送出中，此時鎖住看板避免兩個請求互相覆蓋 */
   readonly saving = signal(false);
   readonly boardError = signal('');
@@ -229,6 +233,7 @@ export class DispatchDashboard implements OnInit {
   private readonly clearBoardDialog = viewChild.required<TemplateRef<unknown>>('clearBoardDialog');
   // 在編組分頁按「儲存編組」前的確認視窗，同樣寫在 html 最下面
   private readonly saveTemplateDialog = viewChild.required<TemplateRef<unknown>>('saveTemplateDialog');
+  private readonly withdrawDispatchDialog = viewChild.required<TemplateRef<unknown>>('withdrawDispatchDialog');
   readonly dispatchResult = signal<DispatchResultDto | null>(null);
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
@@ -258,21 +263,57 @@ export class DispatchDashboard implements OnInit {
   readonly templateError = signal('');
   readonly templateBusy = signal(false);
 
+  /** 看板里程細節預設收合，個別卡片可獨立展開。 */
+  readonly mileageDetailsDefault = signal(false);
+  private readonly mileageDetailsOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
+  readonly mileageRoutes = computed(() => this.published()
+    ? this.publishedRoutes()
+    : this.routes().filter(route => route.vehicleId !== null));
+  readonly allMileageDetailsExpanded = computed(() => this.mileageRoutes().length > 0 &&
+    this.mileageRoutes().every(route => this.mileageDetailsExpanded(route)));
+
+  mileageDetailsExpanded(route: BoardRoute): boolean {
+    return this.mileageDetailsOverrides().get(route.slotKey) ?? this.mileageDetailsDefault();
+  }
+
+  toggleMileageDetails(route: BoardRoute): void {
+    const next = new Map(this.mileageDetailsOverrides());
+    next.set(route.slotKey, !this.mileageDetailsExpanded(route));
+    this.mileageDetailsOverrides.set(next);
+  }
+
+  toggleAllMileageDetails(): void {
+    this.mileageDetailsDefault.set(!this.allMileageDetailsExpanded());
+    this.mileageDetailsOverrides.set(new Map());
+  }
+
   // ── 發布 ──────────────────────────────────────────────
   readonly publishing = signal(false);
+  readonly withdrawing = signal(false);
   readonly publishError = signal('');
-  private readonly publishedDates = signal<ReadonlySet<string>>(new Set());
+  // 發布／撤回 API 回傳整天跨倉的真實狀態，優先於可能尚未更新的日期列。
+  private readonly publicationByDate = signal<ReadonlyMap<string, boolean>>(new Map());
+  // 讀取只接受最新回應；開始寫入時一併作廢舊查詢，不能讓它們蓋掉撤回或拖曳的結果。
+  private daysReadVersion = 0;
+  private boardReadVersion = 0;
+  private ordersReadVersion = 0;
+  private pendingServerRefresh = false;
   private daySwipe: {pointerId: number; startX: number; lastX: number} | null = null;
   private suppressDayCardClickUntil = 0;
 
   /** 發布是整天跨倉的動作；任何倉庫看到同一天已發布，就切成唯讀看板。 */
   readonly published = computed(() => {
     const date = this.dispatchDate();
-    const dayStatus = this.days().find((day) => day.date === date)?.status;
-    const dayWasPublished = ['PUBLISHED', 'IN_PROGRESS', 'CLOSED', 'UNRESOLVED'].includes(dayStatus ?? '');
+    const publication = this.publicationByDate().get(date);
+    if (publication !== undefined) {
+      return publication;
+    }
+    const day = this.days().find((day) => day.date === date);
+    // 日期 status 是配送進度；有完成紀錄的草稿也可能是 IN_PROGRESS，不能據此鎖住看板。
+    // 新 API 回傳跨倉的 published；舊 API 只把明確的 PUBLISHED 視為已發布。
     return (
-      this.publishedDates().has(date) ||
-      dayWasPublished ||
+      day?.published === true ||
+      (day?.published === undefined && day?.status === 'PUBLISHED') ||
       this.routes().some((route) => route.routeStatus === 'PUBLISHED')
     );
   });
@@ -303,7 +344,8 @@ export class DispatchDashboard implements OnInit {
   });
 
   /** 排車、改派或發布進行中都先鎖住看板操作 */
-  readonly busy = computed(() => this.optimizing() || this.saving() || this.publishing());
+  readonly busy = computed(() => this.optimizing() || this.saving() || this.publishing()
+    || this.withdrawing());
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -546,35 +588,44 @@ export class DispatchDashboard implements OnInit {
     // AI 清單在聊天面板確認後，資料庫已經換了，重讀一次才不會用舊畫面蓋回去
     this.boardEvents.boardChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.reloadBoard());
+      .subscribe(() => this.onBoardPush(this.dispatchDate()));
     // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
     this.socket.boardPushes$
       .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
-      .subscribe((push) => this.onBoardPush(push.date));
+      .subscribe((push) => {
+        if (push.resourcesChanged) this.refreshDispatchResources();
+        if (push.date) this.onBoardPush(push.date);
+      });
     // 斷線期間的推播不會補發，重新連上時自己重查一次，免得畫面停在舊的狀態
     this.socket.connected$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
-        this.loadDays();
-        if (this.warehouseId()) {
-          this.refreshOrdersAndBoard();
-        }
-      });
+      .subscribe(() => this.onBoardPush(this.dispatchDate()));
     timer(15_000, 15_000)
       .pipe(
-        switchMap(() => this.api.getOrders().pipe(catchError(() => of<OrderDto[] | null>(null)))),
+        switchMap(() => {
+          const version = this.ordersReadVersion;
+          return this.api.getOrders().pipe(
+            map((orders) => ({orders, version})),
+            catchError(() => of(null)),
+          );
+        }),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((orders) => {
-        if (orders) {
-          this.applySyncedOrders(orders);
+      .subscribe((result) => {
+        if (result && result.version === this.ordersReadVersion && !this.busy()) {
+          this.applySyncedOrders(result.orders);
         }
       });
   }
 
   onWarehouseChange(event: Event): void {
+    if (this.busy()) {
+      return;
+    }
+    this.invalidateBoardReads();
     this.warehouseId.set(Number((event.target as HTMLSelectElement).value));
     this.boardNotices.set([]);
+    this.mileageDetailsOverrides.set(new Map());
     this.reloadBoard();
   }
 
@@ -585,8 +636,10 @@ export class DispatchDashboard implements OnInit {
     if (date === this.dispatchDate() || this.busy()) {
       return;
     }
+    this.invalidateBoardReads();
     this.dispatchDate.set(date);
     this.boardNotices.set([]);
+    this.mileageDetailsOverrides.set(new Map());
     this.publishError.set('');
     this.loadScheduleEligibility();
     this.reloadBoard();
@@ -687,20 +740,58 @@ export class DispatchDashboard implements OnInit {
   }
 
   /** 日期列失敗不擋看板：看板本身照樣能用，只是少了切換日期的入口 */
-  private loadDays(): void {
-    this.api.getDispatchDays().subscribe({
-      next: (days) => this.days.set(days),
-      error: () => this.days.set([]),
+  private loadDays(resyncPublication = false): void {
+    const version = ++this.daysReadVersion;
+    this.api.getDispatchDays().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (days) => {
+        if (version !== this.daysReadVersion) {
+          return;
+        }
+        // 推播／重連只在新查詢成功後換掉已確認狀態，不先清空再落回舊日期列。
+        // 寫入 API 後的日期列查詢只更新統計，發布狀態仍以該次寫入的回傳為準。
+        if (resyncPublication && !this.busy()) {
+          const publication = new Map<string, boolean>();
+          for (const day of days) {
+            if (day.published !== undefined) {
+              publication.set(day.date, day.published);
+            } else if (day.status === 'PUBLISHED') {
+              publication.set(day.date, true);
+            }
+          }
+          this.publicationByDate.set(publication);
+        }
+        this.days.set(days);
+      },
+      // 保留最後一次成功的資料及發布狀態，查詢失敗不能把看板重新鎖住。
+      error: () => {},
     });
+  }
+
+  private invalidateBoardReads(): void {
+    ++this.daysReadVersion;
+    ++this.boardReadVersion;
+    ++this.ordersReadVersion;
+  }
+
+  /** 寫入期間收到的推播不能丟掉，完成（或失敗還原）後再以伺服器同步一次。 */
+  private resumeServerRefresh(): void {
+    if (this.pendingServerRefresh && !this.busy()) {
+      this.onBoardPush(this.dispatchDate());
+    }
   }
 
   /**
    * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
-   * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
+   * 自己正在存檔或排車時先記下重讀需求，等寫入完成；不能插進來蓋掉尚未存完的畫面。
    */
   private onBoardPush(date: string): void {
-    this.loadDays();
-    if (date === this.dispatchDate() && !this.busy()) {
+    if (this.busy()) {
+      this.pendingServerRefresh = true;
+      return;
+    }
+    this.pendingServerRefresh = false;
+    this.loadDays(true);
+    if (date === this.dispatchDate() && this.warehouseId()) {
       this.refreshOrdersAndBoard();
     }
   }
@@ -710,12 +801,30 @@ export class DispatchDashboard implements OnInit {
    * 只重讀看板的話，剛確認或剛點交的單狀態還是舊的。
    */
   private refreshOrdersAndBoard(): void {
-    this.api.getOrders().subscribe({
+    if (this.busy()) {
+      this.pendingServerRefresh = true;
+      return;
+    }
+    const version = ++this.ordersReadVersion;
+    // 新一輪同步從訂單開始，舊看板查詢在等這批訂單時也已經失效。
+    ++this.boardReadVersion;
+    const date = this.dispatchDate();
+    const warehouseId = this.warehouseId();
+    const isCurrent = () => version === this.ordersReadVersion
+      && date === this.dispatchDate() && warehouseId === this.warehouseId() && !this.busy();
+    this.api.getOrders().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (orders) => {
+        if (!isCurrent()) {
+          return;
+        }
         this.applySyncedOrders(orders);
         this.reloadBoard();
       },
-      error: () => this.reloadBoard(),
+      error: () => {
+        if (isCurrent()) {
+          this.reloadBoard();
+        }
+      },
     });
   }
 
@@ -838,6 +947,19 @@ export class DispatchDashboard implements OnInit {
     return this.formatKm(this.routeMetricsByRouteId().get(route.routeId)?.remainingKm);
   }
 
+  maintenanceSummary(route: BoardRoute): VehicleMaintenanceSummary | null | undefined {
+    const metrics = this.routeMetricsByRouteId().get(route.routeId);
+    if (metrics?.maintenance && (metrics.vehicleId == null || metrics.vehicleId === route.vehicleId)) {
+      return metrics.maintenance;
+    }
+    return this.vehicles().find(vehicle => vehicle.id === route.vehicleId)?.maintenance;
+  }
+
+  maintenanceEstimatePending(route: BoardRoute): boolean {
+    return !this.published() && route.cards.some(card => this.isDispatchable(card))
+      && this.maintenanceSummary(route)?.plannedKm == null;
+  }
+
   /**
    * 派出後右側「需要處理」：送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
    * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。
@@ -905,6 +1027,7 @@ export class DispatchDashboard implements OnInit {
         const defaultWarehouseId =
           warehouses.find((warehouse) => warehouse.isActive)?.id ?? warehouses[0]?.id ?? 0;
         this.warehouseId.set(defaultWarehouseId);
+        this.loadDays();
         if (defaultWarehouseId) {
           this.loadScheduleEligibility();
           this.reloadBoard();
@@ -955,6 +1078,7 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    this.invalidateBoardReads();
     this.optimizing.set(true);
     this.boardError.set('');
     this.boardNotices.set([]);
@@ -965,11 +1089,13 @@ export class DispatchDashboard implements OnInit {
         this.sortLaneStoresByRoute();
         this.boardNotices.set(result.notices ?? []);
         this.optimizing.set(false);
+        this.resumeServerRefresh();
       },
       error: (err) => {
         console.error(err);
         this.boardError.set(err?.error?.message ?? '排車失敗，請稍後再試。');
         this.optimizing.set(false);
+        this.resumeServerRefresh();
       },
     });
   }
@@ -1253,8 +1379,8 @@ export class DispatchDashboard implements OnInit {
    * 佔用有兩種來源：同一個倉的其他車道（看板上看得到），以及當天其他倉
    * （看板看不到，要靠後端的 driversTakenElsewhere 補）。
    *
-   * 班表有問題的司機照樣列出並標上原因：草稿允許紅框，派出時才擋（DispatchGuardService）。
-   * 停用的司機不列，除非他就是這條車道目前的司機，不然選單找不到對應選項會誤顯示成「未指派司機」。
+   * 只列目前倉庫的司機；已轉倉的既有指派須明確重新指派。
+   * 班表有問題的司機保留原因，發布時由後端再次檢查。
    */
   driverOptions(route: BoardRoute): DriverOption[] {
     const takenHere = new Map<number, string>();
@@ -1272,7 +1398,8 @@ export class DispatchDashboard implements OnInit {
     return this.drivers()
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && (driver.isActive || driver.id === route.driverId),
+          driver.id != null && driver.warehouseId === this.warehouseId()
+          && (driver.isActive || driver.id === route.driverId),
       )
       .map((driver) => ({
         id: driver.id,
@@ -1283,6 +1410,11 @@ export class DispatchDashboard implements OnInit {
             : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
         scheduleNote: this.driverScheduleNote(driver.id),
       }));
+  }
+
+  assignedDriverOutsideWarehouse(route: BoardRoute): boolean {
+    return route.driverId !== null && !this.drivers().some(driver =>
+      driver.id === route.driverId && driver.warehouseId === this.warehouseId());
   }
 
   /**
@@ -1365,7 +1497,7 @@ export class DispatchDashboard implements OnInit {
       plateNumber: vehicle?.plateNumber ?? '',
       vehicleType: vehicle?.vehicleType ?? null,
       capacity: vehicle?.capacity ?? 0,
-      isMaintenance: vehicle?.status === 'MAINTENANCE',
+      isMaintenance: vehicle != null && vehicle.status !== 'AVAILABLE',
     };
   }
 
@@ -1389,8 +1521,20 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    const selected = (event.target as HTMLSelectElement).value;
+    const select = event.target as HTMLSelectElement;
+    const selected = select.value;
     const driverId = selected === '' ? null : Number(selected);
+
+    if (driverId !== null) {
+      const option = this.driverOptions(route).find(driver => driver.id === driverId);
+      if (!option || option.takenNote || option.scheduleNote) {
+        this.boardError.set(option?.takenNote || option?.scheduleNote || '此司機不屬於目前倉庫，請重新選擇本倉司機。');
+        select.value = route.driverId !== null && !this.assignedDriverOutsideWarehouse(route)
+          ? String(route.driverId) : '';
+        return;
+      }
+    }
+    this.boardError.set('');
 
     this.routes.update((routes) =>
       this.withEmptySlots(routes.map((item) => (item.slotKey === route.slotKey ? {...item, driverId} : item))),
@@ -1472,6 +1616,9 @@ export class DispatchDashboard implements OnInit {
 
     // 訂單全部拖回待排單時 routes 是空陣列，照樣送：後端收到空陣列會清掉當天這個倉的草稿
     // （DispatchWorkflowService.reassign → clearDraftRoutes），畫面的「全空」才會真的寫進資料庫
+    this.invalidateBoardReads();
+    ++this.metricsRequestVersion;
+    this.routeMetricsByRouteId.set(new Map());
     this.saving.set(true);
     this.boardError.set('');
 
@@ -1479,6 +1626,7 @@ export class DispatchDashboard implements OnInit {
       next: (result) => {
         this.applyDispatchResult(result);
         this.saving.set(false);
+        this.resumeServerRefresh();
       },
       error: (err) => {
         console.error(err);
@@ -1488,7 +1636,7 @@ export class DispatchDashboard implements OnInit {
           reason ? `改派儲存失敗：${reason}（已還原成伺服器上的狀態）` : '改派儲存失敗，已還原成伺服器上的狀態。',
         );
         // 本地畫面已經被改過了，重讀一次以伺服器為準，避免留下沒存進去的假象
-        this.reloadBoard();
+        this.reloadBoard(true);
       },
     });
   }
@@ -1542,6 +1690,7 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
+    this.invalidateBoardReads();
     this.publishing.set(true);
     this.publishError.set('');
     // 發布是跨倉動作，發布前逐倉讀取草稿，避免其他倉有休假／請假司機時仍一起送出。
@@ -1551,6 +1700,7 @@ export class DispatchDashboard implements OnInit {
         if (scheduleIssues.length > 0) {
           this.publishError.set(`無法發布排車：${scheduleIssues.join('；')}。`);
           this.publishing.set(false);
+          this.resumeServerRefresh();
           return;
         }
 
@@ -1559,32 +1709,78 @@ export class DispatchDashboard implements OnInit {
       error: (error: unknown) => {
         this.publishError.set(`無法驗證各倉班表資格：${describeError(error)}`);
         this.publishing.set(false);
+        this.resumeServerRefresh();
       },
     });
   }
 
   private publishVerifiedDispatch(): void {
-    this.api.publishDispatch(this.dispatchDate()).subscribe({
-      next: (boards) => this.applyMyBoard(boards),
+    const date = this.dispatchDate();
+    this.api.publishDispatch(date).subscribe({
+      next: (boards) => {
+        this.applyPublicationBoards(date, boards);
+        this.publishing.set(false);
+        this.resumeServerRefresh();
+      },
       error: (error: unknown) => {
         this.publishError.set(describeError(error));
         this.publishing.set(false);
+        this.resumeServerRefresh();
       },
     });
   }
 
-  /** 發布回傳跨倉的多包，挑出目前正在看的那一倉重繪。 */
-  private applyMyBoard(boards: DispatchResultDto[]): void {
+  confirmWithdrawal(): void {
+    if (!this.published() || this.busy()) {
+      return;
+    }
+    this.withdrawing.set(true);
+    this.dialog.open(this.withdrawDispatchDialog(), {
+      width: '440px',
+      maxWidth: 'calc(100vw - 32px)',
+      ariaLabel: '撤回發布確認',
+    }).afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((confirmed) => {
+      this.withdrawing.set(false);
+      if (confirmed === true) this.withdraw();
+    });
+  }
+
+  withdraw(): void {
+    if (!this.published() || this.busy()) {
+      return;
+    }
     const date = this.dispatchDate();
-    this.publishedDates.update((dates) => new Set(dates).add(date));
+    this.invalidateBoardReads();
+    this.withdrawing.set(true);
+    this.publishError.set('');
+    this.api.withdrawDispatch(date).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (boards) => {
+        this.applyPublicationBoards(date, boards);
+        this.withdrawing.set(false);
+        this.resumeServerRefresh();
+      },
+      error: (error: unknown) => {
+        this.publishError.set(`撤回發布失敗：${describeError(error)}`);
+        this.withdrawing.set(false);
+        this.resumeServerRefresh();
+      },
+    });
+  }
+
+  /** 發布／撤回回傳跨倉的多包，同步整天狀態並挑出目前的倉庫重繪。 */
+  private applyPublicationBoards(date: string, boards: DispatchResultDto[]): void {
+    const isPublished = boards.some((board) => board.routes.some((route) => route.status === 'PUBLISHED'));
+    this.publicationByDate.update((states) => new Map(states).set(date, isPublished));
     this.loadDays();
+    if (date !== this.dispatchDate()) {
+      return;
+    }
     const mine = boards.find((board) => board.warehouse.id === this.warehouseId());
     if (mine) {
-      this.applyDispatchResult(mine);
+      this.applyDispatchResult(mine, false);
     } else {
       this.reloadBoard();
     }
-    this.publishing.set(false);
   }
 
   // ── 常配編組 ──────────────────────────────────────────
@@ -1712,15 +1908,17 @@ export class DispatchDashboard implements OnInit {
     this.boardNotices.set([]);
     // 先清掉畫面上的格子：applyDispatchResult 會保留排到一半的人車格，不清的話它們會留在新分頁上
     this.routes.set([]);
+    this.invalidateBoardReads();
     this.saving.set(true);
     this.api.reassignDispatch({date: this.dispatchDate(), warehouseId: this.warehouseId(), routes: []}).subscribe({
       next: (result) => {
         this.applyDispatchResult(result);
         this.saving.set(false);
+        this.resumeServerRefresh();
       },
       error: (error: unknown) => {
         this.boardError.set(describeError(error));
-        this.reloadBoard();
+        this.reloadBoard(true);
       },
     });
   }
@@ -1936,7 +2134,7 @@ export class DispatchDashboard implements OnInit {
     );
   }
 
-  private driverScheduleNote(driverId: number): string | null {
+  private driverScheduleNote(driverId: number, warehouseId = this.warehouseId()): string | null {
     const driver = this.drivers().find((item) => item.id === driverId);
     if (!driver) {
       return '司機資料不存在';
@@ -1944,6 +2142,8 @@ export class DispatchDashboard implements OnInit {
     if (!driver.isActive) {
       return '帳號已停用';
     }
+    if (driver.warehouseId == null) return '尚未設定所屬倉庫';
+    if (driver.warehouseId !== warehouseId) return '司機已轉至其他倉庫，請重新指派';
     if (this.scheduleLoadState() === 'loading') {
       return '正在同步當日班表';
     }
@@ -1973,38 +2173,55 @@ export class DispatchDashboard implements OnInit {
   }
 
   private scheduleIssuesForDispatchBoards(boards: readonly DispatchResultDto[]): string[] {
-    const assignedDriverIds = new Set(
-      boards.flatMap((board) =>
-        board.routes
-          .filter((route) => route.driverId !== null)
-          .map((route) => route.driverId!),
-      ),
-    );
-
-    return [...assignedDriverIds].flatMap((driverId) => {
-      const note = this.driverScheduleNote(driverId);
-      return note ? [`${this.driverName(driverId)}${note}`] : [];
-    });
+    // 發布涵蓋整天全部倉庫，須依每條路線所屬倉庫檢查司機，而非只看目前選中的倉庫。
+    return [...new Set(boards.flatMap(board => board.routes.flatMap(route => {
+      if (route.driverId === null) return [];
+      const note = this.driverScheduleNote(route.driverId, board.warehouse.id!);
+      return note ? [`${this.driverName(route.driverId)}${note}`] : [];
+    })))];
   }
 
   protected driverName(driverId: number): string {
     return this.drivers().find((driver) => driver.id === driverId)?.name ?? `司機 #${driverId}`;
   }
 
-  private reloadBoard(): void {
-    this.api.getDispatchBoard(this.dispatchDate(), this.warehouseId()).subscribe({
+  private reloadBoard(recoverSaving = false): void {
+    if (this.busy() && !recoverSaving) {
+      this.pendingServerRefresh = true;
+      return;
+    }
+    const version = ++this.boardReadVersion;
+    const date = this.dispatchDate();
+    const warehouseId = this.warehouseId();
+    const isCurrent = () => version === this.boardReadVersion
+      && date === this.dispatchDate() && warehouseId === this.warehouseId();
+    this.api.getDispatchBoard(date, warehouseId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (result) => {
-        this.applyDispatchResult(result);
-        this.saving.set(false);
+        if (!isCurrent()) {
+          return;
+        }
+        // 純讀取不再另發日期列查詢，以免蓋掉同一輪推播的跨倉發布狀態查詢。
+        this.applyDispatchResult(result, false);
+        if (recoverSaving) {
+          this.saving.set(false);
+          this.loadDays(true);
+          this.resumeServerRefresh();
+        }
       },
       error: () => {
+        if (!isCurrent()) {
+          return;
+        }
         this.boardError.set('無法重新讀取排車結果，請重新整理頁面。');
-        this.saving.set(false);
+        if (recoverSaving) {
+          this.saving.set(false);
+          this.resumeServerRefresh();
+        }
       },
     });
   }
 
-  private applyDispatchResult(result: DispatchResultDto): void {
+  private applyDispatchResult(result: DispatchResultDto, refreshDays = true): void {
     // 原始結果留著不動，之後要做「調整前後差異」時當作比較基準
     this.dispatchResult.set(result);
 
@@ -2100,20 +2317,26 @@ export class DispatchDashboard implements OnInit {
     this.driversTakenElsewhere.set(result.driversTakenElsewhere ?? []);
     this.loadRouteMetrics(this.routes());
     // 排車、改派、發布都會改到這天的狀態；推播斷線時日期列也不會停在舊的
-    this.loadDays();
+    if (refreshDays) {
+      this.loadDays();
+    }
   }
 
   private loadRouteMetrics(routes: readonly BoardRoute[]): void {
+    const requestVersion = ++this.metricsRequestVersion;
+    this.routeMetricsByRouteId.set(new Map());
     const routeIds = [...new Set(routes
-      .filter((route) => route.routeId > 0 && route.driverId !== null && !route.isMaintenance)
+      .filter((route) => route.routeId > 0 && route.cards.length > 0)
       .map((route) => route.routeId))];
     if (routeIds.length === 0) {
       this.routeMetricsByRouteId.set(new Map());
       return;
     }
 
-    forkJoin(routeIds.map((routeId) => this.api.getRouteMetrics(routeId).pipe(catchError(() => of(null))))).subscribe(
+    forkJoin(routeIds.map((routeId) => this.api.getRouteMetrics(routeId).pipe(catchError(() => of(null)))))
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe(
       (metrics) => {
+        if (requestVersion !== this.metricsRequestVersion) return;
         const next = new Map<number, RouteMetricsDto>();
         metrics.forEach((metric) => {
           if (metric) {
@@ -2123,6 +2346,18 @@ export class DispatchDashboard implements OnInit {
         this.routeMetricsByRouteId.set(next);
       },
     );
+  }
+
+  private refreshDispatchResources(): void {
+    forkJoin({drivers: this.api.getDrivers(), vehicles: this.api.getVehicles(), warehouses: this.api.getWarehouses()})
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: ({drivers, vehicles, warehouses}) => {
+          this.drivers.set(drivers);
+          this.vehicles.set(vehicles);
+          this.warehouses.set(warehouses);
+        },
+        error: () => this.boardError.set('資源資料同步失敗，請重新整理頁面。'),
+      });
   }
 
   private formatEstimatedArrival(value: string | null | undefined): string {

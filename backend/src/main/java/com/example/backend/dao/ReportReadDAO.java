@@ -4,6 +4,8 @@ import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.entity.AttendanceRecordsEntity;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriverShiftsEntity;
+import com.example.backend.entity.DriverLeaveRequestsEntity;
+import com.example.backend.constants.LeaveRequestStatus;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
@@ -80,6 +82,11 @@ public class ReportReadDAO {
                         """, MileageLogsEntity.class)
                 .setParameter("from", from).setParameter("to", to)
                 .getResultList();
+    }
+
+    public List<DriverLeaveRequestsEntity> approvedLeaves(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("select l from DriverLeaveRequestsEntity l where l.workDate between :from and :to and l.status = :approved", DriverLeaveRequestsEntity.class)
+                .setParameter("from", from).setParameter("to", to).setParameter("approved", LeaveRequestStatus.APPROVED).getResultList();
     }
 
     public List<RouteLegMileagesEntity> routeLegMileages(List<Long> routeIds) {

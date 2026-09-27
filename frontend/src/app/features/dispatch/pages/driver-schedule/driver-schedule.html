@@ -472,7 +472,7 @@
                       [attr.aria-label]="entry.day.weekdayIndex === 0 ? '週日固定公休' : null"
                     >
                       @if (entry.day.weekdayIndex === 0) {
-                        <span class="fixed-holiday" aria-hidden="true"></span>
+                        <span class="fixed-holiday" aria-hidden="true"><mat-icon>free_breakfast</mat-icon><span>公休</span></span>
                       } @else if (entry.shift; as shift) {
                         <button
                           type="button"
@@ -482,10 +482,11 @@
                           [class.is-day-off]="shift.shiftType === 'DAY_OFF'"
                           [class.is-leave]="shift.shiftType === 'LEAVE'"
                           [class.is-unassigned]="shift.shiftType === 'UNASSIGNED'"
-                          [title]="shiftLabel(shift.shiftType) + '：' + shift.changeReason"
+                          [title]="shiftLabel(shift.shiftType) + (shift.changeReason ? '：' + shift.changeReason : '')"
                           (click)="selectShift(shift)"
                         >
-                          {{ shiftLabel(shift.shiftType) }}
+                          <mat-icon aria-hidden="true">{{ shiftIcon(shift.shiftType) }}</mat-icon>
+                          <span>{{ shiftLabel(shift.shiftType) }}</span>
                         </button>
                       } @else {
                         <span class="missing-shift">--</span>

@@ -302,8 +302,12 @@ public class DispatchService {
                 throw new IllegalArgumentException(
                         "司機 " + driver.getName() + " 目前非在職狀態，無法指派");
             }
+            if (!warehouseId.equals(driver.getWarehouseId())) {
+                throw new IllegalArgumentException("司機 " + driver.getName()
+                        + " 不屬於目前倉庫，請先在人車資源設定或調整所屬倉庫");
+            }
         }
-        // 司機不綁倉庫，但一天只開一條路線，所以要查整天而不是只查這個倉。
+        // 司機轉倉後仍不能同一天出現在兩條路線，所以要查整天而不是只查這個倉。
         // 本倉的草稿等一下就會被 clearExistingDraftRoutes 清掉，不算佔用。
         for (RoutesEntity other : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
             if (warehouseId.equals(other.getWarehouseId())) {

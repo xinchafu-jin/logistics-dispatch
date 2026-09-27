@@ -1,0 +1,62 @@
+:host { display: block; min-width: 0; font-family: 'Noto Sans TC', 'Microsoft JhengHei', 'Segoe UI', sans-serif; }
+.vehicle-resource-card { display: grid; grid-template-columns: var(--vehicle-columns); align-items: stretch; gap: 22px; padding: 24px 22px; border-bottom: 1px solid var(--border); }
+:host:last-child .vehicle-resource-card { border-bottom: 0; }
+.vehicle-row-header { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.vehicle-detail-block { padding: 18px; border: 1px solid color-mix(in srgb, var(--text) 24%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--surface) 96%, var(--accent) 4%); box-shadow: 0 2px 6px rgb(0 0 0 / 4%); }
+.vehicle-identity { display: flex; align-items: start; gap: 11px; min-width: 0; }
+.vehicle-badge { display: grid; flex: 0 0 auto; place-items: center; width: 36px; height: 36px; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 8px; }
+.vehicle-badge mat-icon { width: 19px; height: 19px; font-size: 19px; }
+.vehicle-identity > div { display: grid; gap: 5px; min-width: 0; }
+.vehicle-identity strong { color: var(--text); font-size: 16px; line-height: 20px; font-weight: 650; letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.vehicle-specs { margin: 0; }
+.vehicle-specs > div { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.vehicle-specs dt, .vehicle-status-line > span:first-child { color: var(--muted); font-size: 13px; line-height: 22px; }
+.vehicle-specs dd { min-width: 0; margin: 0; color: var(--text); font-size: 13px; line-height: 22px; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.vehicle-header-controls { display: grid; align-content: start; gap: 12px; }
+.vehicle-status-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.vehicle-status-pill { --status-color: var(--accent-text); display: inline-flex; align-items: center; gap: 7px; padding: 6px 10px; color: var(--status-color); background: color-mix(in srgb, var(--status-color) 8%, transparent); border-radius: 5px; font-size: 12px; font-weight: 600; }
+.vehicle-status-pill::before { width: 5px; height: 5px; background: currentColor; border-radius: 50%; content: ''; }
+.status-維修中, .status-小保中, .status-大保中 { --status-color: var(--warning); }
+.status-已退役 { --status-color: var(--muted); }
+app-vehicle-maintenance-notice { width: 100%; }
+.vehicle-maintenance-card, .vehicle-maintenance-summary { min-width: 0; }
+.vehicle-maintenance-card { display: grid; grid-column: 2 / -1; grid-template-columns: subgrid; }
+.vehicle-maintenance-overview { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; grid-template-rows: minmax(84px, auto) repeat(3, minmax(76px, auto)); align-items: stretch; column-gap: 22px; height: 100%; }
+// Shared tracks keep both columns aligned even when dates or mileage wrap.
+.vehicle-mileage-column, .vehicle-maintenance-summary { display: grid; grid-row: 1 / span 4; grid-template-rows: subgrid; min-width: 0; }
+.vehicle-mileage-header { display: grid; align-content: start; gap: 8px; margin: 0; }
+.vehicle-mileage-header > span { color: var(--text); font-size: 13px; line-height: 20px; font-weight: 600; }
+.odometer { color: var(--text); font-size: 27px; line-height: 1.25; font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.odometer.is-unknown { font-size: 16px; letter-spacing: 0; }
+.vehicle-service-summary { grid-row: 2 / span 3; }
+.vehicle-service-summary, .maintenance-counts, .service-count-grid { display: grid; grid-template-rows: subgrid; }
+.maintenance-counts, .service-count-grid { grid-row: span 3; }
+.service-count-grid { margin: 0; }
+.service-count { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-content: start; align-items: baseline; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
+.service-count > dt { color: var(--text); font-size: 13px; line-height: 28px; font-weight: 600; }
+.service-count > dd { display: grid; gap: 5px; min-width: 0; margin: 0; }
+.service-count-total { display: inline-flex; align-items: baseline; gap: 5px; }
+.count-value { color: var(--text); font-size: 20px; line-height: 28px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.count-unit { color: var(--muted); font-size: 12px; }
+.last-service-date { display: flex; flex-wrap: wrap; gap: 2px 6px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.last-service-date time { overflow-wrap: anywhere; }
+.vehicle-row-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+.row-action { display: inline-flex; justify-content: center; align-items: center; gap: 6px; min-width: 76px; min-height: 36px; padding: 0 12px; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 7px; cursor: pointer; font: inherit; font-size: 12px; }
+.row-action mat-icon { width: 16px; height: 16px; font-size: 16px; }
+.vehicle-edit-action { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: color-mix(in srgb, var(--accent-text) 25%, transparent); }
+.row-action:hover { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.row-action--danger:hover { color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.row-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 760px) {
+  .vehicle-resource-card { grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 20px 16px; }
+  .vehicle-maintenance-card { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .vehicle-maintenance-overview { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 16px; height: auto; }
+  .vehicle-mileage-column, .vehicle-maintenance-summary { display: block; grid-row: auto; }
+  .vehicle-mileage-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .vehicle-service-summary, .maintenance-counts { display: block; }
+  .service-count-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: none; gap: 12px; }
+  .service-count { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 0 0; }
+  .last-service-date { display: grid; font-size: 11px; }
+}

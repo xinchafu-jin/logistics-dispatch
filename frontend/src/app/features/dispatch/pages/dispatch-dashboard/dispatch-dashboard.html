@@ -128,7 +128,7 @@
 
         <label class="toolbar-field">
           <span>出貨倉庫</span>
-          <select [value]="warehouseId()" (change)="onWarehouseChange($event)">
+          <select [value]="warehouseId()" [disabled]="busy()" (change)="onWarehouseChange($event)">
             @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
               <option [value]="warehouse.id">
                 {{ warehouse.warehouseCode }} · {{ warehouse.name }}
@@ -171,15 +171,6 @@
             {{ optimizing() ? '排車中…' : '自動排車' }}
           </button>
 
-          <button
-            type="button"
-            class="toolbar-action"
-            (click)="publish()"
-            [disabled]="busy()"
-          >
-            {{ publishing() ? '發布中…' : '發布' }}
-          </button>
-
           @if (activeTemplate()) {
             <button
               type="button"
@@ -191,10 +182,19 @@
             </button>
           }
         }
+        @if (published()) { <span class="toolbar-spacer"></span> }
+        <div class="publication-actions" role="group" aria-label="發布與撤回">
+          <button type="button" class="toolbar-action publication-publish" (click)="publish()" [disabled]="busy() || published()">
+            <mat-icon aria-hidden="true">publish</mat-icon>{{ publishing() ? '發布中…' : '發布' }}
+          </button>
+          <button type="button" class="template-secondary" (click)="confirmWithdrawal()" [disabled]="busy() || !published()">
+            <mat-icon aria-hidden="true">undo</mat-icon>{{ withdrawing() ? '撤回中…' : '撤回發布' }}
+          </button>
+        </div>
       </section>
 
       @if (published()) {
-        <p class="board-status">已派出：每張卡片是一台車的即時進度，資料有變動會自動更新；看板目前僅供查看。</p>
+        <p class="board-status">已發布：要調整待送訂單或司機，請先撤回發布。已完成訂單維持完成，不會阻擋撤回；已裝車或配送中的貨物須先交接。</p>
       }
       @if (publishError()) {
         <p class="board-error">{{ publishError() }}</p>
@@ -202,6 +202,15 @@
 
       <div class="board" cdkDropListGroup>
         <div class="board-slots">
+          @if (mileageRoutes().length > 0) {
+            <div class="mileage-global-actions">
+              <button type="button" class="mileage-global-toggle" (click)="toggleAllMileageDetails()"
+                [attr.aria-label]="allMileageDetailsExpanded() ? '全部收合車輛里程與保養' : '全部展開車輛里程與保養'">
+                <mat-icon aria-hidden="true">{{ allMileageDetailsExpanded() ? 'unfold_less' : 'unfold_more' }}</mat-icon>
+                {{ allMileageDetailsExpanded() ? '全部收合' : '全部展開' }}
+              </button>
+            </div>
+          }
           @if (saving()) {
             <p class="board-status">儲存中…</p>
           }
@@ -246,17 +255,20 @@
                   瀏覽器找不到對應值就會退回第一個選項。
                 -->
                 <select
-                  class="board-driver"
-                  [class.is-unassigned]="route.driverId === null"
+                  class="board-driver lane-driver-select"
+                  [attr.aria-label]="'指派司機 ' + (route.plateNumber || '空白格')"
+                  [class.is-unassigned]="route.driverId === null || assignedDriverOutsideWarehouse(route)"
                   [disabled]="busy() || route.isMaintenance || published()"
                   (change)="onDriverChange(route, $event)"
                 >
-                  <option value="" [selected]="route.driverId === null">未指派司機</option>
+                  <option value="" [selected]="route.driverId === null || assignedDriverOutsideWarehouse(route)">
+                    {{ assignedDriverOutsideWarehouse(route) ? '司機歸屬已變更，請重新指派' : '未指派司機' }}
+                  </option>
                   @for (option of driverOptions(route); track option.id) {
                     <option
                       [value]="option.id"
                       [selected]="option.id === route.driverId"
-                      [disabled]="option.takenNote !== null"
+                      [disabled]="option.takenNote !== null || option.scheduleNote !== null"
                     >
                       {{ option.name }}@if (option.scheduleNote) {
                       · {{ option.scheduleNote }}
@@ -267,7 +279,8 @@
                   }
                 </select>
                 <select
-                  class="board-driver"
+                  class="board-driver lane-vehicle-select"
+                  aria-label="選擇車輛"
                   [class.is-unassigned]="route.vehicleId === null"
                   [disabled]="busy() || published()"
                   (change)="onVehicleChange(route, $event)"
@@ -383,6 +396,27 @@
                     </p>
                   }
                 </div>
+                @if (route.vehicleId !== null) {
+                  <button type="button" class="mileage-card-toggle" (click)="toggleMileageDetails(route)"
+                    [attr.aria-expanded]="mileageDetailsExpanded(route)"
+                    [attr.aria-controls]="'mileage-details-' + route.slotKey"
+                    [attr.aria-label]="(mileageDetailsExpanded(route) ? '收合' : '展開') + ' ' + route.plateNumber + ' 里程與保養'">
+                    <span>里程與保養</span>
+                    <span>{{ mileageDetailsExpanded(route) ? '收合' : '展開' }} <mat-icon aria-hidden="true">{{ mileageDetailsExpanded(route) ? 'expand_less' : 'expand_more' }}</mat-icon></span>
+                  </button>
+                  @if (mileageDetailsExpanded(route)) {
+                    <div [id]="'mileage-details-' + route.slotKey">
+                      <app-vehicle-maintenance-panel [summary]="maintenanceSummary(route)" [showCounts]="false" [showEstimateNote]="false" />
+                    </div>
+                  } @else if (maintenanceSummary(route); as summary) {
+                    @if (summary.decision !== 'NORMAL') {
+                      <app-vehicle-maintenance-notice [summary]="summary" />
+                    }
+                  }
+                  @if (maintenanceEstimatePending(route)) {
+                    <p class="board-notice">完整 OSRM 含回程里程尚未取得，發布前必須完成預檢。</p>
+                  }
+                }
               </div>
             }
           </div>
@@ -416,6 +450,23 @@
                     <p><span>預估抵達</span>{{ routeEtaLabel(route) }}</p>
                     <p><span>剩餘里程</span>{{ routeRemainingKmLabel(route) }}</p>
                   </div>
+
+                  <button type="button" class="mileage-card-toggle" (click)="toggleMileageDetails(route)"
+                    [attr.aria-expanded]="mileageDetailsExpanded(route)"
+                    [attr.aria-controls]="'mileage-details-' + route.slotKey"
+                    [attr.aria-label]="(mileageDetailsExpanded(route) ? '收合' : '展開') + ' ' + route.plateNumber + ' 里程與保養'">
+                    <span>里程與保養</span>
+                    <span>{{ mileageDetailsExpanded(route) ? '收合' : '展開' }} <mat-icon aria-hidden="true">{{ mileageDetailsExpanded(route) ? 'expand_less' : 'expand_more' }}</mat-icon></span>
+                  </button>
+                  @if (mileageDetailsExpanded(route)) {
+                    <div [id]="'mileage-details-' + route.slotKey">
+                      <app-vehicle-maintenance-panel [summary]="maintenanceSummary(route)" [showCounts]="false" [showEstimateNote]="false" />
+                    </div>
+                  } @else if (maintenanceSummary(route); as summary) {
+                    @if (summary.decision !== 'NORMAL') {
+                      <app-vehicle-maintenance-notice [summary]="summary" />
+                    }
+                  }
 
                   <div class="published-order-list">
                     @for (card of route.cards; track card.orderId) {
@@ -521,6 +572,18 @@
     <p class="dashboard-description">{{ errorMessage() }}</p>
   }
 </main>
+
+<ng-template #withdrawDispatchDialog>
+  <h2 mat-dialog-title>撤回發布</h2>
+  <mat-dialog-content>
+    <p>確定撤回 {{ dispatchDateLabel() }} 全部倉庫的發布嗎？</p>
+    <p>撤回後未完成的路線回到草稿，司機端的任務會暫時隱藏，重新發布後才會恢復。已開始配送的貨物請先確認交接狀態。</p>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button type="button" matButton [mat-dialog-close]="false">取消</button>
+    <button type="button" matButton="filled" [mat-dialog-close]="true">確認撤回</button>
+  </mat-dialog-actions>
+</ng-template>
 
 <!-- 按「＋」且看板上有東西時跳出；由 openCreateTemplate() 開啟 -->
 <ng-template #clearBoardDialog>

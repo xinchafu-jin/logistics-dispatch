@@ -1,0 +1,26 @@
+<section class="pre-trip" aria-label="點交前安全檢查">
+  <header><div><p>點交前必填</p><h3>出車安全檢查</h3></div><span>{{ route().vehicle.plateNumber }}</span></header>
+  @if (loading()) { <p class="notice" role="status">正在確認檢查紀錄…</p> }
+  @if (error()) { <p class="notice error" role="alert">{{ error() }} <button type="button" (click)="retry()">重新確認</button></p> }
+  @if (result()?.completed) {
+    <div class="notice" [class.error]="!result()?.passed" role="status"><strong>{{ result()?.message }}</strong><p>酒測 {{ result()?.alcoholMgL?.toFixed(2) }} mg/L · {{ result()?.submittedAt?.replace('T', ' ') }}</p></div>
+  }
+  @if (result()?.passed) {
+    <div class="saved-photos">@for (photo of photoKinds; track photo.key) { <div><button type="button" (click)="viewPhoto(photo.key)">查看{{ photo.label }}照片</button>@if (previews()[photo.key]; as url) { <img [src]="url" [alt]="photo.label + '檢查照片'" /> }</div> }</div>
+  } @else if (!loading()) {
+    <form (ngSubmit)="submit()">
+      <fieldset [disabled]="saving()"><legend>1　酒測</legend>
+        <label class="check"><input type="checkbox" name="alcoholTested" [ngModel]="checks().alcoholTested" (ngModelChange)="toggle('alcoholTested', $event)" required />已完成本人酒測</label>
+        <label class="reading">呼氣酒精濃度（mg/L）<input type="number" name="alcohol" min="0" max="9.99" step="0.01" inputmode="decimal" placeholder="請填實測值，例如 0.00" [ngModel]="alcohol()" (ngModelChange)="updateAlcohol($event)" required /></label>
+        <small>系統採零酒精出車規則；非 0.00 不得點交或出車，請通知主管。此數值不是法定門檻說明。</small>
+      </fieldset>
+      <fieldset [disabled]="saving()"><legend>2　車輛檢點</legend><p>四種燈光正常亮起</p><div class="checks">@for (check of lightChecks; track check.key) { <label class="check"><input type="checkbox" [name]="check.key" [ngModel]="checks()[check.key]" (ngModelChange)="toggle(check.key, $event)" required />{{ check.label }}正常</label> }</div>
+        <p>四個輪胎都有氣、沒有破胎</p><div class="checks">@for (check of tireChecks; track check.key) { <label class="check"><input type="checkbox" [name]="check.key" [ngModel]="checks()[check.key]" (ngModelChange)="toggle(check.key, $event)" required />{{ check.label }}正常</label> }</div>
+      </fieldset>
+      <fieldset [disabled]="saving()"><legend>3　行車紀錄器</legend><label class="check"><input type="checkbox" name="dashcam" [ngModel]="checks().dashcam" (ngModelChange)="toggle('dashcam', $event)" required />已開機且正常錄影</label></fieldset>
+      <fieldset [disabled]="saving()"><legend>4　檢查照片（各一張，必填）</legend><div class="photos">@for (photo of photoKinds; track photo.key) { <label><strong>{{ photo.label }}</strong><input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" [attr.aria-label]="photo.label + '照片'" (change)="selectPhoto(photo.key, $event)" required />@if (previews()[photo.key]; as url) { <img [src]="url" [alt]="photo.label + '照片預覽'" /><span>{{ files()[photo.key]?.name }}</span> } @else { <small>尚未選擇照片</small> }</label> }</div><small>JPG、PNG、WebP，每張最多 5 MB；可拍照或選擇相簿。</small></fieldset>
+      <p class="hint">所有檢查與照片完成後才可點交。發現車況異常請勿勾選，聯絡主管撤回或改派任務。</p>
+      <button class="submit" type="submit" [disabled]="!canSubmit()">{{ saving() ? '正在上傳並儲存…' : '提交安全檢查' }}</button>
+    </form>
+  }
+</section>

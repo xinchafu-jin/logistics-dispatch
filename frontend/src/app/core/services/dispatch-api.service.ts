@@ -37,6 +37,7 @@ import {
   ReportCollectionDto,
   ReportQuery,
   ReportSummaryDto,
+  ReportPerformanceDto,
   RouteMetricsDto,
   ScheduleMonthDto,
   StoreDto,
@@ -44,6 +45,8 @@ import {
   TemplateDto,
   TemplateRequest,
   VehicleDto,
+  VehicleMaintenanceRecord,
+  VehicleMaintenanceRules,
   WarehouseDto,
   OptimizeSlotsRequest,
   PlannedPartialLeaveRequestDto,
@@ -59,6 +62,22 @@ export class DispatchApiService {
 
   getDrivers(): Observable<DriverDto[]> {
     return this.http.get<DriverDto[]>(`${API_ROOT}/drivers`);
+  }
+
+  getMaintenanceRules(): Observable<VehicleMaintenanceRules> {
+    return this.http.get<VehicleMaintenanceRules>(`${API_ROOT}/vehicle-maintenance/rules`);
+  }
+
+  saveMaintenanceRules(rules: VehicleMaintenanceRules): Observable<VehicleMaintenanceRules> {
+    return this.http.put<VehicleMaintenanceRules>(`${API_ROOT}/vehicle-maintenance/rules`, rules);
+  }
+
+  getMaintenanceHistory(vehicleId: number): Observable<VehicleMaintenanceRecord[]> {
+    return this.http.get<VehicleMaintenanceRecord[]>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/history`);
+  }
+
+  cancelMaintenance(vehicleId: number): Observable<void> {
+    return this.http.post<void>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/cancel`, null);
   }
 
   // ── 司機月班表 ────────────────────────────────────────
@@ -203,6 +222,10 @@ export class DispatchApiService {
 
   getReportAttendance(query: ReportQuery): Observable<ReportCollectionDto> {
     return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/attendance`, {params: this.reportParams(query)});
+  }
+
+  getReportPerformance(query: ReportQuery): Observable<ReportPerformanceDto> {
+    return this.http.get<ReportPerformanceDto>(`${API_ROOT}/reports/performance`, {params: this.reportParams(query)});
   }
 
   getReportRoutes(query: ReportQuery): Observable<ReportCollectionDto> {
@@ -517,6 +540,12 @@ export class DispatchApiService {
     const params = new HttpParams().set('date', date);
 
     return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, {params});
+  }
+
+  /** 撤回當天全部倉庫的發布；保留訂單，後端會拒絕已開始執行的任務。 */
+  withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, {params});
   }
 
   // ── 常配編組 ──────────────────────────────────────────

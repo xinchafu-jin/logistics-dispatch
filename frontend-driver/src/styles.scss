@@ -114,9 +114,66 @@ input {
 
 // 班表月曆每一格依班別上色（class 由 driver-dashboard 的 scheduleDateClass 加上）。
 // 要寫在全域：格子是 MatCalendar 自己元件裡的元素，元件樣式有封裝，碰不到。
-// 顏色跟下方明細的 .shift-type 標籤一致：上班綠、休假灰、請假橘；選中那天仍由 Material 的實心綠圈蓋過
-.driver-schedule-calendar .shift-cell .mat-calendar-body-cell-content {
+// 保留 Material 原生的日期、選取、鍵盤操作；日期在上，班別圖示／文字在下。
+// 只改月視圖，不影響切換年份／月份時的格子。
+.driver-schedule-calendar mat-month-view .mat-calendar-body-cell-container {
+  height: clamp(58px, 12vw, 72px);
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.driver-schedule-calendar mat-month-view .mat-calendar-body-cell-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  top: 4px;
+  left: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 8px);
+  border-radius: 12px;
+  font-size: 16px;
   font-weight: 700;
+  line-height: 1.15;
+}
+
+.driver-schedule-calendar .schedule-cell-shift {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.driver-schedule-calendar mat-month-view .mat-calendar-body-cell-content::before {
+  border-radius: inherit;
+}
+
+.driver-schedule-calendar .schedule-cell-shift svg {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  fill: currentColor;
+}
+
+.driver-schedule-calendar .schedule-cell-pending {
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: #73510c;
+  background: #fff1c8;
+  white-space: nowrap;
+}
+
+.driver-schedule-calendar .leave-request-pending .mat-calendar-body-cell-content {
+  gap: 2px;
+  box-shadow: inset 0 0 0 1px #c7a75c;
 }
 
 .driver-schedule-calendar .shift-work .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
@@ -124,12 +181,62 @@ input {
   background: #e5f2ec;
 }
 
-.driver-schedule-calendar .shift-day_off .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
-  color: #7a8a84;
-  background: #eef1ef;
+.driver-schedule-calendar .shift-day_off .mat-calendar-body-cell-content {
+  color: #805e12;
+  background: #fff3c4;
+}
+
+.driver-schedule-calendar .shift-day_off .mat-calendar-body-cell-content.mat-calendar-body-selected {
+  color: #624400;
+  background: #f4d36a;
+  box-shadow: inset 0 0 0 2px #9a7419;
 }
 
 .driver-schedule-calendar .shift-leave .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
   color: #9a5a17;
   background: #fbeedd;
+}
+
+.driver-schedule-calendar :is(.shift-unassigned, .shift-not-published, .shift-loading, .shift-unavailable)
+  .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  color: #67796f;
+  background: #f1f5f2;
+}
+
+.driver-schedule-calendar .leave-date-selected .mat-calendar-body-cell-content {
+  border: 2px solid #087c6b;
+  box-shadow: 0 0 0 2px rgb(8 124 107 / 14%);
+}
+
+.driver-schedule-calendar .leave-date-selected .mat-calendar-body-cell-content::after {
+  content: '✓';
+  position: absolute;
+  top: 0;
+  right: 2px;
+  font-size: 10px;
+  color: #087c6b;
+}
+
+// 申請模式只能點符合條件的日期，班別仍可閱讀。
+.driver-schedule-calendar .mat-calendar-body-disabled .mat-calendar-body-cell-content { opacity: .6; }
+.driver-schedule-calendar .mat-calendar-body-disabled.leave-request-pending .mat-calendar-body-cell-content { opacity: 1; }
+
+@media (max-width: 380px) {
+  .driver-schedule-calendar mat-month-view .mat-calendar-body-cell-content {
+    left: 2px;
+    width: calc(100% - 4px);
+    font-size: 14px;
+    border-radius: 10px;
+  }
+
+  .driver-schedule-calendar .schedule-cell-shift {
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  .driver-schedule-calendar .schedule-cell-shift svg {
+    width: 11px;
+    height: 11px;
+    flex-basis: 11px;
+  }
 }

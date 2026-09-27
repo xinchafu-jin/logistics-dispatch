@@ -5,7 +5,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, StoreDto, WarehouseDto} from '../../../../core/services/dispatch-api.models';
+import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, WarehouseDto} from '../../../../core/services/dispatch-api.models';
 
 type PreviewSheet = 'overview' | 'orders' | 'routes' | 'attendance' | 'vehicles' | 'warehouses' | 'stores' | 'exceptions' | 'notes';
 interface ReportRow {
@@ -68,6 +68,7 @@ interface ReportRow {
   workDate?: unknown;
 }
 interface ReportPreview {
+  performance: ReportPerformanceDto;
   summary: ReportSummaryDto;
   attendance: ReportCollectionDto;
   routes: ReportCollectionDto;
@@ -179,6 +180,7 @@ export class ReportHistory implements OnInit {
     const query = this.reportQuery();
     void this.router.navigate([], {relativeTo: this.route, queryParams: {from: this.from(), to: this.to()}, queryParamsHandling: 'merge'});
     forkJoin({
+      performance: this.api.getReportPerformance(query),
       summary: this.api.getReportSummary(query),
       attendance: this.api.getReportAttendance(query),
       routes: this.api.getReportRoutes(query),
@@ -223,6 +225,15 @@ export class ReportHistory implements OnInit {
       this.appendSheet(xlsx, workbook, '訂單明細', this.orderExportRows(preview));
       this.appendSheet(xlsx, workbook, '路線里程油費', this.routeExportRows(preview));
       this.appendSheet(xlsx, workbook, '司機出勤', this.attendanceExportRows(preview));
+      this.appendSheet(xlsx, workbook, '出車收車明細', this.tripExportRows(preview));
+      this.appendSheet(xlsx, workbook, '各倉人車比較', [
+        ['倉庫', '已到班', '應到班', '出勤率', '準時班次', '準時打卡率', '已完成打卡班次', '加班班次', '加班班次率', '加班分鐘', '出車趟次', '收車趟次', '收車完成率', '已記錄實際公里'],
+        ...preview.performance.warehouses.map(row => [row.warehouseName, row.workforce.attendedShifts, row.workforce.dueShifts,
+          this.percent(row.workforce.attendanceRate), row.workforce.onTimeShifts, this.percent(row.workforce.onTimeRate),
+          row.workforce.finishedShifts, row.workforce.overtimeShifts, this.percent(row.workforce.overtimeRate), row.workforce.overtimeMinutes,
+          row.fleet.startedTrips, row.fleet.returnedTrips, this.percent(row.fleet.returnRate), row.fleet.actualKm]),
+        ['口徑', '人員依目前倉庫歸屬，出車依記錄出貨倉庫；比率無分母不補0%；加班為打卡超過排定下班分鐘，非核准薪資加班。'],
+      ]);
       this.appendSheet(xlsx, workbook, '車輛使用', this.vehicleExportRows(preview));
       this.appendSheet(xlsx, workbook, '倉庫門市', this.warehouseExportRows(preview));
       this.appendSheet(xlsx, workbook, '異常案件', this.exceptionExportRows(preview));
@@ -369,8 +380,9 @@ export class ReportHistory implements OnInit {
 
   private attendanceExportRows(preview: ReportPreview): unknown[][] {
     return [
-      ['日期', '司機', '班別', '預定上班', '打卡上班', '預定下班', '打卡下班', '工作分鐘', '資料狀態'],
-      ...this.rows(preview.attendance, 'shifts').map((row) => [row.workDate, row.driverName, row.shiftType, row.scheduledStartAt, row.clockInAt, row.scheduledEndAt, row.clockOutAt, row.clockSpanMinutes, row.dataStatus]),
+      ['日期', '司機', '目前所屬倉庫', '應上班時間（含核准部分請假）', '打卡上班', '排定下班', '打卡下班', '加班分鐘', '出勤判定'],
+      ...preview.performance.shifts.map(row => [row['workDate'], row['driverName'], row['warehouseName'], row['expectedStartAt'], row['clockInAt'],
+        row['scheduledEndAt'], row['clockOutAt'], row['overtimeMinutes'], this.performanceLabel(row['attendanceStatus'])]),
       [],
       ['司機工作摘要'],
       ['司機', '排班天數', '出車趟數', '已發布路線', '訂單數', '已完成', '失敗', '預估公里', '實際公里'],
@@ -380,6 +392,19 @@ export class ReportHistory implements OnInit {
 
   private vehicleExportRows(preview: ReportPreview): unknown[][] {
     return [['車牌', '倉庫', '出車路線', '已發布路線', '訂單數', '箱數', '門市數', '平均裝載率', '預估公里', '實際公里', '里程狀態'], ...this.rows(preview.vehicles, 'vehicles').map((row) => [row.plateNumber, row.warehouseId, row.assignedRoutes, row.publishedRoutes, row.orders, row.boxes, row.distinctStores, this.percent(row.averageLoadRatePercent), row.publishedPlannedKm, row.actualKm, row.actualMileageStatus])];
+  }
+
+  private tripExportRows(preview: ReportPreview): unknown[][] {
+    return [['日期', '車牌', '出貨倉庫', '路線ID', '出車時間', '收車時間', '狀態', '實際公里', '里程來源'],
+      ...preview.performance.trips.map(row => [row['date'], row['plateNumber'], row['warehouseName'], row['routeId'], row['startAt'], row['endAt'],
+        this.performanceLabel(row['status']), row['actualKm'], this.performanceLabel(row['distanceSource'])])];
+  }
+
+  protected performanceLabel(value: unknown): string {
+    const labels: Record<string, string> = {ON_TIME: '準時', LATE: '遲到', MISSING_CLOCK_IN: '缺上班卡',
+      APPROVED_FULL_DAY_LEAVE: '核准整天請假（不計應到班）', MISSING_SHIFT_TIME: '班表時間不足', NOT_DUE: '尚未到班時間',
+      OPEN: '尚未收車', RETURNED: '已收車', INVALID: '時間異常待核對', GPS_SETTLED: 'GPS 已結算', LEGACY_ODOMETER: '舊紀錄儀表差值', MISSING: '尚無可核對里程'};
+    return labels[String(value)] ?? this.value(value);
   }
 
   private warehouseExportRows(preview: ReportPreview): unknown[][] {

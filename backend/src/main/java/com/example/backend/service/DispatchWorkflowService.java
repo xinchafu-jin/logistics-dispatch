@@ -31,6 +31,8 @@ public class DispatchWorkflowService {
     private final RoutePlanMetricsService routePlanMetricsService;
     private final DispatchSlotService dispatchSlotService;
     private final DispatchDayService dispatchDayService;
+    private final DispatchVehicleMaintenanceGuard maintenanceGuard;
+    private final PreTripInspectionService preTripInspectionService;
 
     public DispatchWorkflowService(
             DispatchService dispatchService,
@@ -39,7 +41,9 @@ public class DispatchWorkflowService {
             DispatchDraftService dispatchDraftService,
             RoutePlanMetricsService routePlanMetricsService,
             DispatchSlotService dispatchSlotService,
-            DispatchDayService dispatchDayService
+            DispatchDayService dispatchDayService,
+            DispatchVehicleMaintenanceGuard maintenanceGuard,
+            PreTripInspectionService preTripInspectionService
     ) {
         this.dispatchService = dispatchService;
         this.dispatchBoardService = dispatchBoardService;
@@ -48,6 +52,8 @@ public class DispatchWorkflowService {
         this.routePlanMetricsService = routePlanMetricsService;
         this.dispatchSlotService = dispatchSlotService;
         this.dispatchDayService = dispatchDayService;
+        this.maintenanceGuard = maintenanceGuard;
+        this.preTripInspectionService = preTripInspectionService;
     }
 
     @Transactional(readOnly = true)
@@ -133,12 +139,14 @@ public class DispatchWorkflowService {
      */
     public void assertCanPublish(LocalDate date) {
         dispatchGuardService.assertCanPublish(date);
+        maintenanceGuard.assertCanPublish(date);
     }
 
     @Transactional
     public List<DispatchResponse> publish(LocalDate date) {
         dispatchGuardService.assertCanPublish(date);
         routePlanMetricsService.calculateAndStore(date);
+        maintenanceGuard.assertCanPublishWithFreshMetrics(date);
         dispatchService.publish(date);
         return dispatchBoardService.getBoards(date);
     }
@@ -146,6 +154,7 @@ public class DispatchWorkflowService {
     @Transactional
     public List<DispatchResponse> withdraw(LocalDate date) {
         dispatchGuardService.assertCanWithdraw(date);
+        preTripInspectionService.prepareWithdraw(date);
         dispatchService.withdraw(date);
         return dispatchBoardService.getBoards(date);
     }

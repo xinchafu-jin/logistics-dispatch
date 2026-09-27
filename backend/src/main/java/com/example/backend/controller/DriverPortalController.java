@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -190,13 +191,29 @@ public class DriverPortalController {
         return driverLeaveRequestService.submitPlannedBatches(driverId(jwt), request);
     }
 
-    /** 針對過去整天未打卡的上班日，補送假別、原因及選填佐證照片。 */
+    /** 過去上班日可補整天或部分時段；已打卡時須填起訖時間。 */
     @PostMapping("/leave-requests/makeup")
     public DriverLeaveResponse requestMakeupLeave(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody DriverMakeupLeaveRequestDTO request
     ) {
         return driverLeaveRequestService.submitMakeupLeave(driverId(jwt), request);
+    }
+
+    @PostMapping("/leave-requests/makeup-batch")
+    public List<DriverLeaveResponse> requestMakeupBatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverMakeupLeaveBatchRequestDTO request) {
+        return driverLeaveRequestService.submitMakeupBatch(driverId(jwt), request);
+    }
+
+    @GetMapping("/leave-requests/makeup-candidates")
+    public List<LocalDate> findMakeupCandidates(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime leaveStart,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime leaveEnd) {
+        return driverLeaveRequestService.findMakeupCandidates(driverId(jwt), from, to, leaveStart, leaveEnd);
     }
 
     /** 先上傳補請假佐證照片，再把回傳網址放入 makeup 請求；照片不是必填。 */

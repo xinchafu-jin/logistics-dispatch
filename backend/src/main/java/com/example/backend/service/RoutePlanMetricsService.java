@@ -48,6 +48,7 @@ public class RoutePlanMetricsService {
     private final FuelPriceService fuelPriceService;
     private final GpsDistanceService gpsDistanceService;
     private final GpsPingsDAO gpsPingsDAO;
+    private final VehicleMaintenanceService maintenanceService;
     private final int gpsFreshnessMinutes;
 
     public RoutePlanMetricsService(
@@ -61,6 +62,7 @@ public class RoutePlanMetricsService {
             FuelPriceService fuelPriceService,
             GpsDistanceService gpsDistanceService,
             GpsPingsDAO gpsPingsDAO,
+            VehicleMaintenanceService maintenanceService,
             @org.springframework.beans.factory.annotation.Value(
                     "${app.gps.freshness-minutes:10}") int gpsFreshnessMinutes
     ) {
@@ -74,6 +76,7 @@ public class RoutePlanMetricsService {
         this.fuelPriceService = fuelPriceService;
         this.gpsDistanceService = gpsDistanceService;
         this.gpsPingsDAO = gpsPingsDAO;
+        this.maintenanceService = maintenanceService;
         this.gpsFreshnessMinutes = gpsFreshnessMinutes;
     }
 
@@ -93,6 +96,12 @@ public class RoutePlanMetricsService {
             route.setEstimatedFuelCost(calculation.plannedFuelCost);
         }
         routesDAO.saveAll(routes);
+    }
+
+    /** 保養評估使用完整含回倉路程，不寫入車輛實際儀表里程。 */
+    @Transactional(readOnly = true)
+    public double plannedKm(RoutesEntity route) {
+        return calculatePlan(route, true).totalMeters / 1000.0;
     }
 
     @Transactional(readOnly = true)
@@ -116,6 +125,11 @@ public class RoutePlanMetricsService {
         response.setPricePerLiter(plan.pricePerLiter);
         response.setFuelStatus(plan.fuelStatus);
         response.setLegs(plan.legs);
+        VehiclesEntity vehicle = vehiclesDAO.findById(route.getVehicleId())
+                .orElseThrow(() -> new EntityNotFoundException("找不到路線車輛，ID：" + route.getVehicleId()));
+        // 草稿也提供同一份預檢；只扣未完成訂單的完整含回倉路程，不寫入實際里程。
+        // 全部已結單時保留歷史 plannedKm，但不能再當作另一趟待執行里程扣一次。
+        response.setMaintenance(maintenanceService.summary(vehicle, hasActiveOrders ? response.getPlannedKm() : null));
         populateLiveEta(response, route);
 
         List<MileageLogsEntity> mileageSegments = new ArrayList<>(

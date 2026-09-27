@@ -17,6 +17,7 @@ import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dto.request.DriverLeaveRequestDTO;
 import com.example.backend.dto.request.DriverMakeupLeaveRequestDTO;
+import com.example.backend.dto.request.DriverMakeupLeaveBatchRequestDTO;
 import com.example.backend.dto.request.DriverPlannedLeaveBatchRequestDTO;
 import com.example.backend.entity.AttendanceRecordsEntity;
 import com.example.backend.entity.DriverLeaveRequestsEntity;
@@ -463,6 +464,136 @@ class DriverLeaveRequestServiceTest {
         item.setWorkStart(LocalTime.of(8, 0));
         item.setWorkEnd(LocalTime.of(17, 0));
         return item;
+    }
+
+    @Test
+    void 多日補請一次送審且同一批共用假別原因() {
+        LocalDate first = LocalDate.now().minusDays(3), second = first.plusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, first)).thenReturn(Optional.of(publishedWorkShift(81L, first)));
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, second)).thenReturn(Optional.of(publishedWorkShift(82L, second)));
+        var response = service.submitMakeupBatch(1L, makeupBatch(List.of(second, first)));
+        assertEquals(List.of(first, second), response.stream().map(item -> item.workDate()).toList());
+        assertTrue(response.stream().allMatch(item -> item.requestMode() == LeaveRequestMode.MAKEUP
+                && item.leaveType() == LeaveType.SICK && item.requestReason().equals("連續發燒")));
+        verify(requestsDAO, times(2)).saveAndFlush(any());
+        verify(eventsDAO, times(2)).save(any());
+    }
+
+    @Test
+    void 多日補請任一日已有打卡則整批在寫入前拒絕() {
+        LocalDate first = LocalDate.now().minusDays(3), second = first.plusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, first)).thenReturn(Optional.of(publishedWorkShift(81L, first)));
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, second)).thenReturn(Optional.of(publishedWorkShift(82L, second)));
+        when(attendanceDAO.existsByDriverShiftId(82L)).thenReturn(true);
+        assertThrows(IllegalArgumentException.class, () -> service.submitMakeupBatch(1L, makeupBatch(List.of(first, second))));
+        verify(requestsDAO, never()).saveAndFlush(any());
+        verify(eventsDAO, never()).save(any());
+    }
+
+    @Test
+    void 多日補請不能選今天未來或重複日期() {
+        LocalDate today = LocalDate.now();
+        for (List<LocalDate> dates : List.of(List.of(today), List.of(today.plusDays(1)), List.of(today.minusDays(1), today.minusDays(1)))) {
+            assertThrows(IllegalArgumentException.class, () -> service.submitMakeupBatch(1L, makeupBatch(dates)));
+        }
+        verify(requestsDAO, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void 候選補請日期最多查六十二天且不含今天或未來() {
+        LocalDate today = LocalDate.now(), from = today.minusDays(3);
+        when(shiftsDAO.findMakeupCandidateDates(1L, from, today.minusDays(1), true, null, null)).thenReturn(List.of(from));
+        assertEquals(List.of(from), service.findMakeupCandidates(1L, from, today.plusDays(3)));
+        assertTrue(service.findMakeupCandidates(1L, today, today.plusDays(3)).isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> service.findMakeupCandidates(1L, today.minusDays(62), today));
+    }
+
+    private DriverMakeupLeaveBatchRequestDTO makeupBatch(List<LocalDate> dates) {
+        DriverMakeupLeaveBatchRequestDTO batch = new DriverMakeupLeaveBatchRequestDTO();
+        batch.setWorkDates(dates); batch.setLeaveType(LeaveType.SICK); batch.setReason("連續發燒");
+        return batch;
+    }
+
+    @Test
+    void 有打卡的過去上班日可多日補請部分時段() {
+        LocalDate first = LocalDate.now().minusDays(3), second = first.plusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, first)).thenReturn(Optional.of(publishedWorkShift(81L, first)));
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, second)).thenReturn(Optional.of(publishedWorkShift(82L, second)));
+        when(attendanceDAO.existsByDriverShiftId(81L)).thenReturn(true);
+        when(attendanceDAO.existsByDriverShiftId(82L)).thenReturn(true);
+        var dto = makeupBatch(List.of(first, second));
+        dto.setLeaveStart(LocalTime.of(8, 0)); dto.setLeaveEnd(LocalTime.of(9, 0));
+        var result = service.submitMakeupBatch(1L, dto);
+        assertTrue(result.stream().allMatch(item -> !item.fullDay()
+                && item.leaveStart().equals(LocalTime.of(8, 0)) && item.leaveEnd().equals(LocalTime.of(9, 0))));
+        verify(requestsDAO, times(2)).saveAndFlush(any());
+    }
+
+    @Test
+    void 補請單邊時間倒置或超過班次都不能寫入() {
+        LocalDate date = LocalDate.now().minusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, date)).thenReturn(Optional.of(publishedWorkShift(81L, date)));
+        for (LocalTime[] period : List.of(new LocalTime[]{LocalTime.of(8, 0), null},
+                new LocalTime[]{null, LocalTime.of(9, 0)}, new LocalTime[]{LocalTime.of(9, 0), LocalTime.of(8, 0)},
+                new LocalTime[]{LocalTime.of(7, 0), LocalTime.of(9, 0)}, new LocalTime[]{LocalTime.of(16, 0), LocalTime.of(18, 0)})) {
+            var dto = makeupBatch(List.of(date)); dto.setLeaveStart(period[0]); dto.setLeaveEnd(period[1]);
+            assertThrows(IllegalArgumentException.class, () -> service.submitMakeupBatch(1L, dto));
+        }
+        verify(requestsDAO, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void 補請同日待審一律鎖住而核准部分時段僅鎖住重疊時間() {
+        LocalDate date = LocalDate.now().minusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, date)).thenReturn(Optional.of(publishedWorkShift(81L, date)));
+        DriverLeaveRequestsEntity existing = pending(false, LocalTime.of(8, 0), LocalTime.of(9, 0));
+        existing.setWorkDate(date);
+        when(requestsDAO.findForUpdateByDriverIdAndWorkDate(1L, date)).thenReturn(List.of(existing));
+        var dto = makeupBatch(List.of(date)); dto.setLeaveStart(LocalTime.of(13, 0)); dto.setLeaveEnd(LocalTime.of(17, 0));
+        assertThrows(IllegalArgumentException.class, () -> service.submitMakeupBatch(1L, dto));
+        existing.setStatus(LeaveRequestStatus.APPROVED);
+        assertFalse(service.submitMakeupBatch(1L, dto).getFirst().fullDay());
+        dto.setLeaveStart(LocalTime.of(8, 30)); dto.setLeaveEnd(LocalTime.of(10, 0));
+        assertThrows(IllegalArgumentException.class, () -> service.submitMakeupBatch(1L, dto));
+        verify(requestsDAO, times(1)).saveAndFlush(any());
+    }
+
+    @Test
+    void 部分時段補請可補充系統未到紀錄且更新起訖不另建重複紀錄() {
+        LocalDate date = LocalDate.now().minusDays(1);
+        when(shiftsDAO.findForUpdateByDriverIdAndWorkDate(1L, date)).thenReturn(Optional.of(publishedWorkShift(81L, date)));
+        DriverLeaveRequestsEntity automatic = pending(true, null, null);
+        automatic.setWorkDate(date); automatic.setDriverShiftId(81L);
+        automatic.setSubmissionSource(LeaveSubmissionSource.SYSTEM); automatic.setRequestMode(LeaveRequestMode.SYSTEM_NO_SHOW);
+        when(requestsDAO.findForUpdateByDriverIdAndWorkDate(1L, date)).thenReturn(List.of(automatic));
+        var dto = makeupBatch(List.of(date)); dto.setLeaveStart(LocalTime.of(13, 0)); dto.setLeaveEnd(LocalTime.of(17, 0));
+        var result = service.submitMakeupBatch(1L, dto).getFirst();
+        assertEquals(automatic.getId(), result.id()); assertFalse(result.fullDay());
+        assertEquals(LocalTime.of(13, 0), result.leaveStart());
+        assertEquals(LeaveRequestMode.MAKEUP, result.requestMode());
+        verify(requestsDAO, times(1)).saveAndFlush(automatic);
+    }
+
+    @Test
+    void 時段候選查詢也檢查時間完整及順序() {
+        LocalDate from = LocalDate.now().minusDays(3), to = from.plusDays(1);
+        LocalTime start = LocalTime.of(8, 0), end = LocalTime.of(9, 0);
+        when(shiftsDAO.findMakeupCandidateDates(1L, from, to, false, start, end)).thenReturn(List.of(from));
+        assertEquals(List.of(from), service.findMakeupCandidates(1L, from, to, start, end));
+        assertThrows(IllegalArgumentException.class, () -> service.findMakeupCandidates(1L, from, to, start, null));
+        assertThrows(IllegalArgumentException.class, () -> service.findMakeupCandidates(1L, from, to, end, start));
+    }
+
+    @Test
+    void 同日已有申請中紀錄即使不同時段也不能重複申請() {
+        DriverLeaveRequestsEntity existing = pending(false, LocalTime.of(8, 0), LocalTime.of(9, 0));
+        existing.setWorkDate(temporaryDate);
+        when(requestsDAO.findByDriverIdAndWorkDateOrderByRequestedAtAsc(1L, temporaryDate)).thenReturn(List.of(existing));
+        DriverLeaveRequestDTO dto = new DriverLeaveRequestDTO();
+        dto.setWorkDate(temporaryDate); dto.setLeaveType(LeaveType.SICK); dto.setReason("下午就醫");
+        dto.setLeaveStart(LocalTime.of(13, 0)); dto.setLeaveEnd(LocalTime.of(17, 0));
+        assertThrows(IllegalArgumentException.class, () -> service.submit(1L, dto));
+        verify(requestsDAO, never()).save(any());
     }
 
     private DriverLeaveRequestsEntity pending(

@@ -19,6 +19,21 @@ describe('DispatchApiService', () => {
 
   afterEach(() => httpTesting.verify());
 
+  it('reads operational performance with the same period and warehouse filters as detail queries', () => {
+    service.getReportPerformance({from: '2026-09-21', to: '2026-09-27', warehouseId: 2, driverId: 3, vehicleId: 4}).subscribe();
+    const request = httpTesting.expectOne('/api/reports/performance?from=2026-09-21&to=2026-09-27&warehouseId=2&driverId=3&vehicleId=4');
+    expect(request.request.method).toBe('GET');
+    request.flush({from: '2026-09-21', to: '2026-09-27', workforce: {}, fleet: {}, warehouses: [], shifts: [], trips: []});
+  });
+
+  it('withdraws publication for the selected date without rewriting orders', () => {
+    service.withdrawDispatch('2026-09-27').subscribe((boards) => expect(boards).toEqual([]));
+    const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-27');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    request.flush([]);
+  });
+
   it('uses the direct list endpoints exposed by every backend controller', () => {
     forkJoin({
       drivers: service.getDrivers(),

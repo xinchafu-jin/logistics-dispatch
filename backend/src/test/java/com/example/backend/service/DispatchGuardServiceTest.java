@@ -194,6 +194,39 @@ class DispatchGuardServiceTest {
         assertDoesNotThrow(() -> guard.assertCanWithdraw(DATE));
     }
 
+    @Test
+    void 撤回_三筆已完成和一筆待送不應鎖住整天() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setStatus(RouteStatus.PUBLISHED);
+        List<OrdersEntity> orders = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
+            OrdersEntity order = new OrdersEntity();
+            order.setOrderNumber("DO-" + index);
+            order.setStatus(index < 3 ? OrderStatus.COMPLETED : OrderStatus.CONFIRMED);
+            order.setAssignedDriverId(1L);
+            order.setAssignedVehicleId(110L);
+            orders.add(order);
+        }
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(orders);
+
+        assertDoesNotThrow(() -> guard.assertCanWithdraw(DATE));
+        assertEquals(3, orders.stream().filter(order -> order.getStatus() == OrderStatus.COMPLETED).count());
+        assertTrue(orders.stream().allMatch(order -> order.getAssignedDriverId().equals(1L)));
+    }
+
+    @Test
+    void 撤回_已結案的失敗和未簽收不會阻擋待送訂單() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setStatus(RouteStatus.PUBLISHED);
+        OrdersEntity failed = new OrdersEntity();
+        failed.setStatus(OrderStatus.FAILED);
+        OrdersEntity noSignature = new OrdersEntity();
+        noSignature.setStatus(OrderStatus.NO_SIGNATURE);
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(List.of(failed, noSignature));
+
+        assertDoesNotThrow(() -> guard.assertCanWithdraw(DATE));
+        assertEquals(OrderStatus.FAILED, failed.getStatus());
+        assertEquals(OrderStatus.NO_SIGNATURE, noSignature.getStatus());
+    }
+
     private String publishFailure() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> guard.assertCanPublish(DATE));
         return e.getMessage();

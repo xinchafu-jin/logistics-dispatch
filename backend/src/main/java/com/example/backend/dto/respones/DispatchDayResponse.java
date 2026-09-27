@@ -14,6 +14,9 @@ public class DispatchDayResponse {
 
     private DispatchDayStatus status;
 
+    /** 是否仍有已發布路線（全部倉庫）；不等同於配送進度 status。 */
+    private boolean published;
+
     /** 有效訂單數，不含取消的單 */
     private int orderCount;
 
@@ -43,6 +46,14 @@ public class DispatchDayResponse {
 
     public void setStatus(DispatchDayStatus status) {
         this.status = status;
+    }
+
+    public boolean isPublished() {
+        return published;
+    }
+
+    public void setPublished(boolean published) {
+        this.published = published;
     }
 
     public int getOrderCount() {

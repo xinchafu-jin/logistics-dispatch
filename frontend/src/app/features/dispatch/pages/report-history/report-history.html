@@ -87,19 +87,39 @@
             </div>
           }
           @case ('attendance') {
-            <div class="driver-summary">
-              @for (driver of rows(report.drivers, 'drivers'); track driver.driverId) { <article><strong>{{ value(driver.driverName) }}</strong><span>排班 {{ value(driver.scheduledWorkDays) }} 天</span><span>出車 {{ value(driver.startedTrips) }} 趟</span><span>完成 {{ value(driver.completedOrders) }} 筆</span></article> }
+            <div class="performance-summary">
+              <span>出勤率 <b>{{ percent(report.performance.workforce.attendanceRate) }}</b> · {{ report.performance.workforce.attendedShifts }}/{{ report.performance.workforce.dueShifts }} 班</span>
+              <span>準時打卡率 <b>{{ percent(report.performance.workforce.onTimeRate) }}</b> · {{ report.performance.workforce.onTimeShifts }}/{{ report.performance.workforce.attendedShifts }} 班</span>
+              <span>加班班次率 <b>{{ percent(report.performance.workforce.overtimeRate) }}</b> · {{ report.performance.workforce.overtimeShifts }}/{{ report.performance.workforce.finishedShifts }} 班</span>
+              <span>已記錄加班 {{ report.performance.workforce.overtimeMinutes }} 分鐘</span>
             </div>
-            <div class="preview-table attendance-table"><div class="table-row table-head"><span>日期</span><span>司機</span><span>班別</span><span>預定上班</span><span>打卡上班</span><span>預定下班</span><span>打卡下班</span><span>狀態</span></div>
-              @for (row of rows(report.attendance, 'shifts'); track row.shiftId) { <div class="table-row"><span>{{ value(row.workDate) }}</span><span>{{ value(row.driverName) }}</span><span>{{ value(row.shiftType) }}</span><span>{{ value(row.scheduledStartAt) }}</span><span>{{ value(row.clockInAt) }}</span><span>{{ value(row.scheduledEndAt) }}</span><span>{{ value(row.clockOutAt) }}</span><span>{{ value(row.dataStatus) }}</span></div> }
+            <p class="performance-note">只計已發布上班班次；核准整天請假不計應到班，部分請假涵蓋上班時以核准請假結束時間為準。人員依目前所屬倉庫查詢；下列每班可核對準時與加班，打卡加班非核准薪資加班。出勤＝到班/應到班；準時＝準時/已到班；加班＝有加班/已完成上下班打卡。</p>
+            <div class="preview-table attendance-table"><div class="table-row table-head"><span>日期</span><span>司機</span><span>目前所屬倉庫</span><span>應上班時間</span><span>打卡上班</span><span>排定下班</span><span>打卡下班</span><span>加班分鐘</span><span>判定</span></div>
+              @for (row of report.performance.shifts; track row['shiftId']) { <div class="table-row"><span>{{ value(row['workDate']) }}</span><span>{{ value(row['driverName']) }}</span><span>{{ value(row['warehouseName']) }}</span><span>{{ value(row['expectedStartAt']) }}</span><span>{{ value(row['clockInAt']) }}</span><span>{{ value(row['scheduledEndAt']) }}</span><span>{{ value(row['clockOutAt']) }}</span><span>{{ value(row['overtimeMinutes']) }}</span><span [attr.title]="performanceLabel(row['attendanceStatus'])">{{ performanceLabel(row['attendanceStatus']) }}</span></div> } @empty { <p class="performance-note">此範圍沒有已發布上班班次。</p> }
             </div>
           }
           @case ('vehicles') {
+            <div class="performance-summary">
+              <span>實際出車 <b>{{ report.performance.fleet.startedTrips }}</b> 趟</span>
+              <span>收車完成率 <b>{{ percent(report.performance.fleet.returnRate) }}</b> · {{ report.performance.fleet.returnedTrips }}/{{ report.performance.fleet.startedTrips }} 趟</span>
+              <span>尚未收車 <b>{{ report.performance.fleet.openTrips }}</b> 趟</span>
+              <span>已記錄實際里程 <b>{{ value(report.performance.fleet.actualKm) }}</b> km</span>
+            </div>
+            <p class="performance-note">出車與收車每筆紀錄各計一趟，不以已發布路線冒充實際出車。倉庫依出車路線紀錄；舊資料無法唯一對應時不猜測倉庫。收車完成率＝已收車趟次/實際出車趟次 × 100%。</p>
+            <div class="preview-table trip-table"><div class="table-row table-head"><span>日期</span><span>車牌</span><span>出貨倉庫</span><span>路線ID</span><span>出車時間</span><span>收車時間</span><span>狀態</span><span>實際公里</span><span>里程來源</span></div>
+              @for (row of report.performance.trips; track row['mileageId']) { <div class="table-row"><span>{{ value(row['date']) }}</span><span>{{ value(row['plateNumber']) }}</span><span>{{ value(row['warehouseName']) }}</span><span>{{ value(row['routeId']) }}</span><span>{{ value(row['startAt']) }}</span><span>{{ value(row['endAt']) }}</span><span>{{ performanceLabel(row['status']) }}</span><span>{{ value(row['actualKm']) }}</span><span>{{ performanceLabel(row['distanceSource']) }}</span></div> } @empty { <p class="performance-note">此範圍尚無實際出車紀錄。</p> }
+            </div>
+            <details class="planning-details"><summary>車輛規劃資料（不是實際出車成果）</summary>
             <div class="preview-table vehicle-table"><div class="table-row table-head"><span>車牌</span><span>路線</span><span>訂單</span><span>箱數</span><span>門市</span><span>平均裝載率</span><span>預估公里</span><span>實際公里</span><span>里程狀態</span></div>
               @for (row of rows(report.vehicles, 'vehicles'); track row.vehicleId) { <div class="table-row"><span>{{ value(row.plateNumber) }}</span><span>{{ value(row.assignedRoutes) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.distinctStores) }}</span><span>{{ percent(row.averageLoadRatePercent) }}</span><span>{{ value(row.publishedPlannedKm) }}</span><span>{{ value(row.actualKm) }}</span><span>{{ value(row.actualMileageStatus) }}</span></div> }
             </div>
+            </details>
           }
           @case ('warehouses') {
+            <p class="performance-note">人員依目前倉庫歸屬；人車比例均保留分子與分母，空白母數不補 0%。</p>
+            <div class="preview-table warehouse-performance-table"><div class="table-row table-head"><span>倉庫</span><span>出勤率</span><span>準時打卡率</span><span>加班班次率</span><span>加班分鐘</span><span>實際出車</span><span>收車完成率</span><span>實際公里</span></div>
+              @for (row of report.performance.warehouses; track row.warehouseId) { <div class="table-row"><span>{{ row.warehouseName }}</span><span>{{ percent(row.workforce.attendanceRate) }} · {{ row.workforce.attendedShifts }}/{{ row.workforce.dueShifts }}</span><span>{{ percent(row.workforce.onTimeRate) }} · {{ row.workforce.onTimeShifts }}/{{ row.workforce.attendedShifts }}</span><span>{{ percent(row.workforce.overtimeRate) }} · {{ row.workforce.overtimeShifts }}/{{ row.workforce.finishedShifts }}</span><span>{{ row.workforce.overtimeMinutes }}</span><span>{{ row.fleet.startedTrips }} 趟</span><span>{{ percent(row.fleet.returnRate) }} · {{ row.fleet.returnedTrips }}/{{ row.fleet.startedTrips }}</span><span>{{ value(row.fleet.actualKm) }}</span></div> }
+            </div>
             <div class="preview-table warehouse-table"><div class="table-row table-head"><span>倉庫</span><span>訂單</span><span>箱數</span><span>門市</span><span>路線</span><span>已發布</span><span>待排訂單</span><span>已完成</span><span>平均裝載率</span></div>
               @for (row of rows(report.warehouses, 'warehouses'); track row.warehouseId) { <div class="table-row"><span>{{ value(row.warehouseName) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.distinctStores) }}</span><span>{{ value(row.routes) }}</span><span>{{ value(row.publishedRoutes) }}</span><span>{{ value(row.unassignedConfirmedOrders) }}</span><span>{{ value(row.completedOrders) }}</span><span>{{ percent(row.averageLoadRatePercent) }}</span></div> }
             </div>

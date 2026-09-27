@@ -8,6 +8,9 @@
     <div class="page-actions">
       <p class="updated-at">資料更新於 {{ updatedAt() }}</p>
       <div class="action-buttons">
+        <button type="button" class="secondary-action" (click)="rulesOpen.set(true)">
+          <mat-icon aria-hidden="true">tune</mat-icon>保養與退役規則
+        </button>
         <button type="button" class="secondary-action" (click)="openCreateAdmin()">
           <mat-icon aria-hidden="true">add</mat-icon>
           新增管理員
@@ -34,6 +37,10 @@
 
   <section class="resource-summary" aria-label="今日人車資源概況">
     <article class="summary-card">
+      <p>在職司機</p><strong>{{ activeDriverCount() }}</strong>
+      <span>依帳號啟用狀態計算</span>
+    </article>
+    <article class="summary-card">
       <p>可用車輛</p>
       <strong>{{ availableVehicleCount() }}</strong>
       <span>依車輛目前狀態計算</span>
@@ -50,7 +57,7 @@
     </article>
   </section>
 
-  <section class="resource-workspace" aria-label="車輛、店家與倉庫資源工作區">
+  <section class="resource-workspace" aria-label="司機、車輛、店家與倉庫資源工作區">
     <section class="resource-list-panel" aria-labelledby="resource-list-title">
       <header class="list-header">
         <div>
@@ -67,6 +74,8 @@
           >
             車輛
           </button>
+          <button type="button" [class.is-active]="activeView() === 'drivers'"
+            [attr.aria-pressed]="activeView() === 'drivers'" (click)="setView('drivers')">司機</button>
           <button
             type="button"
             [class.is-active]="activeView() === 'stores'"
@@ -100,17 +109,49 @@
           }
         </div>
 
-        <label class="search-field">
+        @if (activeView() === 'vehicles') {
+          <app-tonnage-filter [tonnages]="vehicleTonnages()" [value]="vehicleTonnageFilter()"
+            (valueChange)="updateVehicleTonnageFilter($event)" />
+        }
+        @if (activeView() === 'drivers') {
+          <mat-select class="driver-warehouse-filter" aria-label="司機所屬倉庫篩選"
+            [value]="driverWarehouseFilter()" (selectionChange)="driverWarehouseFilter.set($event.value)"
+            [panelClass]="['tonnage-filter-panel', theme.isLightTheme() ? 'tonnage-filter-panel-light' : 'tonnage-filter-panel-dark']">
+            <mat-option value="all">全部倉庫</mat-option>
+            @for (warehouse of warehouses(); track warehouse.id) {
+              <mat-option [value]="warehouse.id">{{ warehouse.warehouseCode }} · {{ warehouse.name }}</mat-option>
+            }
+          </mat-select>
+        }
+
+        <div class="search-field">
           <mat-icon aria-hidden="true">search</mat-icon>
-          <span class="sr-only">搜尋人員或車輛</span>
           <input
+            #resourceSearch
             type="search"
-            placeholder="搜尋姓名、車號或店家"
+            [attr.aria-label]="searchPlaceholder()"
+            [placeholder]="searchPlaceholder()"
             [value]="searchTerm()"
             (input)="updateSearch($event)"
+            (search)="updateSearch($event)"
           />
-        </label>
+          @if (searchTerm()) {
+            <button type="button" class="clear-search" aria-label="清除搜尋"
+              (click)="clearSearch(resourceSearch)">
+              <mat-icon aria-hidden="true">close</mat-icon>
+            </button>
+          }
+        </div>
       </div>
+
+      @if (searchTerm().trim() && !loading() && !errorMessage()) {
+        <p class="search-result" role="status" aria-live="polite">
+          搜尋「{{ searchTerm().trim() }}」：{{ searchResultCount() }} {{ activeView() === 'vehicles' ? '台' : '筆' }}
+          @if (activeFilter() !== 'all' || (activeView() === 'vehicles' && vehicleTonnageFilter() !== 'all') || (activeView() === 'drivers' && driverWarehouseFilter() !== 'all')) {
+            <span>（依目前篩選條件）</span>
+          }
+        </p>
+      }
 
       @if (loading()) {
         <p class="empty-state">正在載入資源資料...</p>
@@ -118,58 +159,61 @@
         <p class="empty-state">{{ errorMessage() }}</p>
       } @else if (activeView() === 'vehicles') {
         <div class="resource-table vehicle-table">
-          <div class="table-head" aria-hidden="true">
-            <span>車輛</span>
-            <span>狀態</span>
-            <span>駕駛</span>
-            <span>目前任務</span>
-            <span>操作</span>
+          <div class="vehicle-list-heading">
+            <span>車輛資訊 <small>{{ visibleVehicles().length }} 台</small></span>
+            <span>實際里程與保養狀況</span>
           </div>
 
           @for (vehicle of visibleVehicles(); track vehicle.backendId ?? vehicle.id) {
-            <article class="resource-row">
-              <div class="resource-person vehicle-identity">
-                <span class="vehicle-badge"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
-                <div>
-                  <strong>{{ vehicle.id }}</strong>
-                  <span>{{ vehicle.type }} · {{ vehicle.capacity }}</span>
-                </div>
-              </div>
-              <span class="status-badge" [class]="'status-' + vehicle.status">{{
-                vehicle.status
-              }}</span>
-              <div class="table-value">
-                <strong>{{ vehicle.driver }}</strong>
-                <span>{{ vehicle.inspection }}</span>
-              </div>
-              <div class="table-value">
-                <strong>{{ vehicle.assignment }}</strong>
-                <span>高雄配送區</span>
-              </div>
-              <div class="row-actions">
-                <button
-                  type="button"
-                  class="row-action"
-                  title="編輯車輛"
-                  [attr.aria-label]="'編輯車輛 ' + vehicle.id"
-                  (click)="openEditVehicle(vehicle)"
-                >
-                  <mat-icon aria-hidden="true">edit</mat-icon>
-                </button>
-                <button
-                  type="button"
-                  class="row-action row-action--danger"
-                  title="刪除車輛"
-                  [attr.aria-label]="'刪除車輛 ' + vehicle.id"
-                  (click)="requestDeleteVehicle(vehicle)"
-                >
-                  <mat-icon aria-hidden="true">delete</mat-icon>
-                </button>
-              </div>
-            </article>
+            <app-vehicle-resource-card [vehicle]="vehicle" (editVehicle)="openEditVehicle(vehicle)" (deleteVehicle)="requestDeleteVehicle(vehicle)" />
           } @empty {
             <p class="empty-state">沒有符合目前篩選條件的車輛。</p>
           }
+        </div>
+      } @else if (activeView() === 'drivers') {
+        <div class="driver-resource-list">
+          <div class="driver-list-heading"><span>司機資訊 <small>{{ visibleDrivers().length }} 位</small></span><span>所屬倉庫</span><span>工作時間</span></div>
+          @for (driver of visibleDrivers(); track driver.id) {
+            <article class="driver-resource-card" [attr.aria-label]="'司機 ' + driver.name">
+              <section class="driver-detail-block driver-identity-block">
+                <div class="driver-identity">
+                  <span class="driver-avatar"><mat-icon aria-hidden="true">person</mat-icon></span>
+                  <div><strong>{{ driver.name }}</strong><span>{{ driver.account }}</span></div>
+                  <span class="driver-state" [class.is-inactive]="!driver.isActive">{{ driver.isActive ? '在職' : '停用' }}</span>
+                </div>
+                <dl class="driver-details"><div><dt>手機號碼</dt><dd>{{ driver.phone || '—' }}</dd></div></dl>
+                <div class="driver-card-actions">
+                  <button type="button" class="secondary-action" [attr.aria-label]="'編輯司機 ' + driver.name" (click)="openEditDriver(driver)">
+                    <mat-icon aria-hidden="true">edit</mat-icon>編輯司機
+                  </button>
+                </div>
+              </section>
+              <section class="driver-detail-block">
+                <h4><mat-icon aria-hidden="true">warehouse</mat-icon>所屬倉庫</h4>
+                @if (driverWarehouse(driver); as warehouse) {
+                  <strong class="driver-warehouse-name">{{ warehouse.name }}</strong>
+                  <span class="driver-warehouse-code">{{ warehouse.warehouseCode }}</span>
+                  <p class="driver-card-note">{{ warehouse.address || '尚未提供地址' }}</p>
+                  @if (!warehouse.isActive) {<span class="driver-unassigned">倉庫已停用</span>}
+                } @else {
+                  <strong class="driver-unassigned">待設定所屬倉庫</strong>
+                  <p class="driver-card-note">請編輯司機設定倉庫，設定後才可派車。</p>
+                }
+              </section>
+              <section class="driver-detail-block">
+                <h4><mat-icon aria-hidden="true">schedule</mat-icon>工作時間</h4>
+                <strong class="driver-work-time">{{ driver.workStart.slice(0, 5) }} – {{ driver.workEnd.slice(0, 5) }}</strong>
+                <dl class="driver-details">
+                  <div><dt>休息時間</dt><dd>{{ driver.restDuration }} 分鐘</dd></div>
+                  <div><dt title="依本月已發布上班班次的有效上下班卡計算，扣除加班時段內休息；與營運報表同一口徑，不代表薪資核准">本月已加班</dt><dd>{{ driver.monthlyOvertimeMinutes ?? '—' }} 分鐘</dd></div>
+                </dl>
+                <p class="driver-card-note">本月有效上下班打卡已結算，不含尚未下班的時間。</p>
+                @if (driver.monthlyUnsettledShifts) {
+                  <p class="driver-unassigned">尚有 {{ driver.monthlyUnsettledShifts }} 班未完成有效打卡，不列入加班；請查核或補登下班卡。</p>
+                }
+              </section>
+            </article>
+          } @empty {<p class="empty-state">沒有符合目前篩選條件的司機。</p>}
         </div>
       } @else if (activeView() === 'stores') {
         <div class="resource-table store-table">
@@ -331,7 +375,7 @@
         [attr.aria-labelledby]="
           formType === 'admin'
             ? 'admin-form-title'
-            : formType === 'driver'
+            : formType === 'driver' || formType === 'edit-driver'
               ? 'driver-form-title'
               : formType === 'vehicle' || formType === 'edit-vehicle'
               ? 'vehicle-form-title'
@@ -348,7 +392,7 @@
               [id]="
                 formType === 'admin'
                   ? 'admin-form-title'
-                  : formType === 'driver'
+                  : formType === 'driver' || formType === 'edit-driver'
                     ? 'driver-form-title'
                     : formType === 'vehicle' || formType === 'edit-vehicle'
                     ? 'vehicle-form-title'
@@ -362,6 +406,8 @@
                   ? '新增管理員'
                   : formType === 'driver'
                     ? '新增司機'
+                    : formType === 'edit-driver'
+                      ? '編輯司機'
                     : formType === 'vehicle'
                     ? '新增車輛'
                     : formType === 'edit-vehicle'
@@ -444,7 +490,7 @@
               </button>
             </div>
           </form>
-        } @else if (formType === 'driver') {
+        } @else if (formType === 'driver' || formType === 'edit-driver') {
           <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
             <div class="form-grid">
               <label class="form-field">
@@ -474,21 +520,51 @@
                   type="text"
                   required
                   autocomplete="username"
+                  [readonly]="formType === 'edit-driver'"
                   [value]="driverForm().account"
                   (input)="updateDriverText('account', $event)"
                 />
               </label>
+              @if (formType === 'driver') {
               <label class="form-field">
-                <span>系統產生的初始密碼</span>
+                <span>身分證字號（初始密碼）</span>
                 <input
-                  type="text"
+                  type="password"
                   required
-                  readonly
-                  autocomplete="off"
+                  maxlength="10"
+                  autocomplete="new-password"
                   [value]="driverForm().password"
+                  (input)="updateDriverText('password', $event)"
                 />
               </label>
+              }
+              <div class="form-field" role="group" aria-label="司機所屬倉庫">
+                <span>所屬倉庫</span>
+                <mat-select class="driver-warehouse-select" aria-label="司機所屬倉庫"
+                  placeholder="請選擇所屬倉庫" [value]="driverForm().warehouseId" (selectionChange)="updateDriverWarehouse($event.value)"
+                  [panelClass]="['tonnage-filter-panel', theme.isLightTheme() ? 'tonnage-filter-panel-light' : 'tonnage-filter-panel-dark']">
+                  @for (warehouse of warehouses(); track warehouse.id) {
+                    <mat-option [value]="warehouse.id" [disabled]="!warehouse.isActive && warehouse.id !== driverForm().warehouseId">
+                      {{ warehouse.warehouseCode }} · {{ warehouse.name }}{{ warehouse.isActive ? '' : '（停用）' }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </div>
+              <label class="form-field"><span>上班時間</span>
+                <input type="time" required [value]="driverForm().workStart.slice(0, 5)" (input)="updateDriverText('workStart', $event)" />
+              </label>
+              <label class="form-field"><span>下班時間</span>
+                <input type="time" required [value]="driverForm().workEnd.slice(0, 5)" (input)="updateDriverText('workEnd', $event)" />
+              </label>
+              <label class="form-field"><span>休息時間（分鐘）</span>
+                <input type="number" required min="0" step="1" [value]="driverForm().restDuration" (input)="updateDriverNumber('restDuration', $event)" />
+              </label>
+              <label class="form-field"><span>加班上限（分鐘）</span>
+                <input type="number" required min="0" step="1" [value]="driverForm().maxOvertimeMinutes ?? 0" (input)="updateDriverNumber('maxOvertimeMinutes', $event)" />
+              </label>
+              <label class="driver-active-field"><input type="checkbox" [checked]="driverForm().isActive" (change)="updateDriverActive($event)" />帳號啟用（在職）</label>
             </div>
+            <p class="maintenance-help">倉庫調整會套用到後續派車；既有已發布路線與配送紀錄不會被改寫。停用帳號會保留歷史紀錄。</p>
 
             @if (formError()) {
               <p class="form-error">{{ formError() }}</p>
@@ -497,7 +573,7 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '建立中...' : '建立司機帳號' }}
+                {{ isSaving() ? '儲存中...' : formType === 'edit-driver' ? '儲存司機資料' : '建立司機帳號' }}
               </button>
             </div>
           </form>
@@ -557,12 +633,51 @@
               <label class="form-field">
                 <span>車輛狀態</span>
                 <select [value]="vehicleForm().status" (change)="updateVehicleStatus($event)">
-                  <option value="AVAILABLE">可用</option>
-                  <option value="MAINTENANCE">保養</option>
+                  <option value="AVAILABLE">可用（保養／維修完成）</option>
+                  <option value="MAINTENANCE">送維修（車禍／故障）</option>
+                  <option value="MINOR_MAINTENANCE">送小保</option>
+                  <option value="MAJOR_MAINTENANCE">送大保</option>
                   <option value="RETIRED">已退役</option>
                 </select>
               </label>
+              <label class="form-field">
+                <span>噸位（套用同噸位規則）</span>
+                <input type="number" min="0.01" step="0.01" [value]="vehicleForm().tonnage" (input)="updateVehicleNumber('tonnage', $event)" />
+              </label>
+              <label class="form-field">
+                <span>{{ formType === 'vehicle' ? '初始實際總里程（儀表 km）' : '目前實際總里程（司機紀錄自動更新）' }}</span>
+                <input type="number" min="0" step="1" [required]="formType === 'vehicle'" [readOnly]="formType === 'edit-vehicle'" [placeholder]="formType === 'edit-vehicle' ? '尚無綁定此車的實際里程紀錄' : '新車為 0，舊車填建檔時的儀表總里程'" [value]="vehicleForm().currentOdometerKm" (input)="updateVehicleNumber('currentOdometerKm', $event)" />
+              </label>
+              <label class="form-field">
+                <span>{{ formType === 'vehicle' ? '建檔時的小保基準（新車自動為 0）' : '上次小保儀表里程（自動讀取保養紀錄）' }}</span>
+                <input type="number" min="0" step="1" [readOnly]="baselineLocked()" placeholder="尚無小保紀錄" [value]="formType === 'vehicle' && vehicleForm().currentOdometerKm === 0 ? 0 : vehicleForm().lastMinorMaintenanceKm" (input)="updateVehicleNumber('lastMinorMaintenanceKm', $event)" />
+              </label>
+              <label class="form-field">
+                <span>{{ formType === 'vehicle' ? '建檔時的大保基準（新車自動為 0）' : '上次大保儀表里程（自動讀取保養紀錄）' }}</span>
+                <input type="number" min="0" step="1" [readOnly]="baselineLocked()" placeholder="尚無大保紀錄" [value]="formType === 'vehicle' && vehicleForm().currentOdometerKm === 0 ? 0 : vehicleForm().lastMajorMaintenanceKm" (input)="updateVehicleNumber('lastMajorMaintenanceKm', $event)" />
+              </label>
             </div>
+
+            <p class="maintenance-help">車禍、故障等選「送維修」後儲存，自動建立維修紀錄；維修期間禁止派車，完成後改為「可用」再儲存，維修次數才加一次。維修不計入小保／大保次數，也不重設保養或退役里程。</p>
+            <p class="maintenance-help">例行保養選「送小保／送大保」後儲存，自動記錄送修時間與當時總里程。保養完成後改為「可用」再儲存，才計入次數並更新該類保養基準；大小保互不重設，退役總里程不重設。</p>
+            <p class="maintenance-help">里程只在新增車輛時設定一次；之後由司機的出車／收車儀表讀數寫回資料庫，保養紀錄自動讀取當時總里程，主管不需也不能手動改數字。</p>
+            @if (formType === 'edit-vehicle') {
+              <app-vehicle-maintenance-panel [summary]="vehicleForm().maintenance" />
+              <section class="maintenance-history" aria-label="保養與維修歷史">
+                <h4>保養與維修紀錄</h4>
+                @if (historyLoading()) { <p>載入中…</p> }
+                @if (historyError()) { <p class="form-error">{{ historyError() }}</p> }
+                @for (record of maintenanceHistory(); track record.id) {
+                  <article>
+                    <strong>{{ record.type === 'MINOR' ? '小保' : record.type === 'MAJOR' ? '大保' : '維修' }} · {{ record.status === 'ACTIVE' ? '進行中' : record.status === 'COMPLETED' ? '已完成' : '已取消' }}</strong>
+                    <span>送修 {{ record.sentAt ? (record.sentAt | date:'yyyy/MM/dd HH:mm') : '時間未留存（既有維修）' }} · {{ record.sentOdometerKm == null ? '里程未留存' : (record.sentOdometerKm | number) + ' km' }}</span>
+                    @if (record.completedAt) { <span>完成 {{ record.completedAt | date:'yyyy/MM/dd HH:mm' }} · {{ record.completedOdometerKm == null ? '里程未留存' : (record.completedOdometerKm | number) + ' km' }}</span> }
+                    @if (record.cancelledAt) { <span>取消 {{ record.cancelledAt | date:'yyyy/MM/dd HH:mm' }}</span> }
+                    @if (record.status === 'ACTIVE') { <button type="button" class="plain-button" [disabled]="isSaving()" (click)="cancelVehicleMaintenance()">取消這次送修（不計次、不重設里程）</button> }
+                  </article>
+                } @empty { @if (!historyLoading() && !historyError()) { <p>尚無系統保養或維修紀錄；送修與完成紀錄由系統自動建立。</p> } }
+              </section>
+            }
 
             @if (formError()) {
               <p class="form-error">{{ formError() }}</p>
@@ -798,3 +913,7 @@
     </div>
   }
 </main>
+
+@if (rulesOpen()) {
+  <app-maintenance-rules-editor [tonnages]="vehicleTonnages()" (closed)="rulesOpen.set(false)" (saved)="rulesSaved()" />
+}

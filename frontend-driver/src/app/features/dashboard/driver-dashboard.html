@@ -237,7 +237,7 @@
             </div>
             <mat-icon aria-hidden="true">speed</mat-icon>
           </div>
-          <p>上班後記錄出車里程，下班前記錄收車里程。</p>
+          <p>上班後記錄出車里程，下班前記錄收車里程。點交前請在「今日任務」完成安全檢查。</p>
           <div class="mileage-form-row">
             <label>
               <span>出車表讀數（km）</span>
@@ -352,6 +352,7 @@
                 <p class="task-route-meta">
                   {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
                 </p>
+                <app-pre-trip-check [route]="route" (passedChange)="setInspectionReady(route.routeId, $event)" />
                 <ol class="task-stop-list">
                   @for (stop of route.stops; track stop.orderId) {
                     <li
@@ -396,7 +397,8 @@
                             type="button"
                             class="task-loading-button"
                             (click)="openLoadingAction(stop)"
-                            [disabled]="isTaskSubmitting()"
+                            [disabled]="isTaskSubmitting() || !inspectionReady()[route.routeId]"
+                            [title]="inspectionReady()[route.routeId] ? '開始倉庫點交' : '請先完成點交前安全檢查'"
                           >
                             <mat-icon aria-hidden="true">fact_check</mat-icon>
                             <span>點交</span>
@@ -627,21 +629,36 @@
           <h1>本月班表</h1>
         </div>
         <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
-             每天依班別上色（scheduleDateClass），點某一天看下方明細 -->
+             日期下方顯示班別圖示／文字，點某一天看下方明細 -->
         <section class="schedule-calendar-card" aria-label="班表月曆">
           <mat-calendar
+            appScheduleCellLabels
             #scheduleCalendar
             class="driver-schedule-calendar"
             [startAt]="scheduleMonth()"
-            [selected]="selectedScheduleDate()"
+            [selected]="calendarLeaveComposer.activeMode() ? null : selectedScheduleDate()"
             [dateClass]="scheduleDateClass"
-            (selectedChange)="selectedScheduleDate.set($event!)"
+            [dateFilter]="scheduleDateFilter"
+            (selectedChange)="selectScheduleDate($event)"
           />
           <div class="schedule-legend" aria-hidden="true">
             <span class="shift-type is-work">上班</span>
             <span class="shift-type is-day_off">休假</span>
             <span class="shift-type is-leave">請假</span>
+            @if (pendingScheduleDates().size) { <span class="shift-type is-pending">申請中</span> }
           </div>
+          @if (pendingScheduleDates().size) {
+            <p class="schedule-pending-hint" role="status">
+              <mat-icon aria-hidden="true">hourglass_top</mat-icon>
+              {{ pendingScheduleDates().size }} 天請假申請中，等待主管審核；暫不可重複申請。
+            </p>
+          }
+          <app-schedule-leave-composer #calendarLeaveComposer
+            [month]="scheduleMonth()" [shifts]="publishedShifts()"
+            [scheduleReady]="scheduleViewState() === 'ready'"
+            [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
+            (calendarChange)="refreshScheduleCalendar()" (goToToday)="showScheduleToday()"
+            (submitted)="applyCalendarLeaves($event)" />
         </section>
 
         @if (scheduleViewState() === 'loading') {
@@ -676,250 +693,6 @@
             }
           </div>
         }
-        <section class="mileage-panel general-leave-panel" aria-labelledby="general-leave-title">
-          <header class="leave-section-heading">
-            <div class="leave-heading-copy">
-              <span class="leave-heading-icon" aria-hidden="true">
-                <mat-icon>event_note</mat-icon>
-              </span>
-              <div>
-                <p class="eyebrow">班表與出勤</p>
-                <h2 id="general-leave-title">請假與出勤異動</h2>
-                <p>先選擇申請情境，再填寫對應資料並查看處理進度。</p>
-              </div>
-            </div>
-            @if (unreadLeaveCount() > 0) {
-              <span class="leave-unread-badge" aria-live="polite">
-                <mat-icon aria-hidden="true">notifications</mat-icon>
-                {{ unreadLeaveCount() }} 筆新結果
-              </span>
-            }
-          </header>
-
-          <div class="leave-mode-tabs leave-topic-tabs" role="tablist" aria-label="選擇申請主題">
-            <button
-              type="button"
-              role="tab"
-              [class.is-active]="leaveTopic() === 'schedule'"
-              [attr.aria-selected]="leaveTopic() === 'schedule'"
-              (click)="setLeaveTopic('schedule')"
-            >
-              <mat-icon aria-hidden="true">event_available</mat-icon>
-              <span><strong>班表請假</strong><small>當日、預排與事後補請</small></span>
-            </button>
-            <button
-              type="button"
-              role="tab"
-              [class.is-active]="leaveTopic() === 'emergency'"
-              [attr.aria-selected]="leaveTopic() === 'emergency'"
-              (click)="setLeaveTopic('emergency')"
-            >
-              <mat-icon class="is-warning" aria-hidden="true">report_problem</mat-icon>
-              <span><strong>配送中斷</strong><small>上班途中無法繼續配送</small></span>
-            </button>
-          </div>
-
-          @if (leaveTopic() === 'schedule') {
-          <div class="leave-topic-content">
-          <div class="leave-mode-tabs" role="tablist" aria-label="選擇申請類型">
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'temporary'" [attr.aria-selected]="leaveApplicationTab() === 'temporary'" (click)="setLeaveApplicationTab('temporary')">
-              <mat-icon aria-hidden="true">today</mat-icon>
-              <span><strong>當日特殊事由</strong><small>今天臨時發生</small></span>
-            </button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'planned'" [attr.aria-selected]="leaveApplicationTab() === 'planned'" (click)="setLeaveApplicationTab('planned')">
-              <mat-icon aria-hidden="true">date_range</mat-icon>
-              <span><strong>預排請假</strong><small>未來可複選</small></span>
-            </button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'makeup'" [attr.aria-selected]="leaveApplicationTab() === 'makeup'" (click)="setLeaveApplicationTab('makeup')">
-              <mat-icon aria-hidden="true">history</mat-icon>
-              <span><strong>事後補請</strong><small>補登過去單日</small></span>
-            </button>
-          </div>
-
-          @if (leaveMessage()) { <p class="task-feedback is-success">{{ leaveMessage() }}</p> }
-          @if (leaveError()) { <p class="task-feedback is-error">{{ leaveError() }}</p> }
-
-          @if (leaveApplicationTab() === 'temporary') {
-            <div class="leave-mode-guide">
-              <mat-icon aria-hidden="true">info</mat-icon>
-              <p>申請今天 {{ leaveForm().workDate }} 的特殊事由；整天請假可留白時間，部分時段請填起訖時間。</p>
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="leaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateLeaveFormField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <div class="leave-time-fields">
-                <label><span>開始時間（整天可留白）</span><input type="time" [value]="leaveForm().leaveStart" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveStart', $event)" /></label>
-                <label><span>結束時間</span><input type="time" [value]="leaveForm().leaveEnd" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveEnd', $event)" /></label>
-              </div>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請簡述今天的特殊事由" [value]="leaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action leave-submit-action" (click)="submitLeaveRequest()" [disabled]="isLeaveSubmitting()">
-                <mat-icon aria-hidden="true">send</mat-icon>
-                {{ isLeaveSubmitting() ? '送出中...' : '送出當日特殊事由' }}
-              </button>
-            </div>
-          } @else if (leaveApplicationTab() === 'planned') {
-            <div class="leave-mode-guide">
-              <mat-icon aria-hidden="true">touch_app</mat-icon>
-              <p>可複選明天以後的已發布上班日。已送審或已核准的日期會自動鎖定。</p>
-            </div>
-            @if (isPlannedLeaveLoading()) { <p class="schedule-state">正在取得可預排日期...</p> }
-            <div class="planned-date-heading">
-              <strong>選擇請假日期</strong>
-              <span>{{ plannedLeaveForm().workDates.length }} 天已選</span>
-            </div>
-            <div class="planned-date-options" aria-label="可預排請假日期">
-              @for (shift of plannedLeaveShifts(); track shift.id) {
-                <button type="button" [class.is-selected]="isPlannedDateSelected(shift.workDate)" [class.is-blocked]="isPlannedDateBlocked(shift.workDate)" [disabled]="isLeaveSubmitting() || isPlannedDateBlocked(shift.workDate)" (click)="togglePlannedLeaveDate(shift.workDate)">
-                  <strong>{{ formatShiftDate(shift.workDate) }}</strong><span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
-                  @if (isPlannedDateBlocked(shift.workDate)) { <small>已送審或已核准</small> }
-                </button>
-              } @empty { @if (!isPlannedLeaveLoading()) { <p>最近 60 天沒有可預排的已發布上班日。</p> } }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="plannedLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updatePlannedLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>預排原因</span><textarea rows="3" maxlength="500" placeholder="例如回診、家庭安排" [value]="plannedLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updatePlannedLeaveField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action leave-submit-action" (click)="submitPlannedLeaveRequest()" [disabled]="isLeaveSubmitting()">
-                <mat-icon aria-hidden="true">send</mat-icon>
-                {{ isLeaveSubmitting() ? '送出中...' : '送出預排請假' }}
-              </button>
-            </div>
-          } @else {
-            <div class="leave-mode-guide">
-              <mat-icon aria-hidden="true">info</mat-icon>
-              <p>僅能選擇已結束且整天未打卡的已發布班次，每次申請一個日期。</p>
-            </div>
-            <div class="planned-date-options" aria-label="可事後補請班次">
-              @for (candidate of makeupLeaveCandidates(); track candidate.id) {
-                <button type="button" [class.is-selected]="makeupLeaveForm().workDate === candidate.workDate" [disabled]="isLeaveSubmitting()" (click)="selectMakeupLeaveDate(candidate.workDate)">
-                  <strong>{{ formatShiftDate(candidate.workDate) }}</strong><span>整天未到班</span>
-                  <small>待補充說明</small>
-                </button>
-              } @empty { <p>目前沒有可事後補請的班次。</p> }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="makeupLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateMakeupLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請說明當天未到原因" [value]="makeupLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateMakeupLeaveField('reason', $event)"></textarea></label>
-              <label class="leave-file-picker"><span>佐證照片（選填）</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" [disabled]="isLeaveSubmitting()" (change)="selectMakeupEvidence($event)" /></label>
-              @if (selectedMakeupEvidenceFile(); as evidence) { <small class="leave-file-name">{{ evidence.name }}</small> }
-              <button type="button" class="primary-action leave-submit-action" (click)="submitMakeupLeaveRequest()" [disabled]="isLeaveSubmitting()">
-                <mat-icon aria-hidden="true">send</mat-icon>
-                {{ isLeaveSubmitting() ? '送出中...' : '送出事後補請' }}
-              </button>
-            </div>
-          }
-
-          <div class="driver-leave-history" aria-label="請假與特殊事由處理結果">
-            <div class="leave-history-heading">
-              <div><p class="eyebrow">審核紀錄</p><h3>申請進度</h3></div>
-              <label class="leave-history-filter"><span>日期</span><select [value]="leaveHistoryDate()" (change)="selectLeaveHistoryDate($event)"><option value="">全部日期</option>@for (date of leaveHistoryDates(); track date) { <option [value]="date">{{ formatShiftDate(date) }}</option> }</select></label>
-            </div>
-            @if (isLeaveListLoading()) { <p class="schedule-state">正在更新處理結果...</p> }
-            @for (request of filteredLeaveRequests(); track request.id) {
-              <article [class.is-unread]="!request.driverReadAt">
-                <header><strong>{{ formatShiftDate(request.workDate) }} · {{ leaveModeLabel(request) }}</strong><span [class]="'leave-status is-' + request.status.toLowerCase()">{{ leaveStatusLabel(request.status) }}</span></header>
-                <small>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }} · 申請於 {{ formatDateTime(request.requestedAt) }}</small>
-                <p><b>你的申請原因：</b>{{ request.requestReason }}</p>
-                <p class="decision-reason"><b>主管處理理由：</b>{{ request.decisionReason || '等待主管審核。' }}</p>
-                @if (request.evidencePhotoUrl) { <a class="leave-evidence-link" [href]="request.evidencePhotoUrl" target="_blank" rel="noopener">查看佐證照片</a> }
-                <div class="leave-request-actions">
-                  @if (!request.driverReadAt) { <button type="button" class="outline-action" (click)="markLeaveRequestRead(request)">標記已讀</button> }
-                  <button type="button" class="outline-action" (click)="toggleLeaveHistory(request)">{{ expandedLeaveId() === request.id ? '收合歷程' : '查看歷程' }}</button>
-                </div>
-                @if (expandedLeaveId() === request.id) {
-                  <div class="leave-request-events" aria-label="請假異動歷程">
-                    @if (isLeaveHistoryLoading()) { <small>正在讀取歷程...</small> } @else if (leaveHistoryErrors()[request.id]; as historyError) { <small class="is-error">{{ historyError }}</small> } @else {
-                      @for (event of leaveHistories()[request.id] ?? []; track event.id) { <p><strong>{{ leaveHistoryLabel(event.eventType) }}</strong> · {{ formatDateTime(event.occurredAt) }} @if (event.reason) { <span>· {{ event.reason }}</span> }</p> } @empty { <small>目前沒有歷程資料。</small> }
-                    }
-                  </div>
-                }
-              </article>
-            } @empty { @if (!isLeaveListLoading()) { <div class="leave-history-empty"><mat-icon aria-hidden="true">inbox</mat-icon><small>目前沒有請假或特殊事由申請。</small></div> } }
-          </div>
-          </div>
-          } @else {
-          <div class="leave-topic-content is-emergency" aria-labelledby="emergency-leave-title">
-            <div class="leave-mode-guide is-warning">
-              <mat-icon aria-hidden="true">info</mat-icon>
-              <div>
-                <strong id="emergency-leave-title">臨時請假</strong>
-                <p>僅用於上班途中無法繼續配送，主管收到後會安排接手司機。</p>
-              </div>
-            </div>
-
-            @if (emergencyLeaveMessage()) {
-              <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
-            }
-            @if (emergencyLeaveError()) {
-              <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
-            }
-
-            @if (isEmergencyLeaveFormOpen()) {
-              <label class="delivery-action-panel emergency-leave-reason">
-                <span>請假原因</span>
-                <textarea
-                  rows="3"
-                  maxlength="500"
-                  placeholder="請簡述需要臨時請假的原因"
-                  [value]="emergencyLeaveReason()"
-                  [disabled]="isEmergencyLeaveSubmitting()"
-                  (input)="updateEmergencyLeaveReason($event)"
-                ></textarea>
-              </label>
-              <div class="attendance-actions emergency-leave-actions">
-                <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
-                  <mat-icon aria-hidden="true">close</mat-icon>
-                  取消
-                </button>
-                <button
-                  type="button"
-                  class="danger-action"
-                  (click)="submitEmergencyLeave()"
-                  [disabled]="isEmergencyLeaveSubmitting()"
-                >
-                  <mat-icon aria-hidden="true">send</mat-icon>
-                  {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
-                </button>
-              </div>
-            } @else {
-              <button
-                type="button"
-                class="outline-action emergency-leave-open"
-                (click)="openEmergencyLeaveForm()"
-                [disabled]="!canRequestEmergencyLeave()"
-              >
-                <mat-icon aria-hidden="true">add_alert</mat-icon>
-                申請臨時請假
-              </button>
-            }
-
-            <div class="emergency-leave-history" aria-label="臨時請假紀錄">
-              <div class="leave-history-heading"><div><p class="eyebrow">申請紀錄</p><h3>配送中斷進度</h3></div></div>
-              @for (leave of emergencyLeaves(); track leave.id) {
-                <article>
-                  <div>
-                    <strong>{{ emergencyLeaveStatusLabel(leave.status) }}</strong>
-                    <small>{{ formatDateTime(leave.requestedAt) }} · {{ leave.reason }}</small>
-                  </div>
-                  @if (leave.replacementDriverName) {
-                    <span>接手：{{ leave.replacementDriverName }}</span>
-                  } @else if (leave.rejectionReason) {
-                    <span>原因：{{ leave.rejectionReason }}</span>
-                  }
-                </article>
-              } @empty {
-                @if (!isEmergencyLeaveHistoryLoading()) {
-                  <div class="leave-history-empty"><mat-icon aria-hidden="true">inbox</mat-icon><small>尚無臨時請假紀錄。</small></div>
-                }
-              }
-            </div>
-          </div>
-          }
-        </section>
       } @else {
         <div class="panel-heading">
           <p class="eyebrow">司機</p>
@@ -972,6 +745,10 @@
           <div>
             <dt>司機編號</dt>
             <dd>#{{ profile()?.id ?? user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>所屬倉庫</dt>
+            <dd>{{ profile()?.warehouseName || '待主管設定' }}</dd>
           </div>
           <div>
             <dt>電話</dt>

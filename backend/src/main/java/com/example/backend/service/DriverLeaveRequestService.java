@@ -17,6 +17,7 @@ import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.ScheduleMonthsDAO;
 import com.example.backend.dto.request.DriverLeaveRequestDTO;
 import com.example.backend.dto.request.DriverMakeupLeaveRequestDTO;
+import com.example.backend.dto.request.DriverMakeupLeaveBatchRequestDTO;
 import com.example.backend.dto.request.DriverPlannedLeaveBatchRequestDTO;
 import com.example.backend.dto.request.PlannedPartialLeaveRequestDTO;
 import com.example.backend.dto.respones.DriverLeaveBatchResponse;
@@ -209,11 +210,58 @@ public class DriverLeaveRequestService {
     }
 
     /**
-     * 事後補請假只處理已結束、原本應上班且整天沒有任何打卡的日期。
+     * 事後補請處理已結束的上班日；有打卡時須填部分時段，不能補整天。
      * 若系統已自動建立未到紀錄，就在同一筆紀錄補上司機說明，保留最初的系統稽核事件。
      */
     public DriverLeaveResponse submitMakeupLeave(Long driverId, DriverMakeupLeaveRequestDTO dto) {
         DriversEntity driver = requireActiveDriver(driverId);
+        return saveMakeupLeave(driver, prepareMakeupLeave(driverId, dto));
+    }
+
+    /** 先驗證／鎖定整批日期，任一日不合法都不寫入、不推播；主管仍可逐日核准或拒絕。 */
+    public List<DriverLeaveResponse> submitMakeupBatch(Long driverId, DriverMakeupLeaveBatchRequestDTO dto) {
+        DriversEntity driver = requireActiveDriver(driverId);
+        if (dto == null || dto.getWorkDates() == null || dto.getWorkDates().isEmpty()
+                || dto.getWorkDates().size() > 62 || dto.getWorkDates().stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("請選擇 1 至 62 個補請日期");
+        }
+        if (new HashSet<>(dto.getWorkDates()).size() != dto.getWorkDates().size()) {
+            throw new IllegalArgumentException("補請日期不能重複");
+        }
+        List<PreparedMakeupLeave> prepared = new ArrayList<>();
+        for (LocalDate date : dto.getWorkDates().stream().sorted().toList()) {
+            DriverMakeupLeaveRequestDTO item = new DriverMakeupLeaveRequestDTO();
+            item.setWorkDate(date);
+            item.setLeaveType(dto.getLeaveType());
+            item.setLeaveStart(dto.getLeaveStart());
+            item.setLeaveEnd(dto.getLeaveEnd());
+            item.setReason(dto.getReason());
+            item.setEvidencePhotoUrl(dto.getEvidencePhotoUrl());
+            prepared.add(prepareMakeupLeave(driverId, item));
+        }
+        return prepared.stream().map(item -> saveMakeupLeave(driver, item)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<LocalDate> findMakeupCandidates(Long driverId, LocalDate from, LocalDate to) {
+        return findMakeupCandidates(driverId, from, to, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LocalDate> findMakeupCandidates(Long driverId, LocalDate from, LocalDate to,
+            LocalTime leaveStart, LocalTime leaveEnd) {
+        requireActiveDriver(driverId);
+        if (from == null || to == null || to.isBefore(from) || ChronoUnit.DAYS.between(from, to) > 61) {
+            throw new IllegalArgumentException("請查詢最多 62 天的有效日期範圍");
+        }
+        LeavePeriod period = requestedPeriod(leaveStart, leaveEnd);
+        LocalDate lastPastDate = LocalDate.now(TAIPEI).minusDays(1);
+        if (from.isAfter(lastPastDate)) return List.of();
+        return shiftsDAO.findMakeupCandidateDates(driverId, from, to.isBefore(lastPastDate) ? to : lastPastDate,
+                period.fullDay(), period.start(), period.end());
+    }
+
+    private PreparedMakeupLeave prepareMakeupLeave(Long driverId, DriverMakeupLeaveRequestDTO dto) {
         if (dto == null || dto.getWorkDate() == null || dto.getLeaveType() == null) {
             throw new IllegalArgumentException("補請假日期與假別不能為空");
         }
@@ -228,8 +276,9 @@ public class DriverLeaveRequestService {
         if (!isFinishedPublishedWorkShift(shift, LocalDateTime.now(TAIPEI))) {
             throw new IllegalArgumentException("該班次尚未結束，不能使用事後補請假");
         }
-        if (attendanceDAO.existsByDriverShiftId(shift.getId())) {
-            throw new IllegalArgumentException("該日期已有打卡紀錄，不屬於整天未到的事後補請假");
+        LeavePeriod period = validatePeriod(shift, dto.getLeaveStart(), dto.getLeaveEnd());
+        if (period.fullDay() && attendanceDAO.existsByDriverShiftId(shift.getId())) {
+            throw new IllegalArgumentException(dto.getWorkDate() + " 已有打卡紀錄，補請須填寫開始與結束時間，不能補請整天");
         }
 
         String reason = requireText(dto.getReason(), "請填寫補請假原因");
@@ -239,30 +288,42 @@ public class DriverLeaveRequestService {
         DriverLeaveRequestsEntity request = existing.stream()
                 .filter(item -> item.getStatus() == LeaveRequestStatus.PENDING)
                 .filter(item -> item.getSubmissionSource() == LeaveSubmissionSource.SYSTEM)
+                // 舊版的系統未到紀錄曾沿用 TEMPORARY，仍可補充；已補請的 MAKEUP 不可再覆寫。
+                .filter(item -> item.getRequestMode() == LeaveRequestMode.SYSTEM_NO_SHOW
+                        || item.getRequestMode() == LeaveRequestMode.TEMPORARY)
                 .filter(item -> Boolean.TRUE.equals(item.getFullDay()))
                 .findFirst()
                 .orElse(null);
 
-        if (request == null && existing.stream()
-                .anyMatch(item -> item.getStatus() != LeaveRequestStatus.REJECTED)) {
-            throw new IllegalArgumentException("該日期已有待審核或已核准的請假紀錄");
+        DriverLeaveRequestsEntity systemRecord = request;
+        if (existing.stream().anyMatch(item -> item != systemRecord && item.getStatus() != LeaveRequestStatus.REJECTED
+                && (item.getStatus() == LeaveRequestStatus.PENDING || overlaps(item, period)))) {
+            throw new IllegalArgumentException("該日期已有待審申請，或有已核准且時間重疊的請假紀錄");
         }
 
+        return new PreparedMakeupLeave(dto.getWorkDate(), shift.getId(), dto.getLeaveType(), reason, evidencePhotoUrl, request, period);
+    }
+
+    private DriverLeaveResponse saveMakeupLeave(DriversEntity driver, PreparedMakeupLeave prepared) {
+        Long driverId = driver.getId();
+        DriverLeaveRequestsEntity request = prepared.systemRecord();
         boolean updatingSystemRecord = request != null;
         LeaveType oldType = updatingSystemRecord ? request.getLeaveType() : null;
         if (request == null) {
             request = new DriverLeaveRequestsEntity();
             request.setDriverId(driverId);
-            request.setDriverShiftId(shift.getId());
-            request.setWorkDate(dto.getWorkDate());
-            request.setFullDay(true);
+            request.setDriverShiftId(prepared.shiftId());
+            request.setWorkDate(prepared.workDate());
             request.setSubmissionSource(LeaveSubmissionSource.DRIVER);
         }
+        request.setFullDay(prepared.period().fullDay());
+        request.setLeaveStart(prepared.period().start());
+        request.setLeaveEnd(prepared.period().end());
         request.setRequestMode(LeaveRequestMode.MAKEUP);
-        request.setRequestedLeaveType(dto.getLeaveType());
-        request.setLeaveType(dto.getLeaveType());
-        request.setRequestReason(reason);
-        request.setEvidencePhotoUrl(evidencePhotoUrl);
+        request.setRequestedLeaveType(prepared.leaveType());
+        request.setLeaveType(prepared.leaveType());
+        request.setRequestReason(prepared.reason());
+        request.setEvidencePhotoUrl(prepared.evidencePhotoUrl());
         request.setDriverReadAt(LocalDateTime.now(TAIPEI));
 
         DriverLeaveRequestsEntity saved = requestsDAO.saveAndFlush(request);
@@ -737,6 +798,18 @@ public class DriverLeaveRequestService {
             LocalTime leaveStart,
             LocalTime leaveEnd
     ) {
+        LeavePeriod period = requestedPeriod(leaveStart, leaveEnd);
+        if (period.fullDay()) return period;
+        if (shift.getWorkStart() != null && leaveStart.isBefore(shift.getWorkStart())) {
+            throw new IllegalArgumentException("請假開始時間不能早於表定上班時間");
+        }
+        if (shift.getWorkEnd() != null && leaveEnd.isAfter(shift.getWorkEnd())) {
+            throw new IllegalArgumentException("請假結束時間不能晚於表定下班時間");
+        }
+        return period;
+    }
+
+    private LeavePeriod requestedPeriod(LocalTime leaveStart, LocalTime leaveEnd) {
         if (leaveStart == null && leaveEnd == null) {
             return new LeavePeriod(true, null, null);
         }
@@ -746,12 +819,6 @@ public class DriverLeaveRequestService {
         if (!leaveEnd.isAfter(leaveStart)) {
             throw new IllegalArgumentException("請假結束時間必須晚於開始時間");
         }
-        if (shift.getWorkStart() != null && leaveStart.isBefore(shift.getWorkStart())) {
-            throw new IllegalArgumentException("請假開始時間不能早於表定上班時間");
-        }
-        if (shift.getWorkEnd() != null && leaveEnd.isAfter(shift.getWorkEnd())) {
-            throw new IllegalArgumentException("請假結束時間不能晚於表定下班時間");
-        }
         return new LeavePeriod(false, leaveStart, leaveEnd);
     }
 
@@ -759,14 +826,15 @@ public class DriverLeaveRequestService {
         boolean conflict = requestsDAO.findByDriverIdAndWorkDateOrderByRequestedAtAsc(driverId, date)
                 .stream()
                 .filter(existing -> existing.getStatus() != LeaveRequestStatus.REJECTED)
-                .anyMatch(existing -> overlaps(existing, candidate));
+                .anyMatch(existing -> existing.getStatus() == LeaveRequestStatus.PENDING || overlaps(existing, candidate));
         if (conflict) {
-            throw new IllegalArgumentException("該日期已有待審核或已核准且時間重疊的請假紀錄");
+            throw new IllegalArgumentException("該日期已有待審申請，或有已核准且時間重疊的請假紀錄");
         }
     }
 
     private boolean overlaps(DriverLeaveRequestsEntity existing, LeavePeriod candidate) {
-        if (Boolean.TRUE.equals(existing.getFullDay()) || candidate.fullDay()) {
+        if (Boolean.TRUE.equals(existing.getFullDay()) || candidate.fullDay()
+                || existing.getLeaveStart() == null || existing.getLeaveEnd() == null) {
             return true;
         }
         return existing.getLeaveStart().isBefore(candidate.end())
@@ -928,6 +996,9 @@ public class DriverLeaveRequestService {
 
     private record LeavePeriod(boolean fullDay, LocalTime start, LocalTime end) {
     }
+
+    private record PreparedMakeupLeave(LocalDate workDate, Long shiftId, LeaveType leaveType,
+            String reason, String evidencePhotoUrl, DriverLeaveRequestsEntity systemRecord, LeavePeriod period) { }
 
     private record PreparedLeaveGroup(
             String batchId,

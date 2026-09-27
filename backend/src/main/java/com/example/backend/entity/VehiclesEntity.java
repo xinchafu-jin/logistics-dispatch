@@ -3,6 +3,8 @@ package com.example.backend.entity;
 import com.example.backend.constants.VehicleStatus;
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "vehicles")
 public class VehiclesEntity {
@@ -33,6 +35,17 @@ public class VehiclesEntity {
     /** 車輛儀表板顯示的累積總里程。 */
     @Column
     private Integer currentOdometerKm;
+
+    /** 車輛噸位，對應同噸位共用的保養規則。 */
+    @Column(precision = 6, scale = 2)
+    private BigDecimal tonnage;
+
+    /** 最近完成小保／大保時的實際儀表讀數，不使用 GPS 預估里程。 */
+    @Column
+    private Integer lastMinorMaintenanceKm;
+
+    @Column
+    private Integer lastMajorMaintenanceKm;
 
     /**
      * 車輛自加入系統後，以每趟 GPS 道路距離結算的永久累積里程（公里）。
@@ -90,6 +103,30 @@ public class VehiclesEntity {
 
     public void setCurrentOdometerKm(Integer currentOdometerKm) {
         this.currentOdometerKm = currentOdometerKm;
+    }
+
+    public BigDecimal getTonnage() {
+        return tonnage;
+    }
+
+    public void setTonnage(BigDecimal tonnage) {
+        this.tonnage = tonnage;
+    }
+
+    public Integer getLastMinorMaintenanceKm() {
+        return lastMinorMaintenanceKm;
+    }
+
+    public void setLastMinorMaintenanceKm(Integer lastMinorMaintenanceKm) {
+        this.lastMinorMaintenanceKm = lastMinorMaintenanceKm;
+    }
+
+    public Integer getLastMajorMaintenanceKm() {
+        return lastMajorMaintenanceKm;
+    }
+
+    public void setLastMajorMaintenanceKm(Integer lastMajorMaintenanceKm) {
+        this.lastMajorMaintenanceKm = lastMajorMaintenanceKm;
     }
 
     public Double getCumulativeMileageKm() {

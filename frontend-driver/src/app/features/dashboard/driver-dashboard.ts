@@ -55,6 +55,10 @@ import {
 import {DriverOperationsService} from '../../core/services/driver-operations.service';
 import {DriverWeather, DriverWeatherService} from '../../core/services/driver-weather.service';
 import {BrandLogo} from '../../shared/ui/brand-logo/brand-logo';
+import {ScheduleCellLabels} from '../../shared/ui/schedule-cell-labels/schedule-cell-labels';
+import {ScheduleLeaveComposer} from './schedule-leave-composer/schedule-leave-composer';
+import {pendingLeaveDatesInMonth} from './schedule-leave-composer/schedule-leave-status';
+import {PreTripCheck} from './pre-trip-check/pre-trip-check';
 
 type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
@@ -180,6 +184,9 @@ const RECALC_COOLDOWN_MS = 15_000;
     TextFieldModule,
     FormsModule,
     BrandLogo,
+    PreTripCheck,
+    ScheduleCellLabels,
+    ScheduleLeaveComposer,
   ],
   templateUrl: './driver-dashboard.html',
   styleUrl: './driver-dashboard.scss',
@@ -201,6 +208,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly scheduleViewState = signal<ScheduleViewState>('loading');
   protected readonly scheduleError = signal<string | null>(null);
   protected readonly scheduleMonth = signal(this.monthStart(new Date()));
+  private scheduleRequestVersion = 0;
   // 班表月曆點選的那一天，下方顯示這天的班次；預設今天
   protected readonly selectedScheduleDate = signal(new Date());
   // workDate（YYYY-MM-DD）→ 班次，月曆每一格、下方明細都從這裡查
@@ -210,7 +218,32 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly selectedShift = computed(
     () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
   );
+  protected readonly pendingScheduleDates = computed(() => pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()));
   private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
+  private readonly calendarLeaveComposer = viewChild<ScheduleLeaveComposer>('calendarLeaveComposer');
+  protected readonly scheduleDateFilter = (date: Date) => this.calendarLeaveComposer()?.canSelectDate(date) ?? true;
+
+  protected refreshScheduleCalendar(): void { this.scheduleCalendar()?.updateTodaysDate(); }
+
+  protected selectScheduleDate(date: Date | null): void {
+    if (!date) return;
+    this.selectedScheduleDate.set(date);
+    this.calendarLeaveComposer()?.toggleDate(date);
+  }
+
+  protected showScheduleToday(): void {
+    const today = new Date();
+    this.selectedScheduleDate.set(today);
+    const calendar = this.scheduleCalendar();
+    if (calendar) calendar.activeDate = today;
+  }
+
+  protected applyCalendarLeaves(saved: DriverLeaveRequestResponse[]): void {
+    const ids = new Set(saved.map(request => request.id));
+    this.leaveRequests.update(requests => [...saved, ...requests.filter(request => !ids.has(request.id))]
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)));
+    this.refreshScheduleCalendar();
+  }
 
   /**
    * 月曆每一格的 class：依當天班別上色（shift-work／shift-day_off／shift-leave），樣式在 styles.scss。
@@ -221,7 +254,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return '';
     }
     const shift = this.shiftsByDate().get(this.toIsoDate(date));
-    return shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : '';
+    const status = this.scheduleViewState() === 'loading' ? 'loading'
+      : this.scheduleViewState() === 'error' ? 'unavailable' : shift?.shiftType.toLowerCase() ?? 'not-published';
+    const pending = this.pendingScheduleDates().has(this.toIsoDate(date));
+    return `shift-cell shift-${status} ${pending ? 'leave-request-pending' : ''} ${this.calendarLeaveComposer()?.dateClass(date) ?? ''}`;
   };
 
   /**
@@ -244,6 +280,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     onCleanup(() => subscription.unsubscribe());
   });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly inspectionReady = signal<Record<number, boolean>>({});
+  protected setInspectionReady(routeId: number, passed: boolean): void {
+    this.inspectionReady.update(ready => ({...ready, [routeId]: passed}));
+  }
   protected readonly taskViewState = signal<TaskViewState>('loading');
   protected readonly taskError = signal<string | null>(null);
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
@@ -301,6 +341,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly leaveMessage = signal<string | null>(null);
   protected readonly isLeaveSubmitting = signal(false);
   protected readonly isLeaveListLoading = signal(false);
+  protected readonly leaveListAvailable = signal(false);
   protected readonly isLeaveHistoryLoading = signal(false);
   protected readonly expandedLeaveId = signal<number | null>(null);
   protected readonly leaveHistories = signal<Record<number, DriverLeaveHistoryResponse[]>>({});
@@ -852,6 +893,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected openLoadingAction(stop: DriverTaskStop): void {
     if (!this.canLoad(stop)) {
+      return;
+    }
+
+    const route = this.todayTasks()?.routes.find(item => item.stops.some(routeStop => routeStop.orderId === stop.orderId));
+    if (!route || !this.inspectionReady()[route.routeId]) {
+      this.taskActionError.set('請先完成這條路線的點交前安全檢查。');
       return;
     }
 
@@ -1769,12 +1816,15 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private loadPublishedShifts(): void {
+    const requestVersion = ++this.scheduleRequestVersion;
     const {from, to} = this.monthRange(this.scheduleMonth());
     this.scheduleViewState.set('loading');
     this.scheduleError.set(null);
+    this.scheduleCalendar()?.updateTodaysDate();
 
     this.operations.getPublishedShifts(from, to).subscribe({
       next: (shifts) => {
+        if (requestVersion !== this.scheduleRequestVersion) return;
         this.publishedShifts.set(
           [...shifts].sort((left, right) => left.workDate.localeCompare(right.workDate)),
         );
@@ -1783,15 +1833,17 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.scheduleCalendar()?.updateTodaysDate();
       },
       error: (error: unknown) => {
+        if (requestVersion !== this.scheduleRequestVersion) return;
         this.publishedShifts.set([]);
-        this.scheduleCalendar()?.updateTodaysDate();
         this.scheduleViewState.set('error');
         this.scheduleError.set(this.getErrorMessage(error, '無法取得已發布班表。'));
+        this.scheduleCalendar()?.updateTodaysDate();
       },
     });
   }
 
   private loadTodayTasks(): void {
+    this.inspectionReady.set({});
     this.taskViewState.set('loading');
     this.taskError.set(null);
 
@@ -1849,6 +1901,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.isLeaveListLoading.set(true);
     this.operations.getLeaveRequests().subscribe({
       next: (requests) => {
+        this.leaveListAvailable.set(true);
         this.leaveRequests.set(
           [...requests].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
         );
@@ -1856,6 +1909,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       },
       error: (error: unknown) => {
         this.leaveError.set(this.getErrorMessage(error, '無法取得一般請假結果。'));
+        this.leaveListAvailable.set(false);
         this.isLeaveListLoading.set(false);
       },
     });

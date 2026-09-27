@@ -44,6 +44,8 @@ public class MileageLogsService {
     private final WarehouseProximityService warehouseProximityService;
     private final RouteLegMileageService routeLegMileageService;
     private final MileagePhotoStorageService mileagePhotoStorageService;
+    private final DispatchVehicleMaintenanceGuard maintenanceGuard;
+    private final PreTripInspectionService preTripInspectionService;
 
     public MileageLogsService(
             MileageLogsDAO mileageLogsDAO,
@@ -57,7 +59,9 @@ public class MileageLogsService {
             EmergencyLeaveService emergencyLeaveService,
             WarehouseProximityService warehouseProximityService,
             RouteLegMileageService routeLegMileageService,
-            MileagePhotoStorageService mileagePhotoStorageService
+            MileagePhotoStorageService mileagePhotoStorageService,
+            DispatchVehicleMaintenanceGuard maintenanceGuard,
+            PreTripInspectionService preTripInspectionService
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
         this.driversDAO = driversDAO;
@@ -71,6 +75,8 @@ public class MileageLogsService {
         this.warehouseProximityService = warehouseProximityService;
         this.routeLegMileageService = routeLegMileageService;
         this.mileagePhotoStorageService = mileagePhotoStorageService;
+        this.maintenanceGuard = maintenanceGuard;
+        this.preTripInspectionService = preTripInspectionService;
     }
 
     public MileageLogResponse start(Long driverId, MileageRequestDTO request) {
@@ -87,6 +93,8 @@ public class MileageLogsService {
             throw new IllegalStateException("同一位司機今天存在多條已發布路線，無法判斷出車車輛");
         }
         RoutesEntity route = routes.getFirst();
+        // 與撤回共用路線鎖，檢查必須屬於這次發布的人、車與版本。
+        preTripInspectionService.requirePassed(driverId, route.getId());
         if (route.getVehicleId() == null) {
             throw new IllegalStateException("已發布路線尚未指派車輛");
         }
@@ -104,13 +112,16 @@ public class MileageLogsService {
         }
         VehiclesEntity vehicle = vehiclesDAO.findByIdForUpdate(route.getVehicleId())
                 .orElseThrow(() -> new EntityNotFoundException("找不到已發布路線的車輛，ID：" + route.getVehicleId()));
-        if (vehicle.getCurrentOdometerKm() == null) {
+        boolean initialOdometer = vehicle.getCurrentOdometerKm() == null;
+        if (initialOdometer) {
             vehicle.setCurrentOdometerKm(request.getOdometer());
-            vehiclesDAO.save(vehicle);
         } else if (!vehicle.getCurrentOdometerKm().equals(request.getOdometer())) {
             throw new IllegalArgumentException("出車總里程必須與系統車輛總里程一致，目前為 "
                     + vehicle.getCurrentOdometerKm() + " km");
         }
+        // 司機填的讀數與發布時可能不同；出車前再用最新實際里程及剩餘路程檢查一次。
+        maintenanceGuard.assertCanStart(route, vehicle);
+        if (initialOdometer) vehiclesDAO.save(vehicle);
 
         MileageLogsEntity mileage = new MileageLogsEntity();
         mileage.setDriverId(driverId);

@@ -10,6 +10,7 @@ import {
   DriverLeaveHistoryResponse,
   DriverLeaveBatchResponse,
   DriverMakeupLeaveRequest,
+  DriverMakeupLeaveBatchRequest,
   DriverPlannedLeaveBatchRequest,
   DriverLeaveRequest,
   DriverLeaveRequestResponse,
@@ -29,6 +30,8 @@ import {
   MileageRequest,
   NoSignatureRequest,
   PhotoUploadResponse,
+  PreTripInspectionRequest,
+  PreTripInspectionResult,
 } from './driver-operations.models';
 
 @Injectable({providedIn: 'root'})
@@ -74,6 +77,23 @@ export class DriverOperationsService {
     return this.http.get<DriverTasksResponse>('/api/driver/tasks/today');
   }
 
+  getPreTripInspection(routeId: number): Observable<PreTripInspectionResult> {
+    return this.http.get<PreTripInspectionResult>('/api/driver/pre-trip', {params: {routeId}});
+  }
+
+  submitPreTripInspection(request: PreTripInspectionRequest, photos: Record<'alcohol' | 'vehicle' | 'dashcam', File>): Observable<PreTripInspectionResult> {
+    const data = new FormData();
+    data.append('request', new Blob([JSON.stringify(request)], {type: 'application/json'}));
+    data.append('alcoholPhoto', photos.alcohol);
+    data.append('vehiclePhoto', photos.vehicle);
+    data.append('dashcamPhoto', photos.dashcam);
+    return this.http.post<PreTripInspectionResult>('/api/driver/pre-trip', data);
+  }
+
+  getPreTripPhoto(id: number, kind: 'alcohol' | 'vehicle' | 'dashcam'): Observable<Blob> {
+    return this.http.get(`/api/driver/pre-trip/${id}/photos/${kind}`, {responseType: 'blob'});
+  }
+
   submitEmergencyLeave(request: EmergencyLeaveRequest): Observable<EmergencyLeaveResponse> {
     return this.http.post<EmergencyLeaveResponse>('/api/driver/emergency-leave-requests', request);
   }
@@ -90,6 +110,17 @@ export class DriverOperationsService {
 
   submitMakeupLeave(request: DriverMakeupLeaveRequest): Observable<DriverLeaveRequestResponse> {
     return this.http.post<DriverLeaveRequestResponse>('/api/driver/leave-requests/makeup', request);
+  }
+
+  submitMakeupLeaveBatch(request: DriverMakeupLeaveBatchRequest): Observable<DriverLeaveRequestResponse[]> {
+    return this.http.post<DriverLeaveRequestResponse[]>('/api/driver/leave-requests/makeup-batch', request);
+  }
+
+  getMakeupLeaveCandidates(from: string, to: string, leaveStart?: string, leaveEnd?: string): Observable<string[]> {
+    const params: Record<string, string> = {from, to};
+    if (leaveStart) params['leaveStart'] = leaveStart;
+    if (leaveEnd) params['leaveEnd'] = leaveEnd;
+    return this.http.get<string[]>('/api/driver/leave-requests/makeup-candidates', {params});
   }
 
   uploadLeaveEvidencePhoto(file: File): Observable<PhotoUploadResponse> {

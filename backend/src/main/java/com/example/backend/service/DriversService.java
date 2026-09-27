@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.DriversDAO;
+import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.request.DriverPasswordResetDTO;
 import com.example.backend.dto.request.DriverPasswordResetVerificationDTO;
 import com.example.backend.dto.request.DriversDTO;
@@ -26,15 +27,24 @@ public class DriversService {
     private final DriversDAO driversDAO;
     private final PasswordEncoder passwordEncoder;
     private final DriverPhotoStorageService driverPhotoStorageService;
+    private final WarehousesDAO warehousesDAO;
+    private final DispatchBoardPushService boardPush;
+    private final AttendanceService attendanceService;
 
     public DriversService(
             DriversDAO driversDAO,
             PasswordEncoder passwordEncoder,
-            DriverPhotoStorageService driverPhotoStorageService
+            DriverPhotoStorageService driverPhotoStorageService,
+            WarehousesDAO warehousesDAO,
+            DispatchBoardPushService boardPush,
+            AttendanceService attendanceService
     ) {
         this.driversDAO = driversDAO;
         this.passwordEncoder = passwordEncoder;
         this.driverPhotoStorageService = driverPhotoStorageService;
+        this.warehousesDAO = warehousesDAO;
+        this.boardPush = boardPush;
+        this.attendanceService = attendanceService;
     }
 
     @Transactional(readOnly = true)
@@ -55,7 +65,9 @@ public class DriversService {
         DriversEntity entity = new DriversEntity();
         apply(dto, entity);
         entity.setPassword(passwordEncoder.encode(dto.getPassword()));
-        return toDTO(driversDAO.save(entity));
+        DriversDTO result = toDTO(driversDAO.save(entity));
+        boardPush.markResourcesChanged();
+        return result;
     }
 
     public List<DriversDTO> createAll(List<DriversDTO> dtos) {
@@ -69,7 +81,9 @@ public class DriversService {
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
             return entity;
         }).toList();
-        return driversDAO.saveAll(entities).stream().map(this::toDTO).toList();
+        List<DriversDTO> result = driversDAO.saveAll(entities).stream().map(this::toDTO).toList();
+        boardPush.markResourcesChanged();
+        return result;
     }
 
     public DriversDTO update(Long id, DriversDTO dto) {
@@ -82,7 +96,9 @@ public class DriversService {
             validatePassword(dto.getPassword(), "新密碼不可空白");
             entity.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
-        return toDTO(driversDAO.save(entity));
+        DriversDTO result = toDTO(driversDAO.save(entity));
+        boardPush.markResourcesChanged();
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -114,7 +130,9 @@ public class DriversService {
         DriversEntity entity = findEntity(id);
         entity.setIsActive(isActive);
 
-        return toDTO(driversDAO.save(entity));
+        DriversDTO result = toDTO(driversDAO.save(entity));
+        boardPush.markResourcesChanged();
+        return result;
     }
 
     public DriversDTO updateProfilePhoto(Long id, MultipartFile photo) {
@@ -173,6 +191,16 @@ public class DriversService {
     }
 
     private void apply(DriversDTO dto, DriversEntity entity) {
+        Long warehouseId = dto.getWarehouseId() != null ? dto.getWarehouseId() : entity.getWarehouseId();
+        if (warehouseId == null) {
+            throw new IllegalArgumentException("請選擇司機的所屬倉庫");
+        }
+        var warehouse = warehousesDAO.findById(warehouseId)
+                .orElseThrow(() -> new IllegalArgumentException("找不到所屬倉庫"));
+        if (!Boolean.TRUE.equals(warehouse.getIsActive()) && !warehouseId.equals(entity.getWarehouseId())) {
+            throw new IllegalArgumentException("不能將司機分配到已停用的倉庫");
+        }
+        entity.setWarehouseId(warehouseId);
         entity.setAccount(dto.getAccount());
         entity.setName(dto.getName());
         entity.setPhone(dto.getPhone());
@@ -188,6 +216,13 @@ public class DriversService {
     private DriversDTO toDTO(DriversEntity entity) {
         DriversDTO dto = new DriversDTO();
         dto.setId(entity.getId());
+        dto.setWarehouseId(entity.getWarehouseId());
+        if (entity.getWarehouseId() != null) {
+            warehousesDAO.findById(entity.getWarehouseId()).ifPresent(warehouse -> {
+                dto.setWarehouseName(warehouse.getName());
+                dto.setWarehouseCode(warehouse.getWarehouseCode());
+            });
+        }
         dto.setAccount(entity.getAccount());
         dto.setName(entity.getName());
         dto.setPhone(entity.getPhone());
@@ -196,6 +231,11 @@ public class DriversService {
         dto.setWorkEnd(entity.getWorkEnd());
         dto.setRestDuration(entity.getRestDuration());
         dto.setMaxOvertimeMinutes(entity.getMaxOvertimeMinutes());
+        var overtime = attendanceService.monthlyOvertimeSummary(entity.getId());
+        if (overtime != null) {
+            dto.setMonthlyOvertimeMinutes(overtime.minutes());
+            dto.setMonthlyUnsettledShifts(overtime.unsettledShifts());
+        }
         dto.setIsActive(entity.getIsActive());
         return dto;
     }

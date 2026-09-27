@@ -1,0 +1,64 @@
+@let v = vehicle();
+<article class="resource-row vehicle-resource-card" [attr.aria-label]="v.id + ' 車輛資訊'">
+  <header class="vehicle-row-header vehicle-detail-block">
+    <div class="vehicle-identity">
+      <span class="vehicle-badge"><mat-icon aria-hidden="true">local_shipping</mat-icon></span>
+      <div><strong>{{ v.id }}</strong></div>
+    </div>
+    <dl class="vehicle-specs" aria-label="車輛規格">
+      <div><dt>車型</dt><dd>{{ v.type }}</dd></div>
+      <div><dt>載運容量</dt><dd>{{ v.capacity }}</dd></div>
+    </dl>
+    <div class="vehicle-header-controls">
+      <div class="vehicle-status-line">
+        <span>車輛狀態</span>
+        <span class="status-badge vehicle-status-pill" [class]="'status-' + v.status">{{ v.status }}</span>
+      </div>
+      @if (v.maintenance && v.maintenance.decision !== 'NORMAL') {
+        <app-vehicle-maintenance-notice [summary]="v.maintenance" [compact]="true" />
+      }
+    </div>
+    <div class="row-actions vehicle-row-actions">
+      <button type="button" class="row-action vehicle-edit-action" title="編輯車輛" [attr.aria-label]="'編輯車輛 ' + v.id" (click)="editVehicle.emit()"><mat-icon aria-hidden="true">edit</mat-icon><span>編輯</span></button>
+      <button type="button" class="row-action row-action--danger" title="刪除車輛" [attr.aria-label]="'刪除車輛 ' + v.id" (click)="deleteVehicle.emit()"><mat-icon aria-hidden="true">delete_outline</mat-icon><span>刪除</span></button>
+    </div>
+  </header>
+  <section class="vehicle-maintenance-card" aria-label="車輛里程與保養">
+    <div class="vehicle-maintenance-overview">
+      <div class="vehicle-mileage-column vehicle-detail-block">
+        <header class="vehicle-mileage-header">
+          <span>實際總里程</span>
+          <strong class="odometer" [class.is-unknown]="v.maintenance?.currentOdometerKm == null">{{ v.maintenance?.currentOdometerKm == null ? '待補實際總里程' : (v.maintenance?.currentOdometerKm | number) + ' km' }}</strong>
+        </header>
+        <div class="vehicle-service-summary">
+          <div class="maintenance-counts" aria-label="已完成保養與維修次數及上次完成時間">
+            <dl class="service-count-grid">
+              <div class="service-count">
+                <dt>小保</dt>
+                <dd>
+                  <span class="service-count-total"><strong class="count-value">{{ v.maintenance?.minorCount == null ? '—' : (v.maintenance?.minorCount | number) }}</strong><span class="count-unit">次</span></span>
+                  <span class="last-service-date"><span>上次完成</span><time [attr.datetime]="v.maintenance?.lastMinorAt || null">{{ v.maintenance?.lastMinorAt ? (v.maintenance?.lastMinorAt | date:'yyyy/MM/dd HH:mm') : '尚無完成紀錄' }}</time></span>
+                </dd>
+              </div>
+              <div class="service-count">
+                <dt>大保</dt>
+                <dd>
+                  <span class="service-count-total"><strong class="count-value">{{ v.maintenance?.majorCount == null ? '—' : (v.maintenance?.majorCount | number) }}</strong><span class="count-unit">次</span></span>
+                  <span class="last-service-date"><span>上次完成</span><time [attr.datetime]="v.maintenance?.lastMajorAt || null">{{ v.maintenance?.lastMajorAt ? (v.maintenance?.lastMajorAt | date:'yyyy/MM/dd HH:mm') : '尚無完成紀錄' }}</time></span>
+                </dd>
+              </div>
+              <div class="service-count">
+                <dt>維修</dt>
+                <dd>
+                  <span class="service-count-total"><strong class="count-value">{{ v.maintenance?.repairCount == null ? '—' : (v.maintenance?.repairCount | number) }}</strong><span class="count-unit">次</span></span>
+                  <span class="last-service-date"><span>上次完成</span><time [attr.datetime]="v.maintenance?.lastRepairAt || null">{{ v.maintenance?.lastRepairAt ? (v.maintenance?.lastRepairAt | date:'yyyy/MM/dd HH:mm') : '尚無完成紀錄' }}</time></span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <div class="vehicle-maintenance-summary vehicle-detail-block"><app-vehicle-maintenance-panel [summary]="v.maintenance" [showCounts]="false" [showNotice]="false" layout="resource" /></div>
+    </div>
+  </section>
+</article>

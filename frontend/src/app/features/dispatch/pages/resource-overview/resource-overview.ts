@@ -1,6 +1,16 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { forkJoin, Observable } from 'rxjs';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { DatePipe, DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { catchError, debounceTime, exhaustMap, filter, forkJoin, interval, Observable, of } from 'rxjs';
+import { DriverChatSocketService } from '../../../../core/services/driver-chat-socket.service';
+import { VehicleMaintenancePanel } from '../../components/vehicle-maintenance-panel/vehicle-maintenance-panel';
+import { VehicleResource, VehicleResourceCard } from '../../components/vehicle-resource-card/vehicle-resource-card';
+import { TonnageFilter, TonnageSelection } from '../../components/tonnage-filter/tonnage-filter';
+import { MaintenanceRulesEditor } from '../../components/maintenance-rules-editor/maintenance-rules-editor';
 import {MatIconModule} from '@angular/material/icon';
+import { MatSelectModule } from '@angular/material/select';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   AdminUserCreateRequest,
@@ -9,16 +19,19 @@ import {
   StoreDto,
   StoreStatus,
   VehicleDto,
+  VehicleMaintenanceRecord,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 
-type ResourceView = 'vehicles' | 'stores' | 'warehouses';
-type VehicleResourceStatus = '待派車' | '保養排程' | '已退役';
+type ResourceView = 'vehicles' | 'drivers' | 'stores' | 'warehouses';
+type VehicleResourceStatus = '待派車' | '維修中' | '小保中' | '大保中' | '已退役';
+type VehicleTonnageFilter = TonnageSelection;
 type StoreResourceStatus = '營業中' | '暫停營業';
 type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
   | 'admin'
   | 'driver'
+  | 'edit-driver'
   | 'vehicle'
   | 'edit-vehicle'
   | 'store'
@@ -40,9 +53,6 @@ const deleteTargetLabels: Record<DeleteTargetKind, string> = {
   store: '店家',
   warehouse: '倉庫',
 };
-
-const DRIVER_INITIAL_PASSWORD_LENGTH = 12;
-const DRIVER_PASSWORD_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
 interface StoreResource {
   backendId?: number;
@@ -76,10 +86,11 @@ function emptyAdminUser(): AdminUserCreateRequest {
   };
 }
 
-function emptyDriver(): DriverDto {
+function emptyDriver(warehouseId = 0): DriverDto {
   return {
     account: '',
-    password: generateDriverInitialPassword(),
+    password: '',
+    warehouseId,
     name: '',
     phone: '',
     workStart: '08:00',
@@ -88,21 +99,6 @@ function emptyDriver(): DriverDto {
     maxOvertimeMinutes: 0,
     isActive: true,
   };
-}
-
-function generateDriverInitialPassword(): string {
-  const characters = DRIVER_PASSWORD_CHARACTERS;
-  const values = new Uint8Array(DRIVER_INITIAL_PASSWORD_LENGTH);
-
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(values);
-  } else {
-    for (let index = 0; index < values.length; index += 1) {
-      values[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  return Array.from(values, (value) => characters[value % characters.length]).join('');
 }
 
 function emptyStore(): StoreDto {
@@ -140,35 +136,38 @@ function emptyVehicle(warehouseId = 0): VehicleDto {
     vehicleType: '',
     capacity: 0,
     fuelConsumption: undefined,
+    currentOdometerKm: 0,
     status: 'AVAILABLE',
   };
-}
-
-interface VehicleResource {
-  backendId?: number;
-  id: string;
-  type: string;
-  capacity: string;
-  status: VehicleResourceStatus;
-  driver: string;
-  assignment: string;
-  inspection: string;
 }
 
 @Component({
   selector: 'app-resource-overview',
   imports: [
-    MatIconModule,
+    MatIconModule, MatSelectModule,
+    VehicleMaintenancePanel, VehicleResourceCard, TonnageFilter, MaintenanceRulesEditor, DatePipe, DecimalPipe,
   ],
   templateUrl: './resource-overview.html',
   styleUrl: './resource-overview.scss',
 })
 export class ResourceOverview implements OnInit {
+  protected readonly theme = inject(AdminThemeService);
   private readonly api = inject(DispatchApiService);
+  private readonly socket = inject(DriverChatSocketService);
+  private readonly destroyRef = inject(DestroyRef);
+  readonly rulesOpen = signal(false);
+  readonly maintenanceHistory = signal<VehicleMaintenanceRecord[]>([]);
+  readonly historyLoading = signal(false);
+  readonly historyError = signal('');
+  readonly vehicleTonnages = computed(() => [...new Set(this.vehicles().map(v => v.tonnage).filter((t): t is number => t != null))].sort((a, b) => a - b));
 
   readonly activeView = signal<ResourceView>('vehicles');
   readonly activeFilter = signal('all');
+  readonly vehicleTonnageFilter = signal<VehicleTonnageFilter>('all');
   readonly searchTerm = signal('');
+  readonly drivers = signal<DriverDto[]>([]);
+  readonly driverWarehouseFilter = signal<number | 'all'>('all');
+  readonly editingDriverId = signal<number | null>(null);
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
@@ -190,21 +189,48 @@ export class ResourceOverview implements OnInit {
   readonly deleteTarget = signal<DeleteTarget | null>(null);
   readonly isDeleting = signal(false);
 
-  readonly vehicleFilters = ['all', '待派車', '保養排程', '已退役'];
+  readonly vehicleFilters = ['all', '待派車', '維修中', '小保中', '大保中', '已退役'];
   readonly storeFilters = ['all', '營業中', '暫停營業'];
   readonly warehouseFilters = ['all', '啟用', '停用'];
+  readonly driverFilters = ['all', '在職', '停用', '待設定倉庫'];
+  readonly activeDriverCount = computed(() => this.drivers().filter(driver => driver.isActive).length);
+  readonly visibleDrivers = computed(() => {
+    const term = this.searchTerm().trim().toLowerCase();
+    const status = this.activeFilter();
+    const warehouseId = this.driverWarehouseFilter();
+    return this.drivers().filter(driver => {
+      const warehouse = this.warehouses().find(item => item.id === driver.warehouseId);
+      return (warehouseId === 'all' || driver.warehouseId === warehouseId)
+        && (status === 'all' || (status === '在職' && driver.isActive)
+          || (status === '停用' && !driver.isActive) || (status === '待設定倉庫' && driver.warehouseId == null))
+        && (!term || `${driver.name} ${driver.account} ${driver.phone ?? ''} ${warehouse?.name ?? ''} ${warehouse?.warehouseCode ?? ''}`.toLowerCase().includes(term));
+    });
+  });
+
+  driverWarehouse(driver: DriverDto): WarehouseDto | undefined {
+    return this.warehouses().find(warehouse => warehouse.id === driver.warehouseId);
+  }
 
   readonly visibleVehicles = computed<VehicleResource[]>(() => {
     const filter = this.activeFilter();
     const term = this.searchTerm().trim().toLowerCase();
+    const tonnage = this.vehicleTonnageFilter();
+    // 完整車號只查該車，避免 CAR-0001 同時命中 CAR-00010 等前綴相同的車號。
+    const hasExactPlate = !!term && this.vehicles().some(
+      vehicle => vehicle.plateNumber.trim().toLowerCase() === term,
+    );
 
     return this.vehicles()
+      .filter(vehicle => tonnage === 'all' || vehicle.tonnage === tonnage)
       .map((vehicle) => this.toVehicleResource(vehicle))
       .filter((vehicle) => {
         const matchesFilter = filter === 'all' || vehicle.status === filter;
         const source =
           `${vehicle.id} ${vehicle.type} ${vehicle.driver} ${vehicle.assignment}`.toLowerCase();
-        return matchesFilter && (!term || source.includes(term));
+        const matchesSearch = !term || (hasExactPlate
+          ? vehicle.id.trim().toLowerCase() === term
+          : source.includes(term));
+        return matchesFilter && matchesSearch;
       });
   });
 
@@ -235,7 +261,22 @@ export class ResourceOverview implements OnInit {
       });
   });
 
+  readonly searchPlaceholder = computed(() => {
+    if (this.activeView() === 'drivers') return '搜尋司機姓名、帳號、電話或倉庫';
+    if (this.activeView() === 'stores') return '搜尋店家名稱、編號或聯絡資訊';
+    if (this.activeView() === 'warehouses') return '搜尋倉庫名稱、編號或地址';
+    return '搜尋車號或車型';
+  });
+
+  readonly searchResultCount = computed(() => {
+    if (this.activeView() === 'drivers') return this.visibleDrivers().length;
+    if (this.activeView() === 'stores') return this.visibleStores().length;
+    if (this.activeView() === 'warehouses') return this.visibleWarehouses().length;
+    return this.visibleVehicles().length;
+  });
+
   readonly currentFilters = computed(() => {
+    if (this.activeView() === 'drivers') return this.driverFilters;
     if (this.activeView() === 'stores') {
       return this.storeFilters;
     }
@@ -252,7 +293,7 @@ export class ResourceOverview implements OnInit {
   );
   readonly attentionResourceCount = computed(
     () =>
-      this.vehicles().filter((vehicle) => vehicle.status === 'MAINTENANCE').length +
+      this.vehicles().filter((vehicle) => vehicle.status !== 'AVAILABLE' && vehicle.status !== 'RETIRED' || vehicle.maintenance?.decision === 'WARNING' || vehicle.maintenance?.decision === 'BLOCKED' || vehicle.maintenance?.decision === 'UNKNOWN').length +
       this.stores().filter((store) => store.status === 'SUSPENDED').length +
       this.warehouses().filter((warehouse) => !warehouse.isActive).length,
   );
@@ -264,13 +305,26 @@ export class ResourceOverview implements OnInit {
   });
 
   ngOnInit(): void {
+    this.socket.boardPushes$.pipe(filter(p => !!p.resourcesChanged), debounceTime(300), takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadResources());
+    this.socket.connected$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadResources());
     this.loadResources();
+    interval(60_000).pipe(
+      filter(() => this.activeView() === 'drivers' && !this.loading() && !document.hidden),
+      exhaustMap(() => this.api.getDrivers().pipe(catchError(() => of(null)))),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(drivers => { if (drivers) this.drivers.set(drivers); });
   }
 
   setView(view: ResourceView): void {
     this.activeView.set(view);
     this.activeFilter.set('all');
+    this.vehicleTonnageFilter.set('all');
+    this.driverWarehouseFilter.set('all');
     this.searchTerm.set('');
+  }
+
+  updateVehicleTonnageFilter(value: TonnageSelection): void {
+    this.vehicleTonnageFilter.set(typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 'all');
   }
 
   openCreateAdmin(): void {
@@ -280,9 +334,36 @@ export class ResourceOverview implements OnInit {
   }
 
   openCreateDriver(): void {
-    this.driverForm.set(emptyDriver());
+    this.setView('drivers');
+    if (!this.defaultWarehouseId()) {
+      this.errorMessage.set('請先建立倉庫，再新增司機。');
+      return;
+    }
+    this.driverForm.set(emptyDriver(this.defaultWarehouseId()));
+    this.editingDriverId.set(null);
     this.formError.set('');
     this.activeForm.set('driver');
+  }
+
+  openEditDriver(driver: DriverDto): void {
+    if (driver.id == null) return;
+    const { password, ...editable } = driver;
+    this.driverForm.set({ ...editable });
+    this.editingDriverId.set(driver.id);
+    this.formError.set('');
+    this.activeForm.set('edit-driver');
+  }
+
+  updateDriverWarehouse(warehouseId: number): void {
+    this.driverForm.update(form => ({ ...form, warehouseId }));
+  }
+
+  updateDriverNumber(field: 'restDuration' | 'maxOvertimeMinutes', event: Event): void {
+    this.driverForm.update(form => ({ ...form, [field]: Number((event.target as HTMLInputElement).value) }));
+  }
+
+  updateDriverActive(event: Event): void {
+    this.driverForm.update(form => ({ ...form, isActive: (event.target as HTMLInputElement).checked }));
   }
 
   openCreateStore(): void {
@@ -324,6 +405,7 @@ export class ResourceOverview implements OnInit {
     this.editingVehicleId.set(vehicle.backendId);
     this.formError.set('');
     this.activeForm.set('edit-vehicle');
+    this.loadHistory(vehicle.backendId);
   }
 
   openEditStore(store: StoreResource): void {
@@ -374,6 +456,7 @@ export class ResourceOverview implements OnInit {
     if (!this.isSaving()) {
       this.activeForm.set(null);
       this.editingVehicleId.set(null);
+      this.editingDriverId.set(null);
       this.editingStoreId.set(null);
       this.editingWarehouseId.set(null);
       this.formError.set('');
@@ -385,7 +468,7 @@ export class ResourceOverview implements OnInit {
     this.adminForm.update((form) => ({ ...form, [field]: value }));
   }
 
-  updateDriverText(field: 'account' | 'name' | 'phone', event: Event): void {
+  updateDriverText(field: 'account' | 'name' | 'phone' | 'password' | 'workStart' | 'workEnd', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.driverForm.update((form) => ({...form, [field]: value}));
   }
@@ -395,11 +478,11 @@ export class ResourceOverview implements OnInit {
     this.vehicleForm.update((form) => ({ ...form, [field]: value }));
   }
 
-  updateVehicleNumber(field: 'capacity' | 'fuelConsumption', event: Event): void {
+  updateVehicleNumber(field: 'capacity' | 'fuelConsumption' | 'tonnage' | 'currentOdometerKm' | 'lastMinorMaintenanceKm' | 'lastMajorMaintenanceKm', event: Event): void {
     const value = (event.target as HTMLInputElement).value.trim();
     this.vehicleForm.update((form) => ({
       ...form,
-      [field]: value === '' && field === 'fuelConsumption' ? undefined : Number(value),
+      [field]: value === '' && field !== 'capacity' ? undefined : Number(value),
     }));
   }
 
@@ -479,7 +562,10 @@ export class ResourceOverview implements OnInit {
   }
 
   submitDriver(): void {
+    if (this.isSaving()) return;
     const driver = this.driverForm();
+    const editingId = this.editingDriverId();
+    const isEditing = this.activeForm() === 'edit-driver';
     const password = driver.password?.trim() ?? '';
 
     if (!driver.account.trim() || !driver.name.trim() || !driver.phone?.trim()) {
@@ -492,21 +578,28 @@ export class ResourceOverview implements OnInit {
       return;
     }
 
-    if (password.length < 8 || password.length > 12) {
-      this.formError.set('系統產生的初始密碼不符合規則，請重新開啟新增司機表單。');
+    if (!Number.isInteger(driver.warehouseId) || driver.warehouseId! <= 0) {
+      this.formError.set('請選擇司機的所屬倉庫。');
       return;
     }
-
-    this.saveResource(
-      this.api.createDriver({
-        ...driver,
-        account: driver.account.trim(),
-        name: driver.name.trim(),
-        phone: driver.phone.trim(),
-        password,
-      }),
-      () => this.updatedAt.set(this.formatCurrentTime()),
-    );
+    if (!driver.workStart || !driver.workEnd) {
+      this.formError.set('請填寫上班與下班時間。'); return;
+    }
+    if (![driver.restDuration, driver.maxOvertimeMinutes ?? 0].every(value => Number.isInteger(value) && value >= 0)) {
+      this.formError.set('休息時間與加班上限需為 0 或正整數。'); return;
+    }
+    // 既有後端規則：主管建立司機時以身分證字號作為初始密碼。
+    if (!isEditing && !/^[A-Z][12]\d{8}$/.test(password)) {
+      this.formError.set('請填寫大寫的台灣身分證字號作為初始密碼。'); return;
+    }
+    if (isEditing && editingId === null) { this.formError.set('找不到要修改的司機。'); return; }
+    const {password: ignoredPassword, warehouseName, warehouseCode, profilePhotoUrl, ...fields} = driver;
+    const payload: DriverDto = {...fields, account: driver.account.trim(), name: driver.name.trim(), phone: driver.phone.trim()};
+    if (!isEditing) payload.password = password;
+    this.saveResource(isEditing ? this.api.updateDriver(editingId!, payload) : this.api.createDriver(payload), saved => {
+      this.drivers.update(items => isEditing ? items.map(item => item.id === saved.id ? saved : item) : [...items, saved]);
+      this.updatedAt.set(this.formatCurrentTime());
+    });
   }
 
   submitVehicle(): void {
@@ -535,7 +628,9 @@ export class ResourceOverview implements OnInit {
         return;
       }
 
-      this.saveResource(this.api.updateVehicle(editingId, vehicle), (updatedVehicle) => {
+      // 省略唯讀里程欄位，避免司機收車後用編輯視窗的舊快照覆寫資料庫。
+      const { currentOdometerKm, lastMinorMaintenanceKm, lastMajorMaintenanceKm, maintenance, ...editable } = vehicle;
+      this.saveResource(this.api.updateVehicle(editingId, editable), (updatedVehicle) => {
         this.vehicles.update((items) =>
           items.map((item) => (item.id === updatedVehicle.id ? updatedVehicle : item)),
         );
@@ -544,6 +639,9 @@ export class ResourceOverview implements OnInit {
       return;
     }
 
+    if (!Number.isInteger(vehicle.currentOdometerKm) || vehicle.currentOdometerKm! < 0) {
+      this.formError.set('請填初始實際總里程，公里數需為 0 或正整數。'); return;
+    }
     this.saveResource(this.api.createVehicle(vehicle), (createdVehicle) => {
       this.vehicles.update((items) => [...items, createdVehicle]);
       this.updatedAt.set(this.formatCurrentTime());
@@ -709,17 +807,39 @@ export class ResourceOverview implements OnInit {
     this.searchTerm.set((event.target as HTMLInputElement).value);
   }
 
+  clearSearch(input: HTMLInputElement): void {
+    this.searchTerm.set('');
+    input.value = '';
+    input.focus();
+  }
+
   private loadResources(): void {
     this.loading.set(true);
     this.errorMessage.set('');
 
     forkJoin({
+      drivers: this.api.getDrivers(),
       vehicles: this.api.getVehicles(),
       stores: this.api.getStores(),
       warehouses: this.api.getWarehouses(),
     }).subscribe({
-      next: ({ vehicles, stores, warehouses }) => {
+      next: ({ vehicles, stores, warehouses, drivers }) => {
+        this.drivers.set(drivers);
+        const previous = this.vehicles().find(v => v.id === this.editingVehicleId());
         this.vehicles.set(vehicles);
+        const latest = vehicles.find(v => v.id === this.editingVehicleId());
+        if (this.activeForm() === 'edit-vehicle' && latest) {
+          // 司機收車時即使主管正開著編輯視窗，唯讀數字也必須更新；保留尚未儲存的其他欄位。
+          this.vehicleForm.update(form => ({
+            ...form,
+            status: form.status === previous?.status ? latest.status : form.status,
+            currentOdometerKm: latest.currentOdometerKm,
+            lastMinorMaintenanceKm: latest.lastMinorMaintenanceKm,
+            lastMajorMaintenanceKm: latest.lastMajorMaintenanceKm,
+            maintenance: latest.maintenance,
+          }));
+          this.loadHistory(latest.id!);
+        }
         this.stores.set(stores);
         this.warehouses.set(warehouses);
         this.updatedAt.set(this.formatCurrentTime());
@@ -785,16 +905,17 @@ export class ResourceOverview implements OnInit {
 
   private toVehicleResource(vehicle: VehicleDto): VehicleResource {
     return {
+      maintenance: vehicle.maintenance,
       backendId: vehicle.id,
       id: vehicle.plateNumber,
       type: vehicle.vehicleType || '未設定車型',
-      capacity: `${vehicle.capacity} 箱容量`,
+      capacity: `${vehicle.capacity} 箱`,
       status: this.toVehicleStatus(vehicle.status),
       driver: '未提供',
       assignment: '尚未提供配送任務',
       inspection:
         vehicle.status === 'MAINTENANCE'
-          ? '目前標記為保養'
+          ? '維修中（車禍／故障，不計大小保）'
           : vehicle.fuelConsumption === undefined
             ? '尚未提供油耗資料'
             : `平均油耗 ${vehicle.fuelConsumption}`,
@@ -802,8 +923,10 @@ export class ResourceOverview implements OnInit {
   }
 
   private toVehicleStatus(status: VehicleDto['status']): VehicleResourceStatus {
+    if (status === 'MINOR_MAINTENANCE') return '小保中';
+    if (status === 'MAJOR_MAINTENANCE') return '大保中';
     if (status === 'MAINTENANCE') {
-      return '保養排程';
+      return '維修中';
     }
     if (status === 'RETIRED') {
       return '已退役';
@@ -813,6 +936,30 @@ export class ResourceOverview implements OnInit {
 
   private formatTime(value: string): string {
     return value?.slice(0, 5) || '--:--';
+  }
+
+  rulesSaved(): void { this.rulesOpen.set(false); this.loadResources(); }
+
+  baselineLocked(): boolean {
+    return this.activeForm() === 'edit-vehicle' || this.vehicleForm().currentOdometerKm === 0;
+  }
+
+  private loadHistory(id: number): void {
+    this.historyLoading.set(true); this.historyError.set(''); this.maintenanceHistory.set([]);
+    this.api.getMaintenanceHistory(id).subscribe({
+      next: history => { if (this.editingVehicleId() === id) this.maintenanceHistory.set(history); this.historyLoading.set(false); },
+      error: () => { this.historyError.set('保養與維修紀錄載入失敗，請重新開啟車輛。'); this.historyLoading.set(false); },
+    });
+  }
+
+  cancelVehicleMaintenance(): void {
+    const id = this.editingVehicleId();
+    if (id === null || this.isSaving()) return;
+    this.isSaving.set(true);
+    this.api.cancelMaintenance(id).subscribe({
+      next: () => { this.isSaving.set(false); this.closeForm(); this.loadResources(); },
+      error: (e: HttpErrorResponse) => { this.formError.set(e.error?.message || '取消保養失敗。'); this.isSaving.set(false); },
+    });
   }
 
   private formatCurrentTime(): string {
@@ -836,11 +983,12 @@ export class ResourceOverview implements OnInit {
         this.isSaving.set(false);
         this.activeForm.set(null);
         this.editingVehicleId.set(null);
+        this.editingDriverId.set(null);
         this.editingStoreId.set(null);
         this.editingWarehouseId.set(null);
       },
-      error: () => {
-        this.formError.set('儲存失敗，請確認欄位內容後再試。');
+      error: (e: HttpErrorResponse) => {
+        this.formError.set(e.error?.message || '儲存失敗，請確認欄位內容後再試。');
         this.isSaving.set(false);
       },
     });

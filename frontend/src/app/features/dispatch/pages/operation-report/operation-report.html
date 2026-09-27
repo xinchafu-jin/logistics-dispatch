@@ -1,231 +1,171 @@
 <main class="operation-report-page">
-  <section class="report-period" role="group" aria-label="報表期間">
-    @for (period of periods; track period.id) {
-      <button
-        type="button"
-        [class.is-active]="activePeriod() === period.id"
-        [attr.aria-pressed]="activePeriod() === period.id"
-        (click)="setPeriod(period.id)"
-      >
-        {{ period.label }}
-      </button>
-    }
-    <span>{{ report().range }}</span>
+  <header class="report-intro">
+    <div>
+      <p class="section-eyebrow">主管營運報表</p>
+      <h2>配送營運總覽</h2>
+      <p>依人員、車輛、訂單、異常與倉庫的順序，快速找出需要處理的環節。</p>
+    </div>
+    <button class="history-link" type="button" (click)="openHistory()">查詢本期明細 <mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+  </header>
+
+  <section class="report-toolbar" aria-label="報表期間">
+    <div class="period-tabs" role="group" aria-label="檢視粒度">
+      @for (period of periods; track period.id) {
+        <button type="button" [class.is-active]="activePeriod() === period.id" [attr.aria-pressed]="activePeriod() === period.id" (click)="setPeriod(period.id)">{{ period.label }}</button>
+      }
+    </div>
+    <div class="period-stepper">
+      <button type="button" aria-label="上一期" (click)="stepPeriod(-1)"><mat-icon aria-hidden="true">chevron_left</mat-icon></button>
+      <strong>{{ report().range }}</strong>
+      <button type="button" aria-label="下一期" (click)="stepPeriod(1)"><mat-icon aria-hidden="true">chevron_right</mat-icon></button>
+    </div>
   </section>
 
   @if (loading()) {
-    <p class="updated-at">正在載入報表資料...</p>
+    <div class="report-feedback">正在載入訂單資料...</div>
   } @else if (errorMessage()) {
-    <p class="updated-at">{{ errorMessage() }}</p>
-  }
+    <div class="report-feedback is-error">{{ errorMessage() }}</div>
+  } @else {
+    <p class="scope-note"><mat-icon aria-hidden="true">info_outline</mat-icon>依所選期間查詢資料庫目前狀態，並非「當時」的歷史快照。各區塊分別標示統計口徑；沒有資料的指標不補估值。</p>
+    @if (operationalError() || warehouseError() || exceptionError()) {
+      <button class="history-link" type="button" [disabled]="operationalLoading()" (click)="retryOperationalData()">重新載入報表 <mat-icon aria-hidden="true">refresh</mat-icon></button>
+    }
 
-  <section class="operational-readout" aria-label="配送完整率與核心指標">
-    <article class="health-instrument">
-      <div
-        class="instrument-meter"
-        [style.--health-score]="report().score"
-        aria-hidden="true"
-      >
-        <div class="meter-face">
-          <span>配送完整率</span>
-          <strong>{{ report().score }}</strong>
-          <small>/ 100</small>
-        </div>
-      </div>
-
-      <div class="health-copy">
-        <p class="section-eyebrow">本期完成狀況</p>
-        <h3>{{ report().label }}</h3>
-        <p>{{ report().note }}</p>
-        <span class="health-status"><i aria-hidden="true"></i>資料已更新</span>
-      </div>
-
-      <div class="health-footer">
-        <div>
-          <span>完成配送</span>
-          <strong>{{ report().total }}<small>筆</small></strong>
-        </div>
-        <div>
-          <span>覆蓋區域</span>
-          <strong>{{ areas().length }}<small>區</small></strong>
-        </div>
-        <div>
-          <span>查詢區間</span>
-          <strong>{{ report().range }}</strong>
-        </div>
-      </div>
-    </article>
-
-    <section class="signal-register" aria-labelledby="signal-register-title">
-      <header>
-        <div>
-          <p class="section-eyebrow">重點指標</p>
-          <h3 id="signal-register-title">核心營運訊號</h3>
-        </div>
-        <span>本期</span>
+    <section class="report-section" id="people" aria-labelledby="people-title">
+      <header class="section-heading"><div><p class="section-eyebrow">01 · 人員</p><h3 id="people-title">司機出勤與調度</h3></div>
+        <button type="button" class="section-ratio" (click)="openSheet('attendance')"><span>出勤率</span><strong>{{ percent(capacity()?.people?.attendanceRate ?? null) }}</strong><small>@if (capacity(); as ops) { 已到班 {{ ops.people.attendedShifts }} / 應到班 {{ ops.people.dueShifts }} 班 } @else { {{ operationalLoading() ? '資料載入中' : '資料暫不可用' }} }</small></button>
       </header>
-
-      <div class="signal-list">
-        <article class="signal-item tone-accent">
-          <span class="summary-icon"><mat-icon aria-hidden="true">check_circle</mat-icon></span>
-          <div>
-            <p>配送完整率</p>
-            <strong>{{ report().completion }}</strong>
-            <span>目標值 95.0%</span>
-          </div>
-        </article>
-        <article class="signal-item">
-          <span class="summary-icon"><mat-icon aria-hidden="true">schedule</mat-icon></span>
-          <div>
-            <p>已完成訂單</p>
-            <strong>{{ report().total }}</strong>
-            <span>依配送日期統計</span>
-          </div>
-        </article>
-        <article class="signal-item">
-          <span class="summary-icon"><mat-icon aria-hidden="true">route</mat-icon></span>
-          <div>
-            <p>配送區域</p>
-            <strong>{{ areas().length }}</strong>
-            <span>有訂單的配送區域</span>
-          </div>
-        </article>
-        <article class="signal-item tone-warning">
-          <span class="summary-icon"><mat-icon aria-hidden="true">warning_amber</mat-icon></span>
-          <div>
-            <p>配送失敗</p>
-            <strong>{{ failedOrders().length }}</strong>
-            <span>請至異常中心查看原因</span>
-          </div>
-        </article>
-      </div>
+      @if (operationalLoading()) {
+        <p class="data-feedback">正在整理司機出勤資料...</p>
+      } @else if (operationalError()) {
+        <p class="data-feedback is-error">{{ operationalError() }}</p>
+      } @else if (capacity(); as ops) {
+        <div class="execution-grid people-grid">
+          <button type="button" class="ratio-card" (click)="openSheet('attendance')"><span>出勤率</span><strong>{{ percent(ops.people.attendanceRate) }}</strong><small>已到班 {{ ops.people.attendedShifts }} ÷ 應到班 {{ ops.people.dueShifts }} 班</small><small>到班依上班打卡確認；缺上班卡 {{ ops.people.missingClockInShifts }} 班</small></button>
+          <button type="button" class="ratio-card" (click)="openSheet('attendance')"><span>準時打卡率</span><strong>{{ percent(ops.people.onTimeRate) }}</strong><small>準時 {{ ops.people.onTimeShifts }} ÷ 已到班 {{ ops.people.attendedShifts }} 班</small><small>遲到 {{ ops.people.lateShifts }} 班；不晚於應上班時間即為準時</small></button>
+          <button type="button" class="ratio-card" (click)="openSheet('attendance')"><span>加班班次率</span><strong>{{ percent(ops.people.overtimeRate) }}</strong><small>有加班 {{ ops.people.overtimeShifts }} ÷ 已完成打卡 {{ ops.people.finishedShifts }} 班</small><small>僅計已打上下班卡、且超過排定下班至少 1 分鐘</small></button>
+          <button type="button" (click)="openSheet('attendance')"><span>已記錄加班時間</span><strong>{{ ops.people.overtimeMinutes }}<small> 分鐘</small></strong><small>有效上下班卡：排定下班後實際在班分鐘加總，扣除該時段休息</small><small>只算本頁所選期間；未完成上下班卡不列入，不代表薪資核准</small></button>
+        </div>
+        <p class="definition-note">出勤率＝已到班 ÷ 已到上班時間的應到班班次；準時打卡率＝準時班次 ÷ 已到班班次；加班班次率＝有加班班次 ÷ 已完成上下班打卡班次，均乘 100%。只使用已發布班表；排除休假、核准整天請假與未到上班時間的班次。部分請假涵蓋上班時間時，以核准請假結束時間判斷準時。</p>
+        @if (!ops.people.scheduledWorkShifts) { <p class="data-feedback">本期沒有已發布的上班班次，出勤與準時率沒有母數；不代表出勤率為 0%。</p> }
+        @else if (!ops.people.dueShifts && !ops.people.excusedFullDayShifts && !ops.people.missingTimeShifts) { <p class="data-feedback">本期上班班次尚未到應上班時間，不計算出勤與準時比率。</p> }
+        @if (ops.people.missingTimeShifts) { <p class="data-feedback">{{ ops.people.missingTimeShifts }} 班缺少排定時間，未納入比例，請核對班表。</p> }
+        @if (ops.people.attendedShifts > ops.people.finishedShifts) { <p class="data-feedback">本期 {{ ops.people.attendedShifts - ops.people.finishedShifts }} 班尚未完成有效上下班打卡，加班未結算；過去日期請查核漏下班卡，不能當成沒有加班。</p> }
+      }
     </section>
-  </section>
 
-  <section class="report-workspace" aria-label="配送表現分析">
-    <section class="delivery-chart-panel" aria-labelledby="delivery-chart-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">配送量</p>
-          <h3 id="delivery-chart-title">完成配送趨勢</h3>
-        </div>
-        <span>{{ chartHeading() }}</span>
+    <section class="report-section" id="fleet" aria-labelledby="fleet-title">
+      <header class="section-heading"><div><p class="section-eyebrow">02 · 車輛</p><h3 id="fleet-title">車輛與路線執行</h3></div>
+        <button type="button" class="section-ratio" (click)="openSheet('vehicles')"><span>收車完成率</span><strong>{{ percent(capacity()?.fleet?.returnRate ?? null) }}</strong><small>@if (capacity(); as ops) { 已收車 {{ ops.fleet.returnedTrips }} / 實際出車 {{ ops.fleet.startedTrips }} 趟 } @else { {{ operationalLoading() ? '資料載入中' : '資料暫不可用' }} }</small></button>
       </header>
-
-      <div class="delivery-chart" role="img" aria-label="完成配送趨勢長條圖">
-        <div class="chart-scale" aria-hidden="true">
-          <span>100%</span>
-          <span>75%</span>
-          <span>50%</span>
-          <span>25%</span>
+      @if (operationalLoading()) {
+        <p class="data-feedback">正在整理車輛與路線資料...</p>
+      } @else if (operationalError()) {
+        <p class="data-feedback is-error">{{ operationalError() }}</p>
+      } @else if (capacity(); as ops) {
+        <div class="execution-grid fleet-grid">
+          <button type="button" (click)="openSheet('vehicles')"><span>實際出車</span><strong>{{ ops.fleet.startedTrips }}<small> 趟</small></strong><small>已確認出車車輛 {{ ops.fleet.usedVehicles }} 台；同車多趟分別計數</small><small>未綁定車輛的舊紀錄只計趟次；發布不等於實際出車</small></button>
+          <button type="button" class="ratio-card" (click)="openSheet('vehicles')"><span>收車完成率</span><strong>{{ percent(ops.fleet.returnRate) }}</strong><small>已收車 {{ ops.fleet.returnedTrips }} ÷ 實際出車 {{ ops.fleet.startedTrips }} 趟</small><small>觀察是否完成收車流程，不代表配送準時率</small></button>
+          <button type="button" [class.needs-attention]="ops.fleet.openTrips > 0" (click)="openSheet('vehicles')"><span>尚未收車</span><strong>{{ ops.fleet.openTrips }}<small> 趟</small></strong><small>已有出車時間、尚無收車時間</small>@if (ops.fleet.invalidTrips) { <small>另有 {{ ops.fleet.invalidTrips }} 趟時間異常，需核對</small> }</button>
+          <button type="button" (click)="openSheet('vehicles')"><span>已記錄實際里程</span><strong>{{ number(ops.fleet.actualKm) }}<small> km</small></strong><small>{{ ops.fleet.distanceRecordedTrips }} 趟有可核對里程 / {{ ops.fleet.returnedTrips }} 趟已收車</small><small>缺紀錄不補 0，也不以規劃里程代替實際</small></button>
         </div>
-        <div class="chart-bars" [style.--chart-columns]="chartData().length">
-          @for (item of chartData(); track item.from) {
-            <button
-              type="button"
-              class="chart-column"
-              [attr.aria-label]="item.label + ' ' + item.count + ' 筆訂單，點選查看明細'"
-              (click)="drillInto(item)"
-            >
-              <span class="chart-value">{{ item.count }}</span>
-              <span class="chart-bar-wrap">
-                <span class="chart-bar" [style.height.%]="item.height"></span>
-              </span>
-              <span class="chart-label">{{ item.label }}</span>
-              <small>{{ item.date }}</small>
-            </button>
+        <p class="planning-note">收車完成率＝已收車趟次 ÷ 實際出車趟次 × 100%；依本期出車紀錄統計，包含仍在執行的趟次，沒有出車則顯示「—」。每趟只計一次，不因撤回發布抹去實際紀錄；已記錄里程為 GPS 結算值，舊紀錄使用可核對的儀表差值，明細列出來源。規劃裝載率與預估油費留在路線明細，不當作實際營運成果。</p>
+      }
+    </section>
+
+    <section class="report-section" id="orders" aria-labelledby="orders-title">
+      <header class="section-heading"><div><p class="section-eyebrow">03 · 訂單</p><h3 id="orders-title">訂單履約</h3></div>
+        <button type="button" class="section-ratio" (click)="openOrders('COMPLETED')"><span>訂單完成率</span><strong>{{ percent(report().rate) }}</strong><small>已完成 {{ report().completed }} / 可計算 {{ report().eligible }} 筆</small></button>
+      </header>
+      <div class="kpi-grid">
+        <button type="button" class="kpi-card kpi-primary" (click)="openOrders('COMPLETED')"><span class="kpi-label">訂單完成率 <small>目前狀態</small></span><strong>{{ percent(report().rate) }}</strong><span>{{ report().completed }} / {{ report().eligible }} 筆可計算訂單</span></button>
+        <button type="button" class="kpi-card" (click)="openOrders('CONFIRMED')"><span class="kpi-label">待排率</span><strong>{{ percent(report().waitingRate) }}</strong><span>待排車 {{ report().waitingDispatch }} / {{ report().eligible }} 筆可計算訂單</span></button>
+        <button type="button" class="kpi-card" (click)="openOrders()"><span class="kpi-label">本期訂單</span><strong>{{ report().total }}<small> 筆</small></strong><span>共 {{ report().boxes }} 箱 · 含待審核與取消</span></button>
+        <button type="button" class="kpi-card" (click)="openOrders('COMPLETED')"><span class="kpi-label">已完成</span><strong>{{ report().completed }}<small> 筆</small></strong><span>按預定配送日歸屬本期</span></button>
+      </div>
+      <p class="definition-note">完成率＝已完成 ÷ 可計算訂單；排除待審核與已取消。這不是準時率或準時足量率。@if (report().futureScheduled) { 本期有 {{ report().futureScheduled }} 筆預定配送日尚未到，仍依目前狀態列入訂單統計。}</p>
+      <article class="report-panel trend-panel">
+        <header class="panel-header"><div><p class="section-eyebrow">配送量</p><h3>完成配送趨勢</h3></div><span>{{ chartHeading() }}</span></header>
+        <div class="chart-legend"><i aria-hidden="true"></i> 長條＝已完成筆數 <span>數字＝已完成 / 總訂單</span></div>
+        <div class="delivery-chart" role="group" aria-label="已完成訂單長條圖，可點選期間查詢歷史明細">
+          <div class="chart-scale" aria-hidden="true"><span>{{ chartMaximum() }}</span><span>0</span></div>
+          <div class="chart-bars" [style.--chart-columns]="chartData().length">
+            @for (item of chartData(); track item.from) {
+              <button type="button" class="chart-column" [attr.aria-label]="item.label + ' 已完成 ' + item.completed + ' 筆、總訂單 ' + item.total + ' 筆，前往 ' + item.from + ' 至 ' + item.to + ' 歷史查詢'" (click)="drillInto(item)">
+                <span class="chart-value">{{ item.completed }}<small>/{{ item.total }}</small></span>
+                <span class="chart-bar-wrap"><span class="chart-bar" [style.height.%]="item.height"></span></span>
+                <span class="chart-label">{{ item.label }}</span><small class="chart-date">{{ item.date }}</small>
+              </button>
+            }
+          </div>
+        </div>
+        <p class="chart-footnote">{{ chartFootnote() }}</p>
+      </article>
+      <article class="report-panel status-panel" aria-labelledby="status-title">
+        <header class="panel-header"><div><p class="section-eyebrow">訂單組成</p><h3 id="status-title">各狀態筆數</h3></div><span>合計 {{ report().total }} 筆</span></header>
+        <div class="status-grid">
+          @for (status of statusBreakdown(); track status.label) {
+            <button type="button" class="status-item" [class]="'tone-' + status.tone" (click)="openOrders(status.filter)" [attr.aria-label]="status.label + ' ' + status.count + ' 筆，查看訂單明細'"><span>{{ status.label }}</span><strong>{{ status.count }}</strong><small class="status-percentage">{{ percent(status.percentage) }} · {{ status.count }} / {{ report().total }} 筆</small><span class="status-track" aria-hidden="true"><i [style.width.%]="status.percentage ?? 0"></i></span><small>{{ status.detail }}</small></button>
           }
         </div>
-      </div>
-
-      <div class="chart-footnote">
-        <mat-icon aria-hidden="true">bar_chart</mat-icon>
-        <span>
-          {{ chartFootnote() }}
-        </span>
-      </div>
+      </article>
     </section>
 
-    <section class="area-performance-panel" aria-labelledby="area-performance-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">區域表現</p>
-          <h3 id="area-performance-title">配送區表現</h3>
-        </div>
-        <span>完成率</span>
+    <section class="report-section" id="exceptions" aria-labelledby="exceptions-title">
+      <header class="section-heading"><div><p class="section-eyebrow">04 · 異常</p><h3 id="exceptions-title">待處理與異常追蹤</h3></div>
+        <button type="button" class="section-ratio" (click)="openSheet('exceptions')"><span>本期案件結案率</span><strong>{{ percent(caseStats()?.caseClosureRate ?? null) }}</strong><small>@if (caseStats(); as ops) { @if (ops.recordedExceptions) { 已結案 {{ ops.closedExceptions }} / 本期案件 {{ ops.recordedExceptions }} 件 } @else { 本期無異常案件，不計算比例 } } @else { {{ operationalLoading() ? '資料載入中' : '資料暫不可用' }} }</small></button>
       </header>
-
-      <div class="area-list">
-        @for (area of areas(); track area.area) {
-          <article class="area-row">
-            <div class="area-row-header">
-              <strong>{{ area.area }}</strong>
-              <span>{{ area.completed }}%</span>
-            </div>
-            <div
-              class="progress-track"
-              aria-label="{{ area.area }} 配送完成率 {{ area.completed }}%"
-            >
-              <span class="progress-value" [style.width.%]="area.completed"></span>
-            </div>
-            <div class="area-row-meta">
-              <span>{{ area.routes }} 筆需求</span>
-            </div>
-          </article>
-        } @empty {
-          <p class="empty-state">目前期間沒有配送需求。</p>
-        }
-      </div>
-    </section>
-  </section>
-
-  <section class="report-details" aria-label="配送狀態與異常狀態">
-    <section class="detail-panel" aria-labelledby="delivery-status-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">配送狀態</p>
-          <h3 id="delivery-status-title">配送狀態組成</h3>
-        </div>
-      </header>
-
-      <div class="status-breakdown">
-        @for (status of statusBreakdown(); track status.label) {
-          <article>
-            <span class="status-dot" [class]="'tone-' + status.tone" aria-hidden="true"></span>
-            <div>
-              <strong>{{ status.label }}</strong>
-              <span>{{ status.detail }}</span>
-            </div>
-            <b>{{ status.percentage }}</b>
-          </article>
-        }
-      </div>
-    </section>
-
-    <section class="detail-panel" aria-labelledby="exception-source-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">異常追蹤</p>
-          <h3 id="exception-source-title">配送失敗訂單</h3>
-        </div>
-      </header>
-
-      <div class="source-table">
-        <div class="source-table-head" aria-hidden="true">
-          <span>訂單</span>
-          <span>配送日期</span>
-          <span>狀態</span>
-        </div>
-        @for (order of failedOrders(); track order.id ?? order.orderNumber) {
-          <div class="source-table-row">
-            <span>{{ order.orderNumber }}</span>
-            <strong>{{ order.deliveryDate }}</strong>
-            <span class="source-status tone-warning">配送失敗</span>
+      <div class="exception-layout">
+        <article class="report-panel attention-panel">
+          <header class="panel-header"><div><p class="section-eyebrow">訂單現況</p><h3>待排與配送異常</h3></div><span>按預定配送日</span></header>
+          <div class="attention-summary"><button type="button" (click)="openOrders('PENDING_CONFIRM')"><span>待審核</span><strong>{{ report().pendingApproval }}</strong></button><button type="button" (click)="openOrders('CONFIRMED')"><span>待排車</span><strong>{{ report().waitingDispatch }}</strong></button><button type="button" (click)="openOrders('EXCEPTION')"><span>配送失敗／無人簽收</span><strong>{{ report().failed + report().noSignature }}</strong></button></div>
+          <button type="button" class="exception-rate" (click)="openOrders('EXCEPTION')">異常訂單率 <strong>{{ percent(report().exceptionRate) }}</strong><span>配送失敗／無人簽收 {{ report().failed + report().noSignature }} / {{ report().eligible }} 筆可計算訂單</span></button>
+          <div class="attention-list">
+            @for (order of attentionOrders(); track order.id ?? order.orderNumber) {
+              <button type="button" class="attention-row" (click)="openOrder(order)" [attr.aria-label]="'查看訂單 ' + order.orderNumber + ' 配送詳情'"><span class="attention-row-main"><strong>{{ order.orderNumber }}</strong><span>{{ order.deliveryDate }}</span></span><span class="order-state" [class.is-danger]="order.status === 'FAILED' || order.status === 'NO_SIGNATURE'">{{ statusLabel(order.status) }}</span></button>
+            } @empty { <p class="empty-state">此期間沒有待排車或配送異常訂單。</p> }
           </div>
-        } @empty {
-          <p class="empty-state">這個期間沒有配送失敗訂單。</p>
-        }
+          @if (report().waitingDispatch + report().failed + report().noSignature > attentionOrders().length) { <button type="button" class="text-link" (click)="openOrders()">前往歷史查詢查看全部</button> }
+        </article>
+        <article class="report-panel case-panel">
+          <header class="panel-header"><div><p class="section-eyebrow">異常案件</p><h3>本期建立案件</h3></div><span>按建立日期</span></header>
+          @if (operationalLoading()) { <p class="empty-state">正在整理異常紀錄...</p> }
+          @else if (exceptionError()) { <p class="empty-state">{{ exceptionError() }}</p> }
+          @else if (caseStats(); as ops) {
+            <div class="case-counts"><button type="button" (click)="openSheet('exceptions')"><span>本期案件結案率</span><strong>{{ percent(ops.caseClosureRate) }}</strong><small>已結案 {{ ops.closedExceptions }} / 已記錄 {{ ops.recordedExceptions }} 件</small></button><button type="button" (click)="openSheet('exceptions')"><span>尚未結案</span><strong>{{ ops.openedExceptions }}</strong><small>件</small></button></div>
+            <p class="case-note">僅統計期間內建立且保存在系統的案件；它與「配送失敗訂單」是不同資料來源，不可直接相加。</p>
+          }
+        </article>
       </div>
     </section>
-  </section>
+
+    <section class="report-section" id="warehouses" aria-labelledby="warehouse-title">
+      <header class="section-heading"><div><p class="section-eyebrow">05 · 倉庫</p><h3 id="warehouse-title">各倉庫執行</h3></div>
+        <button type="button" class="section-ratio" (click)="openOrders('COMPLETED')"><span>各倉加總完成率</span><strong>{{ percent(warehouseTotals()?.completionRate ?? null) }}</strong><small>@if (warehouseTotals(); as total) { 已完成 {{ total.completed }} / 可計算 {{ total.eligible }} 筆 } @else { {{ operationalLoading() ? '資料載入中' : '資料暫不可用' }} }</small></button>
+      </header>
+      <article class="report-panel warehouse-panel">
+        @if (operationalLoading()) { <p class="empty-state">正在整理倉庫資料...</p> }
+        @else if (warehouseError() && !warehouseRows().length) { <p class="empty-state">倉庫資料暫時無法載入。</p> }
+        @else {
+          @if (warehouseError()) { <p class="warehouse-note">{{ warehouseError() }}</p> }
+          @if (operationalError()) { <p class="warehouse-note">人員及出車比例暫不可用；倉庫訂單資料正常。</p> }
+          <div class="warehouse-table">
+            <div class="warehouse-row warehouse-head"><span>倉庫</span><span>出勤率</span><span>準時打卡率</span><span>加班班次率</span><span>加班分鐘</span><span>實際出車</span><span>收車完成率</span><span>訂單完成率</span><span>待排車</span><span>明細</span></div>
+            @for (row of warehouseRows(); track row.warehouseId) {
+              <div class="warehouse-row"><strong>{{ row.warehouseName || '倉庫 #' + row.warehouseId }}</strong>
+                <button type="button" class="warehouse-rate" (click)="openWarehouse(row, 'attendance')">{{ percent(row.people?.attendanceRate ?? null) }}@if (row.people; as people) { <small>{{ people.attendedShifts }}/{{ people.dueShifts }} 班</small> }</button>
+                <button type="button" class="warehouse-rate" (click)="openWarehouse(row, 'attendance')">{{ percent(row.people?.onTimeRate ?? null) }}@if (row.people; as people) { <small>{{ people.onTimeShifts }}/{{ people.attendedShifts }} 班</small> }</button>
+                <button type="button" class="warehouse-rate" (click)="openWarehouse(row, 'attendance')">{{ percent(row.people?.overtimeRate ?? null) }}@if (row.people; as people) { <small>{{ people.overtimeShifts }}/{{ people.finishedShifts }} 班</small> }</button>
+                <button type="button" (click)="openWarehouse(row, 'attendance')">{{ row.people?.overtimeMinutes ?? '—' }}</button>
+                <button type="button" (click)="openWarehouse(row, 'vehicles')">{{ row.fleet?.startedTrips ?? '—' }} 趟</button>
+                <button type="button" class="warehouse-rate" (click)="openWarehouse(row, 'vehicles')">{{ percent(row.fleet?.returnRate ?? null) }}@if (row.fleet; as fleet) { <small>{{ fleet.returnedTrips }}/{{ fleet.startedTrips }} 趟</small> }</button>
+                <button type="button" class="warehouse-rate" (click)="openWarehouse(row)">{{ percent(row.completionRate) }}<small>{{ row.completedOrders ?? 0 }}/{{ row.eligibleOrders }} 筆</small></button>
+                <span class="warehouse-pending">{{ row.unassignedConfirmedOrders ?? '—' }}</span><button type="button" (click)="openWarehouse(row, 'warehouses')" [attr.aria-label]="'查看 ' + row.warehouseName + ' 歷史明細'">查看 <mat-icon aria-hidden="true">arrow_forward</mat-icon></button></div>
+            } @empty { <p class="empty-state">尚未建立倉庫資料。</p> }
+          </div>
+          <p class="warehouse-note">列出所有倉庫，沒有本期紀錄也保留；比例沒有母數時顯示「—」。人員依司機目前所屬倉庫分組（非歷史歸屬快照），出車與訂單依記錄的出貨倉庫；無法歸屬另列，未歸屬列的連結查全部明細供核對。各倉加總完成率以已完成筆數加總 ÷ 可計算筆數加總，不平均各倉百分比。點每個數值可查看相應明細。</p>
+        }
+      </article>
+    </section>
+  }
 </main>

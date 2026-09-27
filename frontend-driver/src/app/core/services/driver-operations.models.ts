@@ -61,6 +61,9 @@ export interface GpsPingRequest {
 
 export interface DriverProfileDto {
   id: number;
+  warehouseId?: number | null;
+  warehouseName?: string | null;
+  warehouseCode?: string | null;
   account: string;
   name: string;
   phone: string | null;
@@ -169,6 +172,12 @@ export interface DriverMakeupLeaveRequest {
   leaveType: Exclude<LeaveType, 'ABSENT'>;
   reason: string;
   evidencePhotoUrl?: string | null;
+  leaveStart?: string | null;
+  leaveEnd?: string | null;
+}
+
+export interface DriverMakeupLeaveBatchRequest extends Omit<DriverMakeupLeaveRequest, 'workDate'> {
+  workDates: string[];
 }
 
 export interface DriverLeaveHistoryResponse {
@@ -322,6 +331,23 @@ export interface DriverRouteTask {
   stopCount: number;
   totalBoxes: number;
   stops: DriverTaskStop[];
+}
+
+export type PreTripCheckKey = 'alcoholTested' | 'headlights' | 'taillights' | 'turnSignals' | 'brakeLights'
+  | 'frontLeftTire' | 'frontRightTire' | 'rearLeftTire' | 'rearRightTire' | 'dashcam';
+export interface PreTripInspectionRequest extends Record<PreTripCheckKey, boolean> {
+  routeId: number;
+  alcoholMgL: number;
+}
+export interface PreTripInspectionResult {
+  id: number | null;
+  routeId: number;
+  vehicleId: number;
+  completed: boolean;
+  passed: boolean;
+  alcoholMgL: number | null;
+  submittedAt: string | null;
+  message: string;
 }
 
 export interface DriverTaskWarehouse {

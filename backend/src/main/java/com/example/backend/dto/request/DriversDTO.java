@@ -12,6 +12,22 @@ public class DriversDTO {
 
     private Long id;
 
+    @jakarta.validation.constraints.Positive(message = "請選擇有效的所屬倉庫")
+    private Long warehouseId;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String warehouseName;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String warehouseCode;
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
+    public String getWarehouseName() { return warehouseName; }
+    public void setWarehouseName(String warehouseName) { this.warehouseName = warehouseName; }
+    public String getWarehouseCode() { return warehouseCode; }
+    public void setWarehouseCode(String warehouseCode) { this.warehouseCode = warehouseCode; }
+
     @NotBlank(message = DRIVER_ACCOUNT_REQUIRED)
     @Size(max = 50, message = DRIVER_ACCOUNT_MAX_LENGTH)
     private String account;
@@ -48,6 +64,12 @@ public class DriversDTO {
     @Min(value = 0, message = DRIVER_OVERTIME_MIN)
     private Integer maxOvertimeMinutes;
 
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer monthlyOvertimeMinutes;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Integer monthlyUnsettledShifts;
+
     @NotNull(message = DRIVER_ACTIVE_REQUIRED)
     private Boolean isActive = true;
 
@@ -81,6 +103,12 @@ public class DriversDTO {
 
     public Integer getMaxOvertimeMinutes() { return maxOvertimeMinutes; }
     public void setMaxOvertimeMinutes(Integer maxOvertimeMinutes) { this.maxOvertimeMinutes = maxOvertimeMinutes; }
+
+    public Integer getMonthlyOvertimeMinutes() { return monthlyOvertimeMinutes; }
+    public void setMonthlyOvertimeMinutes(Integer monthlyOvertimeMinutes) { this.monthlyOvertimeMinutes = monthlyOvertimeMinutes; }
+
+    public Integer getMonthlyUnsettledShifts() { return monthlyUnsettledShifts; }
+    public void setMonthlyUnsettledShifts(Integer monthlyUnsettledShifts) { this.monthlyUnsettledShifts = monthlyUnsettledShifts; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

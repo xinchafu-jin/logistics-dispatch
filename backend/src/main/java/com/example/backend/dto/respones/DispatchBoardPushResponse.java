@@ -1,5 +1,6 @@
 package com.example.backend.dto.respones;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.LocalDate;
 
 /**
@@ -9,6 +10,7 @@ import java.time.LocalDate;
 public class DispatchBoardPushResponse {
 
     private LocalDate date;
+    private boolean resourcesChanged;
 
     public DispatchBoardPushResponse() {
     }
@@ -23,5 +25,14 @@ public class DispatchBoardPushResponse {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_DEFAULT)
+    public boolean isResourcesChanged() {
+        return resourcesChanged;
+    }
+
+    public void setResourcesChanged(boolean resourcesChanged) {
+        this.resourcesChanged = resourcesChanged;
     }
 }

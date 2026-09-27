@@ -3,6 +3,7 @@ package com.example.backend.dao;
 import com.example.backend.entity.MileageLogsEntity;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -40,6 +41,21 @@ public interface MileageLogsDAO extends JpaRepository<MileageLogsEntity, Long> {
     List<MileageLogsEntity> findOpenByVehicleForUpdate(@Param("vehicleId") Long vehicleId);
 
     List<MileageLogsEntity> findByMileageSettledAtIsNullAndEndTimeIsNotNull();
+
+    /** 只取已收車且儀表讀數有效的實際里程；舊紀錄可由綁定路線確認車輛。 */
+    @Query("""
+            select mileage
+            from MileageLogsEntity mileage
+            left join RoutesEntity route on route.id = mileage.routeId
+            where coalesce(mileage.vehicleId, route.vehicleId) = :vehicleId
+              and mileage.endTime is not null
+              and mileage.startOdometer is not null
+              and mileage.startOdometer >= 0
+              and mileage.endOdometer >= mileage.startOdometer
+            order by mileage.endTime desc, mileage.id desc
+            """)
+    List<MileageLogsEntity> findLatestCompletedVehicleMileage(
+            @Param("vehicleId") Long vehicleId, Pageable pageable);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select mileage from MileageLogsEntity mileage where mileage.id = :id")

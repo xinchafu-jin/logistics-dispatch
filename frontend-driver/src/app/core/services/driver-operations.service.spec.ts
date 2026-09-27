@@ -216,6 +216,35 @@ describe('DriverOperationsService', () => {
     photo.flush({url: '/uploads/delivery-photos/proof.jpg'});
   });
 
+  it('loads eligible makeup dates and submits multiple dates with no client driver id', () => {
+    service.getMakeupLeaveCandidates('2026-09-01', '2026-09-30').subscribe();
+    const candidates = httpTesting.expectOne(request => request.url === '/api/driver/leave-requests/makeup-candidates');
+    expect(candidates.request.params.get('from')).toBe('2026-09-01');
+    expect(candidates.request.params.get('to')).toBe('2026-09-30');
+    candidates.flush(['2026-09-24', '2026-09-25']);
+    const payload = {workDates: ['2026-09-24', '2026-09-25'], leaveType: 'SICK' as const, reason: '連續發燒'};
+    service.submitMakeupLeaveBatch(payload).subscribe();
+    const batch = httpTesting.expectOne('/api/driver/leave-requests/makeup-batch');
+    expect(batch.request.method).toBe('POST');
+    expect(batch.request.body).toEqual(payload);
+    expect(batch.request.body.driverId).toBeUndefined();
+    batch.flush([]);
+  });
+
+  it('queries makeup dates by partial period and includes the times in batch and single requests', () => {
+    service.getMakeupLeaveCandidates('2026-09-01', '2026-09-30', '08:00', '09:00').subscribe();
+    const candidates = httpTesting.expectOne(request => request.url === '/api/driver/leave-requests/makeup-candidates');
+    expect(candidates.request.params.get('leaveStart')).toBe('08:00');
+    expect(candidates.request.params.get('leaveEnd')).toBe('09:00'); candidates.flush(['2026-09-24']);
+    const request = {leaveType: 'SICK' as const, reason: '補早上就醫', leaveStart: '08:00', leaveEnd: '09:00'};
+    service.submitMakeupLeaveBatch({...request, workDates: ['2026-09-24']}).subscribe();
+    const batch = httpTesting.expectOne('/api/driver/leave-requests/makeup-batch');
+    expect(batch.request.body).toEqual({...request, workDates: ['2026-09-24']}); batch.flush([]);
+    service.submitMakeupLeave({...request, workDate: '2026-09-24'}).subscribe();
+    const single = httpTesting.expectOne('/api/driver/leave-requests/makeup');
+    expect(single.request.body).toEqual({...request, workDate: '2026-09-24'}); single.flush({});
+  });
+
   it('uses the driver chat endpoints without sending a driver id', () => {
     service.getMessages().subscribe();
     service.getMessages(42).subscribe();

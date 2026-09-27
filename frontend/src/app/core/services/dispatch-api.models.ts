@@ -1,5 +1,5 @@
 export type DriverStatus = 'ACTIVE' | 'INACTIVE';
-export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
+export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'MINOR_MAINTENANCE' | 'MAJOR_MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
 export type ScheduleStatus = 'DRAFT' | 'PUBLISHED';
 export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
@@ -66,7 +66,13 @@ export interface ExceptionCaseDto {
 }
 
 export interface DriverDto {
+  /** 本月至今實際打卡加班分鐘；每滿 30 分鐘計入，與排班上限無關。 */
+  monthlyOvertimeMinutes?: number;
+  monthlyUnsettledShifts?: number;
   id?: number;
+  warehouseId?: number | null;
+  warehouseName?: string | null;
+  warehouseCode?: string | null;
   account: string;
   password?: string;
   name: string;
@@ -293,6 +299,8 @@ export interface FuelPriceDto {
 }
 
 export interface RouteMetricsDto {
+  vehicleId?: number | null;
+  maintenance?: VehicleMaintenanceSummary | null;
   routeId: number;
   date: string;
   plannedKm: number | null;
@@ -364,7 +372,54 @@ export interface ReportCollectionDto<T = Record<string, unknown>> {
   [key: string]: string | number | boolean | null | T[];
 }
 
+export interface ReportWorkforceDto {
+  scheduledWorkShifts: number;
+  excusedFullDayShifts: number;
+  dueShifts: number;
+  attendedShifts: number;
+  onTimeShifts: number;
+  lateShifts: number;
+  missingClockInShifts: number;
+  finishedShifts: number;
+  overtimeShifts: number;
+  overtimeMinutes: number;
+  missingTimeShifts: number;
+  attendanceRate: number | null;
+  onTimeRate: number | null;
+  overtimeRate: number | null;
+}
+export interface ReportFleetDto {
+  startedTrips: number;
+  returnedTrips: number;
+  openTrips: number;
+  invalidTrips: number;
+  usedVehicles: number;
+  distanceRecordedTrips: number;
+  actualKm: number | null;
+  returnRate: number | null;
+}
+export interface ReportWarehousePerformanceDto {
+  warehouseId: number | null;
+  warehouseName: string;
+  workforce: ReportWorkforceDto;
+  fleet: ReportFleetDto;
+}
+export interface ReportPerformanceDto {
+  from: string;
+  to: string;
+  workforce: ReportWorkforceDto;
+  fleet: ReportFleetDto;
+  warehouses: ReportWarehousePerformanceDto[];
+  shifts: Record<string, unknown>[];
+  trips: Record<string, unknown>[];
+}
+
 export interface VehicleDto {
+  tonnage?: number | null;
+  currentOdometerKm?: number | null;
+  lastMinorMaintenanceKm?: number | null;
+  lastMajorMaintenanceKm?: number | null;
+  maintenance?: VehicleMaintenanceSummary | null;
   id?: number;
   /** 車輛所屬倉庫，後端必填 */
   warehouseId: number;
@@ -482,6 +537,8 @@ export interface DispatchDayDto {
   /** yyyy-MM-dd */
   date: string;
   status: DispatchDayStatus;
+  /** 是否仍有已發布路線（跨倉）；與配送進度 status 分開。舊版 API 可能未提供。 */
+  published?: boolean;
   /** 有效訂單數，不含取消的單 */
   orderCount: number;
   pendingConfirmCount: number;
@@ -493,7 +550,52 @@ export interface DispatchDayDto {
 
 /** 看板推播：只說哪一天變了，收到後自己重查 /days、/board */
 export interface DispatchBoardPushDto {
-  date: string;
+  date?: string;
+  resourcesChanged?: boolean;
+}
+
+export interface VehicleMaintenanceSummary {
+  currentOdometerKm: number | null;
+  minorRemainingKm: number | null;
+  majorRemainingKm: number | null;
+  retirementRemainingKm: number | null;
+  warningKm: number;
+  plannedKm: number | null;
+  projectedMinorKm: number | null;
+  projectedMajorKm: number | null;
+  projectedRetirementKm: number | null;
+  decision: 'NORMAL' | 'WARNING' | 'BLOCKED' | 'UNKNOWN';
+  reasons: string[];
+  minorCount: number;
+  majorCount: number;
+  repairCount: number;
+  lastMinorAt: string | null;
+  lastMajorAt: string | null;
+  lastRepairAt: string | null;
+}
+
+export interface VehicleMaintenanceRule {
+  tonnage: number;
+  minorIntervalKm: number;
+  majorIntervalKm: number;
+  retirementKm: number;
+}
+
+export interface VehicleMaintenanceRules {
+  warningKm: number;
+  policies: VehicleMaintenanceRule[];
+}
+
+export interface VehicleMaintenanceRecord {
+  id: number;
+  vehicleId: number;
+  type: 'MINOR' | 'MAJOR' | 'REPAIR';
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  sentAt: string | null;
+  sentOdometerKm: number | null;
+  completedAt: string | null;
+  completedOdometerKm: number | null;
+  cancelledAt: string | null;
 }
 
 /** 當天已被其他倉庫排走的司機，附上排在哪裡好讓畫面說明原因 */

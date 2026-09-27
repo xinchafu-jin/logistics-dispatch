@@ -54,6 +54,7 @@ class DeliveryServiceTest {
     private ExceptionCasesDAO exceptionCasesDAO;
     private OrdersDAO ordersDAO;
     private DriversDAO driversDAO;
+    private PreTripInspectionService preTripInspectionService;
     private OrdersEntity order;
     private DeliveryService service;
 
@@ -63,6 +64,7 @@ class DeliveryServiceTest {
         exceptionCasesDAO = mock(ExceptionCasesDAO.class);
         ordersDAO = mock(OrdersDAO.class);
         driversDAO = mock(DriversDAO.class);
+        preTripInspectionService = mock(PreTripInspectionService.class);
         RoutesDAO routesDAO = mock(RoutesDAO.class);
 
         givenActiveDriver(DRIVER_ID);
@@ -85,6 +87,7 @@ class DeliveryServiceTest {
         order.setDeliveryDate(LocalDate.now(TAIPEI));
         order.setStatus(OrderStatus.CONFIRMED);
         when(ordersDAO.findForUpdate(ORDER_ID)).thenReturn(Optional.of(order));
+        when(ordersDAO.findById(ORDER_ID)).thenReturn(Optional.of(order));
 
         // 新建的訂單（補送單）存檔時才給 id，原單存檔照原樣回傳
         when(ordersDAO.save(any(OrdersEntity.class))).thenAnswer(invocation -> {
@@ -107,12 +110,13 @@ class DeliveryServiceTest {
 
         // 路段里程在抵達時記錄，屬於 RouteLegMileageService 自己的測試範圍，這裡只要不出錯就好
         service = new DeliveryService(deliveryRecordsDAO, exceptionCasesDAO, ordersDAO, routesDAO, driversDAO,
-                mock(RouteLegMileageService.class));
+                mock(RouteLegMileageService.class), preTripInspectionService);
     }
 
     @Test
     void 點交箱數相符_轉為已點交並記下時間() {
         LoadingResponse response = service.load(DRIVER_ID, loading(12, null));
+        verify(preTripInspectionService).requirePassed(DRIVER_ID, ROUTE_ID);
 
         assertEquals(OrderStatus.LOADED, order.getStatus());
         assertNotNull(order.getLoadedAt());
@@ -121,6 +125,16 @@ class DeliveryServiceTest {
         assertNull(response.getExceptionCaseId());
         assertNull(response.getFollowUpOrderId());
         verify(exceptionCasesDAO, never()).save(any());
+    }
+
+    @Test
+    void 安全檢查未通過_不能點交() {
+        doThrow(new IllegalArgumentException("安全檢查尚未通過"))
+                .when(preTripInspectionService).requirePassed(DRIVER_ID, ROUTE_ID);
+
+        assertThrows(IllegalArgumentException.class, () -> service.load(DRIVER_ID, loading(12, null)));
+        verify(ordersDAO, never()).save(any());
+        verify(ordersDAO, never()).findForUpdate(any());
     }
 
     @Test

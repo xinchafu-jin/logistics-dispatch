@@ -51,6 +51,7 @@ public class DeliveryService {
     private final RoutesDAO routesDAO;
     private final DriversDAO driversDAO;
     private final RouteLegMileageService routeLegMileageService;
+    private final PreTripInspectionService preTripInspectionService;
 
     public DeliveryService(
             DeliveryRecordsDAO deliveryRecordsDAO,
@@ -58,7 +59,8 @@ public class DeliveryService {
             OrdersDAO ordersDAO,
             RoutesDAO routesDAO,
             DriversDAO driversDAO,
-            RouteLegMileageService routeLegMileageService
+            RouteLegMileageService routeLegMileageService,
+            PreTripInspectionService preTripInspectionService
     ) {
         this.deliveryRecordsDAO = deliveryRecordsDAO;
         this.exceptionCasesDAO = exceptionCasesDAO;
@@ -66,12 +68,22 @@ public class DeliveryService {
         this.routesDAO = routesDAO;
         this.driversDAO = driversDAO;
         this.routeLegMileageService = routeLegMileageService;
+        this.preTripInspectionService = preTripInspectionService;
     }
 
     /** 倉庫點交：箱數相符轉為 LOADED；不符時原單 FAILED，並建立異常單與明日補送單。 */
     public LoadingResponse load(Long driverId, LoadingRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
+        // 先鎖路線再鎖訂單，與撤回流程保持相同鎖順序；讀取的 routeId 之後仍須重驗。
+        OrdersEntity selected = ordersDAO.findById(request.getOrderId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        DELIVERY_ORDER_NOT_FOUND.formatted(request.getOrderId())));
+        Long selectedRouteId = selected.getRouteId();
+        if (selectedRouteId == null) throw new IllegalArgumentException(DELIVERY_ROUTE_REQUIRED);
+        preTripInspectionService.requirePassed(driverId, selectedRouteId);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
+        if (!selectedRouteId.equals(order.getRouteId()))
+            throw new IllegalArgumentException("任務路線已變更，請重新整理後再點交");
         // 連按兩次時，第二次進來單子已經是 LOADED 或 FAILED，會在這裡被擋下
         requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_LOADING_STATUS_INVALID);
 
