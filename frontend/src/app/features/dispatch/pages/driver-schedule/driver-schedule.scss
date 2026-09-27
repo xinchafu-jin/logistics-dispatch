@@ -20,7 +20,7 @@
 }
 
 .schedule-toolbar {
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 24px;
 }
 
@@ -32,7 +32,6 @@
   letter-spacing: 0.09em;
 }
 
-.schedule-toolbar h2,
 .schedule-grid-panel h3,
 .shift-editor h3,
 .empty-state h3 {
@@ -40,17 +39,6 @@
   color: var(--text);
   font-family: var(--font-display);
   font-weight: 600;
-}
-
-.schedule-toolbar h2 {
-  font-size: 2.25rem;
-}
-
-.schedule-toolbar > div:first-child > p:last-child {
-  max-width: 670px;
-  margin: 12px 0 0;
-  color: var(--muted);
-  line-height: 1.65;
 }
 
 .month-controls {
@@ -1207,7 +1195,6 @@ thead th.is-sunday {
 @media (max-width: 760px) {
   .schedule-toolbar,
   .empty-state { align-items: flex-start; flex-direction: column; }
-  .schedule-toolbar h2 { font-size: 1.625rem; }
   .month-controls { flex-wrap: wrap; }
   .empty-state .primary-action { margin-left: 0; }
   .schedule-summary { align-items: flex-start; flex-direction: column; gap: 16px; }

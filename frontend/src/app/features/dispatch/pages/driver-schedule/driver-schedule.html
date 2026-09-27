@@ -1,22 +1,7 @@
 <main class="driver-schedule-page">
   <header class="schedule-toolbar">
-    <div>
-      <p class="page-eyebrow">司機班表</p>
-      <h2>司機月班表</h2>
-      <p>建立、安排與發布司機每日班次；發布後才會在司機端顯示。</p>
-    </div>
-
     <div class="month-controls" aria-label="選擇班表月份">
-      <button
-        type="button"
-        class="icon-button"
-        (click)="moveMonth(-1)"
-        title="上一個月"
-        aria-label="上一個月"
-      >
-        <mat-icon aria-hidden="true">chevron_left</mat-icon>
-      </button>
-      <!-- Material 日期選擇器從「年」開始選、選到月份就關閉，不進到日；輸入框唯讀，點一下就開月曆 -->
+      <!-- Material 月份選擇器：直接開在 1～12 月（year 視圖），選完月份即關閉，不進入日期格 -->
       <label>
         <span>班表月份</span>
         <mat-form-field class="admin-date-field month-field" appearance="outline" subscriptSizing="dynamic">
@@ -29,28 +14,14 @@
             (click)="monthPicker.open()"
           />
           <mat-datepicker-toggle matIconSuffix [for]="monthPicker" />
-          <mat-datepicker #monthPicker startView="multi-year" (monthSelected)="selectMonth($event, monthPicker)" />
+          <mat-datepicker
+            #monthPicker
+            startView="year"
+            [calendarHeaderComponent]="monthPickerHeader"
+            (monthSelected)="selectMonth($event, monthPicker)"
+          />
         </mat-form-field>
       </label>
-      <button
-        type="button"
-        class="icon-button"
-        (click)="moveMonth(1)"
-        title="下一個月"
-        aria-label="下一個月"
-      >
-        <mat-icon aria-hidden="true">chevron_right</mat-icon>
-      </button>
-      <button
-        type="button"
-        class="icon-button"
-        (click)="refresh()"
-        title="重新整理"
-        aria-label="重新整理"
-        [disabled]="saving()"
-      >
-        <mat-icon aria-hidden="true">refresh</mat-icon>
-      </button>
     </div>
   </header>
 
