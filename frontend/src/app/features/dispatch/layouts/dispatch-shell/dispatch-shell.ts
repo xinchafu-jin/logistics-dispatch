@@ -34,7 +34,6 @@ import {
 } from '../../../../core/services/dispatch-api.models';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
-import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
@@ -84,8 +83,6 @@ export class DispatchShell implements OnInit {
   protected readonly user = inject(AuthService).user;
   protected readonly isSigningOut = signal(false);
   protected readonly isLightTheme = this.theme.isLightTheme;
-  // 頂部欄右側的頁面資訊，由各頁寫入（目前只有今日調度）
-  protected readonly headerMeta = inject(DispatchHeaderService).meta;
   protected readonly isNotificationsOpen = signal(false);
   protected readonly pendingApplicationCount = signal(0);
   protected readonly pendingApplications = signal<DriverAccountApplicationDto[]>([]);

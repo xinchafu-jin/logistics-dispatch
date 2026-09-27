@@ -278,14 +278,6 @@ app-brand-logo {
   background: var(--metal-edge);
 }
 
-.workspace-eyebrow {
-  margin: 0 0 5px;
-  color: var(--accent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-}
-
 .workspace-header h1 {
   margin: 0;
   color: var(--text);
@@ -306,20 +298,6 @@ app-brand-logo {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-}
-
-// 頁面資訊（倉庫 · 資料更新於）：比使用者名稱淡一階，放在它左邊
-.workspace-meta {
-  color: var(--subtle);
-  font-size: 0.8125rem;
-  white-space: nowrap;
-}
-
-// 手機寬度頂部欄塞不下，只留必要的按鈕
-@media (max-width: 640px) {
-  .workspace-meta {
-    display: none;
-  }
 }
 
 .application-notification,

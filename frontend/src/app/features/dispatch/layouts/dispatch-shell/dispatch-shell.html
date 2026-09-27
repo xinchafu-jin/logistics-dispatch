@@ -11,17 +11,10 @@
 
       <span class="workspace-divider" aria-hidden="true"></span>
 
-      <div>
-        <p class="workspace-eyebrow">物流調度</p>
-        <h1>{{ pageTitle() }}</h1>
-      </div>
+      <h1>{{ pageTitle() }}</h1>
     </div>
 
     <div class="workspace-actions">
-      <!-- 由頁面透過 DispatchHeaderService 提供，例如今日調度的「倉庫 · 資料更新於」；沒有就不顯示 -->
-      @if (headerMeta(); as meta) {
-        <span class="workspace-meta">{{ meta }}</span>
-      }
       <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
       <button
         type="button"

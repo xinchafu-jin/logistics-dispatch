@@ -5,7 +5,7 @@
 .fleet-monitor-intro {
   display: flex;
   align-items: end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 24px;
 }
 
@@ -17,23 +17,11 @@
   letter-spacing: 0.09em;
 }
 
-.fleet-monitor-intro h2,
 .fleet-list-panel h3 {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
   font-weight: 600;
-}
-
-.fleet-monitor-intro h2 {
-  font-size: 2.25rem;
-}
-
-.fleet-monitor-intro > div > p:last-child {
-  max-width: 680px;
-  margin: 12px 0 0;
-  color: var(--muted);
-  line-height: 1.7;
 }
 
 .gps-state {
@@ -444,10 +432,6 @@
 @media (max-width: 700px) {
   .fleet-monitor-intro {
     display: grid;
-  }
-
-  .fleet-monitor-intro h2 {
-    font-size: 1.625rem;
   }
 
   .gps-state {

@@ -10,11 +10,10 @@
 .page-intro {
   display: flex;
   align-items: end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 24px;
 }
 
-.page-eyebrow,
 .section-eyebrow {
   margin: 0 0 7px;
   color: var(--accent);
@@ -23,24 +22,12 @@
   letter-spacing: 0.09em;
 }
 
-.page-intro h2,
 .list-header h3,
 .detail-header h3 {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
   font-weight: 600;
-}
-
-.page-intro h2 {
-  font-size: 2rem;
-}
-
-.page-intro > div > p:not(.page-eyebrow) {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 0.9375rem;
-  line-height: 1.65;
 }
 
 .review-summary {
@@ -917,10 +904,6 @@
     display: block;
   }
 
-  .page-intro h2 {
-    font-size: 1.625rem;
-  }
-
   .review-summary {
     width: fit-content;
     margin-top: 20px;
@@ -928,7 +911,6 @@
 
   .intro-actions {
     align-items: start;
-    margin-top: 20px;
   }
 
   .review-workspace {

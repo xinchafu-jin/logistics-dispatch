@@ -11,13 +11,12 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
-import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
+import {Component, computed, DestroyRef, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
-import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {
   DispatchDayDto,
@@ -281,11 +280,6 @@ export class DispatchDashboard implements OnInit {
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
   );
   readonly warehouseName = signal('高雄配送區');
-  private readonly header = inject(DispatchHeaderService);
-  // 倉庫名稱與更新時間顯示在頂部欄（dispatch-shell），這頁本身不再畫；兩個 signal 任一變了就同步過去
-  private readonly syncHeaderMeta = effect(() => {
-    this.header.meta.set(`${this.warehouseName()} · 資料更新於 ${this.updatedAt()}`);
-  });
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
@@ -538,8 +532,6 @@ export class DispatchDashboard implements OnInit {
   });
 
   ngOnInit(): void {
-    // 離開這頁就清掉頂部欄的資訊，不然切到別頁還會顯示這頁的倉庫與更新時間
-    this.destroyRef.onDestroy(() => this.header.meta.set(null));
     this.loadDashboard();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
