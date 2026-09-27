@@ -284,11 +284,6 @@ export interface NoSignatureRequest {
   notes?: string;
 }
 
-export interface DriverExceptionRequest {
-  orderId: number;
-  description: string;
-}
-
 export interface PhotoUploadResponse {
   url: string;
 }
@@ -425,6 +420,8 @@ export interface DriverMessageDto {
   createdAt: string;
   /** 對方讀到的時間；null 或沒有這個欄位都代表還沒讀 */
   readAt?: string | null;
+  /** 屬於哪件案件的對話；null 或沒有這個欄位＝一般對話 */
+  exceptionCaseId?: number | null;
 }
 
 /** POST /api/driver/messages 的請求本體。對話屬於誰、誰發的、時間都由後端決定，只送內容 */
@@ -432,8 +429,11 @@ export interface DriverMessageRequest {
   content: string;
 }
 
-/** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */
-export type DriverMessagePushType = 'MESSAGE' | 'READ';
+/**
+ * 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀，
+ * CASE_OPENED／CASE_CLOSED＝案件建立、結案（後端還沒做，先照約定接好）
+ */
+export type DriverMessagePushType = 'MESSAGE' | 'READ' | 'CASE_OPENED' | 'CASE_CLOSED';
 
 /**
  * WebSocket 推播的內容，從私人頻道 /user/queue/messages 收到。對應後端 DriverMessagePushResponse。
@@ -448,4 +448,60 @@ export interface DriverMessagePushDto {
   readSenderType?: MessageSender | null;
   /** 標已讀的時間；只有 READ 有 */
   readAt?: string | null;
+  /** READ 標的是哪一串；null 或沒有這個欄位＝一般對話。MESSAGE 改看 message.exceptionCaseId */
+  exceptionCaseId?: number | null;
+  /** 案件本體；只有 CASE_OPENED、CASE_CLOSED 有 */
+  exceptionCase?: DriverCaseDto | null;
+}
+
+// ── 例外回報案件（對應後端 /api/driver/cases）──────────────────────────
+// 後端還沒實作，這裡的欄位就是前後端的約定：後端照這個形狀回，前端不用再改
+
+/** 司機可以選的分類。後端存進 exception_cases.category（VARCHAR），中文標籤與圖示只放在前端 */
+export type DriverCaseCategory =
+  | 'VEHICLE'
+  | 'ACCIDENT'
+  | 'ROAD'
+  | 'STORE'
+  | 'GOODS'
+  | 'PERSONAL'
+  | 'SYSTEM'
+  | 'OTHER';
+
+/** 對應 ExceptionStatus。資料庫只有這兩種；畫面上的「等待回覆／處理中」用 acceptedAt 推算，不另外加狀態 */
+export type DriverCaseStatus = 'OPEN' | 'CLOSED';
+
+/** POST /api/driver/cases 的請求本體。司機、路線、建立時間都由後端決定，不從前端收 */
+export interface DriverCaseRequest {
+  category: DriverCaseCategory;
+  /** 跟某張單有關才帶；車輛、路況這類整台車的狀況是 null */
+  orderId: number | null;
+  /** 快選情境加上補充說明組成的一段文字，最多 1000 字 */
+  description: string;
+  /** 還能不能繼續配送；後台用來排序，不能繼續的排最前面 */
+  canContinue: boolean;
+  /** 先上傳 /api/driver/delivery-photo 拿到的網址；沒拍照是 null */
+  photoUrl: string | null;
+}
+
+/** 一件案件。對應後端 DriverCaseResponse（GET /api/driver/cases、建立後的回應、推播都是這個形狀） */
+export interface DriverCaseDto {
+  id: number;
+  category: DriverCaseCategory;
+  status: DriverCaseStatus;
+  orderId: number | null;
+  orderNumber: string | null;
+  storeName: string | null;
+  description: string;
+  canContinue: boolean;
+  photoUrl: string | null;
+  createdAt: string;
+  /** 第一位管理員回覆的時間；null＝還在等調度中心回覆 */
+  acceptedAt: string | null;
+  /** 結案時間；OPEN 時是 null */
+  handledAt: string | null;
+  /** 後台結案時填的處理結果；OPEN 時是 null */
+  resolution: string | null;
+  /** 調度中心在這件案件發的、司機還沒讀的訊息數 */
+  unreadCount: number;
 }

@@ -164,7 +164,6 @@ describe('DriverOperationsService', () => {
     service.startMileage({ odometer: 18_400 }).subscribe();
     service.endMileage({ odometer: 18_438 }).subscribe();
     service.recalculateMileage().subscribe();
-    service.reportException({orderId: 41, description: '外箱破損，已拍照存證。'}).subscribe();
     service.uploadDeliveryPhoto(new File(['proof'], 'proof.jpg', {type: 'image/jpeg'})).subscribe();
 
     const loading = httpTesting.expectOne('/api/driver/loading');
@@ -206,10 +205,6 @@ describe('DriverOperationsService', () => {
     expect(recalculate.request.body).toEqual({});
     recalculate.flush({});
 
-    const exception = httpTesting.expectOne('/api/driver/exception');
-    expect(exception.request.body).toEqual({orderId: 41, description: '外箱破損，已拍照存證。'});
-    exception.flush({});
-
     const photo = httpTesting.expectOne('/api/driver/delivery-photo');
     expect(photo.request.method).toBe('POST');
     expect(photo.request.body).toBeInstanceOf(FormData);
@@ -244,6 +239,61 @@ describe('DriverOperationsService', () => {
     send.flush({});
 
     const read = httpTesting.expectOne('/api/driver/messages/read');
+    expect(read.request.method).toBe('POST');
+    read.flush(1);
+  });
+
+  it('uses the driver case endpoints without sending a driver id', () => {
+    service.getCases().subscribe();
+    service.createCase({
+      category: 'VEHICLE',
+      orderId: null,
+      description: '爆胎：停在台 1 線路肩',
+      canContinue: false,
+      photoUrl: null,
+    }).subscribe();
+    service.getCaseMessages(7).subscribe();
+    service.getCaseMessages(7, 42).subscribe();
+    service.sendCaseMessage(7, '三角錐放好了').subscribe();
+    service.markCaseMessagesRead(7).subscribe();
+
+    const list = httpTesting.expectOne(
+      (request) => request.method === 'GET' && request.url === '/api/driver/cases',
+    );
+    list.flush([]);
+
+    const create = httpTesting.expectOne(
+      (request) => request.method === 'POST' && request.url === '/api/driver/cases',
+    );
+    // 司機、路線、時間由後端決定，請求只有司機填的內容
+    expect(create.request.body).toEqual({
+      category: 'VEHICLE',
+      orderId: null,
+      description: '爆胎：停在台 1 線路肩',
+      canContinue: false,
+      photoUrl: null,
+    });
+    create.flush({});
+
+    // 跟一般對話一樣：第一次打開不能帶 afterId
+    const firstLoad = httpTesting.expectOne(
+      (request) =>
+        request.method === 'GET' && request.url === '/api/driver/cases/7/messages' && !request.params.has('afterId'),
+    );
+    firstLoad.flush([]);
+
+    const catchUp = httpTesting.expectOne(
+      (request) => request.url === '/api/driver/cases/7/messages' && request.params.get('afterId') === '42',
+    );
+    catchUp.flush([]);
+
+    const send = httpTesting.expectOne(
+      (request) => request.method === 'POST' && request.url === '/api/driver/cases/7/messages',
+    );
+    expect(send.request.body).toEqual({content: '三角錐放好了'});
+    send.flush({});
+
+    const read = httpTesting.expectOne('/api/driver/cases/7/messages/read');
     expect(read.request.method).toBe('POST');
     read.flush(1);
   });

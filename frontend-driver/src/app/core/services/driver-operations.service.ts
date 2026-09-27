@@ -6,7 +6,8 @@ import {
   AttendanceRecordDto,
   DeliverRequest,
   DeliveryRecordResponse,
-  DriverExceptionRequest,
+  DriverCaseDto,
+  DriverCaseRequest,
   DriverLeaveHistoryResponse,
   DriverLeaveBatchResponse,
   DriverMakeupLeaveRequest,
@@ -139,10 +140,6 @@ export class DriverOperationsService {
     return this.http.post<PhotoUploadResponse>('/api/driver/delivery-photo', formData);
   }
 
-  reportException(request: DriverExceptionRequest): Observable<DeliveryRecordResponse> {
-    return this.http.post<DeliveryRecordResponse>('/api/driver/exception', request);
-  }
-
   startMileage(request: MileageRequest): Observable<MileageLogResponse> {
     return this.http.post<MileageLogResponse>('/api/driver/mileage/start', request);
   }
@@ -187,5 +184,38 @@ export class DriverOperationsService {
    */
   markMessagesRead(): Observable<number> {
     return this.http.post<number>('/api/driver/messages/read', {});
+  }
+
+  // ── 例外回報案件（後端還沒實作；網址與形狀是約定，見 driver-operations.models.ts）──
+  // 跟聊天一樣不帶 driverId：後端從 token 取，而且要檢查案件是不是這位司機的，不然改網址上的 id 就能讀別人的案件
+
+  /** 自己的案件，含每件的未讀數；支援中心打開、WebSocket 連上時各抓一次 */
+  getCases(): Observable<DriverCaseDto[]> {
+    return this.http.get<DriverCaseDto[]>('/api/driver/cases');
+  }
+
+  /** 建立案件，回傳存好的案件（含 id），前端直接切到這件案件的對話 */
+  createCase(request: DriverCaseRequest): Observable<DriverCaseDto> {
+    return this.http.post<DriverCaseDto>('/api/driver/cases', request);
+  }
+
+  /** 案件對話，一律由舊到新；afterId 的用法跟 getMessages 一樣 */
+  getCaseMessages(caseId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`/api/driver/cases/${caseId}/messages`, {params});
+  }
+
+  /** 在案件裡留言；已結案的案件後端要擋，不能只靠前端把輸入框關掉 */
+  sendCaseMessage(caseId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`/api/driver/cases/${caseId}/messages`, request);
+  }
+
+  /** 把這件案件裡調度中心的回覆標成已讀；只標這一串，不能動到一般對話或其他案件 */
+  markCaseMessagesRead(caseId: number): Observable<number> {
+    return this.http.post<number>(`/api/driver/cases/${caseId}/messages/read`, {});
   }
 }

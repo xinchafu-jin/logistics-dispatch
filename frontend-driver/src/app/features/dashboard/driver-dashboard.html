@@ -75,19 +75,20 @@
         </section>
       }
       <div class="map-quick-actions">
+        <!-- 支援中心：回報問題、案件對話、一般對話都從這裡進；紅點是一般對話加上所有案件的未讀 -->
         <button
           type="button"
           matIconButton
           class="chat-control"
-          (click)="openDriverChat()"
-          title="聊天室"
-          aria-label="聊天室"
-          [matBadge]="unreadChatCount() > 99 ? '99+' : unreadChatCount()"
-          [matBadgeHidden]="unreadChatCount() === 0"
-          [matBadgeDescription]="unreadChatCount() + ' 則未讀訊息'"
+          (click)="openSupportCenter()"
+          title="支援中心"
+          aria-label="支援中心"
+          [matBadge]="supportUnreadCount() > 99 ? '99+' : supportUnreadCount()"
+          [matBadgeHidden]="supportUnreadCount() === 0"
+          [matBadgeDescription]="supportUnreadCount() + ' 則未讀訊息'"
           matBadgeSize="small"
         >
-          <mat-icon aria-hidden="true">forum</mat-icon>
+          <mat-icon aria-hidden="true">support_agent</mat-icon>
         </button>
         <button
           type="button"
@@ -601,10 +602,11 @@
                               <mat-icon aria-hidden="true">warning_amber</mat-icon>
                               無人簽收
                             </button>
+                            <!-- 開支援中心的建立案件：分類是貨物問題、帶入這張單 -->
                             <button
                               type="button"
                               class="delivery-exception-button"
-                              (click)="toggleDeliveryException()"
+                              (click)="reportStopIssue(stop)"
                               [disabled]="isTaskSubmitting()"
                             >
                               <mat-icon aria-hidden="true">report_problem</mat-icon>
@@ -618,27 +620,6 @@
                               取消
                             </button>
                           </div>
-                          @if (deliveryExceptionOpen()) {
-                            <label class="delivery-exception-detail">
-                              <span>異常說明</span>
-                              <textarea
-                                rows="3"
-                                maxlength="1000"
-                                placeholder="例如貨物短少、外箱破損或現場無法交付的原因"
-                                [value]="deliveryExceptionDescription()"
-                                [disabled]="isTaskSubmitting()"
-                                (input)="updateDeliveryExceptionDescription($event)"
-                              ></textarea>
-                              <button
-                                type="button"
-                                class="delivery-exception-button"
-                                (click)="reportDeliveryException(stop)"
-                                [disabled]="isTaskSubmitting()"
-                              >
-                                送出異常
-                              </button>
-                            </label>
-                          }
                         </section>
                       }
                     </li>
@@ -975,75 +956,421 @@
   </nav>
 </main>
 
-<!-- 與調度中心的聊天：交給 MatBottomSheet 開啟（openDriverChat），不另外開元件。
-     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到 -->
+<!-- 支援中心：交給 MatBottomSheet 開啟（openSupportCenter、reportStopIssue），不另外開元件。
+     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到。
+     裡面三頁由 supportView 決定：home 首頁、create 建立案件、thread 對話（一般對話或某件案件） -->
 <ng-template #driverChatSheet>
   <section class="driver-chat-sheet" aria-labelledby="driver-chat-title">
     <header class="driver-chat-sheet__header">
-      <div>
-        <p class="driver-chat-sheet__eyebrow">配送支援</p>
-        <h2 id="driver-chat-title">調度中心</h2>
+      @if (supportView().kind !== 'home') {
+        <button type="button" matIconButton aria-label="回支援中心" (click)="backToSupportHome()">
+          <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        </button>
+      }
+      <div class="driver-chat-sheet__heading">
+        <p class="driver-chat-sheet__eyebrow">{{ supportHeading().eyebrow }}</p>
+        <h2 id="driver-chat-title">{{ supportHeading().title }}</h2>
       </div>
-      <button type="button" matIconButton aria-label="關閉" (click)="closeDriverChat()">
+      @if (activeCase(); as current) {
+        <em [class]="caseStatusClass(current)">{{ caseStatusLabel(current) }}</em>
+      }
+      <button type="button" matIconButton aria-label="關閉" (click)="closeSupportCenter()">
         <mat-icon aria-hidden="true">close</mat-icon>
       </button>
     </header>
-    <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
-      @if (chatViewState() === 'loading') {
-        <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
-      } @else if (chatViewState() === 'error') {
-        <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
-      } @else if (chatViewState() === 'empty') {
-        <div class="driver-chat-empty">
-          <mat-icon aria-hidden="true">forum</mat-icon>
-          <strong>目前還沒有對話</strong>
-          <span>有狀況可以直接在下方留言給調度中心</span>
-        </div>
-      } @else {
-        @for (message of chatMessages(); track message.id) {
-          <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
-            <p>{{ message.content }}</p>
-            <small>
-              {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
-              @if (isOwnChatMessage(message) && message.readAt) {
-                · 已讀
+
+    @switch (supportView().kind) {
+      @case ('home') {
+        <div class="support-body">
+          @if (caseListState() === 'error') {
+            <p class="support-notice is-error" role="status">
+              案件清單暫時無法取得。還是可以回報新問題，或用一般對話聯絡調度中心。
+            </p>
+          }
+
+          @if (openCases().length > 0) {
+            <section class="support-section" aria-labelledby="support-open-title">
+              <h3 id="support-open-title" class="support-section-title">處理中的案件</h3>
+              <ul class="support-case-list">
+                @for (item of openCases(); track item.id) {
+                  <li>
+                    <!-- 還沒有人回覆的用橘框：司機一眼看得出哪件還在等 -->
+                    <button
+                      type="button"
+                      class="support-case-row"
+                      [class.is-waiting]="!item.acceptedAt"
+                      (click)="openCaseThread(item.id)"
+                    >
+                      <mat-icon aria-hidden="true">{{ caseCategoryIcon(item.category) }}</mat-icon>
+                      <span class="support-row-copy">
+                        <strong>{{ caseCategoryLabel(item.category) }}</strong>
+                        <small>{{ item.description }}</small>
+                      </span>
+                      <span class="support-case-row__meta">
+                        <em [class]="caseStatusClass(item)">{{ caseStatusLabel(item) }}</em>
+                        <small>{{ formatCaseTime(item.createdAt) }}</small>
+                      </span>
+                      @if (item.unreadCount > 0) {
+                        <b class="support-unread" [attr.aria-label]="item.unreadCount + ' 則未讀'">{{ item.unreadCount }}</b>
+                      }
+                    </button>
+                  </li>
+                }
+              </ul>
+            </section>
+          } @else if (caseListState() === 'loading') {
+            <p class="driver-chat-sheet__placeholder">正在取得案件...</p>
+          }
+
+          <section class="support-section" aria-labelledby="support-new-title">
+            <h3 id="support-new-title" class="support-section-title">回報新問題</h3>
+            <div class="support-category-grid">
+              @for (option of caseCategories; track option.code) {
+                <button
+                  type="button"
+                  class="support-category"
+                  [class.is-urgent]="option.urgent"
+                  (click)="startCase(option.code)"
+                >
+                  <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+                  <span>{{ option.label }}</span>
+                </button>
               }
-            </small>
-          </article>
+            </div>
+          </section>
+
+          <section class="support-section" aria-label="其他聯絡方式">
+            <button type="button" class="support-link-row" (click)="openCaseThread(null)">
+              <mat-icon aria-hidden="true">forum</mat-icon>
+              <span class="support-row-copy">
+                <strong>一般對話</strong>
+                <small>不屬於案件的事，直接留言給調度中心</small>
+              </span>
+              @if (unreadChatCount() > 0) {
+                <b class="support-unread" [attr.aria-label]="unreadChatCount() + ' 則未讀'">{{ unreadChatCount() }}</b>
+              }
+              <mat-icon aria-hidden="true">chevron_right</mat-icon>
+            </button>
+            <!-- 網路不通或 App 壞掉時案件也送不出去，一定要留一條打電話的路 -->
+            @if (warehousePhone(); as phone) {
+              <a class="support-link-row" [href]="'tel:' + phone">
+                <mat-icon aria-hidden="true">call</mat-icon>
+                <span class="support-row-copy">
+                  <strong>打給倉庫</strong>
+                  <small>{{ phone }} · 網路不通或緊急時</small>
+                </span>
+              </a>
+            }
+          </section>
+
+          @if (closedCases().length > 0) {
+            <section class="support-section">
+              <button
+                type="button"
+                class="support-toggle"
+                [attr.aria-expanded]="isClosedCaseListOpen()"
+                (click)="toggleClosedCaseList()"
+              >
+                <span>已結案（{{ closedCases().length }}）</span>
+                <mat-icon aria-hidden="true">{{ isClosedCaseListOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </button>
+              @if (isClosedCaseListOpen()) {
+                <ul class="support-case-list">
+                  @for (item of closedCases(); track item.id) {
+                    <li>
+                      <button type="button" class="support-case-row is-closed" (click)="openCaseThread(item.id)">
+                        <mat-icon aria-hidden="true">{{ caseCategoryIcon(item.category) }}</mat-icon>
+                        <span class="support-row-copy">
+                          <strong>{{ caseCategoryLabel(item.category) }}</strong>
+                          <small>{{ item.resolution || item.description }}</small>
+                        </span>
+                        <span class="support-case-row__meta">
+                          <em [class]="caseStatusClass(item)">{{ caseStatusLabel(item) }}</em>
+                          <small>{{ formatCaseTime(item.handledAt ?? item.createdAt) }}</small>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+        </div>
+      }
+
+      @case ('create') {
+        @if (activeCategory(); as category) {
+          <form class="support-case-form" (ngSubmit)="submitCase()">
+            <div class="support-body">
+              @if (category.notice) {
+                <div class="support-notice" [class.is-danger]="category.urgent" role="note">
+                  <p>{{ category.notice }}</p>
+                  @if (category.calls) {
+                    <div class="support-calls">
+                      @for (call of category.calls; track call.tel) {
+                        <a [href]="'tel:' + call.tel">
+                          <mat-icon aria-hidden="true">call</mat-icon>
+                          {{ call.label }}
+                        </a>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- 快選只是幫忙組說明文字，不另外存；送出時組成「爆胎、警示燈亮：補充說明」 -->
+              @if (category.quickPicks.length > 0) {
+                <fieldset class="support-field">
+                  <legend>發生什麼事（可以選好幾個）</legend>
+                  <div class="support-picks">
+                    @for (pick of category.quickPicks; track pick) {
+                      <button
+                        type="button"
+                        class="support-pick"
+                        [class.is-selected]="isCasePickSelected(pick)"
+                        [attr.aria-pressed]="isCasePickSelected(pick)"
+                        (click)="toggleCasePick(pick)"
+                      >
+                        {{ pick }}
+                      </button>
+                    }
+                  </div>
+                </fieldset>
+              }
+
+              <label class="support-field">
+                <span>相關訂單</span>
+                <select (change)="selectCaseOrder($event)">
+                  <option value="" [selected]="caseOrderId() === null">不指定（整台車或路上的狀況）</option>
+                  @for (stop of caseOrderOptions(); track stop.orderId) {
+                    <option [value]="stop.orderId" [selected]="caseOrderId() === stop.orderId">
+                      {{ stop.sequence }}. {{ stop.storeName }}（{{ taskStatusLabel(stop.orderStatus) }}）
+                    </option>
+                  }
+                </select>
+              </label>
+
+              <!-- 不給預設值：要司機自己按，後台靠這一題判斷要不要馬上處理 -->
+              <fieldset class="support-field">
+                <legend>還能繼續配送嗎</legend>
+                <div class="support-choice">
+                  <button
+                    type="button"
+                    [class.is-selected]="caseCanContinue() === true"
+                    [attr.aria-pressed]="caseCanContinue() === true"
+                    (click)="setCaseCanContinue(true)"
+                  >
+                    可以
+                  </button>
+                  <button
+                    type="button"
+                    class="is-stop"
+                    [class.is-selected]="caseCanContinue() === false"
+                    [attr.aria-pressed]="caseCanContinue() === false"
+                    (click)="setCaseCanContinue(false)"
+                  >
+                    不行，需要支援
+                  </button>
+                </div>
+              </fieldset>
+
+              <label class="support-field">
+                <span>{{ category.quickPicks.length > 0 ? '補充說明（選填）' : '說明' }}</span>
+                <!-- 900 字：留位置給前面組進去的快選，加起來不超過後端的 1000 字 -->
+                <textarea
+                  rows="3"
+                  maxlength="900"
+                  placeholder="例如：停在台 1 線路肩，已開雙黃燈"
+                  [value]="caseNote()"
+                  (input)="updateCaseNote($event)"
+                ></textarea>
+              </label>
+
+              <div class="support-field">
+                <span>照片（選填）</span>
+                <div class="support-photo">
+                  <label class="support-photo-button">
+                    <mat-icon aria-hidden="true">photo_camera</mat-icon>
+                    {{ casePhoto() ? '換一張' : '拍照或選照片' }}
+                    <input
+                      class="support-photo-input"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      (change)="selectCasePhoto($event)"
+                    />
+                  </label>
+                  @if (casePhoto(); as photo) {
+                    <small>{{ photo.name }}</small>
+                    <button type="button" class="support-photo-remove" (click)="removeCasePhoto()">移除</button>
+                  }
+                </div>
+              </div>
+            </div>
+
+            @if (caseFormError()) {
+              <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ caseFormError() }}</p>
+            }
+            <button type="submit" class="primary-action support-submit" [disabled]="isSubmittingCase()">
+              <mat-icon aria-hidden="true">send</mat-icon>
+              {{ isSubmittingCase() ? '送出中...' : '送出並開始對話' }}
+            </button>
+          </form>
         }
       }
-    </section>
 
-    @if (chatSendError()) {
-      <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+      @case ('thread') {
+        @if (activeCase(); as current) {
+          <section class="driver-chat-thread" aria-live="polite" aria-label="案件對話內容">
+            <!-- 案件卡：司機當初回報的內容，放在對話最上面 -->
+            <article class="support-case-card">
+              <header>
+                <mat-icon aria-hidden="true">{{ caseCategoryIcon(current.category) }}</mat-icon>
+                <strong>{{ caseCategoryLabel(current.category) }}</strong>
+                <span [class.is-stop]="!current.canContinue">
+                  {{ current.canContinue ? '可以繼續配送' : '無法繼續配送' }}
+                </span>
+              </header>
+              <p>{{ current.description }}</p>
+              <dl>
+                @if (current.orderNumber) {
+                  <div>
+                    <dt>訂單</dt>
+                    <dd>{{ current.orderNumber }}@if (current.storeName) { · {{ current.storeName }}}</dd>
+                  </div>
+                }
+                <div>
+                  <dt>回報時間</dt>
+                  <dd>{{ formatCaseTime(current.createdAt) }}</dd>
+                </div>
+              </dl>
+              @if (current.photoUrl) {
+                <a class="support-case-card__photo" [href]="current.photoUrl" target="_blank" rel="noopener">
+                  <img [src]="current.photoUrl" alt="回報時附的照片" />
+                </a>
+              }
+            </article>
+
+            @if (caseThreadState() === 'loading') {
+              <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+            } @else if (caseThreadState() === 'error') {
+              <p class="driver-chat-sheet__placeholder is-error">目前無法取得對話內容。</p>
+            } @else if (caseMessages().length === 0) {
+              <p class="driver-chat-sheet__placeholder">
+                {{ current.status === 'CLOSED' ? '這件案件沒有對話紀錄。' : '案件已送出，調度中心的回覆會顯示在這裡。' }}
+              </p>
+            }
+            @for (message of caseMessages(); track message.id) {
+              <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+                <p>{{ message.content }}</p>
+                <small>
+                  {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+                  @if (isOwnChatMessage(message) && message.readAt) {
+                    · 已讀
+                  }
+                </small>
+              </article>
+            }
+          </section>
+
+          @if (current.status === 'CLOSED') {
+            <!-- 結案後只能看：輸入框換成處理結果。後端也要擋已結案的留言，這裡拿掉輸入框只是畫面 -->
+            <section class="support-resolution" aria-label="處理結果">
+              <strong>
+                <mat-icon aria-hidden="true">task_alt</mat-icon>
+                已結案 · {{ formatCaseTime(current.handledAt) }}
+              </strong>
+              <p>{{ current.resolution || '調度中心沒有填寫處理結果。' }}</p>
+            </section>
+          } @else {
+            @if (caseSendError()) {
+              <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ caseSendError() }}</p>
+            }
+            <form class="driver-chat-composer" (ngSubmit)="sendCaseMessage()">
+              <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                <textarea
+                  matInput
+                  cdkTextareaAutosize
+                  cdkAutosizeMinRows="1"
+                  cdkAutosizeMaxRows="4"
+                  maxlength="1000"
+                  placeholder="補充狀況給調度中心"
+                  name="caseChatInput"
+                  aria-label="輸入這件案件的訊息"
+                  [(ngModel)]="caseChatInput"
+                ></textarea>
+              </mat-form-field>
+              <button
+                type="submit"
+                matIconButton
+                aria-label="送出"
+                [disabled]="isSendingCaseMessage() || !caseChatInput().trim()"
+              >
+                <mat-icon aria-hidden="true">send</mat-icon>
+              </button>
+            </form>
+          }
+        } @else if (isGeneralThread()) {
+          <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
+            @if (chatViewState() === 'loading') {
+              <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+            } @else if (chatViewState() === 'error') {
+              <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
+            } @else if (chatViewState() === 'empty') {
+              <div class="driver-chat-empty">
+                <mat-icon aria-hidden="true">forum</mat-icon>
+                <strong>目前還沒有對話</strong>
+                <span>有狀況可以直接在下方留言給調度中心</span>
+              </div>
+            } @else {
+              @for (message of chatMessages(); track message.id) {
+                <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+                  <p>{{ message.content }}</p>
+                  <small>
+                    {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+                    @if (isOwnChatMessage(message) && message.readAt) {
+                      · 已讀
+                    }
+                  </small>
+                </article>
+              }
+            }
+          </section>
+
+          @if (chatSendError()) {
+            <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+          }
+
+          <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
+          <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
+            <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
+            <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+              <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
+              <textarea
+                matInput
+                cdkTextareaAutosize
+                cdkAutosizeMinRows="1"
+                cdkAutosizeMaxRows="4"
+                maxlength="1000"
+                placeholder="留言給調度中心"
+                name="chatInput"
+                aria-label="輸入給調度中心的訊息"
+                [(ngModel)]="chatInput"
+              ></textarea>
+            </mat-form-field>
+            <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+            <button
+              type="submit"
+              matIconButton
+              aria-label="送出"
+              [disabled]="isSendingChatMessage() || !chatInput().trim()"
+            >
+              <mat-icon aria-hidden="true">send</mat-icon>
+            </button>
+          </form>
+        } @else {
+          <p class="driver-chat-sheet__placeholder is-error">找不到這件案件，請回支援中心再試一次。</p>
+        }
+      }
     }
-
-    <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
-    <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
-      <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
-      <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
-        <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
-        <textarea
-          matInput
-          cdkTextareaAutosize
-          cdkAutosizeMinRows="1"
-          cdkAutosizeMaxRows="4"
-          maxlength="1000"
-          placeholder="留言給調度中心"
-          name="chatInput"
-          aria-label="輸入給調度中心的訊息"
-          [(ngModel)]="chatInput"
-        ></textarea>
-      </mat-form-field>
-      <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
-      <button
-        type="submit"
-        matIconButton
-        aria-label="送出"
-        [disabled]="isSendingChatMessage() || !chatInput().trim()"
-      >
-        <mat-icon aria-hidden="true">send</mat-icon>
-      </button>
-    </form>
   </section>
 </ng-template>
