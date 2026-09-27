@@ -789,6 +789,70 @@ app-brand-logo {
   z-index: 80;
 }
 
+.sticky-note-launcher {
+  position: fixed;
+  top: 50%;
+  z-index: 75;
+  display: grid;
+  width: 52px;
+  min-width: 52px;
+  height: 64px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--metal-edge);
+  color: var(--accent);
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sticky-note-launcher.is-right {
+  right: 0;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+}
+
+.sticky-note-launcher.is-left {
+  left: 76px;
+  border-left: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.sticky-note-launcher.is-dragging {
+  z-index: 100;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 38%);
+  cursor: grabbing;
+}
+
+.sticky-note-launcher mat-icon {
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+  font-size: 24px;
+  line-height: 24px;
+}
+
+.sticky-note-launcher__count {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  place-items: center;
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  color: var(--button-text);
+  background: var(--accent);
+  font-size: 0.625rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .chat-panel {
   position: fixed;
   right: 24px;
@@ -1004,7 +1068,8 @@ app-brand-logo {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-panel {
+  .chat-panel,
+  .sticky-note-launcher {
     animation: none;
     transition: none;
   }

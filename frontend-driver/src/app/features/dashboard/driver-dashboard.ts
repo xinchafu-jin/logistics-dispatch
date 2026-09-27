@@ -77,6 +77,7 @@ interface DriverLeaveForm {
 }
 
 type LeaveApplicationTab = 'temporary' | 'planned' | 'makeup';
+type LeaveTopic = 'schedule' | 'emergency';
 
 interface DriverPlannedLeaveForm {
   leaveType: DriverLeaveRequest['leaveType'];
@@ -281,6 +282,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     reason: '',
   });
   protected readonly leaveApplicationTab = signal<LeaveApplicationTab>('temporary');
+  protected readonly leaveTopic = signal<LeaveTopic>('schedule');
   protected readonly plannedLeaveForm = signal<DriverPlannedLeaveForm>({
     leaveType: 'ANNUAL',
     workDates: [],
@@ -1237,6 +1239,14 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     if (tab === 'planned') {
       this.loadPlannedLeaveShifts();
     }
+  }
+
+  protected setLeaveTopic(topic: LeaveTopic): void {
+    this.leaveTopic.set(topic);
+    this.leaveError.set(null);
+    this.leaveMessage.set(null);
+    this.emergencyLeaveError.set(null);
+    this.emergencyLeaveMessage.set(null);
   }
 
   protected updatePlannedLeaveField<K extends keyof DriverPlannedLeaveForm>(
