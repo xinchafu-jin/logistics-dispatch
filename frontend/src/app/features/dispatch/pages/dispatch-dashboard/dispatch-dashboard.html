@@ -191,6 +191,13 @@
               刪除編組
             </button>
           }
+        } @else {
+          <!-- 發布後工具列只剩撤回：撤回是整天跨倉的動作，按下先跳確認（confirmWithdraw） -->
+          <span class="toolbar-spacer"></span>
+
+          <button type="button" class="toolbar-action" (click)="confirmWithdraw()" [disabled]="busy()">
+            {{ withdrawing() ? '撤回中…' : '撤回發布' }}
+          </button>
         }
       </section>
 
@@ -551,5 +558,17 @@
   <mat-dialog-actions align="end">
     <button type="button" matButton [mat-dialog-close]="false">取消</button>
     <button type="button" matButton="filled" [mat-dialog-close]="true">儲存</button>
+  </mat-dialog-actions>
+</ng-template>
+
+<!-- 按「撤回發布」時跳出；由 confirmWithdraw() 開啟。能不能撤回的規則寫在 DispatchGuardService.assertCanWithdraw -->
+<ng-template #withdrawDialog>
+  <mat-dialog-content>
+    <p>撤回 {{ dispatchDateLabel() }} 全部倉庫的發布？</p>
+    <p>路線會改回草稿，司機端的任務會先消失，改完重新發布才會出現。當天只要有任何一張單已點交、配送中或已結束，整批都不能撤回。</p>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button type="button" matButton [mat-dialog-close]="false">取消</button>
+    <button type="button" matButton="filled" [mat-dialog-close]="true">撤回</button>
   </mat-dialog-actions>
 </ng-template>

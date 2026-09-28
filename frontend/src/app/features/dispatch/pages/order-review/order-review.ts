@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
+import { ActivatedRoute } from '@angular/router';
 import {MatIconModule} from '@angular/material/icon';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
@@ -133,6 +134,7 @@ function describeError(error: unknown): string {
 export class OrderReview implements OnInit {
   private readonly api = inject(DispatchApiService);
   private readonly importer = inject(OrderImportService);
+  private readonly route = inject(ActivatedRoute, {optional: true});
 
   readonly filters: { key: FilterKey; label: string }[] = [
     { key: 'all', label: '全部' },
@@ -147,6 +149,13 @@ export class OrderReview implements OnInit {
   readonly warehouses = signal<WarehouseDto[]>([]);
   readonly activeFilter = signal<FilterKey>('all');
   readonly searchTerm = signal('');
+  readonly deliveryDateFrom = signal('');
+  readonly deliveryDateTo = signal('');
+  readonly dateRangeError = computed(() => {
+    const from = this.deliveryDateFrom();
+    const to = this.deliveryDateTo();
+    return from && to && from > to ? '開始日期不能晚於結束日期，請調整日期區間。' : '';
+  });
   readonly selectedOrderId = signal('');
   readonly actionMessage = signal('確認資料後，可將配送需求送入待排車佇列。');
   readonly loading = signal(true);
@@ -163,11 +172,17 @@ export class OrderReview implements OnInit {
   readonly filteredOrders = computed(() => {
     const filter = this.activeFilter();
     const term = this.searchTerm().trim().toLowerCase();
+    const from = this.deliveryDateFrom();
+    const to = this.deliveryDateTo();
+    if (this.dateRangeError()) return [];
 
     return this.orders().filter((order) => {
       const matchesFilter = filter === 'all' || order.status === filter;
       const searchSource = `${order.id} ${order.store} ${order.area}`.toLowerCase();
-      return matchesFilter && (!term || searchSource.includes(term));
+      // deliveryDate 是資料庫的 YYYY-MM-DD，直接比較日期，避免 UTC 轉換造成跨日。
+      const date = order.raw.deliveryDate;
+      const matchesDate = (!from && !to) || !!date && (!from || date >= from) && (!to || date <= to);
+      return matchesFilter && matchesDate && (!term || searchSource.includes(term));
     });
   });
 
@@ -197,6 +212,26 @@ export class OrderReview implements OnInit {
 
   updateSearch(event: Event): void {
     this.searchTerm.set((event.target as HTMLInputElement).value);
+    this.syncSelectedOrder();
+  }
+
+  updateDeliveryDate(bound: 'from' | 'to', event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (bound === 'from') this.deliveryDateFrom.set(value);
+    else this.deliveryDateTo.set(value);
+    this.syncSelectedOrder();
+  }
+
+  showTodayOrders(): void {
+    const today = todayLocalDate();
+    this.deliveryDateFrom.set(today);
+    this.deliveryDateTo.set(today);
+    this.syncSelectedOrder();
+  }
+
+  clearDeliveryDates(): void {
+    this.deliveryDateFrom.set('');
+    this.deliveryDateTo.set('');
     this.syncSelectedOrder();
   }
 
@@ -523,6 +558,10 @@ export class OrderReview implements OnInit {
         this.warehouses.set(warehouses);
         this.orders.set(orders.flatMap((order) => this.toDeliveryOrder(order, stores)));
         this.syncSelectedOrder();
+        const requestedOrder = this.route?.snapshot.queryParamMap.get('order');
+        if (requestedOrder && this.orders().some((order) => order.id === requestedOrder)) {
+          this.selectedOrderId.set(requestedOrder);
+        }
         this.loading.set(false);
       },
       error: () => {

@@ -478,6 +478,15 @@ describe('DispatchApiService', () => {
     }
   });
 
+  it('withdraws the whole day publication with only the date, like publish', () => {
+    service.withdrawDispatch('2026-09-28').subscribe((boards) => expect(boards).toEqual([]));
+
+    const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-28');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    request.flush([]);
+  });
+
   it('deletes a driver through the backend DELETE contract', () => {
     service.deleteDriver(8).subscribe();
 

@@ -528,6 +528,19 @@ export class DispatchApiService {
     return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, {params});
   }
 
+  /**
+   * 撤回當天全部倉庫的發布：PUBLISHED 路線翻回草稿，司機端的任務跟著消失。
+   *
+   * 跟發布一樣是整天一次、不帶 warehouseId。當天只要有任何一張單已點交或更後面的狀態，
+   * 後端整批擋下（DispatchGuardService.assertCanWithdraw），錯誤訊息會列出單號。
+   * 回傳格式跟發布相同：每個有路線的倉庫各一包看板。
+   */
+  withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, {params});
+  }
+
   // ── 常配編組 ──────────────────────────────────────────
 
   getTemplates(): Observable<TemplateDto[]> {

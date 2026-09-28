@@ -233,7 +233,7 @@
   }
 
   <aside class="dispatch-sidebar">
-    <mat-nav-list class="sidebar-nav" aria-label="物流後台主選單">
+    <mat-nav-list class="sidebar-nav" aria-label="物流後台主選單" (click)="onNavClick($event)">
       <p class="nav-group-title">調度作業</p>
 
       <a
@@ -297,21 +297,34 @@
       <router-outlet/>
     </section>
   </main>
+
+  <button
+    type="button"
+    class="sticky-note-launcher"
+    [class.is-left]="stickyNoteDockSide() === 'left'"
+    [class.is-right]="stickyNoteDockSide() === 'right'"
+    [class.is-dragging]="isStickyNoteDragging()"
+    [style.transform]="stickyNoteLauncherTransform()"
+    [attr.aria-label]="'備忘錄，目前位於' + (stickyNoteDockSide() === 'left' ? '左側' : '右側') + '；點擊開啟，按住可拖到另一側'"
+    [attr.aria-grabbed]="isStickyNoteDragging()"
+    matTooltip="備忘錄 · 按住可拖到另一側"
+    (click)="openStickyNotesFromLauncher()"
+    (pointerdown)="startStickyNoteDrag($event)"
+    (pointermove)="moveStickyNoteDrag($event)"
+    (pointerup)="endStickyNoteDrag($event)"
+    (pointercancel)="cancelStickyNoteDrag($event)"
+  >
+    <mat-icon aria-hidden="true">push_pin</mat-icon>
+    @if (adminStickyNotes().length > 0) {
+      <span class="sticky-note-launcher__count">{{ adminStickyNotes().length > 99 ? '99+' : adminStickyNotes().length }}</span>
+    }
+  </button>
+
   @if (chatView() !== 'closed') {
     <section class="chat-panel" [class.is-narrow]="chatView() === 'narrow'" aria-label="聊天室">
       <header class="chat-panel__header">
         <h2>聊天室</h2>
         <div class="chat-panel__actions">
-          <button
-            type="button"
-            matButton
-            class="chat-panel__note-button"
-            aria-label="開啟備忘錄"
-            (click)="openStickyNotes()"
-          >
-            <mat-icon aria-hidden="true">sticky_note_2</mat-icon>
-            <span>備忘錄</span>
-          </button>
           <button
             type="button"
             matIconButton

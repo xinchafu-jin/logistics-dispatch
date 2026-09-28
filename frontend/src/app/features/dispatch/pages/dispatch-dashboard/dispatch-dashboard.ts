@@ -232,6 +232,8 @@ export class DispatchDashboard implements OnInit {
   private readonly clearBoardDialog = viewChild.required<TemplateRef<unknown>>('clearBoardDialog');
   // 在編組分頁按「儲存編組」前的確認視窗，同樣寫在 html 最下面
   private readonly saveTemplateDialog = viewChild.required<TemplateRef<unknown>>('saveTemplateDialog');
+  // 按「撤回發布」前的確認視窗，同樣寫在 html 最下面
+  private readonly withdrawDialog = viewChild.required<TemplateRef<unknown>>('withdrawDialog');
   readonly dispatchResult = signal<DispatchResultDto | null>(null);
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
@@ -263,7 +265,10 @@ export class DispatchDashboard implements OnInit {
 
   // ── 發布 ──────────────────────────────────────────────
   readonly publishing = signal(false);
+  readonly withdrawing = signal(false);
+  // 發布、撤回共用工具列下方這一行錯誤訊息；busy() 讓兩者不會同時在跑，不會互相蓋掉
   readonly publishError = signal('');
+  // 這次開頁面發布成功的日期；撤回成功時要刪掉，不然 published() 一直是 true，看板解不開
   private readonly publishedDates = signal<ReadonlySet<string>>(new Set());
   private daySwipe: {pointerId: number; startX: number; lastX: number} | null = null;
   private suppressDayCardClickUntil = 0;
@@ -300,8 +305,10 @@ export class DispatchDashboard implements OnInit {
     ];
   });
 
-  /** 排車、改派或發布進行中都先鎖住看板操作 */
-  readonly busy = computed(() => this.optimizing() || this.saving() || this.publishing());
+  /** 排車、改派、發布或撤回進行中都先鎖住看板操作 */
+  readonly busy = computed(
+    () => this.optimizing() || this.saving() || this.publishing() || this.withdrawing(),
+  );
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -1711,18 +1718,80 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  /** 發布回傳跨倉的多包，挑出目前正在看的那一倉重繪。 */
+  /** 發布成功：記下這天已發布（看板切成唯讀），再重繪目前這一倉。 */
   private applyMyBoard(boards: DispatchResultDto[]): void {
     const date = this.dispatchDate();
     this.publishedDates.update((dates) => new Set(dates).add(date));
     this.loadDays();
+    this.redrawMyBoard(boards);
+    this.publishing.set(false);
+  }
+
+  /**
+   * 撤回當天全部倉庫的發布，路線翻回草稿、司機端的任務跟著消失，所以先跳確認。
+   *
+   * 能不能撤回以後端為準（DispatchGuardService.assertCanWithdraw）：只要有一張單已點交或更後面的狀態，
+   * 整批擋下。這裡跟 publish() 一樣先擋掉一定會失敗的情況，省得確認完才被退回。
+   */
+  confirmWithdraw(): void {
+    if (!this.published() || this.busy()) {
+      return;
+    }
+
+    // 過去的日期只要有單，日期列就是 UNRESOLVED 或 CLOSED，published() 一定是 true：就算後端撤回成功，看板也解不開
+    if (this.dispatchDate() < todayLocalDate()) {
+      this.publishError.set('不能撤回已經過去的日期。');
+      return;
+    }
+
+    // 日期列的狀態是後端依訂單推算的：IN_PROGRESS、CLOSED 代表已有單點交或結束，送出去一定被擋
+    const dayStatus = this.days().find((day) => day.date === this.dispatchDate())?.status;
+    if (dayStatus === 'IN_PROGRESS' || dayStatus === 'CLOSED') {
+      this.publishError.set('已有訂單點交或開始配送，不能撤回。');
+      return;
+    }
+
+    this.dialog.open(this.withdrawDialog()).afterClosed().subscribe((ok) => {
+      // 按取消是 false；點背景、按 Esc 是 undefined，只有按「撤回」才是 true
+      if (ok) {
+        this.withdraw();
+      }
+    });
+  }
+
+  private withdraw(): void {
+    const date = this.dispatchDate();
+    this.withdrawing.set(true);
+    this.publishError.set('');
+    this.api.withdrawDispatch(date).subscribe({
+      next: (boards) => {
+        // published() 看三個來源，三個都要變回來看板才會解開：
+        // publishedDates 在這裡刪掉；日期列的狀態由 loadDays 重抓；路線狀態由 redrawMyBoard 換成已是 DRAFT 的
+        this.publishedDates.update((dates) => {
+          const next = new Set(dates);
+          next.delete(date);
+          return next;
+        });
+        this.loadDays();
+        this.redrawMyBoard(boards);
+        this.withdrawing.set(false);
+      },
+      error: (error: unknown) => {
+        // 被 assertCanWithdraw 擋下時，訊息會列出已經開始配送的單號
+        this.publishError.set(describeError(error));
+        this.withdrawing.set(false);
+      },
+    });
+  }
+
+  /** 發布、撤回都回傳跨倉的多包，挑出目前正在看的那一倉重繪；這一倉沒有路線就重抓。 */
+  private redrawMyBoard(boards: DispatchResultDto[]): void {
     const mine = boards.find((board) => board.warehouse.id === this.warehouseId());
     if (mine) {
       this.applyDispatchResult(mine);
     } else {
       this.reloadBoard();
     }
-    this.publishing.set(false);
   }
 
   // ── 常配編組 ──────────────────────────────────────────

@@ -73,6 +73,33 @@
         </label>
       </div>
 
+      <div class="date-filter-bar" role="group" aria-label="配送日期篩選">
+        <span class="date-filter-title">配送日期</span>
+        <label class="date-filter-field">
+          <span>開始日期</span>
+          <input type="date" [value]="deliveryDateFrom()" [max]="deliveryDateTo() || '9999-12-31'"
+            [attr.aria-invalid]="dateRangeError() ? 'true' : null"
+            [attr.aria-describedby]="dateRangeError() ? 'order-date-error' : null"
+            (input)="updateDeliveryDate('from', $event)" />
+        </label>
+        <span class="date-filter-separator" aria-hidden="true">～</span>
+        <label class="date-filter-field">
+          <span>結束日期</span>
+          <input type="date" [value]="deliveryDateTo()" [min]="deliveryDateFrom() || '0001-01-01'"
+            [attr.aria-invalid]="dateRangeError() ? 'true' : null"
+            [attr.aria-describedby]="dateRangeError() ? 'order-date-error' : null"
+            (input)="updateDeliveryDate('to', $event)" />
+        </label>
+        <div class="date-filter-actions">
+          <button type="button" (click)="showTodayOrders()">今天</button>
+          <button type="button" (click)="clearDeliveryDates()"
+            [disabled]="!deliveryDateFrom() && !deliveryDateTo()">清除日期</button>
+        </div>
+      </div>
+      @if (dateRangeError()) {
+        <p id="order-date-error" class="date-filter-error" role="alert">{{ dateRangeError() }}</p>
+      }
+
       @if (loading()) {
         <p class="development-note">
           <mat-icon aria-hidden="true">fact_check</mat-icon>
@@ -97,6 +124,7 @@
               <span class="order-id">{{ order.id }}</span>
               <strong>{{ order.store }}</strong>
               <span>{{ order.area }} · {{ order.deliveryWindow }}</span>
+              <span class="order-row-date">配送日期 {{ order.raw.deliveryDate || '未提供' }}</span>
             </span>
 
             <span class="order-row-meta">
@@ -107,7 +135,7 @@
             </span>
           </button>
         } @empty {
-          <div class="empty-state">沒有符合目前篩選條件的配送需求。</div>
+          <div class="empty-state">{{ dateRangeError() ? '請先修正配送日期區間。' : '沒有符合目前篩選條件的配送需求。' }}</div>
         }
       </div>
     </section>
@@ -128,6 +156,10 @@
 
         <dl class="detail-grid">
           <div>
+            <dt>配送日期</dt>
+            <dd>{{ order.raw.deliveryDate || '未提供' }}</dd>
+          </div>
+          <div>
             <dt>配送時段</dt>
             <dd>{{ order.deliveryWindow }}</dd>
           </div>
@@ -141,7 +173,7 @@
           </div>
           <div>
             <dt>建立時間</dt>
-            <dd>今日 {{ order.createdAt }}</dd>
+            <dd>{{ order.createdAt }}</dd>
           </div>
         </dl>
 

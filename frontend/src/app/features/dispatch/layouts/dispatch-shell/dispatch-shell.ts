@@ -1,4 +1,5 @@
 import {Component, DestroyRef, OnInit, TemplateRef, computed, effect, inject, signal, output, viewChild} from '@angular/core';
+import {DOCUMENT} from '@angular/common';
 import {HttpErrorResponse} from '@angular/common/http';
 import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import {MatListModule} from '@angular/material/list';
@@ -49,6 +50,7 @@ type RejectionTarget =
 // 聊天室狀態
 type ChatView = 'closed' | 'narrow' | 'wide';
 type ChatMessageRole = 'user' | 'assistant';
+type StickyNoteDockSide = 'left' | 'right';
 
 interface ChatMessage {
   role: ChatMessageRole;
@@ -79,6 +81,7 @@ interface ChatMessage {
   styleUrl: './dispatch-shell.scss',
 })
 export class DispatchShell implements OnInit {
+  private readonly document = inject(DOCUMENT);
   private readonly theme = inject(AdminThemeService);
   protected readonly user = inject(AuthService).user;
   protected readonly isSigningOut = signal(false);
@@ -130,6 +133,15 @@ export class DispatchShell implements OnInit {
   protected readonly editingStickyNoteId = signal<number | null>(null);
   protected readonly deletingStickyNoteId = signal<number | null>(null);
   protected readonly stickyNoteDeleteBusy = signal(false);
+  protected readonly stickyNoteDockSide = signal<StickyNoteDockSide>(this.readStickyNoteDockSide());
+  protected readonly stickyNoteDragOffset = signal(0);
+  protected readonly isStickyNoteDragging = signal(false);
+  protected readonly stickyNoteLauncherTransform = computed(
+    () => `translateY(-50%) translateX(${this.stickyNoteDragOffset()}px)`,
+  );
+  private stickyNoteDragPointerId: number | null = null;
+  private stickyNoteDragStartX = 0;
+  private stickyNoteLastDragEndedAt = 0;
   // 紅點：driverId → 司機發的、還沒被任何管理員讀的則數。沒有未讀的司機不在裡面
   protected readonly unreadByDriver = signal<Record<number, number>>({});
   // 大頭照載入失敗的司機；記下來改顯示名字第一個字，不然會一直顯示破圖
@@ -207,6 +219,7 @@ export class DispatchShell implements OnInit {
 
   ngOnInit(): void {
     this.loadPendingNotifications();
+    this.loadAdminStickyNotes();
     this.connectChatSocket();
   }
 
@@ -226,6 +239,13 @@ export class DispatchShell implements OnInit {
 
   protected toggleTheme(): void {
     this.theme.toggle();
+  }
+
+  protected onNavClick(event: MouseEvent): void {
+    const target = (event.target as HTMLElement)?.closest('a, button');
+    if (target instanceof HTMLElement) {
+      target.blur();
+    }
   }
 
   protected toggleNotifications(): void {
@@ -501,6 +521,53 @@ export class DispatchShell implements OnInit {
     this.loadAdminStickyNotes();
   }
 
+  protected openStickyNotesFromLauncher(): void {
+    if (Date.now() - this.stickyNoteLastDragEndedAt < 250) return;
+    this.openStickyNotes();
+  }
+
+  protected startStickyNoteDrag(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    this.stickyNoteDragPointerId = event.pointerId;
+    this.stickyNoteDragStartX = event.clientX;
+    this.stickyNoteDragOffset.set(0);
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  protected moveStickyNoteDrag(event: PointerEvent): void {
+    if (event.pointerId !== this.stickyNoteDragPointerId) return;
+    const offset = event.clientX - this.stickyNoteDragStartX;
+    if (Math.abs(offset) < 6 && !this.isStickyNoteDragging()) return;
+    this.isStickyNoteDragging.set(true);
+    this.stickyNoteDragOffset.set(offset);
+    event.preventDefault();
+  }
+
+  protected endStickyNoteDrag(event: PointerEvent): void {
+    if (event.pointerId !== this.stickyNoteDragPointerId) return;
+    const target = event.currentTarget as HTMLElement;
+    if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
+
+    if (this.isStickyNoteDragging()) {
+      const viewportWidth = this.document.defaultView?.innerWidth ?? 0;
+      const side: StickyNoteDockSide = event.clientX < viewportWidth / 2 ? 'left' : 'right';
+      this.stickyNoteDockSide.set(side);
+      this.persistStickyNoteDockSide(side);
+      this.stickyNoteLastDragEndedAt = Date.now();
+    }
+
+    this.stickyNoteDragPointerId = null;
+    this.stickyNoteDragOffset.set(0);
+    this.isStickyNoteDragging.set(false);
+  }
+
+  protected cancelStickyNoteDrag(event: PointerEvent): void {
+    if (event.pointerId !== this.stickyNoteDragPointerId) return;
+    this.stickyNoteDragPointerId = null;
+    this.stickyNoteDragOffset.set(0);
+    this.isStickyNoteDragging.set(false);
+  }
+
   protected loadAdminStickyNotes(): void {
     this.stickyNotesLoading.set(true);
     this.stickyNotesError.set('');
@@ -607,6 +674,24 @@ export class DispatchShell implements OnInit {
       const updatedAt = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
       return Number.isNaN(updatedAt) || updatedAt === 0 ? right.id - left.id : updatedAt;
     });
+  }
+
+  private readStickyNoteDockSide(): StickyNoteDockSide {
+    try {
+      return this.document.defaultView?.localStorage.getItem('dispatch-sticky-note-dock') === 'left'
+        ? 'left'
+        : 'right';
+    } catch {
+      return 'right';
+    }
+  }
+
+  private persistStickyNoteDockSide(side: StickyNoteDockSide): void {
+    try {
+      this.document.defaultView?.localStorage.setItem('dispatch-sticky-note-dock', side);
+    } catch {
+      // Local storage may be unavailable in private or restricted browser contexts.
+    }
   }
 
   /**
