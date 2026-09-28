@@ -1,0 +1,236 @@
+:host {
+  display: block;
+  color: #173129;
+  font-size: 1rem;
+}
+
+.pre-trip {
+  margin: 16px 0 20px;
+  padding: 18px;
+  border: 1px solid #bdd5cb;
+  border-radius: 12px;
+  background: #f1f8f5;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  p {
+    margin: 0 0 5px;
+    color: #0e7663;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+}
+
+h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.plate {
+  font-weight: 700;
+}
+
+fieldset {
+  margin: 16px 0 0;
+  padding: 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 9px;
+  background: #fff;
+}
+
+legend {
+  padding: 0 6px;
+  font-weight: 750;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 12px;
+
+  input[type='number'],
+  textarea {
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 1px solid #a9c1b7;
+    border-radius: 6px;
+    color: #173129;
+    background: #fff;
+    font: inherit;
+  }
+}
+
+input[type='file'] {
+  width: 100%;
+  color: #526f66;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+input::file-selector-button {
+  min-height: 40px;
+  margin: 0 8px 0 0;
+  padding: 0 10px;
+  border: 1px solid #bdd5cb;
+  border-radius: 6px;
+  color: #0e7663;
+  background: #eef7f3;
+  font: inherit;
+  cursor: pointer;
+}
+
+.check-group + .check-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #c8dad3;
+}
+
+.group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.choices {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+// 手套、手指大也按得到：高度至少 44px
+.choice {
+  min-width: 64px;
+  min-height: 44px;
+
+  &.is-selected {
+    border-color: #0e7663;
+    color: #fff;
+    background: #0e7663;
+  }
+
+  &.is-abnormal.is-selected {
+    border-color: #b3261e;
+    background: #b3261e;
+  }
+}
+
+button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #a9c1b7;
+  border-radius: 7px;
+  color: #0e7663;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+
+  &.primary {
+    border-color: #0e7663;
+    color: #fff;
+    background: #0e7663;
+  }
+}
+
+.submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 4px;
+  border-color: #0e7663;
+  color: #fff;
+  background: #0e7663;
+  font-weight: 700;
+
+  &:disabled {
+    border-color: #c8dad3;
+    color: #526f66;
+    background: #dbe7e1;
+    cursor: not-allowed;
+  }
+}
+
+small,
+.hint {
+  color: #526f66;
+  font-size: 0.87rem;
+  line-height: 1.6;
+}
+
+.remaining {
+  display: block;
+  margin-top: 6px;
+  text-align: center;
+}
+
+img {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border: 1px solid #c8dad3;
+  border-radius: 6px;
+}
+
+.notice {
+  margin: 14px 0;
+  padding: 13px;
+  border-radius: 8px;
+  color: #175c4b;
+  background: #e1f2e9;
+  line-height: 1.6;
+
+  p {
+    margin: 5px 0 0;
+    font-size: 0.87rem;
+  }
+
+  &.is-error {
+    border: 1px solid #e3b4ae;
+    color: #8c281e;
+    background: #fff0ed;
+  }
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.saved-photos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid #0e7663;
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .pre-trip {
+    padding: 12px;
+  }
+
+  .saved-photos {
+    grid-template-columns: 1fr;
+  }
+}

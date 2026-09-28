@@ -57,6 +57,8 @@ class DeliveryServiceTest {
     private OrdersEntity order;
     private DeliveryService service;
 
+    private PreTripInspectionService preTripInspectionService;
+
     @BeforeEach
     void setUp() {
         deliveryRecordsDAO = mock(DeliveryRecordsDAO.class);
@@ -85,6 +87,9 @@ class DeliveryServiceTest {
         order.setDeliveryDate(LocalDate.now(TAIPEI));
         order.setStatus(OrderStatus.CONFIRMED);
         when(ordersDAO.findForUpdate(ORDER_ID)).thenReturn(Optional.of(order));
+        // load 先用不鎖的 findById 查路線、確認安全檢查，再鎖訂單；安全檢查另有自己的測試，這裡一律當作通過
+        when(ordersDAO.findById(ORDER_ID)).thenReturn(Optional.of(order));
+        preTripInspectionService = mock(PreTripInspectionService.class);
 
         // 新建的訂單（補送單）存檔時才給 id，原單存檔照原樣回傳
         when(ordersDAO.save(any(OrdersEntity.class))).thenAnswer(invocation -> {
@@ -107,7 +112,7 @@ class DeliveryServiceTest {
 
         // 路段里程在抵達時記錄，屬於 RouteLegMileageService 自己的測試範圍，這裡只要不出錯就好
         service = new DeliveryService(deliveryRecordsDAO, exceptionCasesDAO, ordersDAO, routesDAO, driversDAO,
-                mock(RouteLegMileageService.class));
+                mock(RouteLegMileageService.class), preTripInspectionService);
     }
 
     @Test
@@ -121,6 +126,18 @@ class DeliveryServiceTest {
         assertNull(response.getExceptionCaseId());
         assertNull(response.getFollowUpOrderId());
         verify(exceptionCasesDAO, never()).save(any());
+    }
+
+    @Test
+    void 安全檢查沒通過_不能點交_訂單也不會被鎖() {
+        when(preTripInspectionService.requirePassed(DRIVER_ID, ROUTE_ID))
+                .thenThrow(new IllegalArgumentException("出車前安全檢查沒有通過，請聯絡主管處理"));
+
+        assertThrows(IllegalArgumentException.class, () -> service.load(DRIVER_ID, loading(12, null)));
+
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        // 先確認檢查再鎖訂單：檢查沒過就不會走到鎖訂單那一步
+        verify(ordersDAO, never()).findForUpdate(ORDER_ID);
     }
 
     @Test

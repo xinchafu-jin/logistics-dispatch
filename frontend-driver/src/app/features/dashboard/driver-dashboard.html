@@ -265,34 +265,11 @@
             </div>
             <mat-icon aria-hidden="true">speed</mat-icon>
           </div>
-          <p>上班後記錄出車里程，下班前記錄收車里程。</p>
+          <!-- 出車里程已經併進「任務」分頁的出車前安全檢查（通過時後端同一個交易記下），這裡只留收車 -->
+          <p>出車時的行車紀錄器里程在「任務」分頁的安全檢查一起填；下班前在這裡記收車時的行車紀錄器里程。</p>
           <div class="mileage-form-row">
             <label>
-              <span>出車表讀數（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18400"
-                [value]="startMileageReading()"
-                (input)="updateStartMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
-            <button
-              type="button"
-              class="mileage-start-button"
-              (click)="submitStartMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
-            >
-              <mat-icon aria-hidden="true">play_arrow</mat-icon>
-              出車
-            </button>
-          </div>
-          <div class="mileage-form-row">
-            <label>
-              <span>收車表讀數（km）</span>
+              <span>收車時行車紀錄器里程（km）</span>
               <input
                 type="number"
                 inputmode="numeric"
@@ -380,6 +357,11 @@
                 <p class="task-route-meta">
                   {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
                 </p>
+                <!-- 出車前安全檢查：通過才開放這條路線的點交；記出車里程時後端也會再擋一次 -->
+                <app-pre-trip-check
+                  [route]="route"
+                  (passedChange)="setInspectionReady(route.routeId, $event)"
+                />
                 <ol class="task-stop-list">
                   @for (stop of route.stops; track stop.orderId) {
                     <li
@@ -424,7 +406,8 @@
                             type="button"
                             class="task-loading-button"
                             (click)="openLoadingAction(stop)"
-                            [disabled]="isTaskSubmitting()"
+                            [disabled]="isTaskSubmitting() || !inspectionReady()[route.routeId]"
+                            [title]="inspectionReady()[route.routeId] ? '開始倉庫點交' : '請先通過出車前安全檢查'"
                           >
                             <mat-icon aria-hidden="true">fact_check</mat-icon>
                             <span>點交</span>

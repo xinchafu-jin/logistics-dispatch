@@ -58,6 +58,7 @@ import {
 import {DriverOperationsService} from '../../core/services/driver-operations.service';
 import {DriverWeather, DriverWeatherService} from '../../core/services/driver-weather.service';
 import {BrandLogo} from '../../shared/ui/brand-logo/brand-logo';
+import {PreTripCheck} from './pre-trip-check/pre-trip-check';
 
 type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
@@ -407,7 +408,7 @@ export function caseCategoryOption(code: DriverCaseCategory): CaseCategoryOption
   return CASE_CATEGORIES.find((option) => option.code === code) ?? OTHER_CASE_CATEGORY;
 }
 
-/** 畫面上的案件狀態。資料庫只有 OPEN／CLOSED；OPEN 再用「有沒有管理員回覆過」分成等待回覆、處理中 */
+/** 畫面上的案件狀態。資料庫只有 OPEN／CLOSED；OPEN 再用「調度中心接收了沒」分成等待回覆、處理中 */
 export type CaseDisplayStatus = 'waiting' | 'handling' | 'closed';
 
 export function caseDisplayStatus(item: Pick<DriverCaseDto, 'status' | 'acceptedAt'>): CaseDisplayStatus {
@@ -471,6 +472,7 @@ export function mergeMessagesById(
     TextFieldModule,
     FormsModule,
     BrandLogo,
+    PreTripCheck,
   ],
   templateUrl: './driver-dashboard.html',
   styleUrl: './driver-dashboard.scss',
@@ -535,6 +537,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     onCleanup(() => subscription.unsubscribe());
   });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  /**
+   * routeId → 這條路線的出車前安全檢查通過了沒，由路線卡片上的 app-pre-trip-check 回報。
+   * 重新整理任務時不清空：同一條路線、同一台車的元件不會重建，也就不會再回報一次，清掉點交按鈕會被誤鎖
+   */
+  protected readonly inspectionReady = signal<Record<number, boolean>>({});
   protected readonly taskViewState = signal<TaskViewState>('loading');
   protected readonly taskError = signal<string | null>(null);
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
@@ -550,7 +557,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
-  protected readonly startMileageReading = signal('');
   protected readonly endMileageReading = signal('');
   protected readonly mileageError = signal<string | null>(null);
   protected readonly mileageMessage = signal<string | null>(null);
@@ -873,6 +879,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       .subscribe(() => {
         this.loadChatMessages();
         this.loadCases();
+        this.catchUpCaseThread();
       });
     this.chatSocket.connect();
   }
@@ -1204,6 +1211,33 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
+  /**
+   * 重連時補抓停著的那件案件：斷線期間的推播不會補發。只重抓清單的話，清單上的未讀數會讓
+   * markViewingCaseRead 標已讀，後台看到「已讀」，那幾則卻從來沒出現在司機畫面上。
+   * 有訊息就只問比最後一則新的（afterId），接在後面；還沒有就整串載。
+   */
+  private catchUpCaseThread(): void {
+    const view = this.supportView();
+    if (view.kind !== 'thread' || view.caseId === null) {
+      return;
+    }
+    const caseId = view.caseId;
+    const lastId = this.caseMessages().at(-1)?.id;
+    if (lastId === undefined) {
+      this.loadCaseMessages(caseId);
+      return;
+    }
+    this.operations.getCaseMessages(caseId, lastId).subscribe({
+      next: (newer) => {
+        if (this.isShowingCase(caseId)) {
+          this.caseMessages.set(mergeMessagesById(this.caseMessages(), newer));
+        }
+      },
+      // 補抓失敗不另外提示：下次重連或重新點進這件時會再載一次
+      error: () => undefined,
+    });
+  }
+
   /** 對話頁停在這件案件（不管 sheet 開沒開）；非同步回應回來時用它確認司機還在同一串 */
   private isShowingCase(caseId: number): boolean {
     const view = this.supportView();
@@ -1263,7 +1297,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private handleChatPush(push: DriverMessagePushDto): void {
-    if (push.type === 'CASE_OPENED' || push.type === 'CASE_CLOSED') {
+    // 案件建立、接收、結案：整件換掉。接收後 acceptedAt 有值，畫面從「等待回覆」變「處理中」
+    if (push.type === 'CASE_OPENED' || push.type === 'CASE_ACCEPTED' || push.type === 'CASE_CLOSED') {
       if (push.exceptionCase) {
         this.upsertCase(push.exceptionCase);
       }
@@ -1271,7 +1306,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     // 帶 exceptionCaseId 的是案件那一串，不能合併進一般對話，不然案件的回覆會出現在一般對話裡；
-    // 沒帶的才是一般對話（後端還沒改版前的推播也都沒帶，照舊走下面）
+    // 沒帶的才是一般對話
     const caseId = push.type === 'MESSAGE' ? push.message?.exceptionCaseId : push.exceptionCaseId;
     if (caseId != null) {
       this.handleCasePush(caseId, push);
@@ -1309,7 +1344,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.caseThreadState.set('ready');
       }
       if (message.senderType === 'ADMIN') {
-        // 第一則管理員回覆＝有人接手，畫面從「等待回覆」變「處理中」，不用等後端另外推狀態
+        // 後端規定先接收才能回覆，所以有回覆就一定已經接收；CASE_ACCEPTED 推播漏掉時，靠這裡補上 acceptedAt
         this.driverCases.update((cases) =>
           cases.map((item) =>
             item.id !== caseId
@@ -1612,8 +1647,18 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return this.activeLoadingOrderId() === stop.orderId;
   }
 
+  protected setInspectionReady(routeId: number, passed: boolean): void {
+    this.inspectionReady.update((ready) => ({...ready, [routeId]: passed}));
+  }
+
   protected openLoadingAction(stop: DriverTaskStop): void {
     if (!this.canLoad(stop)) {
+      return;
+    }
+    // 按鈕沒通過時本來就不能按，這裡再擋一次；後端 DeliveryService.load 也會擋
+    const route = this.todayTasks()?.routes.find((item) => item.stops.some((routeStop) => routeStop.orderId === stop.orderId));
+    if (!route || !this.inspectionReady()[route.routeId]) {
+      this.taskActionError.set('請先通過這條路線的出車前安全檢查。');
       return;
     }
 
@@ -1815,38 +1860,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     );
   }
 
-  protected updateStartMileage(event: Event): void {
-    this.startMileageReading.set((event.target as HTMLInputElement).value);
-  }
-
   protected updateEndMileage(event: Event): void {
     this.endMileageReading.set((event.target as HTMLInputElement).value);
   }
 
   protected canRecordMileage(): boolean {
     return this.isWorkingOrOvertime(this.attendance()?.status);
-  }
-
-  protected submitStartMileage(): void {
-    const odometer = this.readOdometer(this.startMileageReading());
-    if (odometer === null || this.isMileageSubmitting()) {
-      return;
-    }
-
-    this.isMileageSubmitting.set(true);
-    this.mileageError.set(null);
-    this.mileageMessage.set(null);
-    this.operations.startMileage({odometer}).subscribe({
-      next: (mileageLog) => {
-        this.startMileageReading.set('');
-        this.mileageMessage.set(`已記錄出車里程 ${mileageLog.startOdometer} km。`);
-        this.isMileageSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.mileageError.set(this.getErrorMessage(error, '無法記錄出車里程。'));
-        this.isMileageSubmitting.set(false);
-      },
-    });
   }
 
   protected submitEndMileage(): void {
@@ -2689,7 +2708,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readOdometer(value: string): number | null {
     const normalizedValue = value.trim();
     if (!normalizedValue) {
-      this.mileageError.set('請輸入里程表讀數。');
+      this.mileageError.set('請輸入行車紀錄器里程。');
       return null;
     }
 

@@ -51,6 +51,7 @@ public class DeliveryService {
     private final RoutesDAO routesDAO;
     private final DriversDAO driversDAO;
     private final RouteLegMileageService routeLegMileageService;
+    private final PreTripInspectionService preTripInspectionService;
 
     public DeliveryService(
             DeliveryRecordsDAO deliveryRecordsDAO,
@@ -58,7 +59,8 @@ public class DeliveryService {
             OrdersDAO ordersDAO,
             RoutesDAO routesDAO,
             DriversDAO driversDAO,
-            RouteLegMileageService routeLegMileageService
+            RouteLegMileageService routeLegMileageService,
+            PreTripInspectionService preTripInspectionService
     ) {
         this.deliveryRecordsDAO = deliveryRecordsDAO;
         this.exceptionCasesDAO = exceptionCasesDAO;
@@ -66,12 +68,21 @@ public class DeliveryService {
         this.routesDAO = routesDAO;
         this.driversDAO = driversDAO;
         this.routeLegMileageService = routeLegMileageService;
+        this.preTripInspectionService = preTripInspectionService;
     }
 
     /** 倉庫點交：箱數相符轉為 LOADED；不符時原單 FAILED，並建立異常單與明日補送單。 */
     public LoadingResponse load(Long driverId, LoadingRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
+        // 出車前安全檢查通過才能點交。requirePassed 會鎖路線，所以要在鎖訂單之前呼叫：
+        // 撤回也是先鎖路線，兩邊都「先路線、後訂單」，才不會一邊等一邊、互相卡死
+        Long routeId = routeIdOf(request.getOrderId());
+        preTripInspectionService.requirePassed(driverId, routeId);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
+        // 上面查路線時還沒鎖訂單，這段時間訂單可能被移到別條路線，剛才通過的檢查就不算數
+        if (!routeId.equals(order.getRouteId())) {
+            throw new IllegalArgumentException("任務已變更，請重新整理今日任務");
+        }
         // 連按兩次時，第二次進來單子已經是 LOADED 或 FAILED，會在這裡被擋下
         requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_LOADING_STATUS_INVALID);
 
@@ -423,6 +434,16 @@ public class DeliveryService {
             copy.setNotes(source.getNotes());
             targetOrder.addItem(copy);
         }
+    }
+
+    /** 這張單排在哪條路線；只讀、不鎖，鎖訂單要等路線鎖好之後（見 load） */
+    private Long routeIdOf(Long orderId) {
+        OrdersEntity order = ordersDAO.findById(orderId)
+                .orElseThrow(() -> new EntityNotFoundException(DELIVERY_ORDER_NOT_FOUND.formatted(orderId)));
+        if (order.getRouteId() == null) {
+            throw new IllegalArgumentException(DELIVERY_ROUTE_REQUIRED);
+        }
+        return order.getRouteId();
     }
 
     private OrdersEntity findAuthorizedOrderForUpdate(Long driverId, Long orderId, LocalDate today) {

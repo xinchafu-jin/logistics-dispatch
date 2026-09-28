@@ -340,6 +340,55 @@ export interface DriverRouteTask {
   stops: DriverTaskStop[];
 }
 
+/** 出車前安全檢查的 15 項；值 true＝正常、false＝異常、null＝還沒選 */
+export type PreTripCheckKey =
+  | 'dashcam'
+  | 'engineOil'
+  | 'brakeFluid'
+  | 'powerSteeringFluid'
+  | 'transmissionOil'
+  | 'fuel'
+  | 'coolant'
+  | 'batteryWater'
+  | 'washerFluid'
+  | 'tirePressure'
+  | 'tireTread'
+  | 'headlights'
+  | 'turnSignals'
+  | 'brakeLights'
+  | 'dashboardLights';
+
+/** 送出時每一項都要有答案；異常照樣可以送，後端存成不通過 */
+export interface PreTripInspectionRequest extends Record<PreTripCheckKey, boolean> {
+  routeId: number;
+  /** 呼氣酒精濃度 mg/L，0.00 才能出車 */
+  alcoholMgL: number;
+  /** 出車時行車紀錄器上的里程（km）；通過時後端會用它記出車里程，行車紀錄器異常時可以不填 */
+  odometer: number | null;
+  /** 有異常時必填 */
+  note: string | null;
+}
+
+/** GET／POST /api/driver/pre-trip 的回應；還沒送過時 completed 是 false、id 是 null */
+export interface PreTripInspectionResult {
+  id: number | null;
+  routeId: number;
+  vehicleId: number;
+  completed: boolean;
+  passed: boolean;
+  alcoholMgL: number | null;
+  /** 異常項目的中文名稱，例如「煞車燈」 */
+  abnormalItems: string[];
+  note: string | null;
+  hasFaultPhoto: boolean;
+  /** 今天已經出車（通過時同一個交易記下行車紀錄器里程） */
+  departed: boolean;
+  /** 出車時行車紀錄器上的里程；還沒出車是 null */
+  startOdometer: number | null;
+  submittedAt: string | null;
+  message: string;
+}
+
 export interface DriverTaskWarehouse {
   id: number;
   warehouseCode: string;
@@ -431,9 +480,9 @@ export interface DriverMessageRequest {
 
 /**
  * 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀，
- * CASE_OPENED／CASE_CLOSED＝案件建立、結案（後端還沒做，先照約定接好）
+ * CASE_OPENED／CASE_ACCEPTED／CASE_CLOSED＝案件建立、調度中心接收、結案
  */
-export type DriverMessagePushType = 'MESSAGE' | 'READ' | 'CASE_OPENED' | 'CASE_CLOSED';
+export type DriverMessagePushType = 'MESSAGE' | 'READ' | 'CASE_OPENED' | 'CASE_ACCEPTED' | 'CASE_CLOSED';
 
 /**
  * WebSocket 推播的內容，從私人頻道 /user/queue/messages 收到。對應後端 DriverMessagePushResponse。
@@ -450,12 +499,12 @@ export interface DriverMessagePushDto {
   readAt?: string | null;
   /** READ 標的是哪一串；null 或沒有這個欄位＝一般對話。MESSAGE 改看 message.exceptionCaseId */
   exceptionCaseId?: number | null;
-  /** 案件本體；只有 CASE_OPENED、CASE_CLOSED 有 */
+  /** 案件本體；只有 CASE_* 有。推播裡的 unreadCount 固定是 0，本機的未讀數要留著（見 upsertCase） */
   exceptionCase?: DriverCaseDto | null;
 }
 
 // ── 例外回報案件（對應後端 /api/driver/cases）──────────────────────────
-// 後端還沒實作，這裡的欄位就是前後端的約定：後端照這個形狀回，前端不用再改
+// 對應後端 DriverCaseRequestDTO、DriverCaseResponse；改欄位要兩邊一起改
 
 /** 司機可以選的分類。後端存進 exception_cases.category（VARCHAR），中文標籤與圖示只放在前端 */
 export type DriverCaseCategory =
@@ -468,7 +517,7 @@ export type DriverCaseCategory =
   | 'SYSTEM'
   | 'OTHER';
 
-/** 對應 ExceptionStatus。資料庫只有這兩種；畫面上的「等待回覆／處理中」用 acceptedAt 推算，不另外加狀態 */
+/** 對應 ExceptionStatus。資料庫只有這兩種；畫面上的「等待回覆／處理中」看 acceptedAt（調度中心接收了沒），不另外加狀態 */
 export type DriverCaseStatus = 'OPEN' | 'CLOSED';
 
 /** POST /api/driver/cases 的請求本體。司機、路線、建立時間都由後端決定，不從前端收 */
@@ -496,7 +545,7 @@ export interface DriverCaseDto {
   canContinue: boolean;
   photoUrl: string | null;
   createdAt: string;
-  /** 第一位管理員回覆的時間；null＝還在等調度中心回覆 */
+  /** 調度中心在異常中心按「接收」的時間；null＝還沒有人接收，畫面顯示「等待回覆」 */
   acceptedAt: string | null;
   /** 結案時間；OPEN 時是 null */
   handledAt: string | null;

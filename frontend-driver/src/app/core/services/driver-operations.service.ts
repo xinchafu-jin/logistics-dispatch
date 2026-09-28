@@ -30,6 +30,8 @@ import {
   MileageRequest,
   NoSignatureRequest,
   PhotoUploadResponse,
+  PreTripInspectionRequest,
+  PreTripInspectionResult,
 } from './driver-operations.models';
 
 @Injectable({providedIn: 'root'})
@@ -73,6 +75,43 @@ export class DriverOperationsService {
 
   getTodayTasks(): Observable<DriverTasksResponse> {
     return this.http.get<DriverTasksResponse>('/api/driver/tasks/today');
+  }
+
+  // ── 出車前安全檢查 ─────────────────────────────────────
+  // 通過之後才能記出車里程和點交；能不能出車由後端判定
+
+  getPreTripInspection(routeId: number): Observable<PreTripInspectionResult> {
+    const params = new HttpParams().set('routeId', routeId);
+    return this.http.get<PreTripInspectionResult>('/api/driver/pre-trip', {params});
+  }
+
+  /**
+   * 檢查內容放 request（JSON），照片放檔案欄位：酒測器照片必填；行車紀錄器照片通過時必填
+   * （同一張證明行車紀錄器有開、也拍到出車里程）；故障照片選填。
+   * 通過的話後端同一個交易就記下出車里程，不用再另外呼叫 startMileage。
+   * request 要包成 application/json 的 Blob，後端的 @RequestPart 才會用 JSON 解析
+   */
+  submitPreTripInspection(
+    request: PreTripInspectionRequest,
+    alcoholPhoto: File,
+    dashcamPhoto: File | null,
+    faultPhoto: File | null,
+  ): Observable<PreTripInspectionResult> {
+    const formData = new FormData();
+    formData.append('request', new Blob([JSON.stringify(request)], {type: 'application/json'}));
+    formData.append('alcoholPhoto', alcoholPhoto);
+    if (dashcamPhoto) {
+      formData.append('dashcamPhoto', dashcamPhoto);
+    }
+    if (faultPhoto) {
+      formData.append('faultPhoto', faultPhoto);
+    }
+    return this.http.post<PreTripInspectionResult>('/api/driver/pre-trip', formData);
+  }
+
+  /** 照片要帶登入 token 才讀得到，不能直接放在 <img src>，所以拿成 Blob 再轉網址 */
+  getPreTripPhoto(inspectionId: number, kind: 'alcohol' | 'fault'): Observable<Blob> {
+    return this.http.get(`/api/driver/pre-trip/${inspectionId}/photos/${kind}`, {responseType: 'blob'});
   }
 
   submitEmergencyLeave(request: EmergencyLeaveRequest): Observable<EmergencyLeaveResponse> {
@@ -186,8 +225,8 @@ export class DriverOperationsService {
     return this.http.post<number>('/api/driver/messages/read', {});
   }
 
-  // ── 例外回報案件（後端還沒實作；網址與形狀是約定，見 driver-operations.models.ts）──
-  // 跟聊天一樣不帶 driverId：後端從 token 取，而且要檢查案件是不是這位司機的，不然改網址上的 id 就能讀別人的案件
+  // ── 例外回報案件（後端 DriverPortalController 的 /api/driver/cases）──
+  // 跟聊天一樣不帶 driverId：後端從 token 取，並檢查案件是不是這位司機的，別人的案件一律回「找不到案件」
 
   /** 自己的案件，含每件的未讀數；支援中心打開、WebSocket 連上時各抓一次 */
   getCases(): Observable<DriverCaseDto[]> {

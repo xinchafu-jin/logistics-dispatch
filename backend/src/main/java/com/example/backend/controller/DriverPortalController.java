@@ -13,12 +13,19 @@ import com.example.backend.dto.respones.EmergencyLeaveResponse;
 import com.example.backend.dto.respones.ExceptionCaseResponse;
 import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.dto.respones.PhotoUploadResponse;
+import com.example.backend.dto.respones.PreTripInspectionResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +34,8 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
@@ -53,6 +62,8 @@ public class DriverPortalController {
     private final LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService;
     private final DriverMessagesService driverMessagesService;
     private final DriverLeaveRequestService driverLeaveRequestService;
+    private final PreTripInspectionService preTripInspectionService;
+    private final DepartureService departureService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -68,7 +79,9 @@ public class DriverPortalController {
             DeliveryPhotoStorageService deliveryPhotoStorageService,
             LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService,
             DriverMessagesService driverMessagesService,
-            DriverLeaveRequestService driverLeaveRequestService
+            DriverLeaveRequestService driverLeaveRequestService,
+            PreTripInspectionService preTripInspectionService,
+            DepartureService departureService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -84,6 +97,8 @@ public class DriverPortalController {
         this.leaveEvidencePhotoStorageService = leaveEvidencePhotoStorageService;
         this.driverMessagesService = driverMessagesService;
         this.driverLeaveRequestService = driverLeaveRequestService;
+        this.preTripInspectionService = preTripInspectionService;
+        this.departureService = departureService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -278,7 +293,56 @@ public class DriverPortalController {
         return driverExceptionService.report(driverId(jwt), request);
     }
 
-    /** 記錄今日出車時的里程表讀數。 */
+    /** 查這條路線目前這組人車的出車前安全檢查：檢查過沒、通過沒、哪幾項異常。 */
+    @GetMapping("/pre-trip")
+    public PreTripInspectionResponse findPreTripInspection(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam Long routeId
+    ) {
+        return preTripInspectionService.findLatest(driverId(jwt), routeId);
+    }
+
+    /**
+     * 送出出車前安全檢查；通過時同一個交易記下出車時的行車紀錄器里程（見 DepartureService）。
+     * request 是 JSON；酒測器照片必填，行車紀錄器照片通過時必填，故障照片選填。
+     * 照片都標 required = false：缺照片時由 service 回「請拍酒測器讀數照片」這類訊息，
+     * 不然 Spring 丟的 MissingServletRequestPartException 會被 GlobalExceptionHandler 當成 500。
+     */
+    @PostMapping(value = "/pre-trip", consumes = "multipart/form-data")
+    public PreTripInspectionResponse submitPreTripInspection(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestPart("request") PreTripInspectionRequestDTO request,
+            @RequestPart(value = "alcoholPhoto", required = false) MultipartFile alcoholPhoto,
+            @RequestPart(value = "dashcamPhoto", required = false) MultipartFile dashcamPhoto,
+            @RequestPart(value = "faultPhoto", required = false) MultipartFile faultPhoto
+    ) {
+        return departureService.submitPreTripInspection(driverId(jwt), request, alcoholPhoto, dashcamPhoto, faultPhoto);
+    }
+
+    /**
+     * 讀自己送過的檢查照片，kind 是 alcohol 或 fault。
+     * 酒測結果是個人資料：不放公開路徑、不給快取，只有本人查得到。
+     */
+    @GetMapping("/pre-trip/{inspectionId}/photos/{kind}")
+    public ResponseEntity<Resource> findPreTripPhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long inspectionId,
+            @PathVariable String kind
+    ) {
+        Path photo = preTripInspectionService.photo(driverId(jwt), inspectionId, kind);
+        if (!Files.isRegularFile(photo)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(imageType(photo))
+                .cacheControl(CacheControl.noStore())
+                .body(new FileSystemResource(photo));
+    }
+
+    /**
+     * 記錄今日出車時的行車紀錄器里程；出車前安全檢查要先通過。
+     * 司機端現在改由安全檢查一起記（DepartureService），這支保留給還沒改版的呼叫端。
+     */
     @PostMapping("/mileage/start")
     public MileageLogResponse startMileage(
             @AuthenticationPrincipal Jwt jwt,
@@ -286,7 +350,7 @@ public class DriverPortalController {
         return mileageLogsService.start(driverId(jwt), request);
     }
 
-    /** 記錄今日收工時的里程表讀數。 */
+    /** 記錄今日收車時的行車紀錄器里程。 */
     @PostMapping("/mileage/end")
     public MileageLogResponse endMileage(
             @AuthenticationPrincipal Jwt jwt,
@@ -294,7 +358,7 @@ public class DriverPortalController {
         return mileageLogsService.end(driverId(jwt), request);
     }
 
-    /** 補傳出車時的里程表照片；保留原本的 JSON 登記 API。 */
+    /** 補傳出車時的行車紀錄器照片；保留原本的 JSON 登記 API。 */
     @PostMapping(value = "/mileage/start/photo", consumes = "multipart/form-data")
     public MileageLogResponse uploadStartMileagePhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -303,7 +367,7 @@ public class DriverPortalController {
         return mileageLogsService.attachStartPhoto(driverId(jwt), file);
     }
 
-    /** 補傳收車時的里程表照片；保留原本的 JSON 登記 API。 */
+    /** 補傳收車時的行車紀錄器照片；保留原本的 JSON 登記 API。 */
     @PostMapping(value = "/mileage/end/photo", consumes = "multipart/form-data")
     public MileageLogResponse uploadEndMileagePhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -340,6 +404,18 @@ public class DriverPortalController {
     @PostMapping("/messages/read")
     public int markMessagesRead(@AuthenticationPrincipal Jwt jwt) {
         return driverMessagesService.markReadByDriver(driverId(jwt));
+    }
+
+    /** 檔名的副檔名是存檔時依檔案內容決定的（PreTripPhotoStorageService），照著回傳對應的類型 */
+    private MediaType imageType(Path photo) {
+        String fileName = photo.getFileName().toString();
+        if (fileName.endsWith(".png")) {
+            return MediaType.IMAGE_PNG;
+        }
+        if (fileName.endsWith(".webp")) {
+            return MediaType.parseMediaType("image/webp");
+        }
+        return MediaType.IMAGE_JPEG;
     }
 
     /** 從登入 Token 取得資料庫中的司機 ID。 */

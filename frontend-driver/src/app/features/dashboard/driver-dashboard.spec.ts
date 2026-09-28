@@ -142,12 +142,12 @@ describe('maneuverIcon', () => {
 });
 
 describe('caseDisplayStatus', () => {
-  it('資料庫只有 OPEN／CLOSED：OPEN 還沒有管理員回覆是等待回覆，回覆過是處理中', () => {
+  it('資料庫只有 OPEN／CLOSED：OPEN 還沒被接收是等待回覆，接收了是處理中', () => {
     expect(caseDisplayStatus({status: 'OPEN', acceptedAt: null})).toBe('waiting');
     expect(caseDisplayStatus({status: 'OPEN', acceptedAt: '2026-09-27T10:44:00'})).toBe('handling');
   });
 
-  it('結案就是結案，不管有沒有人回覆過', () => {
+  it('結案就是結案，不管有沒有人接收過', () => {
     expect(caseDisplayStatus({status: 'CLOSED', acceptedAt: null})).toBe('closed');
     expect(caseDisplayStatus({status: 'CLOSED', acceptedAt: '2026-09-27T10:44:00'})).toBe('closed');
   });

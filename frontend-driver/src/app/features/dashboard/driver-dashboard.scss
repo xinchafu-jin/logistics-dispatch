@@ -953,7 +953,6 @@ h2 {
 .delivery-complete-button,
 .delivery-exception-button,
 .delivery-cancel-button,
-.mileage-start-button,
 .mileage-end-button {
   display: inline-flex;
   min-height: 38px;
@@ -969,8 +968,7 @@ h2 {
   font-weight: 800;
 }
 
-.delivery-complete-button,
-.mileage-start-button {
+.delivery-complete-button {
   color: #08231f;
   background: #70d5ba;
 }
@@ -990,7 +988,6 @@ h2 {
 
 .delivery-complete-button mat-icon,
 .delivery-exception-button mat-icon,
-.mileage-start-button mat-icon,
 .mileage-end-button mat-icon,
 .mileage-heading mat-icon {
   width: 16px;
@@ -1087,7 +1084,6 @@ h2 {
   gap: 8px;
 }
 
-.mileage-start-button,
 .mileage-end-button {
   min-width: 58px;
 }

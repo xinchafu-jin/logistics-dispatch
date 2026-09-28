@@ -47,7 +47,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 所以另建一位測試司機、一台測試車和一條今天已發布的路線，測完連同訂單、補送單、異常單全部刪掉。
  * token 用專案的 JwtEncoder 簽（做法同 DriverMessagesApiTest）。</p>
  *
- * <p>前提：本機 DB 已套用 V5，至少有一個倉庫與一間門市。</p>
+ * <p>點交前要先通過出車前安全檢查（PreTripInspectionService.requirePassed），這裡直接插一筆通過的檢查，
+ * 檢查本身的規則由 PreTripInspectionApiTest、PreTripInspectionServiceTest 負責。</p>
+ *
+ * <p>前提：本機 DB 已套用 V10，至少有一個倉庫與一間門市。</p>
  */
 @SpringBootTest(properties = {
         "app.crypto.password=test-only-password-test-only-password",
@@ -102,6 +105,7 @@ class DriverLoadingApiTest {
         routeId = jdbcTemplate.queryForObject(
                 "SELECT id FROM routes WHERE vehicle_id = ? AND date = ?", Long.class, vehicleId, today);
 
+        insertPassedInspection(today);
         firstOrderId = insertOrder(MARKER + "-1", 1, storeId, warehouseId, today);
         secondOrderId = insertOrder(MARKER + "-2", 2, storeId, warehouseId, today);
     }
@@ -116,6 +120,9 @@ class DriverLoadingApiTest {
             jdbcTemplate.update("DELETE FROM orders WHERE parent_order_id = ?", orderId);
         }
         jdbcTemplate.update("DELETE FROM orders WHERE order_number LIKE ?", MARKER + "-%");
+        // pre_trip_inspections 沒有外鍵（稽核紀錄），刪路線不會連帶刪，要自己刪
+        jdbcTemplate.update("DELETE FROM pre_trip_inspections WHERE route_id IN (SELECT id FROM routes WHERE vehicle_id IN "
+                + "(SELECT id FROM vehicles WHERE plate_number = ?))", MARKER);
         jdbcTemplate.update("DELETE FROM routes WHERE vehicle_id IN (SELECT id FROM vehicles WHERE plate_number = ?)", MARKER);
         jdbcTemplate.update("DELETE FROM vehicles WHERE plate_number = ?", MARKER);
         jdbcTemplate.update("DELETE FROM drivers WHERE account = ?", MARKER);
@@ -201,6 +208,16 @@ class DriverLoadingApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"orderId\": " + firstOrderId + ", \"loadedBoxCount\": 12}"))
                 .andExpect(status().isForbidden());
+    }
+
+    /** 這條路線、這組人車、版本 1 的一筆通過檢查：酒測 0.00、15 項全部正常 */
+    private void insertPassedInspection(LocalDate today) {
+        jdbcTemplate.update("INSERT INTO pre_trip_inspections (route_id, driver_id, vehicle_id, route_version, work_date, "
+                        + "alcohol_mg_l, dashcam, engine_oil, brake_fluid, power_steering_fluid, transmission_oil, fuel, "
+                        + "coolant, battery_water, washer_fluid, tire_pressure, tire_tread, headlights, turn_signals, "
+                        + "brake_lights, dashboard_lights, alcohol_photo, passed, submitted_at) "
+                        + "VALUES (?, ?, ?, 1, ?, 0.00, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'test.jpg', 1, NOW(6))",
+                routeId, driverId, vehicleId, today);
     }
 
     private long insertOrder(String orderNumber, int sequence, long storeId, long warehouseId, LocalDate today) {
