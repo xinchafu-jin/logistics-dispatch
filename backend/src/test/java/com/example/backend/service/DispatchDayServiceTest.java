@@ -16,7 +16,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -148,6 +150,59 @@ class DispatchDayServiceTest {
         route(10L, TODAY, RouteStatus.DRAFT);
 
         assertEquals(DispatchDayStatus.UNPLANNED, statusOf(TODAY));
+    }
+
+    @Test
+    void 撤回後仍有已完成訂單_配送進度不代表已發布() {
+        order(TODAY, OrderStatus.COMPLETED, 10L);
+        order(TODAY, OrderStatus.COMPLETED, 10L);
+        order(TODAY, OrderStatus.COMPLETED, 10L);
+        order(TODAY, OrderStatus.CONFIRMED, 10L);
+        route(10L, TODAY, RouteStatus.DRAFT);
+
+        DispatchDayResponse day = service.getDays(TODAY, TODAY, TODAY).get(0);
+
+        assertEquals(DispatchDayStatus.IN_PROGRESS, day.getStatus());
+        assertEquals(3, day.getFinishedCount());
+        assertFalse(day.isPublished());
+        routes.get(0).setStatus(RouteStatus.PUBLISHED);
+        DispatchDayResponse republished = service.getDays(TODAY, TODAY, TODAY).get(0);
+        assertEquals(DispatchDayStatus.IN_PROGRESS, republished.getStatus());
+        assertTrue(republished.isPublished());
+    }
+
+    @Test
+    void 已結案且已撤回_不可視為已發布() {
+        order(TODAY, OrderStatus.COMPLETED, 10L);
+        route(10L, TODAY, RouteStatus.DRAFT);
+
+        DispatchDayResponse day = service.getDays(TODAY, TODAY, TODAY).get(0);
+        assertEquals(DispatchDayStatus.CLOSED, day.getStatus());
+        assertFalse(day.isPublished());
+    }
+
+    @Test
+    void 未結案舊日期且已撤回_不可視為已發布() {
+        order(YESTERDAY, OrderStatus.CONFIRMED, 10L);
+        route(10L, YESTERDAY, RouteStatus.DRAFT);
+
+        DispatchDayResponse day = service.getDays(YESTERDAY, YESTERDAY, TODAY).get(0);
+        assertEquals(DispatchDayStatus.UNRESOLVED, day.getStatus());
+        assertFalse(day.isPublished());
+    }
+
+    @Test
+    void 另一個倉庫仍有已發布路線_必須顯示已發布() {
+        order(TODAY, OrderStatus.CONFIRMED, 10L);
+        order(TODAY, OrderStatus.COMPLETED, 11L);
+        route(10L, TODAY, RouteStatus.DRAFT);
+        routes.get(0).setWarehouseId(1L);
+        route(11L, TODAY, RouteStatus.PUBLISHED);
+        routes.get(1).setWarehouseId(2L);
+
+        DispatchDayResponse day = service.getDays(TODAY, TODAY, TODAY).get(0);
+        assertEquals(DispatchDayStatus.IN_PROGRESS, day.getStatus());
+        assertTrue(day.isPublished());
     }
 
     // ── 數量 ─────────────────────────────────────────────

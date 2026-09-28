@@ -67,7 +67,12 @@ export interface ExceptionCaseDto {
 }
 
 export interface DriverDto {
+  monthlyOvertimeMinutes?: number;
+  monthlyUnsettledShifts?: number;
   id?: number;
+  warehouseId?: number | null;
+  warehouseName?: string | null;
+  warehouseCode?: string | null;
   account: string;
   password?: string;
   name: string;
@@ -341,6 +346,7 @@ export interface ReportQuery {
   vehicleId?: number;
   storeId?: number;
   routeId?: number;
+  includeDetails?: boolean;
 }
 
 export interface ReportDailySummaryDto {
@@ -380,6 +386,66 @@ export interface ReportCollectionDto<T = Record<string, unknown>> {
   from: string;
   to: string;
   [key: string]: string | number | boolean | null | T[];
+}
+
+export interface ReportWorkforceDto {
+  scheduledWorkShifts: number; excusedFullDayShifts: number; dueShifts: number;
+  attendedShifts: number; onTimeShifts: number; lateShifts: number; missingClockInShifts: number;
+  finishedShifts: number; overtimeShifts: number; overtimeMinutes: number; missingTimeShifts: number;
+  attendanceRate: number | null; onTimeRate: number | null; overtimeRate: number | null;
+}
+export interface ReportFleetDto {
+  startedTrips: number; returnedTrips: number; openTrips: number; invalidTrips: number;
+  usedVehicles: number; distanceRecordedTrips: number; actualKm: number | null; returnRate: number | null;
+}
+export interface ReportWarehousePerformanceDto {
+  warehouseId: number | null; warehouseName: string; workforce: ReportWorkforceDto; fleet: ReportFleetDto;
+}
+export interface ReportPerformanceDto {
+  from: string; to: string; workforce: ReportWorkforceDto; fleet: ReportFleetDto;
+  warehouses: ReportWarehousePerformanceDto[]; shifts: Record<string, unknown>[]; trips: Record<string, unknown>[];
+}
+
+export interface ReportDeliveryOutcomeDto {
+  dueOrders: number; deliveredOrders: number; fullOrders: number; outstandingOrders: number;
+  windowEligibleOrders: number; windowArrivals: number; lateArrivals: number; earlyArrivals: number;
+  missingArrivalOrders: number; missingWindowOrders: number; missingQualityOrders: number;
+  fullDeliveryRate: number | null; receivingWindowRate: number | null;
+}
+export interface ReportLoadingOutcomeDto {
+  checkedOrders: number; matchedOrders: number; mismatchedOrders: number;
+  missingLoadingOrders: number; dueUnassignedOrders: number; matchRate: number | null;
+}
+export interface ReportDeliveryProblemsDto {
+  assessedOrders: number; affectedOrders: number; shortageOrders: number;
+  damagedOrders: number; noSignatureOrders: number; issueRate: number | null;
+}
+export interface ReportRecoveryDto {
+  attemptedOrders: number; recoveryOrders: number; attemptedRecoveryOrders: number;
+  deliveredRecoveryOrders: number; outstandingRecoveryOrders: number; recoveryShare: number | null;
+}
+export interface ReportOrderOutcomeDto {
+  orderType: string | null; parentOrderId: number | null; attempted: boolean; recovery: boolean; recoveryReason: string | null;
+  orderId: number; orderNumber: string; date: string; warehouseId: number | null; warehouseName: string;
+  storeId: number | null; storeName: string; driverId: number | null; status: string;
+  due: boolean; delivered: boolean; full: boolean; withinWindow: boolean; late: boolean; early: boolean;
+  missingArrival: boolean; missingQuality: boolean; assessed: boolean; shortage: boolean; damaged: boolean;
+  noSignature: boolean; loadingMatched: boolean; loadingMismatch: boolean; missingLoading: boolean; dueUnassigned: boolean;
+  windowStart: string | null; windowEnd: string | null; arrivedAt: string | null; deliveredAt: string | null; loadedAt: string | null;
+  orderedBoxCount: number | null; expectedBoxCount: number | null; deliveredBoxCount: number | null; shortageBoxCount: number | null;
+  damagedBoxCount: number | null; replacementRequiredBoxCount: number | null; loadingIssue: string | null;
+  items: {productCode: string | null; itemName: string; expectedQuantity: number | null;
+    loadedQuantity: number | null; unit: string; notes: string | null}[];
+}
+export interface ReportOutcomesDto {
+  from: string; to: string; asOf: string; delivery: ReportDeliveryOutcomeDto;
+  safety: {assignedRoutes: number; inspectedRoutes: number; passedRoutes: number; failedRoutes: number;
+    missingInspectionRoutes: number; inspectionPassRate: number | null};
+  loading: ReportLoadingOutcomeDto; problems: ReportDeliveryProblemsDto;
+  warehouses: {warehouseId: number | null; warehouseName: string; delivery: ReportDeliveryOutcomeDto;
+    loading: ReportLoadingOutcomeDto; problems: ReportDeliveryProblemsDto}[];
+  daily: {date: string; dueOrders: number; fullOrders: number}[];
+  recovery: ReportRecoveryDto; orders: ReportOrderOutcomeDto[];
 }
 
 export interface VehicleDto {
@@ -578,6 +644,8 @@ export interface DispatchDayDto {
   /** yyyy-MM-dd */
   date: string;
   status: DispatchDayStatus;
+  /** 是否仍有已發布路線；配送進度不代表發布狀態。 */
+  published?: boolean;
   /** 有效訂單數，不含取消的單 */
   orderCount: number;
   pendingConfirmCount: number;
@@ -589,7 +657,8 @@ export interface DispatchDayDto {
 
 /** 看板推播：只說哪一天變了，收到後自己重查 /days、/board */
 export interface DispatchBoardPushDto {
-  date: string;
+  date: string | null;
+  resourcesChanged?: boolean;
 }
 
 export type RouteDeviationEndReason = 'BACK_ON_ROUTE' | 'DELIVERING' | 'ON_BREAK' | 'TRIP_ENDED' | 'OFF_DUTY';

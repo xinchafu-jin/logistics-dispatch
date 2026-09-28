@@ -11,6 +11,7 @@ import {
   DriverLeaveHistoryResponse,
   DriverLeaveBatchResponse,
   DriverMakeupLeaveRequest,
+  DriverMakeupLeaveBatchRequest,
   DriverPlannedLeaveBatchRequest,
   DriverLeaveRequest,
   DriverLeaveRequestResponse,
@@ -130,6 +131,10 @@ export class DriverOperationsService {
 
   submitMakeupLeave(request: DriverMakeupLeaveRequest): Observable<DriverLeaveRequestResponse> {
     return this.http.post<DriverLeaveRequestResponse>('/api/driver/leave-requests/makeup', request);
+  }
+
+  submitMakeupLeaveBatch(request: DriverMakeupLeaveBatchRequest): Observable<DriverLeaveRequestResponse[]> {
+    return this.http.post<DriverLeaveRequestResponse[]>('/api/driver/leave-requests/makeup-batch', request);
   }
 
   uploadLeaveEvidencePhoto(file: File): Observable<PhotoUploadResponse> {

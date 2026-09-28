@@ -277,8 +277,8 @@ export class DispatchDashboard implements OnInit {
   /** 發布是整天跨倉的動作；任何倉庫看到同一天已發布，就切成唯讀看板。 */
   readonly published = computed(() => {
     const date = this.dispatchDate();
-    const dayStatus = this.days().find((day) => day.date === date)?.status;
-    const dayWasPublished = ['PUBLISHED', 'IN_PROGRESS', 'CLOSED', 'UNRESOLVED'].includes(dayStatus ?? '');
+    const day = this.days().find((entry) => entry.date === date);
+    const dayWasPublished = day?.published ?? day?.status === 'PUBLISHED';
     return (
       this.publishedDates().has(date) ||
       dayWasPublished ||
@@ -632,7 +632,7 @@ export class DispatchDashboard implements OnInit {
     // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
     this.socket.boardPushes$
       .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
-      .subscribe((push) => this.onBoardPush(push.date));
+      .subscribe((push) => this.onBoardPush(push));
     // 偏離推播直接套用、不用 debounce：每一則都帶完整的那筆紀錄，不必回頭重查
     this.loadActiveDeviations();
     this.socket.routeDeviationPushes$
@@ -786,9 +786,13 @@ export class DispatchDashboard implements OnInit {
    * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
    * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
    */
-  private onBoardPush(date: string): void {
+  private onBoardPush(push: {date: string | null; resourcesChanged?: boolean}): void {
+    if (push.resourcesChanged) {
+      this.api.getDrivers().subscribe({next: drivers => this.drivers.set(drivers)});
+      this.api.getVehicles().subscribe({next: vehicles => this.vehicles.set(vehicles)});
+    }
     this.loadDays();
-    if (date === this.dispatchDate() && !this.busy()) {
+    if (push.date === this.dispatchDate() && !this.busy()) {
       this.refreshOrdersAndBoard();
     }
   }
@@ -1430,7 +1434,8 @@ export class DispatchDashboard implements OnInit {
     return this.drivers()
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && (driver.isActive || driver.id === route.driverId),
+          driver.id != null && driver.warehouseId === this.warehouseId()
+            && (driver.isActive || driver.id === route.driverId),
       )
       .map((driver) => ({
         id: driver.id,
@@ -1531,6 +1536,10 @@ export class DispatchDashboard implements OnInit {
   /** 車道司機今天不能出車的原因；沒指派司機或可以出車時回傳 null。車道紅框與狀態標籤用 */
   routeScheduleProblem(route: BoardRoute): string | null {
     return route.driverId === null ? null : this.driverScheduleNote(route.driverId);
+  }
+
+  assignedDriverOutsideWarehouse(route: BoardRoute): boolean {
+    return route.driverId !== null && this.drivers().find(driver => driver.id === route.driverId)?.warehouseId !== this.warehouseId();
   }
 
   /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
@@ -2164,6 +2173,9 @@ export class DispatchDashboard implements OnInit {
     }
     if (!driver.isActive) {
       return '帳號已停用';
+    }
+    if (driver.warehouseId !== this.warehouseId()) {
+      return '司機已轉至其他倉庫，請重新指派';
     }
     if (this.scheduleLoadState() === 'loading') {
       return '正在同步當日班表';

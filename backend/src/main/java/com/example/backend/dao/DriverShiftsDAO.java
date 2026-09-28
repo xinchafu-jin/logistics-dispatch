@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,6 +25,34 @@ public interface DriverShiftsDAO extends JpaRepository<DriverShiftsEntity, Long>
     );
 
     Optional<DriverShiftsEntity> findByDriverIdAndWorkDate(Long driverId, LocalDate workDate);
+
+    /** 可先選過去上班日（含有打卡）；送出時另檢查整天／部分時段資格與重複申請。 */
+    @Query("""
+            select shift.workDate from DriverShiftsEntity shift
+            join ScheduleMonthsEntity month on month.id = shift.scheduleMonthId
+            where shift.driverId = :driverId and shift.workDate between :from and :to
+              and shift.shiftType = com.example.backend.constants.ShiftType.WORK
+              and month.status = com.example.backend.constants.ScheduleStatus.PUBLISHED
+              and (:fullDay = true or ((shift.workStart is null or shift.workStart <= :leaveStart)
+                              and (shift.workEnd is null or shift.workEnd >= :leaveEnd)))
+              and not exists (select request.id from DriverLeaveRequestsEntity request
+                  where request.driverId = shift.driverId and request.workDate = shift.workDate
+                    and request.status <> com.example.backend.constants.LeaveRequestStatus.REJECTED
+                    and (request.status = com.example.backend.constants.LeaveRequestStatus.PENDING
+                      or :fullDay = true or request.fullDay = true
+                      or request.leaveStart is null or request.leaveEnd is null
+                      or (request.leaveStart < :leaveEnd and :leaveStart < request.leaveEnd))
+                    and not (request.status = com.example.backend.constants.LeaveRequestStatus.PENDING
+                      and (request.requestMode = com.example.backend.constants.LeaveRequestMode.SYSTEM_NO_SHOW
+                        or request.requestMode = com.example.backend.constants.LeaveRequestMode.TEMPORARY)
+                      and request.submissionSource = com.example.backend.constants.LeaveSubmissionSource.SYSTEM
+                      and request.fullDay = true))
+            order by shift.workDate
+            """)
+    List<LocalDate> findMakeupCandidateDates(@Param("driverId") Long driverId,
+            @Param("from") LocalDate from, @Param("to") LocalDate to,
+            @Param("fullDay") boolean fullDay, @Param("leaveStart") LocalTime leaveStart,
+            @Param("leaveEnd") LocalTime leaveEnd);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""

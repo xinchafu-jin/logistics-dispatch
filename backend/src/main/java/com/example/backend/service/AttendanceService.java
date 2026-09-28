@@ -148,6 +148,40 @@ public class AttendanceService {
                 });
     }
 
+    /** 與營運報表一致：只結算有效上下班卡，不採用可能過期的即時加班快取。 */
+    public int monthlyOvertimeMinutes(Long driverId) {
+        return monthlyOvertimeMinutes(driverId, now());
+    }
+
+    int monthlyOvertimeMinutes(Long driverId, LocalDateTime asOf) {
+        return monthlyOvertimeSummary(driverId, asOf).minutes();
+    }
+
+    public MonthlyOvertimeSummary monthlyOvertimeSummary(Long driverId) {
+        return monthlyOvertimeSummary(driverId, now());
+    }
+
+    MonthlyOvertimeSummary monthlyOvertimeSummary(Long driverId, LocalDateTime asOf) {
+        LocalDate today = asOf.toLocalDate();
+        LocalDate firstDay = YearMonth.from(today).atDay(1);
+        long minutes = 0;
+        int unsettled = 0;
+        for (var record : attendanceRecordsDAO.findByDriverIdAndWorkDateBetweenOrderByWorkDateAsc(driverId, firstDay, today)) {
+            var shift = driverShiftsDAO.findById(record.getDriverShiftId()).orElse(null);
+            if (shift == null || shift.getShiftType() != ShiftType.WORK || shift.getWorkStart() == null
+                    || shift.getWorkEnd() == null || !driverId.equals(shift.getDriverId())) continue;
+            var month = scheduleMonthsDAO.findById(shift.getScheduleMonthId()).orElse(null);
+            if (month == null || month.getStatus() != ScheduleStatus.PUBLISHED) continue;
+            Long observed = RecordedOvertime.minutes(record.getClockInAt(), record.getClockOutAt(),
+                    resolveScheduledEnd(record.getWorkDate(), shift), record.getBreakStartedAt(), record.getBreakEndsAt(), asOf);
+            if (observed == null) unsettled++;
+            else minutes += observed;
+        }
+        return new MonthlyOvertimeSummary(Math.toIntExact(minutes), unsettled);
+    }
+
+    public record MonthlyOvertimeSummary(int minutes, int unsettledShifts) {}
+
     /** GPS 寫入前的後端防線：只有工作中才允許，休息與下班一律拒絕。 */
     public boolean isGpsUploadAllowed(Long driverId) {
         LocalDateTime now = now();

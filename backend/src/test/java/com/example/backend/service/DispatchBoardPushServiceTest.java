@@ -14,6 +14,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -95,6 +97,47 @@ class DispatchBoardPushServiceTest {
         service.markChanged(MON);
 
         assertDoesNotThrow(this::commit);
+    }
+
+    @Test
+    void 資源異動_同一交易只在commit後推一次() {
+        TransactionSynchronizationManager.initSynchronization();
+        service.markResourcesChanged();
+        service.markResourcesChanged();
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
+        commit();
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate).convertAndSend(eq(DispatchBoardPushService.ADMIN_TOPIC), captor.capture());
+        DispatchBoardPushResponse response = (DispatchBoardPushResponse) captor.getValue();
+        assertTrue(response.isResourcesChanged());
+        assertNull(response.getDate());
+    }
+
+    @Test
+    void 資源異動_rollback不能推() {
+        TransactionSynchronizationManager.initSynchronization();
+        service.markResourcesChanged();
+        rollback();
+        verify(messagingTemplate, never()).convertAndSend(any(String.class), any(Object.class));
+    }
+
+    @Test
+    void 資源異動_交易外立即通知() {
+        service.markResourcesChanged();
+        verify(messagingTemplate).convertAndSend(eq(DispatchBoardPushService.ADMIN_TOPIC), any(Object.class));
+    }
+
+    @Test
+    void 日期與資源同時異動_兩種通知都保留() {
+        TransactionSynchronizationManager.initSynchronization();
+        service.markChanged(MON);
+        service.markResourcesChanged();
+        service.markChanged(MON);
+        commit();
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(messagingTemplate, times(2)).convertAndSend(eq(DispatchBoardPushService.ADMIN_TOPIC), captor.capture());
+        assertEquals(MON, ((DispatchBoardPushResponse) captor.getAllValues().get(0)).getDate());
+        assertTrue(((DispatchBoardPushResponse) captor.getAllValues().get(1)).isResourcesChanged());
     }
 
     private void commit() {

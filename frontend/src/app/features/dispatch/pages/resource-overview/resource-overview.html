@@ -58,6 +58,7 @@
         </div>
 
         <div class="view-switch" role="group" aria-label="資源類型">
+          <button type="button" [class.is-active]="activeView() === 'drivers'" [attr.aria-pressed]="activeView() === 'drivers'" (click)="setView('drivers')">司機</button>
           <button
             type="button"
             [class.is-active]="activeView() === 'vehicles'"
@@ -99,6 +100,15 @@
           }
         </div>
 
+        @if (activeView() === 'drivers') {
+          <mat-select class="driver-warehouse-filter" aria-label="司機所屬倉庫篩選" [value]="driverWarehouseFilter()" (selectionChange)="driverWarehouseFilter.set($event.value)">
+            <mat-option value="all">全部倉庫</mat-option>
+            @for (warehouse of warehouses(); track warehouse.id) {
+              <mat-option [value]="warehouse.id">{{ warehouse.warehouseCode }} · {{ warehouse.name }}</mat-option>
+            }
+          </mat-select>
+        }
+
         <label class="search-field">
           <mat-icon aria-hidden="true">search</mat-icon>
           <span class="sr-only">搜尋人員或車輛</span>
@@ -115,6 +125,33 @@
         <p class="empty-state">正在載入資源資料...</p>
       } @else if (errorMessage()) {
         <p class="empty-state">{{ errorMessage() }}</p>
+      } @else if (activeView() === 'drivers') {
+        <div class="driver-resource-list">
+          <div class="driver-list-heading"><span>司機資訊 <small>{{ visibleDrivers().length }} 位</small></span><span>所屬倉庫</span><span>工作時間</span></div>
+          @for (driver of visibleDrivers(); track driver.id) {
+            <article class="driver-resource-card" [attr.aria-label]="'司機 ' + driver.name">
+              <section class="driver-detail-block">
+                <h4><mat-icon aria-hidden="true">person</mat-icon>司機資訊</h4>
+                <div class="driver-identity"><strong>{{ driver.name }}</strong><span class="driver-state" [class.is-inactive]="!driver.isActive">{{ driver.isActive ? '在職' : '停用' }}</span></div>
+                <dl class="driver-details"><div><dt>司機編號</dt><dd>{{ driver.account }}</dd></div><div><dt>手機號碼</dt><dd>{{ driver.phone || '—' }}</dd></div></dl>
+                <div class="driver-card-actions"><button type="button" class="secondary-action" [attr.aria-label]="'編輯司機 ' + driver.name" (click)="openEditDriver(driver)"><mat-icon aria-hidden="true">edit</mat-icon>編輯司機</button></div>
+              </section>
+              <section class="driver-detail-block">
+                <h4><mat-icon aria-hidden="true">warehouse</mat-icon>所屬倉庫</h4>
+                @if (driverWarehouse(driver); as warehouse) {
+                  <strong class="driver-warehouse-name">{{ warehouse.name }}</strong>
+                  <dl class="driver-details"><div><dt>倉庫代碼</dt><dd>{{ warehouse.warehouseCode }}</dd></div><div><dt>地址</dt><dd>{{ warehouse.address || '尚未提供地址' }}</dd></div></dl>
+                  @if (!warehouse.isActive) { <span class="driver-unassigned">倉庫已停用</span> }
+                } @else { <strong class="driver-unassigned">待設定所屬倉庫</strong><dl class="driver-details"><div><dt>倉庫代碼</dt><dd>—</dd></div><div><dt>地址</dt><dd>請編輯司機設定倉庫，設定後才可派車。</dd></div></dl> }
+              </section>
+              <section class="driver-detail-block">
+                <h4><mat-icon aria-hidden="true">schedule</mat-icon>工作時間</h4>
+                <strong class="driver-work-time">{{ driver.workStart.slice(0, 5) }} – {{ driver.workEnd.slice(0, 5) }}</strong>
+                <dl class="driver-details"><div><dt>休息時間</dt><dd>{{ driver.restDuration }} 分鐘</dd></div><div><dt>本月已加班</dt><dd>{{ driver.monthlyOvertimeMinutes ?? '—' }} 分鐘</dd></div></dl>
+              </section>
+            </article>
+          } @empty { <p class="empty-state">沒有符合目前篩選條件的司機。</p> }
+        </div>
       } @else if (activeView() === 'vehicles') {
         <div class="resource-table vehicle-table">
           <div class="table-head" aria-hidden="true">
@@ -331,7 +368,7 @@
         [attr.aria-labelledby]="
           formType === 'admin'
             ? 'admin-form-title'
-            : formType === 'driver'
+            : formType === 'driver' || formType === 'edit-driver'
               ? 'driver-form-title'
               : formType === 'vehicle' || formType === 'edit-vehicle'
               ? 'vehicle-form-title'
@@ -348,7 +385,7 @@
               [id]="
                 formType === 'admin'
                   ? 'admin-form-title'
-                  : formType === 'driver'
+                  : formType === 'driver' || formType === 'edit-driver'
                     ? 'driver-form-title'
                     : formType === 'vehicle' || formType === 'edit-vehicle'
                     ? 'vehicle-form-title'
@@ -362,6 +399,8 @@
                   ? '新增管理員'
                   : formType === 'driver'
                     ? '新增司機'
+                    : formType === 'edit-driver'
+                      ? '編輯司機'
                     : formType === 'vehicle'
                     ? '新增車輛'
                     : formType === 'edit-vehicle'
@@ -444,7 +483,7 @@
               </button>
             </div>
           </form>
-        } @else if (formType === 'driver') {
+        } @else if (formType === 'driver' || formType === 'edit-driver') {
           <form class="resource-form" (submit)="$event.preventDefault(); submitDriver()">
             <div class="form-grid">
               <label class="form-field">
@@ -474,20 +513,37 @@
                   type="text"
                   required
                   autocomplete="username"
+                  [readonly]="formType === 'edit-driver'"
                   [value]="driverForm().account"
                   (input)="updateDriverText('account', $event)"
                 />
               </label>
+              @if (formType === 'driver') {
               <label class="form-field">
-                <span>系統產生的初始密碼</span>
+                <span>身分證字號（初始密碼）</span>
                 <input
-                  type="text"
+                  type="password"
                   required
-                  readonly
-                  autocomplete="off"
+                  maxlength="10"
+                  autocomplete="new-password"
                   [value]="driverForm().password"
+                  (input)="updateDriverText('password', $event)"
                 />
               </label>
+              }
+              <div class="form-field" role="group" aria-label="司機所屬倉庫">
+                <span>所屬倉庫</span>
+                <mat-select class="driver-warehouse-select" aria-label="司機所屬倉庫" [value]="driverForm().warehouseId" (selectionChange)="updateDriverWarehouse($event.value)">
+                  @for (warehouse of warehouses(); track warehouse.id) {
+                    <mat-option [value]="warehouse.id" [disabled]="!warehouse.isActive && warehouse.id !== driverForm().warehouseId">{{ warehouse.warehouseCode }} · {{ warehouse.name }}</mat-option>
+                  }
+                </mat-select>
+              </div>
+              <label class="form-field"><span>上班時間</span><input type="time" required [value]="driverForm().workStart.slice(0, 5)" (input)="updateDriverText('workStart', $event)" /></label>
+              <label class="form-field"><span>下班時間</span><input type="time" required [value]="driverForm().workEnd.slice(0, 5)" (input)="updateDriverText('workEnd', $event)" /></label>
+              <label class="form-field"><span>休息時間（分鐘）</span><input type="number" min="0" step="1" [value]="driverForm().restDuration" (input)="updateDriverNumber('restDuration', $event)" /></label>
+              <label class="form-field"><span>加班上限（分鐘）</span><input type="number" min="0" step="1" [value]="driverForm().maxOvertimeMinutes ?? 0" (input)="updateDriverNumber('maxOvertimeMinutes', $event)" /></label>
+              <label class="form-field"><span>帳號啟用（在職）</span><input type="checkbox" [checked]="driverForm().isActive" (change)="updateDriverActive($event)" /></label>
             </div>
 
             @if (formError()) {
@@ -497,7 +553,7 @@
             <div class="modal-actions">
               <button type="button" class="plain-button" (click)="closeForm()">取消</button>
               <button type="submit" class="primary-action" [disabled]="isSaving()">
-                {{ isSaving() ? '建立中...' : '建立司機帳號' }}
+                {{ isSaving() ? '儲存中...' : formType === 'edit-driver' ? '儲存司機資料' : '建立司機帳號' }}
               </button>
             </div>
           </form>

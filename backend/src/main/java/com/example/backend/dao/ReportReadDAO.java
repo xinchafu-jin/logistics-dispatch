@@ -4,9 +4,13 @@ import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.entity.AttendanceRecordsEntity;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriverShiftsEntity;
+import com.example.backend.entity.DriverLeaveRequestsEntity;
+import com.example.backend.constants.LeaveRequestStatus;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.OrderItemsEntity;
+import com.example.backend.entity.PreTripInspectionsEntity;
 import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.EntityManager;
@@ -82,6 +86,11 @@ public class ReportReadDAO {
                 .getResultList();
     }
 
+    public List<DriverLeaveRequestsEntity> approvedLeaves(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("select l from DriverLeaveRequestsEntity l where l.workDate between :from and :to and l.status = :approved", DriverLeaveRequestsEntity.class)
+                .setParameter("from", from).setParameter("to", to).setParameter("approved", LeaveRequestStatus.APPROVED).getResultList();
+    }
+
     public List<RouteLegMileagesEntity> routeLegMileages(List<Long> routeIds) {
         if (routeIds.isEmpty()) {
             return List.of();
@@ -124,5 +133,36 @@ public class ReportReadDAO {
                     .getResultList());
         }
         return records;
+    }
+
+    public List<ExceptionCasesEntity> exceptionsForOrders(List<Long> orderIds) {
+        List<ExceptionCasesEntity> records = new ArrayList<>();
+        for (int i = 0; i < orderIds.size(); i += ID_BATCH_SIZE) {
+            records.addAll(entityManager.createQuery(
+                            "select e from ExceptionCasesEntity e where e.orderId in :ids order by e.id",
+                            ExceptionCasesEntity.class)
+                    .setParameter("ids", orderIds.subList(i, Math.min(i + ID_BATCH_SIZE, orderIds.size())))
+                    .getResultList());
+        }
+        return records;
+    }
+
+    public List<PreTripInspectionsEntity> inspections(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("""
+                        select i from PreTripInspectionsEntity i where i.workDate between :from and :to
+                        order by i.id
+                        """, PreTripInspectionsEntity.class)
+                .setParameter("from", from).setParameter("to", to).getResultList();
+    }
+
+    public List<OrderItemsEntity> orderItemsForOrders(List<Long> ids) {
+        List<OrderItemsEntity> rows = new ArrayList<>();
+        for (int i = 0; i < ids.size(); i += ID_BATCH_SIZE) {
+            rows.addAll(entityManager.createQuery(
+                            "select i from OrderItemsEntity i where i.order.id in :ids order by i.order.id, i.sequence, i.id",
+                            OrderItemsEntity.class)
+                    .setParameter("ids", ids.subList(i, Math.min(i + ID_BATCH_SIZE, ids.size()))).getResultList());
+        }
+        return rows;
     }
 }

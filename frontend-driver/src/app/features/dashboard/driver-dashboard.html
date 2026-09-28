@@ -622,11 +622,13 @@
         <section class="schedule-calendar-card" aria-label="班表月曆">
           <mat-calendar
             #scheduleCalendar
+            appScheduleCellLabels
             class="driver-schedule-calendar"
             [startAt]="scheduleMonth()"
-            [selected]="selectedScheduleDate()"
+            [selected]="calendarLeaveComposer()?.activeMode() ? null : selectedScheduleDate()"
             [dateClass]="scheduleDateClass"
-            (selectedChange)="selectedScheduleDate.set($event!)"
+            [dateFilter]="scheduleDateFilter"
+            (selectedChange)="selectScheduleDate($event)"
           />
           <div class="schedule-legend" aria-hidden="true">
             <span class="shift-type is-work">上班</span>
@@ -720,24 +722,10 @@
               <button type="button" class="primary-action" (click)="submitPlannedLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出預排請假' }}</button>
             </div>
           } @else {
-            <p>只可選擇已結束、整天未打卡的已發布班次，不能任意挑選過去日期。</p>
-            <div class="planned-date-options" aria-label="可事後補請班次">
-              @for (candidate of makeupLeaveCandidates(); track candidate.id) {
-                <button type="button" [class.is-selected]="makeupLeaveForm().workDate === candidate.workDate" [disabled]="isLeaveSubmitting()" (click)="selectMakeupLeaveDate(candidate.workDate)">
-                  <strong>{{ formatShiftDate(candidate.workDate) }}</strong><span>整天未到班</span>
-                  <small>待補充說明</small>
-                </button>
-              } @empty { <p>目前沒有可事後補請的班次。</p> }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="makeupLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateMakeupLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請說明當天未到原因" [value]="makeupLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateMakeupLeaveField('reason', $event)"></textarea></label>
-              <label><span>佐證照片（選填）</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" [disabled]="isLeaveSubmitting()" (change)="selectMakeupEvidence($event)" /></label>
-              @if (selectedMakeupEvidenceFile(); as evidence) { <small class="leave-file-name">{{ evidence.name }}</small> }
-              <button type="button" class="primary-action" (click)="submitMakeupLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出事後補請' }}</button>
-            </div>
+            <app-schedule-leave-composer #calendarLeaveComposer [makeupOnly]="true"
+              [month]="scheduleMonth()" [shifts]="publishedShifts()" [scheduleReady]="scheduleViewState() === 'ready'"
+              [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
+              (calendarChange)="refreshScheduleCalendar()" (submitted)="onCalendarLeaveSubmitted($event)" />
           }
 
           <div class="driver-leave-history" aria-label="請假與特殊事由處理結果">
@@ -895,6 +883,10 @@
           <div>
             <dt>電話</dt>
             <dd>{{ profile()?.phone || '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>所屬倉庫</dt>
+            <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
           </div>
           <div>
             <dt>登入狀態</dt>

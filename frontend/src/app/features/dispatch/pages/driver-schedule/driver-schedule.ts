@@ -930,6 +930,10 @@ export class DriverSchedule implements OnInit {
     }[shiftType];
   }
 
+  protected shiftIcon(shiftType: ShiftType): string {
+    return {WORK: 'work_outline', DAY_OFF: 'free_breakfast', LEAVE: 'event_busy', UNASSIGNED: 'event_note'}[shiftType];
+  }
+
   protected scheduleStatusLabel(): string {
     return this.isPublished() ? '已發布' : '草稿中';
   }

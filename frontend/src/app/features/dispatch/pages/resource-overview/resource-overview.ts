@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { forkJoin, Observable } from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
+import {MatSelectModule} from '@angular/material/select';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
 import {
   AdminUserCreateRequest,
@@ -17,7 +18,7 @@ import {
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 
-type ResourceView = 'vehicles' | 'stores' | 'warehouses';
+type ResourceView = 'vehicles' | 'drivers' | 'stores' | 'warehouses';
 type VehicleResourceStatus = '待派車' | '保養中' | '維修中' | '已退役';
 /** 行車紀錄器里程與保養基準：新增時可以填；編輯時只有原本是空的（舊車）才能補一次 */
 type VehicleMileageField = 'currentOdometerKm' | 'lastMinorMaintenanceKm' | 'lastMajorMaintenanceKm';
@@ -35,6 +36,7 @@ type WarehouseResourceStatus = '啟用' | '停用';
 type ResourceForm =
   | 'admin'
   | 'driver'
+  | 'edit-driver'
   | 'vehicle'
   | 'edit-vehicle'
   | 'store'
@@ -56,9 +58,6 @@ const deleteTargetLabels: Record<DeleteTargetKind, string> = {
   store: '店家',
   warehouse: '倉庫',
 };
-
-const DRIVER_INITIAL_PASSWORD_LENGTH = 12;
-const DRIVER_PASSWORD_CHARACTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
 
 interface StoreResource {
   backendId?: number;
@@ -92,10 +91,11 @@ function emptyAdminUser(): AdminUserCreateRequest {
   };
 }
 
-function emptyDriver(): DriverDto {
+function emptyDriver(warehouseId?: number): DriverDto {
   return {
+    warehouseId,
     account: '',
-    password: generateDriverInitialPassword(),
+    password: '',
     name: '',
     phone: '',
     workStart: '08:00',
@@ -104,21 +104,6 @@ function emptyDriver(): DriverDto {
     maxOvertimeMinutes: 0,
     isActive: true,
   };
-}
-
-function generateDriverInitialPassword(): string {
-  const characters = DRIVER_PASSWORD_CHARACTERS;
-  const values = new Uint8Array(DRIVER_INITIAL_PASSWORD_LENGTH);
-
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(values);
-  } else {
-    for (let index = 0; index < values.length; index += 1) {
-      values[index] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  return Array.from(values, (value) => characters[value % characters.length]).join('');
 }
 
 function emptyStore(): StoreDto {
@@ -194,6 +179,7 @@ interface VehicleResource {
   selector: 'app-resource-overview',
   imports: [
     MatIconModule,
+    MatSelectModule,
     DatePipe,
     DecimalPipe,
   ],
@@ -206,6 +192,9 @@ export class ResourceOverview implements OnInit {
   readonly activeView = signal<ResourceView>('vehicles');
   readonly activeFilter = signal('all');
   readonly searchTerm = signal('');
+  readonly drivers = signal<DriverDto[]>([]);
+  readonly driverWarehouseFilter = signal<number | 'all'>('all');
+  readonly editingDriverId = signal<number | null>(null);
   readonly vehicles = signal<VehicleDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly warehouses = signal<WarehouseDto[]>([]);
@@ -249,6 +238,24 @@ export class ResourceOverview implements OnInit {
   readonly vehicleFilters = ['all', '待派車', '保養中', '維修中', '已退役'];
   readonly storeFilters = ['all', '營業中', '暫停營業'];
   readonly warehouseFilters = ['all', '啟用', '停用'];
+  readonly driverFilters = ['all', '在職', '停用', '待設定倉庫'];
+  readonly activeDriverCount = computed(() => this.drivers().filter(driver => driver.isActive).length);
+  readonly visibleDrivers = computed(() => {
+    const term = this.searchTerm().trim().toLowerCase();
+    const status = this.activeFilter();
+    const warehouseId = this.driverWarehouseFilter();
+    return this.drivers().filter(driver => {
+      const warehouse = this.driverWarehouse(driver);
+      return (warehouseId === 'all' || driver.warehouseId === warehouseId)
+        && (status === 'all' || (status === '在職' && driver.isActive) || (status === '停用' && !driver.isActive)
+          || (status === '待設定倉庫' && driver.warehouseId == null))
+        && (!term || `${driver.name} ${driver.account} ${driver.phone ?? ''} ${warehouse?.name ?? ''} ${warehouse?.warehouseCode ?? ''}`.toLowerCase().includes(term));
+    });
+  });
+
+  driverWarehouse(driver: DriverDto): WarehouseDto | undefined {
+    return this.warehouses().find(warehouse => warehouse.id === driver.warehouseId);
+  }
 
   readonly visibleVehicles = computed<VehicleResource[]>(() => {
     const filter = this.activeFilter();
@@ -292,6 +299,7 @@ export class ResourceOverview implements OnInit {
   });
 
   readonly currentFilters = computed(() => {
+    if (this.activeView() === 'drivers') return this.driverFilters;
     if (this.activeView() === 'stores') {
       return this.storeFilters;
     }
@@ -327,6 +335,7 @@ export class ResourceOverview implements OnInit {
     this.activeView.set(view);
     this.activeFilter.set('all');
     this.searchTerm.set('');
+    this.driverWarehouseFilter.set('all');
   }
 
   openCreateAdmin(): void {
@@ -336,9 +345,36 @@ export class ResourceOverview implements OnInit {
   }
 
   openCreateDriver(): void {
-    this.driverForm.set(emptyDriver());
+    this.setView('drivers');
+    if (!this.defaultWarehouseId()) {
+      this.errorMessage.set('請先建立倉庫，再新增司機。');
+      return;
+    }
+    this.driverForm.set(emptyDriver(this.defaultWarehouseId()));
+    this.editingDriverId.set(null);
     this.formError.set('');
     this.activeForm.set('driver');
+  }
+
+  openEditDriver(driver: DriverDto): void {
+    if (driver.id == null) return;
+    const {password, ...editable} = driver;
+    this.driverForm.set({...editable});
+    this.editingDriverId.set(driver.id);
+    this.formError.set('');
+    this.activeForm.set('edit-driver');
+  }
+
+  updateDriverWarehouse(warehouseId: number): void {
+    this.driverForm.update(form => ({...form, warehouseId}));
+  }
+
+  updateDriverNumber(field: 'restDuration' | 'maxOvertimeMinutes', event: Event): void {
+    this.driverForm.update(form => ({...form, [field]: Number((event.target as HTMLInputElement).value)}));
+  }
+
+  updateDriverActive(event: Event): void {
+    this.driverForm.update(form => ({...form, isActive: (event.target as HTMLInputElement).checked}));
   }
 
   openCreateStore(): void {
@@ -641,8 +677,9 @@ export class ResourceOverview implements OnInit {
 
   /** 後端的錯誤訊息（例如「小保基準已經有紀錄…」）直接顯示，拿不到才用預設的 */
   private errorText(error: unknown, fallback: string): string {
-    if (error instanceof HttpErrorResponse && typeof error.error?.message === 'string') {
-      return error.error.message;
+    const body = error instanceof HttpErrorResponse ? error.error : (error as {error?: {message?: unknown}} | null)?.error;
+    if (typeof body?.message === 'string') {
+      return body.message;
     }
     return fallback;
   }
@@ -696,6 +733,7 @@ export class ResourceOverview implements OnInit {
       this.activeForm.set(null);
       this.correctionOpen.set(false);
       this.editingVehicleId.set(null);
+      this.editingDriverId.set(null);
       this.editingStoreId.set(null);
       this.editingWarehouseId.set(null);
       this.formError.set('');
@@ -707,7 +745,7 @@ export class ResourceOverview implements OnInit {
     this.adminForm.update((form) => ({ ...form, [field]: value }));
   }
 
-  updateDriverText(field: 'account' | 'name' | 'phone', event: Event): void {
+  updateDriverText(field: 'account' | 'name' | 'phone' | 'password' | 'workStart' | 'workEnd', event: Event): void {
     const value = (event.target as HTMLInputElement).value;
     this.driverForm.update((form) => ({...form, [field]: value}));
   }
@@ -811,6 +849,8 @@ export class ResourceOverview implements OnInit {
 
   submitDriver(): void {
     const driver = this.driverForm();
+    const editingId = this.editingDriverId();
+    const isEditing = this.activeForm() === 'edit-driver';
     const password = driver.password?.trim() ?? '';
 
     if (!driver.account.trim() || !driver.name.trim() || !driver.phone?.trim()) {
@@ -823,21 +863,29 @@ export class ResourceOverview implements OnInit {
       return;
     }
 
-    if (password.length < 8 || password.length > 12) {
-      this.formError.set('系統產生的初始密碼不符合規則，請重新開啟新增司機表單。');
+    if (!Number.isInteger(driver.warehouseId) || driver.warehouseId! <= 0) {
+      this.formError.set('請選擇司機的所屬倉庫。');
       return;
     }
-
-    this.saveResource(
-      this.api.createDriver({
-        ...driver,
-        account: driver.account.trim(),
-        name: driver.name.trim(),
-        phone: driver.phone.trim(),
-        password,
-      }),
-      () => this.updatedAt.set(this.formatCurrentTime()),
-    );
+    if (!driver.workStart || !driver.workEnd) {
+      this.formError.set('請填寫上班與下班時間。'); return;
+    }
+    if (![driver.restDuration, driver.maxOvertimeMinutes ?? 0].every(value => Number.isInteger(value) && value >= 0)) {
+      this.formError.set('休息時間與加班上限需為 0 或正整數。'); return;
+    }
+    if (!isEditing && !/^[A-Z][12]\d{8}$/.test(password)) {
+      this.formError.set('請填寫大寫的台灣身分證字號作為初始密碼。'); return;
+    }
+    if (isEditing && editingId === null) {
+      this.formError.set('找不到要修改的司機。'); return;
+    }
+    const {password: ignoredPassword, warehouseName, warehouseCode, profilePhotoUrl, ...fields} = driver;
+    const payload: DriverDto = {...fields, account: driver.account.trim(), name: driver.name.trim(), phone: driver.phone.trim()};
+    if (!isEditing) payload.password = password;
+    this.saveResource(isEditing ? this.api.updateDriver(editingId!, payload) : this.api.createDriver(payload), saved => {
+      this.drivers.update(items => isEditing ? items.map(item => item.id === saved.id ? saved : item) : [...items, saved]);
+      this.updatedAt.set(this.formatCurrentTime());
+    });
   }
 
   submitVehicle(): void {
@@ -1069,16 +1117,23 @@ export class ResourceOverview implements OnInit {
     this.searchTerm.set((event.target as HTMLInputElement).value);
   }
 
+  clearSearch(input: HTMLInputElement): void {
+    input.value = '';
+    this.searchTerm.set('');
+  }
+
   private loadResources(): void {
     this.loading.set(true);
     this.errorMessage.set('');
 
     forkJoin({
+      drivers: this.api.getDrivers(),
       vehicles: this.api.getVehicles(),
       stores: this.api.getStores(),
       warehouses: this.api.getWarehouses(),
     }).subscribe({
-      next: ({ vehicles, stores, warehouses }) => {
+      next: ({ drivers, vehicles, stores, warehouses }) => {
+        this.drivers.set(drivers);
         this.vehicles.set(vehicles);
         this.stores.set(stores);
         this.warehouses.set(warehouses);

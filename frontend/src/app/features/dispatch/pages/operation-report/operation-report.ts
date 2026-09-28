@@ -1,292 +1,336 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { Router } from '@angular/router';
-import { forkJoin } from 'rxjs';
-import { MatIconModule } from '@angular/material/icon';
-import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
-import { OrderDto, StoreDto } from '../../../../core/services/dispatch-api.models';
+import {Component, computed, inject, OnDestroy, OnInit, signal} from '@angular/core';
+import {Router} from '@angular/router';
+import {catchError, forkJoin, of, Subscription} from 'rxjs';
+import {MatIconModule} from '@angular/material/icon';
+import {NgTemplateOutlet} from '@angular/common';
+import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {ReportCollectionDto, ReportPerformanceDto, ReportOutcomesDto} from '../../../../core/services/dispatch-api.models';
+import {CURRENT_ISSUE_CATEGORIES, matchesReportCase} from '../../report-delivery-cases';
 
-type ReportPeriod = 'year' | 'month' | 'week';
+type ReportPeriod = 'year' | 'month' | 'week' | 'day';
 
-interface ChartBucket {
-  label: string;
-  date: string;
-  count: number;
-  height: number;
-  from: string;
-  to: string;
+interface OperationalSources {
+  performance: ReportPerformanceDto | null;
+  outcomes: ReportOutcomesDto | null;
+  exceptions: ReportCollectionDto | null;
 }
 
-interface AreaPerformance {
-  area: string;
-  completed: number;
-  routes: number;
-}
+interface ChartBucket {from: string; to: string; label: string; dateLabel: string; count: number; other: number;}
+interface StatusTile {label: string; value: number; metric: string; icon: string; tone?: 'warning' | 'muted';}
+interface RateDial {label: string; value: number | null; numerator: number; denominator: number; sheet: string; metric: string;}
 
-interface ReportMetrics {
-  range: string;
-  score: number;
-  label: string;
-  note: string;
-  completion: string;
-  total: number;
-}
-
-interface StatusSummary {
-  label: string;
-  detail: string;
-  percentage: string;
-  tone: string;
-}
 
 @Component({
   selector: 'app-operation-report',
-  imports: [MatIconModule],
+  imports: [MatIconModule, NgTemplateOutlet],
   templateUrl: './operation-report.html',
   styleUrl: './operation-report.scss',
 })
-export class OperationReport implements OnInit {
+export class OperationReport implements OnInit, OnDestroy {
   private readonly api = inject(DispatchApiService);
   private readonly router = inject(Router);
+  private supplementalRequest?: Subscription;
 
-  readonly activePeriod = signal<ReportPeriod>('week');
+  // 首次進入顯示本月累計；週別仍由使用者選擇，不將其他期間混入本週。
+  readonly activePeriod = signal<ReportPeriod>('month');
   readonly selectedYear = signal(new Date().getFullYear());
   readonly selectedMonth = signal(new Date().getMonth());
   readonly selectedWeek = signal(0);
-  readonly orders = signal<OrderDto[]>([]);
-  readonly stores = signal<StoreDto[]>([]);
+  readonly selectedDay = signal(new Date().getDate());
   readonly loading = signal(true);
-  readonly errorMessage = signal('');
+  readonly operationalData = signal<OperationalSources | null>(null);
+  readonly operationalLoading = signal(false);
+  readonly operationalError = signal('');
+  readonly outcomeError = signal('');
+  readonly exceptionError = signal('');
 
-  readonly periods: { id: ReportPeriod; label: string }[] = [
-    { id: 'year', label: '年度' },
-    { id: 'month', label: '本月' },
-    { id: 'week', label: '本週' },
+  readonly periods: {id: ReportPeriod; label: string}[] = [
+    {id: 'year', label: '年度'},
+    {id: 'month', label: '月度'},
+    {id: 'week', label: '週別'},
+    {id: 'day', label: '日別'},
   ];
 
-  readonly report = computed<ReportMetrics>(() => {
-    const orders = this.ordersInPeriod();
-    const total = orders.length;
-    const completed = orders.filter((order) => order.status === 'COMPLETED').length;
-    const score = total ? Math.round((completed / total) * 100) : 0;
-
+  readonly capacity = computed(() => {
+    const data = this.operationalData();
+    if (!data?.performance) return null;
     return {
-      range: this.periodRangeLabel(),
-      score,
-      label: total ? (score >= 95 ? '配送完整率達標' : '配送完整率待留意') : '尚無配送資料',
-      note: total ? '依此期間所有訂單的完成狀態統計。' : '這個期間尚未有配送訂單。',
-      completion: `${total ? ((completed / total) * 100).toFixed(1) : '0.0'}%`,
-      total,
+      people: data.performance.workforce,
     };
   });
+  readonly outcomes = computed(() => this.operationalData()?.outcomes ?? null);
+  readonly delivery = computed(() => this.outcomes()?.delivery ?? null);
+  readonly fleet = computed(() => this.operationalData()?.performance?.fleet ?? null);
+  readonly recovery = computed(() => this.outcomes()?.recovery ?? null);
+  readonly warehouseSummary = computed(() => this.outcomes()?.loading ?? null);
 
-  readonly chartData = computed(() => this.buildChartData(this.ordersInPeriod()));
-  readonly areas = computed(() => this.buildAreas(this.ordersInPeriod(), this.stores()));
-  readonly statusBreakdown = computed<StatusSummary[]>(() => {
-    const orders = this.ordersInPeriod();
-    const total = orders.length || 1;
-    const statuses: { status: OrderDto['status']; label: string; detail: string; tone: string }[] = [
-      { status: 'COMPLETED', label: '已完成', detail: '正常簽收結案', tone: 'complete' },
-      { status: 'IN_DELIVERY', label: '配送中', detail: '目前正在配送', tone: 'followup' },
-      { status: 'LOADED', label: '已點交', detail: '已在倉庫裝車，尚未抵達門市', tone: 'followup' },
-      { status: 'FAILED', label: '配送失敗', detail: '需要異常處理', tone: 'exception' },
-      { status: 'CONFIRMED', label: '待排車', detail: '等待調度安排', tone: 'pending' },
-    ];
-
-    return statuses.map((item) => ({
-      ...item,
-      percentage: `${((orders.filter((order) => order.status === item.status).length / total) * 100).toFixed(1)}%`,
-    }));
+  readonly exceptionCases = computed(() => {
+    const rows = this.operationalData()?.exceptions?.['cases'];
+    return Array.isArray(rows) ? rows : null;
+  });
+  readonly caseStats = computed(() => {
+    const rows = this.exceptionCases();
+    if (!rows) return null;
+    return {total: rows.length, open: rows.filter(row => row['status'] === 'OPEN').length,
+      closed: rows.filter(row => row['status'] === 'CLOSED').length};
   });
 
-  readonly failedOrders = computed(() => this.ordersInPeriod().filter((order) => order.status === 'FAILED'));
+  readonly peopleDials = computed<RateDial[] | null>(() => {
+    const p = this.capacity()?.people;
+    return p ? [
+      {label: '打卡率', value: p.attendanceRate, numerator: p.attendedShifts, denominator: p.dueShifts, sheet: 'attendance', metric: 'clocked-in'},
+      {label: '準時上班率', value: p.onTimeRate, numerator: p.onTimeShifts, denominator: p.attendedShifts, sheet: 'attendance', metric: 'on-time'},
+      {label: '加班率', value: p.overtimeRate, numerator: p.overtimeShifts, denominator: p.finishedShifts, sheet: 'attendance', metric: 'overtime'},
+    ] : null;
+  });
+  readonly peopleTiles = computed<StatusTile[] | null>(() => {
+    const p = this.capacity()?.people;
+    return p ? [
+      {label: '遲到', value: p.lateShifts, metric: 'late', icon: 'schedule', tone: 'warning'},
+      {label: '缺上班卡', value: p.missingClockInShifts, metric: 'missing-clock-in', icon: 'event_busy', tone: 'warning'},
+    ] : null;
+  });
+  readonly orderTiles = computed<StatusTile[] | null>(() => {
+    const d = this.delivery();
+    return d ? [
+      {label: '完整交付', value: d.fullOrders, metric: 'full', icon: 'task_alt'},
+      {label: '交貨不完整', value: d.deliveredOrders - d.fullOrders - d.missingQualityOrders, metric: 'incomplete', icon: 'inventory_2', tone: 'warning'},
+      {label: '未確認交付', value: d.outstandingOrders, metric: 'outstanding', icon: 'pending_actions', tone: 'warning'},
+      {label: '箱數待核對', value: d.missingQualityOrders, metric: 'missing-quality', icon: 'fact_check', tone: 'muted'},
+    ] : null;
+  });
+  readonly issueTiles = computed<StatusTile[] | null>(() => {
+    const rows = this.exceptionCases();
+    return rows ? CURRENT_ISSUE_CATEGORIES.map(item => ({label: item.label, icon: item.icon, metric: item.id,
+      value: rows.filter(row => matchesReportCase(row, item.id)).length})) : null;
+  });
+  readonly loadingTiles = computed<StatusTile[] | null>(() => {
+    const w = this.warehouseSummary();
+    return w ? [
+      {label: '點交相符', value: w.matchedOrders, metric: 'matched', icon: 'checklist'},
+      {label: '點交不符', value: w.mismatchedOrders, metric: 'mismatched', icon: 'rule', tone: 'warning'},
+      {label: '點交紀錄缺漏', value: w.missingLoadingOrders, metric: 'missing-loading', icon: 'fact_check', tone: 'muted'},
+      {label: '到期未排車', value: w.dueUnassignedOrders, metric: 'unassigned', icon: 'local_shipping', tone: 'warning'},
+    ] : null;
+  });
+
+  readonly tripBuckets = computed<ChartBucket[] | null>(() => {
+    const p = this.operationalData()?.performance;
+    return p ? this.calendarBuckets().map(bucket => ({...bucket, other: 0,
+      count: p.trips.filter(trip => typeof trip['date'] === 'string' && trip['date'] >= bucket.from && trip['date'] <= bucket.to).length})) : null;
+  });
+  readonly orderBuckets = computed<ChartBucket[] | null>(() => this.outcomes()
+    ? this.calendarBuckets().map(bucket => {
+      const rows = this.outcomes()!.daily.filter(day => day.date >= bucket.from && day.date <= bucket.to);
+      const count = rows.reduce((sum, day) => sum + day.fullOrders, 0);
+      return {...bucket, count, other: rows.reduce((sum, day) => sum + day.dueOrders, 0) - count};
+    }) : null);
+  readonly warehouseComparisons = computed(() => this.outcomes()?.warehouses ?? null);
+  readonly tripChartHasData = computed(() => this.tripBuckets()?.some(b => b.count > 0) ?? false);
+  readonly orderChartHasData = computed(() => this.orderBuckets()?.some(b => b.count + b.other > 0) ?? false);
+  readonly issueChartHasData = computed(() => this.issueTiles()?.some(tile => tile.value > 0) ?? false);
+
+  protected chartHeight(count: number, buckets: ChartBucket[]): number {
+    const max = Math.max(1, ...buckets.map(b => b.count + b.other));
+    return count / max * 100;
+  }
+  protected issueHeight(value: number): number {
+    return value / Math.max(1, ...(this.issueTiles() ?? []).map(row => row.value)) * 100;
+  }
+  protected openBucket(bucket: ChartBucket, sheet: string): void {
+    void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to, sheet}});
+  }
+  protected scopeLabel(): string {
+    return this.activePeriod() === 'year' ? '每月' : this.activePeriod() === 'month' ? '每週'
+      : this.activePeriod() === 'day' ? '當日' : '週一至週六';
+  }
+  private calendarBuckets(): Omit<ChartBucket, 'count' | 'other'>[] {
+    const {start} = this.periodDates();
+    const ranges = this.activePeriod() === 'year'
+      ? Array.from({length: 12}, (_, m) => ({start: new Date(this.selectedYear(), m, 1), end: new Date(this.selectedYear(), m + 1, 0), label: `${m + 1}月`, dateLabel: ''}))
+      : this.activePeriod() === 'month'
+        ? this.monthWeeks().map((week, i) => ({...week, label: `第${i + 1}週`, dateLabel: `${week.start.getDate()}–${week.end.getDate()}日`}))
+        : this.activePeriod() === 'day'
+          ? [{start, end: start, label: '當日', dateLabel: `${start.getMonth() + 1}/${start.getDate()}`}]
+        : Array.from({length: 6}, (_, d) => {
+          const day = new Date(start); day.setDate(day.getDate() + d);
+          return {start: day, end: day, label: `週${['一', '二', '三', '四', '五', '六'][d]}`, dateLabel: `${day.getMonth() + 1}/${day.getDate()}`};
+        });
+    return ranges.map(range => ({from: this.toDateString(range.start), to: this.toDateString(range.end), label: range.label, dateLabel: range.dateLabel}));
+  }
 
   ngOnInit(): void {
-    this.loadReport();
+    this.syncPeriodToToday();
+    this.loadOperationalData();
   }
+
+  ngOnDestroy(): void { this.supplementalRequest?.unsubscribe(); }
 
   protected setPeriod(period: ReportPeriod): void {
     this.activePeriod.set(period);
+    if (period === 'week') {
+      this.selectedWeek.set(Math.min(this.selectedWeek(), this.monthWeeks().length - 1));
+    }
+    this.loadOperationalData();
   }
 
-  protected drillInto(bucket: ChartBucket): void {
+  protected stepPeriod(direction: -1 | 1): void {
+    const year = this.selectedYear();
+    const month = this.selectedMonth();
+    if (this.activePeriod() === 'day') {
+      const next = new Date(this.periodDates().start);
+      next.setDate(next.getDate() + direction);
+      this.selectedYear.set(next.getFullYear());
+      this.selectedMonth.set(next.getMonth());
+      this.selectedDay.set(next.getDate());
+      this.selectedWeek.set(this.weekIndexForDate(next));
+      this.loadOperationalData();
+      return;
+    }
     if (this.activePeriod() === 'year') {
-      const date = this.parseDate(bucket.from);
-      this.selectedYear.set(date.getFullYear());
-      this.selectedMonth.set(date.getMonth());
-      this.selectedWeek.set(0);
-      this.activePeriod.set('month');
+      this.selectedYear.set(year + direction);
+      this.loadOperationalData();
       return;
     }
-
     if (this.activePeriod() === 'month') {
-      this.selectedWeek.set(this.weekIndexForDate(this.parseDate(bucket.from)));
-      this.activePeriod.set('week');
+      const next = new Date(year, month + direction, 1);
+      this.selectedYear.set(next.getFullYear());
+      this.selectedMonth.set(next.getMonth());
+      this.loadOperationalData();
       return;
     }
-
-    void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to}});
+    // 以七天移動，跨月、跨年時不重複或跳過同一個自然週。
+    const anchor = new Date(this.periodDates().start);
+    anchor.setDate(anchor.getDate() + direction * 7 + 3);
+    this.selectedYear.set(anchor.getFullYear());
+    this.selectedMonth.set(anchor.getMonth());
+    this.selectedDay.set(anchor.getDate());
+    this.selectedWeek.set(this.weekIndexForDate(anchor));
+    this.loadOperationalData();
   }
 
-  protected chartHeading(): string {
-    return this.activePeriod() === 'year'
-      ? '每月訂單筆數'
-      : this.activePeriod() === 'month'
-        ? '每週訂單筆數'
-        : '每日訂單筆數';
+  protected openHistory(sheet = 'overview', metric = ''): void {
+    const dates = this.periodDates();
+    void this.router.navigate(['/dispatch/history'], {queryParams: {
+      from: this.toDateString(dates.start),
+      to: this.toDateString(dates.end),
+      sheet,
+      ...(metric ? {metric} : {}),
+    }});
   }
 
-  protected chartFootnote(): string {
-    return this.activePeriod() === 'year'
-      ? '點選月份可查看整月訂單。'
-      : this.activePeriod() === 'month'
-        ? '點選週次可查看該週每日訂單。'
-        : '點選日期可直接查看該日訂單歷史。';
+  protected openSheet(sheet: string): void { this.openHistory(sheet); }
+  protected openMetric(sheet: string, metric: string): void { this.openHistory(sheet, metric); }
+  protected dialDegrees(value: number | null): number { return value === null ? 0 : Math.min(100, Math.max(0, value)) * 3.6; }
+
+  protected openWarehouse(warehouseId: number | null): void {
+    const dates = this.periodDates();
+    void this.router.navigate(['/dispatch/history'], {queryParams: {
+      from: this.toDateString(dates.start), to: this.toDateString(dates.end), sheet: 'loading-quality',
+      ...(warehouseId === null ? {} : {warehouseId}),
+    }});
   }
 
-  private loadReport(): void {
-    this.loading.set(true);
-    this.errorMessage.set('');
-    forkJoin({orders: this.api.getOrders(), stores: this.api.getStores()}).subscribe({
-      next: ({orders, stores}) => {
-        this.orders.set(orders);
-        this.stores.set(stores);
-        this.syncPeriodToAvailableData();
+  protected percent(value: number | null): string { return value === null ? '—' : `${value.toFixed(1)}%`; }
+  protected number(value: number | null): string { return value === null ? '—' : value.toLocaleString('zh-TW', {maximumFractionDigits: 1}); }
+  protected retryOperationalData(): void { this.loadOperationalData(); }
+
+  private syncPeriodToToday(): void {
+    const anchor = this.parseDate(this.todayTaipei());
+    this.selectedYear.set(anchor.getFullYear());
+    this.selectedMonth.set(anchor.getMonth());
+    this.selectedDay.set(anchor.getDate());
+    this.selectedWeek.set(this.weekIndexForDate(anchor));
+  }
+
+  private loadOperationalData(): void {
+    const {start, end} = this.periodDates();
+    const query = {period: 'CUSTOM' as const, from: this.toDateString(start), to: this.toDateString(end)};
+    this.supplementalRequest?.unsubscribe();
+    this.operationalLoading.set(true);
+    this.operationalError.set('');
+    this.outcomeError.set('');
+    this.exceptionError.set('');
+    this.operationalData.set(null);
+    this.supplementalRequest = forkJoin({
+      performance: this.api.getReportPerformance(query).pipe(catchError(() => {
+        this.operationalError.set('人員打卡與出車資料暫時無法載入。');
+        return of(null);
+      })),
+      outcomes: this.api.getReportOutcomes(query).pipe(catchError(() => {
+        this.outcomeError.set('配送成果資料暫時無法載入。');
+        return of(null);
+      })),
+      exceptions: this.api.getReportExceptions(query).pipe(catchError(() => {
+        this.exceptionError.set('異常案件暫時無法載入。');
+        return of(null);
+      })),
+    }).subscribe({
+      next: (data) => {
+        this.operationalData.set(data);
         this.loading.set(false);
+        this.operationalLoading.set(false);
       },
       error: () => {
-        this.errorMessage.set('暫時無法載入訂單資料，請稍後再試。');
+        this.operationalError.set('營運資料暫時無法載入。');
+        this.operationalLoading.set(false);
         this.loading.set(false);
       },
     });
   }
 
-  private syncPeriodToAvailableData(): void {
-    const latest = this.orders()
-      .map((order) => this.parseDate(order.deliveryDate))
-      .filter((date) => !Number.isNaN(date.getTime()))
-      .sort((left, right) => right.getTime() - left.getTime())[0];
-    if (!latest) {
-      return;
-    }
-    this.selectedYear.set(latest.getFullYear());
-    this.selectedMonth.set(latest.getMonth());
-    this.selectedWeek.set(this.weekIndexForDate(latest));
+  private todayTaipei(): string {
+    return new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Taipei'}).format(new Date());
   }
 
-  private ordersInPeriod(): OrderDto[] {
-    const {start, end} = this.periodDates();
-    return this.orders().filter((order) => {
-      const date = this.parseDate(order.deliveryDate);
-      return date >= start && date <= end;
-    });
-  }
-
-  private buildChartData(orders: OrderDto[]): ChartBucket[] {
-    const {start, end} = this.periodDates();
-    const buckets = this.activePeriod() === 'year'
-      ? Array.from({length: 12}, (_, month) => {
-          const from = new Date(this.selectedYear(), month, 1);
-          return {label: `${month + 1}月`, from, to: new Date(this.selectedYear(), month + 1, 0)};
-        })
-      : this.activePeriod() === 'month'
-        ? Array.from({length: 4}, (_, week) => {
-            const from = new Date(this.selectedYear(), this.selectedMonth(), 1 + (week * 7));
-            const to = new Date(this.selectedYear(), this.selectedMonth(), week === 3 ? end.getDate() : (week + 1) * 7);
-            return {label: `第 ${week + 1} 週`, from, to};
-          })
-        : Array.from({length: 7}, (_, day) => {
-            const from = new Date(start);
-            from.setDate(start.getDate() + day);
-            return {label: this.weekdayLabel(from), from, to: from};
-          });
-
-    const counts = buckets.map(({from, to}) => orders.filter((order) => {
-      const date = this.parseDate(order.deliveryDate);
-      return date >= from && date <= to;
-    }).length);
-    const max = Math.max(...counts, 1);
-
-    return buckets.map((bucket, index) => ({
-      label: bucket.label,
-      date: this.bucketDateLabel(bucket.from, bucket.to),
-      count: counts[index],
-      height: (counts[index] / max) * 100,
-      from: this.toDateString(bucket.from),
-      to: this.toDateString(bucket.to),
-    }));
-  }
-
-  private buildAreas(orders: OrderDto[], stores: StoreDto[]): AreaPerformance[] {
-    const grouped = new Map<string, {total: number; completed: number}>();
-    const storesById = new Map(stores.filter((store) => store.id != null).map((store) => [store.id!, store]));
-
-    orders.forEach((order) => {
-      const area = this.extractArea(storesById.get(order.storeId)?.address ?? '');
-      const current = grouped.get(area) ?? {total: 0, completed: 0};
-      current.total += 1;
-      if (order.status === 'COMPLETED') {
-        current.completed += 1;
-      }
-      grouped.set(area, current);
-    });
-
-    return [...grouped.entries()].map(([area, value]) => ({
-      area,
-      completed: value.total ? (value.completed / value.total) * 100 : 0,
-      routes: value.total,
-    }));
-  }
 
   private periodDates(): {start: Date; end: Date} {
     const year = this.selectedYear();
     const month = this.selectedMonth();
-    if (this.activePeriod() === 'year') {
-      return {start: new Date(year, 0, 1), end: new Date(year, 11, 31)};
+    if (this.activePeriod() === 'year') return {start: new Date(year, 0, 1), end: new Date(year, 11, 31)};
+    if (this.activePeriod() === 'month') return {start: new Date(year, month, 1), end: new Date(year, month + 1, 0)};
+    if (this.activePeriod() === 'day') {
+      const day = Math.min(this.selectedDay(), new Date(year, month + 1, 0).getDate());
+      const start = new Date(year, month, day);
+      return {start, end: new Date(start)};
     }
-    if (this.activePeriod() === 'month') {
-      return {start: new Date(year, month, 1), end: new Date(year, month + 1, 0)};
-    }
-    const start = new Date(year, month, 1 + (this.selectedWeek() * 7));
-    const end = new Date(year, month, Math.min(start.getDate() + 6, new Date(year, month + 1, 0).getDate()));
+    const start = this.mondayOf(new Date(year, month, 1));
+    start.setDate(start.getDate() + this.selectedWeek() * 7);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
     return {start, end};
   }
 
-  private periodRangeLabel(): string {
+  protected periodRangeLabel(): string {
     const {start, end} = this.periodDates();
-    return `${this.toDateString(start).replaceAll('-', '/')} - ${this.toDateString(end).replaceAll('-', '/')}`;
+    if (this.activePeriod() === 'day') return this.toDateString(start).replaceAll('-', '/');
+    return `${this.toDateString(start).replaceAll('-', '/')} — ${this.toDateString(end).replaceAll('-', '/')}`;
+  }
+
+  private mondayOf(value: Date): Date {
+    const monday = new Date(value);
+    monday.setDate(value.getDate() - (value.getDay() + 6) % 7);
+    return monday;
   }
 
   private weekIndexForDate(value: Date): number {
-    return Math.min(3, Math.floor((value.getDate() - 1) / 7));
+    const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
+    return Math.floor(((value.getDate() - 1) + (monthStart.getDay() + 6) % 7) / 7);
   }
 
-  private bucketDateLabel(from: Date, to: Date): string {
-    if (this.activePeriod() === 'year') {
-      return `${from.getFullYear()}/${String(from.getMonth() + 1).padStart(2, '0')}`;
+  private monthWeeks(): {start: Date; end: Date}[] {
+    const monthStart = new Date(this.selectedYear(), this.selectedMonth(), 1);
+    const monthEnd = new Date(this.selectedYear(), this.selectedMonth() + 1, 0);
+    const weeks: {start: Date; end: Date}[] = [];
+    for (const monday = this.mondayOf(monthStart); monday <= monthEnd; monday.setDate(monday.getDate() + 7)) {
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      weeks.push({start: new Date(Math.max(monthStart.getTime(), monday.getTime())),
+        end: new Date(Math.min(monthEnd.getTime(), sunday.getTime()))});
     }
-    if (this.activePeriod() === 'month') {
-      return `${this.monthDayLabel(from)} - ${this.monthDayLabel(to)}`;
-    }
-    return this.monthDayLabel(from);
+    return weeks;
   }
 
-  private parseDate(value: string): Date {
-    return new Date(`${value}T00:00:00`);
-  }
-
-  private toDateString(value: Date): string {
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-  }
-
-  private weekdayLabel(value: Date): string {
-    return ['日', '一', '二', '三', '四', '五', '六'][value.getDay()];
-  }
-
-  private monthDayLabel(value: Date): string {
-    return `${String(value.getMonth() + 1).padStart(2, '0')}/${String(value.getDate()).padStart(2, '0')}`;
-  }
-
-  private extractArea(address: string): string {
-    return address.match(/高雄市([^\s]+區)/)?.[1] ?? '未提供區域';
-  }
+  private parseDate(value: string): Date { return new Date(`${value}T00:00:00`); }
+  private toDateString(value: Date): string { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`; }
 }

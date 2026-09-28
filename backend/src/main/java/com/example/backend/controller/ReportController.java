@@ -4,6 +4,10 @@ import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
 import com.example.backend.dto.respones.ReportResponses;
 import com.example.backend.service.ReportService;
+import com.example.backend.service.ReportPerformanceService;
+import com.example.backend.dto.respones.ReportPerformanceResponse;
+import com.example.backend.dto.respones.ReportOutcomesResponse;
+import com.example.backend.service.ReportOutcomesService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,9 +27,37 @@ public class ReportController {
 
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
     private final ReportService reportService;
+    private final ReportPerformanceService performanceService;
+    private final ReportOutcomesService outcomesService;
 
-    public ReportController(ReportService reportService) {
+    public ReportController(ReportService reportService, ReportPerformanceService performanceService,
+            ReportOutcomesService outcomesService) {
         this.reportService = reportService;
+        this.performanceService = performanceService;
+        this.outcomesService = outcomesService;
+    }
+
+    @GetMapping("/outcomes")
+    public ReportOutcomesResponse outcomes(
+            @RequestParam(required = false) ReportPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(defaultValue = "false") boolean includeDetails) {
+        return outcomesService.outcomes(range(period, date, from, to), warehouseId, includeDetails);
+    }
+
+    @GetMapping("/performance")
+    public ReportPerformanceResponse performance(
+            @RequestParam(required = false) ReportPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) Long driverId,
+            @RequestParam(required = false) Long vehicleId) {
+        return performanceService.performance(range(period, date, from, to), warehouseId, driverId, vehicleId);
     }
 
     @GetMapping("/summary")

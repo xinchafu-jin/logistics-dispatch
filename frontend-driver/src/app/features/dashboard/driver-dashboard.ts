@@ -59,6 +59,9 @@ import {DriverOperationsService} from '../../core/services/driver-operations.ser
 import {DriverWeather, DriverWeatherService} from '../../core/services/driver-weather.service';
 import {BrandLogo} from '../../shared/ui/brand-logo/brand-logo';
 import {PreTripCheck} from './pre-trip-check/pre-trip-check';
+import {ScheduleLeaveComposer} from './schedule-leave-composer/schedule-leave-composer';
+import {pendingLeaveDatesInMonth} from './schedule-leave-composer/schedule-leave-status';
+import {ScheduleCellLabels} from '../../shared/ui/schedule-cell-labels/schedule-cell-labels';
 
 type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
@@ -473,6 +476,8 @@ export function mergeMessagesById(
     FormsModule,
     BrandLogo,
     PreTripCheck,
+    ScheduleLeaveComposer,
+    ScheduleCellLabels,
   ],
   templateUrl: './driver-dashboard.html',
   styleUrl: './driver-dashboard.scss',
@@ -504,6 +509,21 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
   );
   private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
+  protected readonly calendarLeaveComposer = viewChild<ScheduleLeaveComposer>('calendarLeaveComposer');
+  protected readonly scheduleDateFilter = (date: Date) => this.calendarLeaveComposer()?.canSelectDate(date) ?? true;
+  protected selectScheduleDate(date: Date | null): void {
+    if (!date) return;
+    this.selectedScheduleDate.set(date);
+    this.calendarLeaveComposer()?.toggleDate(date);
+  }
+  protected refreshScheduleCalendar(): void { this.scheduleCalendar()?.updateTodaysDate(); }
+  protected onCalendarLeaveSubmitted(saved: DriverLeaveRequestResponse[]): void {
+    this.leaveRequests.update(current => {
+      const ids = new Set(saved.map(request => request.id));
+      return [...saved, ...current.filter(request => !ids.has(request.id))];
+    });
+    this.loadLeaveRequests();
+  }
 
   /**
    * 月曆每一格的 class：依當天班別上色（shift-work／shift-day_off／shift-leave），樣式在 styles.scss。
@@ -514,7 +534,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return '';
     }
     const shift = this.shiftsByDate().get(this.toIsoDate(date));
-    return shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : '';
+    const selection = this.calendarLeaveComposer()?.dateClass(date) ?? '';
+    const pending = pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()).has(this.toIsoDate(date));
+    return [shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : 'shift-cell shift-not-published',
+      selection, pending ? 'leave-request-pending' : ''].filter(Boolean).join(' ');
   };
 
   /**
@@ -595,6 +618,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly leaveMessage = signal<string | null>(null);
   protected readonly isLeaveSubmitting = signal(false);
   protected readonly isLeaveListLoading = signal(false);
+  protected readonly leaveListAvailable = signal(false);
   protected readonly isLeaveHistoryLoading = signal(false);
   protected readonly expandedLeaveId = signal<number | null>(null);
   protected readonly leaveHistories = signal<Record<number, DriverLeaveHistoryResponse[]>>({});
@@ -2597,14 +2621,18 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
     this.isLeaveListLoading.set(true);
+    this.leaveListAvailable.set(false);
     this.operations.getLeaveRequests().subscribe({
       next: (requests) => {
         this.leaveRequests.set(
           [...requests].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
         );
+        this.leaveListAvailable.set(true);
         this.isLeaveListLoading.set(false);
+        this.refreshScheduleCalendar();
       },
       error: (error: unknown) => {
+        this.leaveListAvailable.set(false);
         this.leaveError.set(this.getErrorMessage(error, '無法取得一般請假結果。'));
         this.isLeaveListLoading.set(false);
       },

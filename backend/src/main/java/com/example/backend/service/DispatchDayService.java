@@ -150,6 +150,7 @@ public class DispatchDayService {
         DispatchDayResponse response = new DispatchDayResponse();
         response.setDate(date);
         response.setStatus(resolveStatus(date, today, routes, orders));
+        response.setPublished(routes.stream().anyMatch(route -> route.getStatus() == RouteStatus.PUBLISHED));
         response.setOrderCount(orders.size());
         response.setPendingConfirmCount(pendingConfirm);
         response.setUnassignedCount(unassigned);

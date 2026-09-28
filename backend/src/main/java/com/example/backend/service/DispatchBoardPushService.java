@@ -45,6 +45,15 @@ public class DispatchBoardPushService {
         pendingPush().dates.add(date);
     }
 
+    /** 司機、車輛等資源變更時通知看板重新取得指派選項。 */
+    public void markResourcesChanged() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            pushResourcesChanged();
+            return;
+        }
+        pendingPush().resourcesChanged = true;
+    }
+
     /** 這個交易目前記下、還沒推的日期；交易外回傳空集合。給測試確認監聽器有接上 */
     public Set<LocalDate> pendingDates() {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
@@ -83,14 +92,26 @@ public class DispatchBoardPushService {
         }
     }
 
+    private void pushResourcesChanged() {
+        try {
+            messagingTemplate.convertAndSend(ADMIN_TOPIC, new DispatchBoardPushResponse(null, true));
+        } catch (RuntimeException e) {
+            log.warn("看板資源推播失敗", e);
+        }
+    }
+
     private class PendingPush implements TransactionSynchronization {
 
         private final Set<LocalDate> dates = new LinkedHashSet<>();
+        private boolean resourcesChanged;
 
         @Override
         public void afterCommit() {
             for (LocalDate date : dates) {
                 push(date);
+            }
+            if (resourcesChanged) {
+                pushResourcesChanged();
             }
         }
     }

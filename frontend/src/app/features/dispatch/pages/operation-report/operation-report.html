@@ -1,231 +1,183 @@
 <main class="operation-report-page">
-  <section class="report-period" role="group" aria-label="報表期間">
-    @for (period of periods; track period.id) {
-      <button
-        type="button"
-        [class.is-active]="activePeriod() === period.id"
-        [attr.aria-pressed]="activePeriod() === period.id"
-        (click)="setPeriod(period.id)"
-      >
-        {{ period.label }}
-      </button>
-    }
-    <span>{{ report().range }}</span>
-  </section>
-
-  @if (loading()) {
-    <p class="updated-at">正在載入報表資料...</p>
-  } @else if (errorMessage()) {
-    <p class="updated-at">{{ errorMessage() }}</p>
-  }
-
-  <section class="operational-readout" aria-label="配送完整率與核心指標">
-    <article class="health-instrument">
-      <div
-        class="instrument-meter"
-        [style.--health-score]="report().score"
-        aria-hidden="true"
-      >
-        <div class="meter-face">
-          <span>配送完整率</span>
-          <strong>{{ report().score }}</strong>
-          <small>/ 100</small>
-        </div>
-      </div>
-
-      <div class="health-copy">
-        <p class="section-eyebrow">本期完成狀況</p>
-        <h3>{{ report().label }}</h3>
-        <p>{{ report().note }}</p>
-        <span class="health-status"><i aria-hidden="true"></i>資料已更新</span>
-      </div>
-
-      <div class="health-footer">
-        <div>
-          <span>完成配送</span>
-          <strong>{{ report().total }}<small>筆</small></strong>
-        </div>
-        <div>
-          <span>覆蓋區域</span>
-          <strong>{{ areas().length }}<small>區</small></strong>
-        </div>
-        <div>
-          <span>查詢區間</span>
-          <strong>{{ report().range }}</strong>
-        </div>
-      </div>
-    </article>
-
-    <section class="signal-register" aria-labelledby="signal-register-title">
-      <header>
-        <div>
-          <p class="section-eyebrow">重點指標</p>
-          <h3 id="signal-register-title">核心營運訊號</h3>
-        </div>
-        <span>本期</span>
-      </header>
-
-      <div class="signal-list">
-        <article class="signal-item tone-accent">
-          <span class="summary-icon"><mat-icon aria-hidden="true">check_circle</mat-icon></span>
-          <div>
-            <p>配送完整率</p>
-            <strong>{{ report().completion }}</strong>
-            <span>目標值 95.0%</span>
-          </div>
-        </article>
-        <article class="signal-item">
-          <span class="summary-icon"><mat-icon aria-hidden="true">schedule</mat-icon></span>
-          <div>
-            <p>已完成訂單</p>
-            <strong>{{ report().total }}</strong>
-            <span>依配送日期統計</span>
-          </div>
-        </article>
-        <article class="signal-item">
-          <span class="summary-icon"><mat-icon aria-hidden="true">route</mat-icon></span>
-          <div>
-            <p>配送區域</p>
-            <strong>{{ areas().length }}</strong>
-            <span>有訂單的配送區域</span>
-          </div>
-        </article>
-        <article class="signal-item tone-warning">
-          <span class="summary-icon"><mat-icon aria-hidden="true">warning_amber</mat-icon></span>
-          <div>
-            <p>配送失敗</p>
-            <strong>{{ failedOrders().length }}</strong>
-            <span>請至異常中心查看原因</span>
-          </div>
-        </article>
-      </div>
-    </section>
-  </section>
-
-  <section class="report-workspace" aria-label="配送表現分析">
-    <section class="delivery-chart-panel" aria-labelledby="delivery-chart-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">配送量</p>
-          <h3 id="delivery-chart-title">完成配送趨勢</h3>
-        </div>
-        <span>{{ chartHeading() }}</span>
-      </header>
-
-      <div class="delivery-chart" role="img" aria-label="完成配送趨勢長條圖">
-        <div class="chart-scale" aria-hidden="true">
-          <span>100%</span>
-          <span>75%</span>
-          <span>50%</span>
-          <span>25%</span>
-        </div>
-        <div class="chart-bars" [style.--chart-columns]="chartData().length">
-          @for (item of chartData(); track item.from) {
-            <button
-              type="button"
-              class="chart-column"
-              [attr.aria-label]="item.label + ' ' + item.count + ' 筆訂單，點選查看明細'"
-              (click)="drillInto(item)"
-            >
-              <span class="chart-value">{{ item.count }}</span>
-              <span class="chart-bar-wrap">
-                <span class="chart-bar" [style.height.%]="item.height"></span>
+  <ng-template #rateDial let-rate="rate" let-label="label" let-numerator="numerator" let-denominator="denominator" let-sheet="sheet" let-metric="metric">
+    <button class="rate-card" type="button" (click)="openMetric(sheet, metric)" [attr.aria-label]="label + ' ' + percent(rate) + '，查看明細'">
+      <span class="rate-ring" [class.is-empty]="rate === null" [style.--sweep]="dialDegrees(rate) + 'deg'" aria-hidden="true"><span><strong>{{ rate === null ? '—' : number(rate) }}<small>@if (rate !== null) { % }</small></strong></span></span>
+      <span class="rate-label">{{ label }}<mat-icon aria-hidden="true">north_east</mat-icon></span>
+      <small class="rate-basis">{{ denominator ? numerator + ' / ' + denominator + ' 班' : '無計算母數' }}</small>
+    </button>
+  </ng-template>
+  <ng-template #timeChart let-buckets="buckets" let-sheet="sheet" let-stacked="stacked" let-hasData="hasData" let-empty="empty">
+    @if (buckets) {
+      @if (hasData) {
+        <div class="chart-scroll"><div class="column-chart" [class.is-year]="activePeriod() === 'year'" [style.--columns]="buckets.length" [attr.aria-label]="stacked ? '完整交付與其餘到期訂單' : '實際出車次數'">
+          @for (bucket of buckets; track bucket.from) {
+            <button type="button" class="column" (click)="openBucket(bucket, sheet)" [attr.aria-label]="bucket.label + ' ' + bucket.dateLabel + '：' + (stacked ? '完整 ' + bucket.count + '／到期 ' + (bucket.count + bucket.other) + ' 筆' : bucket.count + ' 次出車') + '，查看明細'">
+              <span class="column-plot">
+                @if (bucket.count + bucket.other > 0) {
+                  <span class="column-total">{{ bucket.count + bucket.other }}<small>@if (stacked) { 筆 } @else { 次 }</small></span>
+                  <span class="column-stack">
+                    <span class="column-fill" [style.height.%]="chartHeight(bucket.count, buckets)"></span>
+                    @if (stacked) { <span class="column-other" [style.height.%]="chartHeight(bucket.other, buckets)"></span> }
+                  </span>
+                }
               </span>
-              <span class="chart-label">{{ item.label }}</span>
-              <small>{{ item.date }}</small>
+              <span class="column-label">{{ bucket.label }}</span><small>{{ bucket.dateLabel }}</small>
             </button>
           }
-        </div>
-      </div>
-
-      <div class="chart-footnote">
-        <mat-icon aria-hidden="true">bar_chart</mat-icon>
-        <span>
-          {{ chartFootnote() }}
-        </span>
-      </div>
-    </section>
-
-    <section class="area-performance-panel" aria-labelledby="area-performance-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">區域表現</p>
-          <h3 id="area-performance-title">配送區表現</h3>
-        </div>
-        <span>完成率</span>
-      </header>
-
-      <div class="area-list">
-        @for (area of areas(); track area.area) {
-          <article class="area-row">
-            <div class="area-row-header">
-              <strong>{{ area.area }}</strong>
-              <span>{{ area.completed }}%</span>
-            </div>
-            <div
-              class="progress-track"
-              aria-label="{{ area.area }} 配送完成率 {{ area.completed }}%"
-            >
-              <span class="progress-value" [style.width.%]="area.completed"></span>
-            </div>
-            <div class="area-row-meta">
-              <span>{{ area.routes }} 筆需求</span>
-            </div>
-          </article>
-        } @empty {
-          <p class="empty-state">目前期間沒有配送需求。</p>
-        }
-      </div>
-    </section>
+        </div></div>
+      } @else { <div class="chart-empty"><mat-icon aria-hidden="true">{{ stacked ? 'inventory_2' : 'local_shipping' }}</mat-icon><span>{{ empty }}</span></div> }
+    } @else { <p class="visual-empty">資料未載入</p> }
+  </ng-template>
+  <header class="report-header">
+    <div class="report-title"><p class="eyebrow">全倉營運總覽</p><h2>營運報表</h2></div>
+    <button type="button" class="history-link" (click)="openHistory()"><mat-icon aria-hidden="true">history</mat-icon>歷史查詢</button>
+  </header>
+  <section class="period-bar" aria-label="報表期間">
+    <div class="period-tabs" role="group" aria-label="期間類型">
+      @for (period of periods; track period.id) { <button type="button" [class.is-active]="activePeriod() === period.id" [attr.aria-pressed]="activePeriod() === period.id" (click)="setPeriod(period.id)">{{ period.label }}</button> }
+    </div>
+    <div class="period-stepper">
+      <button type="button" aria-label="上一期" (click)="stepPeriod(-1)"><mat-icon aria-hidden="true">chevron_left</mat-icon></button><strong>{{ periodRangeLabel() }}</strong><button type="button" aria-label="下一期" (click)="stepPeriod(1)"><mat-icon aria-hidden="true">chevron_right</mat-icon></button>
+    </div>
   </section>
-
-  <section class="report-details" aria-label="配送狀態與異常狀態">
-    <section class="detail-panel" aria-labelledby="delivery-status-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">配送狀態</p>
-          <h3 id="delivery-status-title">配送狀態組成</h3>
-        </div>
-      </header>
-
-      <div class="status-breakdown">
-        @for (status of statusBreakdown(); track status.label) {
-          <article>
-            <span class="status-dot" [class]="'tone-' + status.tone" aria-hidden="true"></span>
-            <div>
-              <strong>{{ status.label }}</strong>
-              <span>{{ status.detail }}</span>
+  @if (loading()) { <p class="report-feedback" role="status">正在載入營運資料…</p> } @else {
+    @if (operationalError() || outcomeError() || exceptionError()) {
+      <div class="data-alert" role="status"><mat-icon aria-hidden="true">info_outline</mat-icon><span>部分資料未載入，相關欄位以「—」顯示。</span><button type="button" class="retry-action" (click)="retryOperationalData()">重新載入</button></div>
+    }
+    @if (operationalLoading()) { <p class="supplemental-feedback" role="status">正在更新營運成果…</p> }
+    <div class="report-sections" [attr.aria-busy]="operationalLoading()">
+      <section class="detail-row" id="people" aria-labelledby="people-title">
+        <header class="area-header">
+          <div class="detail-name"><span class="section-index">01</span><mat-icon aria-hidden="true">badge</mat-icon><h3 id="people-title">人員</h3><small>打卡與工作負荷</small></div>
+          <button type="button" class="row-link" (click)="openSheet('attendance')">人員明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+        </header>
+        <div class="section-body">
+          <div class="metric-overview">
+            <div class="score-item"><span class="score-label">已打上班卡</span><strong>{{ number(capacity()?.people?.attendedShifts ?? null) }}<small>班</small></strong><small>應打卡 {{ number(capacity()?.people?.dueShifts ?? null) }} 班</small></div>
+            <p class="evidence-note">已記錄加班 {{ capacity()?.people?.finishedShifts ? number(capacity()!.people.overtimeMinutes) : '—' }} 分鐘</p>
+            <div class="status-chips">
+              @for (item of peopleTiles() ?? []; track item.metric) { <button type="button" [class.has-warning]="item.value > 0" (click)="openMetric('attendance', item.metric)">{{ item.label }}<strong>{{ item.value }} 班</strong><mat-icon aria-hidden="true">chevron_right</mat-icon></button> }
             </div>
-            <b>{{ status.percentage }}</b>
-          </article>
-        }
-      </div>
-    </section>
-
-    <section class="detail-panel" aria-labelledby="exception-source-title">
-      <header class="panel-header">
-        <div>
-          <p class="section-eyebrow">異常追蹤</p>
-          <h3 id="exception-source-title">配送失敗訂單</h3>
-        </div>
-      </header>
-
-      <div class="source-table">
-        <div class="source-table-head" aria-hidden="true">
-          <span>訂單</span>
-          <span>配送日期</span>
-          <span>狀態</span>
-        </div>
-        @for (order of failedOrders(); track order.id ?? order.orderNumber) {
-          <div class="source-table-row">
-            <span>{{ order.orderNumber }}</span>
-            <strong>{{ order.deliveryDate }}</strong>
-            <span class="source-status tone-warning">配送失敗</span>
           </div>
-        } @empty {
-          <p class="empty-state">這個期間沒有配送失敗訂單。</p>
-        }
+          <div class="section-visual" aria-label="人員三項比率">
+            @if (peopleDials(); as dials) {
+              <div class="rate-grid three">@for (dial of dials; track dial.metric) { <ng-container [ngTemplateOutlet]="rateDial" [ngTemplateOutletContext]="{rate: dial.value, label: dial.label, numerator: dial.numerator, denominator: dial.denominator, sheet: dial.sheet, metric: dial.metric}"></ng-container> }</div>
+            } @else { <p class="visual-empty">人員資料未載入</p> }
+          </div>
+        </div>
+      </section>
+      <section class="detail-row" id="fleet" aria-labelledby="fleet-title">
+        <header class="area-header">
+          <div class="detail-name"><span class="section-index">02</span><mat-icon aria-hidden="true">local_shipping</mat-icon><h3 id="fleet-title">車輛</h3><small>出車、里程與補送</small></div>
+          <button type="button" class="row-link" (click)="openSheet('vehicles')">出車與里程明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+        </header>
+        <div class="section-body">
+          <div class="metric-overview">
+            <div class="score-item"><span class="score-label">出車次數</span><strong>{{ number(fleet()?.startedTrips ?? null) }}<small>次</small></strong><small>實際使用 {{ number(fleet()?.usedVehicles ?? null) }} 台車輛</small></div>
+            <div class="support-metrics">
+              <button type="button" (click)="openMetric('vehicles', 'distance-recorded')"><span>已記錄實際公里</span><strong>{{ number(fleet()?.actualKm ?? null) }}<small> km</small></strong><small>{{ number(fleet()?.distanceRecordedTrips ?? null) }} 趟有可核對里程</small></button>
+              <button type="button" (click)="openMetric('recovery', 'attempted')"><span>已執行補送</span><strong>{{ number(recovery()?.attemptedRecoveryOrders ?? null) }}<small> 筆</small></strong><small>占已執行訂單 {{ percent(recovery()?.recoveryShare ?? null) }}</small></button>
+            </div>
+            @if (fleet() && fleet()!.distanceRecordedTrips < fleet()!.startedTrips) { <p class="evidence-note">{{ fleet()!.startedTrips - fleet()!.distanceRecordedTrips }} 趟里程未完整，公里合計不是全部出車。</p> }
+            <button type="button" class="inline-detail" (click)="openSheet('recovery')">補送原單與原因<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+          </div>
+          <div class="section-visual">
+            <div class="chart-heading"><h4>實際出車次數</h4><span>{{ scopeLabel() }}</span></div>
+            <ng-container [ngTemplateOutlet]="timeChart" [ngTemplateOutletContext]="{buckets: tripBuckets(), sheet: 'vehicles', stacked: false, hasData: tripChartHasData(), empty: '本期圖表日期無出車紀錄'}"></ng-container>
+          </div>
+        </div>
+      </section>
+      <section class="detail-row" id="orders" aria-labelledby="orders-title">
+        <header class="area-header">
+          <div class="detail-name"><span class="section-index">03</span><mat-icon aria-hidden="true">inventory_2</mat-icon><h3 id="orders-title">訂單</h3><small>完整與及時交付</small></div>
+          <button type="button" class="row-link" (click)="openSheet('delivery-quality')">配送結果明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+        </header>
+        <div class="section-body">
+          <div class="metric-overview">
+            <div class="score-item"><span class="score-label">紀錄完整交付率</span><strong>{{ percent(delivery()?.fullDeliveryRate ?? null) }}</strong><small>司機紀錄完整 {{ number(delivery()?.fullOrders ?? null) }} / 到期應配送 {{ number(delivery()?.dueOrders ?? null) }} 筆</small></div>
+            <div class="support-metrics">
+              <button type="button" (click)="openMetric('delivery-quality', 'within-window')"><span>收貨時段內抵達率</span><strong>{{ percent(delivery()?.receivingWindowRate ?? null) }}</strong><small>{{ number(delivery()?.windowArrivals ?? null) }} / {{ number(delivery()?.windowEligibleOrders ?? null) }} 筆</small></button>
+              <button type="button" (click)="openMetric('delivery-quality', 'late-arrival')"><span>逾時抵達</span><strong>{{ number(delivery()?.lateArrivals ?? null) }}<small> 筆</small></strong></button>
+            </div>
+            <div class="status-chips">
+              @for (item of orderTiles() ?? []; track item.metric) { @if (item.metric !== 'full') { <button type="button" [class.has-warning]="item.value > 0" (click)="openMetric('delivery-quality', item.metric)">{{ item.label }}<strong>{{ item.value }}</strong></button> } }
+            </div>
+          </div>
+          <div class="section-visual">
+            <div class="chart-heading"><h4>司機交貨紀錄</h4><span>{{ scopeLabel() }}</span></div>
+            <div class="chart-legend"><span><i></i>紀錄完整</span><span><i class="other"></i>其餘到期訂單</span></div>
+            <ng-container [ngTemplateOutlet]="timeChart" [ngTemplateOutletContext]="{buckets: orderBuckets(), sheet: 'delivery-quality', stacked: true, hasData: orderChartHasData(), empty: '本期圖表日期無到期應配送訂單'}"></ng-container>
+          </div>
+        </div>
+      </section>
+      <section class="detail-row" id="exceptions" aria-labelledby="exceptions-title">
+        <header class="area-header">
+          <div class="detail-name"><span class="section-index">04</span><mat-icon aria-hidden="true">report_problem</mat-icon><h3 id="exceptions-title">異常</h3><small>配送回報與處理</small></div>
+          <button type="button" class="row-link" (click)="openMetric('exceptions', 'open')">待處理案件明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+        </header>
+        <div class="section-body">
+          <div class="metric-overview">
+            <div class="score-item" [class.is-negative]="(caseStats()?.open ?? 0) > 0"><span class="score-label">本期目前待處理異常</span><strong>{{ number(caseStats()?.open ?? null) }}<small>件</small></strong>
+              @if (caseStats(); as cases) { <small>本期登錄 {{ number(cases.total) }} 件 · 已結案 {{ number(cases.closed) }} 件</small> }
+              @else { <small>案件資料暫時無法載入</small> }
+            </div>
+          </div>
+          <div class="section-visual">
+            <div class="chart-heading"><h4>待處理異常類型</h4><span>目前狀態 · 單位：案件</span></div>
+            @if (issueChartHasData()) {
+              <div class="issue-chart">
+                @for (item of issueTiles() ?? []; track item.metric) {
+                  <button type="button" class="issue-column" (click)="openMetric('exceptions', item.metric)" [attr.aria-label]="item.label + ' ' + item.value + ' 件，查看明細'">
+                    <span class="issue-plot"><span class="issue-fill" [style.height.%]="issueHeight(item.value)"><strong>{{ item.value }}</strong></span></span><span><mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>{{ item.label }}</span>
+                  </button>
+                }
+              </div>
+              <p class="evidence-note">其他待處理通報可點入查看原始類型與原因；倉庫點交不符亦可在倉庫區看訂單點交結果。</p>
+            } @else { <div class="chart-empty"><mat-icon aria-hidden="true">task_alt</mat-icon><span>{{ caseStats() ? '本期目前無待處理異常' : '異常案件資料未載入' }}</span></div> }
+          </div>
+        </div>
+      </section>
+      <section class="detail-row" id="warehouses" aria-labelledby="warehouses-title">
+        <header class="area-header">
+          <div class="detail-name"><span class="section-index">05</span><mat-icon aria-hidden="true">warehouse</mat-icon><h3 id="warehouses-title">倉庫</h3><small>出貨點交</small></div>
+          <button type="button" class="row-link" (click)="openSheet('loading-quality')">點交與各倉明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+        </header>
+        <div class="section-body">
+          <div class="metric-overview">
+            <div class="score-item"><span class="score-label">點交相符率</span><strong>{{ percent(warehouseSummary()?.matchRate ?? null) }}</strong><small>相符 {{ number(warehouseSummary()?.matchedOrders ?? null) }} / 已點交 {{ number(warehouseSummary()?.checkedOrders ?? null) }} 筆</small></div>
+            <div class="status-chips">
+              @for (item of loadingTiles() ?? []; track item.metric) { @if (item.metric !== 'matched') { <button type="button" [class.has-warning]="item.value > 0" (click)="openMetric('loading-quality', item.metric)">{{ item.label }}<strong>{{ item.value }}</strong></button> } }
+            </div>
+          </div>
+          <div class="section-visual">
+            <div class="chart-heading"><h4>各倉點交相符率</h4><span>相符 / 已點交</span></div>
+            <div class="warehouse-comparison">
+              @for (warehouse of warehouseComparisons() ?? []; track warehouse.warehouseId) {
+                <button type="button" (click)="openWarehouse(warehouse.warehouseId)" [attr.aria-label]="warehouse.warehouseName + '，查看點交明細'">
+                  <span class="warehouse-name">{{ warehouse.warehouseName }}<small>{{ warehouse.loading.matchedOrders }} / {{ warehouse.loading.checkedOrders }} 筆</small></span>
+                  @if (warehouse.loading.matchRate !== null) { <span class="warehouse-track" aria-hidden="true"><span [style.width.%]="warehouse.loading.matchRate"></span></span><strong>{{ percent(warehouse.loading.matchRate) }}</strong> } @else { <span class="warehouse-no-data">尚無點交紀錄</span> }
+                  <mat-icon aria-hidden="true">chevron_right</mat-icon>
+                </button>
+              } @empty { <p class="visual-empty">{{ warehouseSummary() ? '尚無出貨倉庫' : '倉庫資料未載入' }}</p> }
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <details class="scope-note">
+      <summary>統計說明與計算方式</summary>
+      <div class="scope-content">
+        <p>所有倉庫合計，比例以加總筆數計算，不平均各倉百分比。沒有母數或資料未載入顯示「—」，不當作 0%。資料為目前紀錄，非歷史當時快照。</p>
+        <p>打卡率＝有效上班卡班次 ÷ 應打上班卡班次；準時上班率＝準時上班卡班次 ÷ 已打上班卡班次；加班率＝有加班班次 ÷ 有效完成上下班打卡班次，均乘 100%。只計已發布班表，排除未到上班時間與核准整天請假。核准部分請假涵蓋上班時間時，以請假結束時間判定準時。缺上班卡不直接等於缺勤；加班分鐘非核准薪資加班。</p>
+        <p>出車次數依本期實際出車紀錄計算；實際公里只加總可核對的已完成里程，未完成／缺紀錄不當作 0 km。補送依本期預定配送日的已核准重送、補送訂單統計；有抵達或交貨處理紀錄才算已執行，每單一次。補送執行占比＝已執行補送訂單 ÷ 有執行紀錄的所有訂單 × 100%，不是補送出車率。</p>
+        <p>無人簽收、點交不符及品質異常可連結原單與補送單，但目前沒有單獨記錄補送額外公里、實際油耗與成本。整趟里程不能直接當成異常增加的成本，也不能據此認定主管派錯單。</p>
+        <p>紀錄完整交付率＝司機完成交貨、實送等於應送且紀錄中無交付差異的訂單 ÷ 到期應配送訂單 × 100%。目前沒有門市驗收回覆，不代表收件人身分或逐項商品已獨立驗證。</p>
+        <p>到期以預定配送日及目前門市收貨截止時間判斷；跨夜順延，缺時段以配送日結束判斷。不含待審核、取消及未到期訂單。</p>
+        <p>收貨時段內抵達率＝在目前門市收貨時段內抵達 ÷ 有時段的到期應配送訂單 × 100%；不是客戶承諾準時交付率。缺抵達不算準時，缺時段不進此比例。</p>
+        <p>異常區顯示本期建立且目前仍待處理的案件；已結案不計入主數字與分類圖，但原始紀錄仍保留於歷史查詢。倉庫點交不符亦列入異常案件，倉庫區另以訂單點交結果分析，兩者口徑不同，不應相加。路線偏離目前沒有此分支的歷史報表資料來源，暫不計入；無人簽收尚非門市獨立確認。</p>
+        <p>點交相符率＝成功點交且無點交不符案件的訂單 ÷ 有點交結果的訂單 × 100%。倉庫指訂單的出貨倉庫，不是接單來源；目前沒有原料採購／品質檢驗紀錄，不能計算原料品質率。</p>
+        <p>週別圖表僅顯示週一至週六；若有週日紀錄，仍保留於本期合計與明細。月份按自然週分組並裁切於當月，年度按月份分組。</p>
       </div>
-    </section>
-  </section>
+    </details>
+  }
 </main>

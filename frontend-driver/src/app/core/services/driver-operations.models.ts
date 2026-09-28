@@ -61,6 +61,9 @@ export interface GpsPingRequest {
 
 export interface DriverProfileDto {
   id: number;
+  warehouseId?: number | null;
+  warehouseName?: string | null;
+  warehouseCode?: string | null;
   account: string;
   name: string;
   phone: string | null;
@@ -169,6 +172,12 @@ export interface DriverMakeupLeaveRequest {
   leaveType: Exclude<LeaveType, 'ABSENT'>;
   reason: string;
   evidencePhotoUrl?: string | null;
+  leaveStart?: string | null;
+  leaveEnd?: string | null;
+}
+
+export interface DriverMakeupLeaveBatchRequest extends Omit<DriverMakeupLeaveRequest, 'workDate'> {
+  workDates: string[];
 }
 
 export interface DriverLeaveHistoryResponse {
