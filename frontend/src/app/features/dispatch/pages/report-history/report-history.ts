@@ -8,6 +8,7 @@ import {DispatchApiService} from '../../../../core/services/dispatch-api.service
 import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, WarehouseDto,
   ReportOutcomesDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
 import {REPORT_CASE_METRICS, matchesReportCase} from '../../report-delivery-cases';
+import {ORDER_PROGRESS_METRICS, matchesOrderProgress} from '../../report-unsettled-orders';
 
 type PreviewSheet = 'overview' | 'orders' | 'routes' | 'attendance' | 'vehicles' | 'warehouses' | 'stores' | 'exceptions' | 'notes'
   | 'delivery-quality' | 'recovery' | 'loading-quality';
@@ -110,6 +111,7 @@ const SHEETS: ReadonlyArray<{id: PreviewSheet; label: string; icon: string}> = [
 ];
 
 const METRICS: Partial<Record<PreviewSheet, {id: string; label: string}[]>> = {
+  orders: ORDER_PROGRESS_METRICS.map(({id, label}) => ({id, label})),
   attendance: [{id: 'clocked-in', label: '已打上班卡'}, {id: 'on-time', label: '準時上班'}, {id: 'late', label: '遲到'},
     {id: 'missing-clock-in', label: '缺上班卡'}, {id: 'overtime', label: '有加班'}],
   vehicles: [{id: 'distance-recorded', label: '有可核對實際里程'}],
@@ -517,6 +519,7 @@ export class ReportHistory implements OnInit, OnDestroy {
       }
     }
     return preview.orders
+      .filter(order => matchesOrderProgress(order, this.selectedSheet() === 'orders' ? this.metric() : ''))
       .filter((order) => order.deliveryDate >= this.from() && order.deliveryDate <= this.to())
       .filter((order) => this.warehouseId() === null || order.warehouseId === this.warehouseId())
       .filter((order) => this.storeId() === null || order.storeId === this.storeId())

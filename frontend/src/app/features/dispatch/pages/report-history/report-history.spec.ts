@@ -28,6 +28,23 @@ describe('ReportHistory links from the supervisor summary', () => {
   });
 
   it.each([
+    ['unsettled', ['待確認', '待排車', '已點交', '配送中']],
+    ['pending-confirm', ['待確認']],
+    ['awaiting-delivery', ['待排車', '已點交']],
+    ['in-delivery', ['配送中']],
+  ])('filters order details and Excel consistently for %s', (metric, statuses) => {
+    const page = open({from: '2026-09-28', to: '2026-10-04', sheet: 'orders', metric}) as any;
+    const orders = ['PENDING_CONFIRM', 'CONFIRMED', 'LOADED', 'IN_DELIVERY', 'COMPLETED', 'CANCELLED', 'FAILED', 'NO_SIGNATURE']
+      .map((status, i) => ({id: i + 1, orderNumber: `O-${i + 1}`, storeId: 1, warehouseId: 1, boxCount: 15,
+        deliveryDate: '2026-09-28', status}));
+    const preview = {orders: [...orders, {...orders[0], orderNumber: 'OUTSIDE', deliveryDate: '2026-09-27'}],
+      routes: {routes: []}, storeDirectory: []};
+    expect(page.metric()).toBe(metric);
+    expect(page.orderRows(preview).map((row: any) => row.status)).toEqual(statuses);
+    expect(page.orderExportRows(preview).slice(1).map((row: any[]) => row[5])).toEqual(statuses);
+  });
+
+  it.each([
     ['2026-01-01', '2026-12-31', 'year'],
     ['2026-09-01', '2026-09-30', 'month'],
     ['2026-09-28', '2026-10-04', 'week'],

@@ -4,15 +4,15 @@ import {catchError, forkJoin, of, Subscription} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {NgTemplateOutlet} from '@angular/common';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {ReportCollectionDto, ReportPerformanceDto, ReportOutcomesDto} from '../../../../core/services/dispatch-api.models';
-import {CURRENT_ISSUE_CATEGORIES, matchesReportCase} from '../../report-delivery-cases';
+import {OrderDto, ReportPerformanceDto, ReportOutcomesDto} from '../../../../core/services/dispatch-api.models';
+import {UNSETTLED_ORDER_CATEGORIES, matchesOrderProgress} from '../../report-unsettled-orders';
 
 type ReportPeriod = 'year' | 'month' | 'week' | 'day';
 
 interface OperationalSources {
   performance: ReportPerformanceDto | null;
   outcomes: ReportOutcomesDto | null;
-  exceptions: ReportCollectionDto | null;
+  orders: OrderDto[] | null;
 }
 
 interface ChartBucket {from: string; to: string; label: string; dateLabel: string; count: number; other: number;}
@@ -42,7 +42,7 @@ export class OperationReport implements OnInit, OnDestroy {
   readonly operationalLoading = signal(false);
   readonly operationalError = signal('');
   readonly outcomeError = signal('');
-  readonly exceptionError = signal('');
+  readonly unsettledError = signal('');
 
   readonly periods: {id: ReportPeriod; label: string}[] = [
     {id: 'year', label: '年度'},
@@ -64,15 +64,18 @@ export class OperationReport implements OnInit, OnDestroy {
   readonly recovery = computed(() => this.outcomes()?.recovery ?? null);
   readonly warehouseSummary = computed(() => this.outcomes()?.loading ?? null);
 
-  readonly exceptionCases = computed(() => {
-    const rows = this.operationalData()?.exceptions?.['cases'];
-    return Array.isArray(rows) ? rows : null;
+  readonly periodOrders = computed(() => {
+    const orders = this.operationalData()?.orders;
+    if (!orders) return null;
+    const {start, end} = this.periodDates();
+    const from = this.toDateString(start), to = this.toDateString(end);
+    return orders.filter(order => order.deliveryDate >= from && order.deliveryDate <= to);
   });
-  readonly caseStats = computed(() => {
-    const rows = this.exceptionCases();
+  readonly unsettledStats = computed(() => {
+    const rows = this.periodOrders();
     if (!rows) return null;
-    return {total: rows.length, open: rows.filter(row => row['status'] === 'OPEN').length,
-      closed: rows.filter(row => row['status'] === 'CLOSED').length};
+    return {total: rows.length, unsettled: rows.filter(row => matchesOrderProgress(row, 'unsettled')).length,
+      completed: rows.filter(row => row.status === 'COMPLETED').length};
   });
 
   readonly peopleDials = computed<RateDial[] | null>(() => {
@@ -99,10 +102,10 @@ export class OperationReport implements OnInit, OnDestroy {
       {label: '箱數待核對', value: d.missingQualityOrders, metric: 'missing-quality', icon: 'fact_check', tone: 'muted'},
     ] : null;
   });
-  readonly issueTiles = computed<StatusTile[] | null>(() => {
-    const rows = this.exceptionCases();
-    return rows ? CURRENT_ISSUE_CATEGORIES.map(item => ({label: item.label, icon: item.icon, metric: item.id,
-      value: rows.filter(row => matchesReportCase(row, item.id)).length})) : null;
+  readonly unsettledTiles = computed<StatusTile[] | null>(() => {
+    const rows = this.periodOrders();
+    return rows ? UNSETTLED_ORDER_CATEGORIES.map(item => ({label: item.label, icon: item.icon, metric: item.id,
+      value: rows.filter(row => matchesOrderProgress(row, item.id)).length})) : null;
   });
   readonly loadingTiles = computed<StatusTile[] | null>(() => {
     const w = this.warehouseSummary();
@@ -128,14 +131,14 @@ export class OperationReport implements OnInit, OnDestroy {
   readonly warehouseComparisons = computed(() => this.outcomes()?.warehouses ?? null);
   readonly tripChartHasData = computed(() => this.tripBuckets()?.some(b => b.count > 0) ?? false);
   readonly orderChartHasData = computed(() => this.orderBuckets()?.some(b => b.count + b.other > 0) ?? false);
-  readonly issueChartHasData = computed(() => this.issueTiles()?.some(tile => tile.value > 0) ?? false);
+  readonly unsettledChartHasData = computed(() => this.unsettledTiles()?.some(tile => tile.value > 0) ?? false);
 
   protected chartHeight(count: number, buckets: ChartBucket[]): number {
     const max = Math.max(1, ...buckets.map(b => b.count + b.other));
     return count / max * 100;
   }
-  protected issueHeight(value: number): number {
-    return value / Math.max(1, ...(this.issueTiles() ?? []).map(row => row.value)) * 100;
+  protected unsettledHeight(value: number): number {
+    return value / Math.max(1, ...(this.unsettledTiles() ?? []).map(row => row.value)) * 100;
   }
   protected openBucket(bucket: ChartBucket, sheet: string): void {
     void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to, sheet}});
@@ -250,7 +253,7 @@ export class OperationReport implements OnInit, OnDestroy {
     this.operationalLoading.set(true);
     this.operationalError.set('');
     this.outcomeError.set('');
-    this.exceptionError.set('');
+    this.unsettledError.set('');
     this.operationalData.set(null);
     this.supplementalRequest = forkJoin({
       performance: this.api.getReportPerformance(query).pipe(catchError(() => {
@@ -261,8 +264,8 @@ export class OperationReport implements OnInit, OnDestroy {
         this.outcomeError.set('配送成果資料暫時無法載入。');
         return of(null);
       })),
-      exceptions: this.api.getReportExceptions(query).pipe(catchError(() => {
-        this.exceptionError.set('異常案件暫時無法載入。');
+      orders: this.api.getOrders().pipe(catchError(() => {
+        this.unsettledError.set('未結單訂單資料暫時無法載入。');
         return of(null);
       })),
     }).subscribe({

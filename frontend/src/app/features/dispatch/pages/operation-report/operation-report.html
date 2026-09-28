@@ -41,7 +41,7 @@
     </div>
   </section>
   @if (loading()) { <p class="report-feedback" role="status">正在載入營運資料…</p> } @else {
-    @if (operationalError() || outcomeError() || exceptionError()) {
+    @if (operationalError() || outcomeError() || unsettledError()) {
       <div class="data-alert" role="status"><mat-icon aria-hidden="true">info_outline</mat-icon><span>部分資料未載入，相關欄位以「—」顯示。</span><button type="button" class="retry-action" (click)="retryOperationalData()">重新載入</button></div>
     }
     @if (operationalLoading()) { <p class="supplemental-feedback" role="status">正在更新營運成果…</p> }
@@ -110,30 +110,29 @@
           </div>
         </div>
       </section>
-      <section class="detail-row" id="exceptions" aria-labelledby="exceptions-title">
+      <section class="detail-row" id="unsettled-orders" aria-labelledby="unsettled-orders-title">
         <header class="area-header">
-          <div class="detail-name"><span class="section-index">04</span><mat-icon aria-hidden="true">report_problem</mat-icon><h3 id="exceptions-title">異常</h3><small>配送回報與處理</small></div>
-          <button type="button" class="row-link" (click)="openMetric('exceptions', 'open')">待處理案件明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+          <div class="detail-name"><span class="section-index">04</span><mat-icon aria-hidden="true">pending_actions</mat-icon><h3 id="unsettled-orders-title">未結單訂單</h3><small>訂單處理進度</small></div>
+          <button type="button" class="row-link" (click)="openMetric('orders', 'unsettled')">未結單明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
           <div class="metric-overview">
-            <div class="score-item" [class.is-negative]="(caseStats()?.open ?? 0) > 0"><span class="score-label">本期目前待處理異常</span><strong>{{ number(caseStats()?.open ?? null) }}<small>件</small></strong>
-              @if (caseStats(); as cases) { <small>本期登錄 {{ number(cases.total) }} 件 · 已結案 {{ number(cases.closed) }} 件</small> }
-              @else { <small>案件資料暫時無法載入</small> }
+            <div class="score-item" [class.is-negative]="(unsettledStats()?.unsettled ?? 0) > 0"><span class="score-label">本期未結單</span><strong>{{ number(unsettledStats()?.unsettled ?? null) }}<small>筆</small></strong>
+              @if (unsettledStats(); as stats) { <small>本期訂單 {{ number(stats.total) }} 筆 · 已完成 {{ number(stats.completed) }} 筆</small> }
+              @else { <small>訂單資料暫時無法載入</small> }
             </div>
           </div>
           <div class="section-visual">
-            <div class="chart-heading"><h4>待處理異常類型</h4><span>目前狀態 · 單位：案件</span></div>
-            @if (issueChartHasData()) {
-              <div class="issue-chart">
-                @for (item of issueTiles() ?? []; track item.metric) {
-                  <button type="button" class="issue-column" (click)="openMetric('exceptions', item.metric)" [attr.aria-label]="item.label + ' ' + item.value + ' 件，查看明細'">
-                    <span class="issue-plot"><span class="issue-fill" [style.height.%]="issueHeight(item.value)"><strong>{{ item.value }}</strong></span></span><span><mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>{{ item.label }}</span>
+            <div class="chart-heading"><h4>未結單進度</h4><span>目前狀態 · 單位：訂單筆數</span></div>
+            @if (unsettledChartHasData()) {
+              <div class="issue-chart order-progress-chart">
+                @for (item of unsettledTiles() ?? []; track item.metric) {
+                  <button type="button" class="issue-column" (click)="openMetric('orders', item.metric)" [attr.aria-label]="item.label + ' ' + item.value + ' 筆，查看明細'">
+                    <span class="issue-plot"><span class="issue-fill" [style.height.%]="unsettledHeight(item.value)"><strong>{{ item.value }}</strong></span></span><span><mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>{{ item.label }}</span>
                   </button>
                 }
               </div>
-              <p class="evidence-note">其他待處理通報可點入查看原始類型與原因；倉庫點交不符亦可在倉庫區看訂單點交結果。</p>
-            } @else { <div class="chart-empty"><mat-icon aria-hidden="true">task_alt</mat-icon><span>{{ caseStats() ? '本期目前無待處理異常' : '異常案件資料未載入' }}</span></div> }
+            } @else { <div class="chart-empty"><mat-icon aria-hidden="true">task_alt</mat-icon><span>{{ unsettledStats() ? '本期目前無未結單訂單' : '訂單資料未載入' }}</span></div> }
           </div>
         </div>
       </section>
@@ -174,7 +173,7 @@
         <p>紀錄完整交付率＝司機完成交貨、實送等於應送且紀錄中無交付差異的訂單 ÷ 到期應配送訂單 × 100%。目前沒有門市驗收回覆，不代表收件人身分或逐項商品已獨立驗證。</p>
         <p>到期以預定配送日及目前門市收貨截止時間判斷；跨夜順延，缺時段以配送日結束判斷。不含待審核、取消及未到期訂單。</p>
         <p>收貨時段內抵達率＝在目前門市收貨時段內抵達 ÷ 有時段的到期應配送訂單 × 100%；不是客戶承諾準時交付率。缺抵達不算準時，缺時段不進此比例。</p>
-        <p>異常區顯示本期建立且目前仍待處理的案件；已結案不計入主數字與分類圖，但原始紀錄仍保留於歷史查詢。倉庫點交不符亦列入異常案件，倉庫區另以訂單點交結果分析，兩者口徑不同，不應相加。路線偏離目前沒有此分支的歷史報表資料來源，暫不計入；無人簽收尚非門市獨立確認。</p>
+        <p>未結單依本期預定配送日及訂單目前狀態統計：待確認、已確認、已點交、配送中；待出貨包含已確認與已點交。完成、取消、配送失敗與無人簽收是已結束的配送原單，不重複計入；後續重送／補送仍未完成時，依新訂單狀態計入。此數字不是待處理異常案件數。</p>
         <p>點交相符率＝成功點交且無點交不符案件的訂單 ÷ 有點交結果的訂單 × 100%。倉庫指訂單的出貨倉庫，不是接單來源；目前沒有原料採購／品質檢驗紀錄，不能計算原料品質率。</p>
         <p>週別圖表僅顯示週一至週六；若有週日紀錄，仍保留於本期合計與明細。月份按自然週分組並裁切於當月，年度按月份分組。</p>
       </div>
