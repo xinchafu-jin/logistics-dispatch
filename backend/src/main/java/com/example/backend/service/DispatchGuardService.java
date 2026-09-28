@@ -111,8 +111,7 @@ public class DispatchGuardService {
                 // 月班表沒發布的情況上面已經整體列過，有發布才逐位檢查司機當天的班次
                 DriversEntity driver = driversEntityMap.get(route.getDriverId());
                 DriverShiftsEntity shift = shiftsEntityMap.get(route.getDriverId());
-                String reason = driver != null && !Objects.equals(route.getWarehouseId(), driver.getWarehouseId())
-                        ? "司機不屬於目前倉庫" : scheduleProblem(driver, shift, monthPublished);
+                String reason = scheduleProblem(driver, shift, monthPublished);
                 if (reason != null) {
                     String who = label;
                     if (driver != null) {

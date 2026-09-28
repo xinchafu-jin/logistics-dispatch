@@ -631,7 +631,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly leaveHistories = signal<Record<number, DriverLeaveHistoryResponse[]>>({});
   protected readonly leaveHistoryErrors = signal<Record<number, string>>({});
   protected readonly unreadLeaveCount = computed(
-    () => this.leaveRequests().filter((request) => !request.driverReadAt).length,
+    () => this.leaveRequests().filter((request) => request.status !== 'PENDING'
+      && request.reviewedAt && !request.driverReadAt).length,
   );
   protected readonly leaveHistoryDates = computed(() =>
     [...new Set(this.leaveRequests().map((request) => request.workDate))].sort((left, right) => right.localeCompare(left)),

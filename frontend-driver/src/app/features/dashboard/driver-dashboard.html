@@ -643,7 +643,7 @@
             </p>
           }
           <app-schedule-leave-composer #calendarLeaveComposer
-            [month]="scheduleMonth()" [shifts]="publishedShifts()"
+            [month]="scheduleMonth()" [selectedDate]="selectedScheduleDate()" [shifts]="publishedShifts()"
             [scheduleReady]="scheduleViewState() === 'ready'"
             [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
             (calendarChange)="refreshScheduleCalendar()" (goToToday)="showScheduleToday()"

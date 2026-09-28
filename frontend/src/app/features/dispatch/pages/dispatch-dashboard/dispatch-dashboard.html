@@ -266,8 +266,8 @@
                   (change)="onDriverChange(route, $event)"
                 >
                   <option value="" [selected]="route.driverId === null">未指派司機</option>
-                  @if (assignedDriverOutsideWarehouse(route)) {
-                    <option [value]="route.driverId" selected disabled>司機歸屬已變更，請重新指派</option>
+                  @if (assignedDriverMissing(route)) {
+                    <option [value]="route.driverId" selected disabled>司機資料不存在，請重新指派</option>
                   }
                   @for (option of driverOptions(route); track option.id) {
                     <option

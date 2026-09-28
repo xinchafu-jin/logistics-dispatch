@@ -14,7 +14,7 @@ const lane = (driverId: number | null = null): Lane => ({
   capacity: 50, driverId, totalDistance: 0, routeStatus: 'DRAFT', hasLockedStops: false,
   isMaintenance: false, cards: [], storeIds: [],
 });
-const driver = (id: number, warehouseId: number, isActive = true): DriverDto => ({
+const driver = (id: number, warehouseId: number | null, isActive = true): DriverDto => ({
   id, warehouseId, isActive, account: `D${id}`, name: `Driver ${id}`,
   workStart: '08:00', workEnd: '17:00', restDuration: 60,
 });
@@ -36,17 +36,28 @@ describe('MAJOR dispatch integration', () => {
   });
   afterEach(() => TestBed.resetTestingModule());
 
-  it('offers only current-warehouse drivers and preserves an assigned disabled identity', () => {
-    page.drivers.set([driver(1, 1), driver(2, 2), driver(3, 1, false)]);
-    expect(page.driverOptions(lane()).map(option => option.id)).toEqual([1]);
-    expect(page.driverOptions(lane(3)).map(option => option.id)).toEqual([1, 3]);
+  it('offers active drivers from every warehouse and preserves an assigned disabled identity', () => {
+    page.drivers.set([driver(1, 1), driver(2, 2), driver(3, 1, false), driver(4, null)]);
+    expect(page.driverOptions(lane()).map(option => option.id)).toEqual([1, 2, 4]);
+    expect(page.driverOptions(lane(3)).map(option => option.id)).toEqual([1, 2, 3, 4]);
   });
 
-  it('flags a transferred assigned driver instead of silently offering them again', () => {
+  it('keeps a cross-warehouse assigned driver selectable', () => {
     page.drivers.set([driver(2, 2)]);
     const route = lane(2);
-    expect(page.driverOptions(route)).toEqual([]);
-    expect(page.routeScheduleProblem(route)).toContain('重新指派');
+    expect(page.driverOptions(route).map(option => option.id)).toEqual([2]);
+    expect(page.assignedDriverMissing(route)).toBe(false);
+  });
+
+  it('shows a driver already used at another warehouse but prevents a second assignment', () => {
+    page.drivers.set([driver(2, 2)]);
+    page.driversTakenElsewhere.set([{driverId: 2, driverName: 'Driver 2', plateNumber: 'TN-22', warehouseName: '台南倉'}]);
+
+    expect(page.driverOptions(lane())[0].takenNote).toContain('已排在 台南倉 TN-22');
+  });
+
+  it('still flags an assigned driver whose record no longer exists', () => {
+    expect(page.assignedDriverMissing(lane(9))).toBe(true);
   });
 
   it('does not confuse closed delivery progress with an active publication', () => {

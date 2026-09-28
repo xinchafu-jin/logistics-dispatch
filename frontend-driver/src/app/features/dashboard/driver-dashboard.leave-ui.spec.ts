@@ -103,6 +103,23 @@ describe('MAJOR uses the complete V3 calendar leave interface', () => {
     expect(composer.activeMode()).toBeNull();
   });
 
+  it('shows leave review replies only when their work date is selected on the calendar', async () => {
+    page.leaveRequests.set([request(28, 'PREPLANNED'), {
+      ...request(29, 'PREPLANNED'), status: 'APPROVED', reviewedAt: '2026-09-27T13:00:00',
+      decisionReason: '29 日准假',
+    }]);
+    await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')).toBeNull();
+    expect(page.unreadLeaveCount()).toBe(1);
+
+    page.selectScheduleDate(date(29)); await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')?.textContent).toContain('29 日准假');
+    page.selectScheduleDate(date(28)); await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')).toBeNull();
+    page.selectScheduleDate(date(29)); await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')?.textContent).toContain('29 日准假');
+  });
+
   it('uses the V3 same-day entry and moves the calendar back to today', async () => {
     page.selectedScheduleDate.set(date(24));
     await openMode(1);
