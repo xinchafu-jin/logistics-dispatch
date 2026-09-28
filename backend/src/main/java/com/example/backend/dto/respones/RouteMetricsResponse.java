@@ -12,6 +12,8 @@ public class RouteMetricsResponse {
     private Long driverId;
     private Long vehicleId;
     private Double plannedKm;
+    /** 這台車的保養狀況；還有待配送的單時，含這趟（plannedKm）跑完後的預估 */
+    private VehicleMaintenanceSummaryResponse maintenance;
     private Integer plannedDriveMinutes;
     private Integer plannedTotalMinutes;
     private Double plannedFuelLiters;
@@ -73,6 +75,14 @@ public class RouteMetricsResponse {
 
     public void setPlannedKm(Double plannedKm) {
         this.plannedKm = plannedKm;
+    }
+
+    public VehicleMaintenanceSummaryResponse getMaintenance() {
+        return maintenance;
+    }
+
+    public void setMaintenance(VehicleMaintenanceSummaryResponse maintenance) {
+        this.maintenance = maintenance;
     }
 
     public Integer getPlannedDriveMinutes() {

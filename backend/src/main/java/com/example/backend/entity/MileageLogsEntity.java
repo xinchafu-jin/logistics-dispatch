@@ -6,9 +6,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 里程紀錄。司機出車與收工各填一次里程表讀數。
+ * 里程紀錄。司機出車與收工各填一次行車紀錄器上的里程（出車時跟著安全檢查一起填）。
  * 實際 GPS 里程由該趟相鄰 GPS 點的 OSRM 道路距離累加。
- * startOdometer、endOdometer 保留既有人工里程表紀錄用途。
+ * startOdometer、endOdometer 是司機填的行車紀錄器里程；實際公里＝收車讀數－出車讀數。
  * 實際工時 = endTime - startTime
  */
 @Entity

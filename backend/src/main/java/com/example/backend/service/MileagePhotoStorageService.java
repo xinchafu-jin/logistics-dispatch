@@ -13,7 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
-/** 儲存出車與收車時的里程表照片，與交貨照片分開管理。 */
+/** 儲存出車與收車時的行車紀錄器照片（拍得到里程），與交貨照片分開管理。 */
 @Service
 public class MileagePhotoStorageService {
 
@@ -29,28 +29,28 @@ public class MileagePhotoStorageService {
 
     public String store(MultipartFile photo) {
         if (photo == null || photo.isEmpty()) {
-            throw new IllegalArgumentException("請選擇里程表照片");
+            throw new IllegalArgumentException("請拍行車紀錄器照片");
         }
         if (photo.getSize() > MAX_FILE_SIZE) {
-            throw new IllegalArgumentException("里程表照片不可超過 5 MB");
+            throw new IllegalArgumentException("行車紀錄器照片不可超過 5 MB");
         }
         try (InputStream source = photo.getInputStream()) {
             byte[] header = source.readNBytes(12);
             String extension = imageExtension(header);
             if (extension == null) {
-                throw new IllegalArgumentException("里程表照片只支援 JPG、PNG 或 WebP");
+                throw new IllegalArgumentException("行車紀錄器照片只支援 JPG、PNG 或 WebP");
             }
             Files.createDirectories(storageDirectory);
             Path target = storageDirectory.resolve(UUID.randomUUID() + extension).normalize();
             if (!target.startsWith(storageDirectory)) {
-                throw new IllegalArgumentException("里程表照片檔名不合法");
+                throw new IllegalArgumentException("行車紀錄器照片檔名不合法");
             }
             try (InputStream completed = new SequenceInputStream(new ByteArrayInputStream(header), source)) {
                 Files.copy(completed, target, StandardCopyOption.REPLACE_EXISTING);
             }
             return PUBLIC_URL_PREFIX + target.getFileName();
         } catch (IOException exception) {
-            throw new IllegalStateException("里程表照片儲存失敗", exception);
+            throw new IllegalStateException("行車紀錄器照片儲存失敗", exception);
         }
     }
 

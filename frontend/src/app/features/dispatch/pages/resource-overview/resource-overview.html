@@ -15,6 +15,10 @@
           <mat-icon aria-hidden="true">add</mat-icon>
           新增車輛
         </button>
+        <button type="button" class="secondary-action" (click)="openMaintenanceSettings()">
+          <mat-icon aria-hidden="true">build</mat-icon>
+          保養提醒設定
+        </button>
         <button type="button" class="secondary-action" (click)="openCreateStore()">
           <mat-icon aria-hidden="true">add</mat-icon>
           新增店家
@@ -135,7 +139,8 @@
               }}</span>
               <div class="table-value">
                 <strong>{{ vehicle.driver }}</strong>
-                <span>{{ vehicle.inspection }}</span>
+                <!-- 保養狀況：快到了黃色、會超過或送修中紅色、資料不齊灰色 -->
+                <span [class]="'maintenance-note is-' + vehicle.maintenanceTone">{{ vehicle.inspection }}</span>
               </div>
               <div class="table-value">
                 <strong>{{ vehicle.assignment }}</strong>
@@ -552,12 +557,237 @@
               <label class="form-field">
                 <span>車輛狀態</span>
                 <select [value]="vehicleForm().status" (change)="updateVehicleStatus($event)">
-                  <option value="AVAILABLE">可用</option>
-                  <option value="MAINTENANCE">保養</option>
+                  <option value="AVAILABLE">可用（保養／維修完成也選這個）</option>
+                  <option value="MINOR_MAINTENANCE">送小保</option>
+                  <option value="MAJOR_MAINTENANCE">送大保</option>
+                  <option value="MAINTENANCE">送維修（車禍／故障）</option>
                   <option value="RETIRED">已退役</option>
                 </select>
               </label>
+              <label class="form-field">
+                <span>小保間隔（每跑幾公里）</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="不知道可以先留白"
+                  [value]="vehicleForm().minorMaintenanceIntervalKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('minorMaintenanceIntervalKm', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>大保間隔（每跑幾公里）</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="不知道可以先留白"
+                  [value]="vehicleForm().majorMaintenanceIntervalKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('majorMaintenanceIntervalKm', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>退役總里程（行車紀錄器到幾公里）</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="不知道可以先留白"
+                  [value]="vehicleForm().retirementKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('retirementKm', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>{{ formType === 'vehicle' ? '目前行車紀錄器里程（新車填 0）' : '目前行車紀錄器里程' }}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  [readOnly]="!canFillMileage('currentOdometerKm')"
+                  [placeholder]="canFillMileage('currentOdometerKm') ? '照行車紀錄器上的數字填' : ''"
+                  [value]="vehicleForm().currentOdometerKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('currentOdometerKm', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>上次小保時的行車紀錄器里程</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  [readOnly]="!canFillMileage('lastMinorMaintenanceKm')"
+                  [placeholder]="canFillMileage('lastMinorMaintenanceKm') ? '不知道可以先留白' : ''"
+                  [value]="vehicleForm().lastMinorMaintenanceKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('lastMinorMaintenanceKm', $event)"
+                />
+              </label>
+              <label class="form-field">
+                <span>上次大保時的行車紀錄器里程</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  [readOnly]="!canFillMileage('lastMajorMaintenanceKm')"
+                  [placeholder]="canFillMileage('lastMajorMaintenanceKm') ? '不知道可以先留白' : ''"
+                  [value]="vehicleForm().lastMajorMaintenanceKm ?? ''"
+                  (input)="updateVehicleOptionalNumber('lastMajorMaintenanceKm', $event)"
+                />
+              </label>
             </div>
+
+            <p class="maintenance-help">
+              小保間隔、大保間隔、退役總里程是這台車自己的規則，三格一起填或都留白，隨時可以改，存檔後剩餘里程立刻照新的算。
+              里程與保養基準只能補一次：空的可以填，填過之後就由司機出車、收車和保養完成自動更新，這裡改不動；
+              打錯了在編輯車輛時按「更正里程」，要寫原因，會留紀錄。
+              例行保養選「送小保／送大保」儲存；保養完成改回「可用」儲存，系統會把當下的行車紀錄器里程記成新的基準。
+              車禍、故障選「送維修」，完成改回「可用」只記次數，不重設保養基準。
+            </p>
+
+            <!-- 更正里程：打錯時用。放在車輛表單裡面，所以按鈕都是 type="button"、Enter 自己處理，不會送出整張車輛表單 -->
+            @if (formType === 'edit-vehicle' && canCorrectMileage()) {
+              @if (correctionOpen()) {
+                <section class="mileage-correction" aria-label="更正里程">
+                  <h4>更正里程</h4>
+                  <p class="maintenance-help">
+                    只改打錯的那格，其他照原樣就好。車在外面跑（出車還沒收車）時改目前里程，這趟的出車讀數也會一起改，司機才收得了車。
+                    每次更正都會留下原因和修改的人。
+                  </p>
+                  <div class="form-grid">
+                    <label class="form-field">
+                      <span>目前行車紀錄器里程</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        [value]="correctionForm().currentOdometerKm"
+                        (input)="updateCorrectionField('currentOdometerKm', $event)"
+                        (keydown.enter)="$event.preventDefault(); submitMileageCorrection()"
+                      />
+                    </label>
+                    <label class="form-field">
+                      <span>上次小保時的行車紀錄器里程</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        [value]="correctionForm().lastMinorMaintenanceKm"
+                        (input)="updateCorrectionField('lastMinorMaintenanceKm', $event)"
+                        (keydown.enter)="$event.preventDefault(); submitMileageCorrection()"
+                      />
+                    </label>
+                    <label class="form-field">
+                      <span>上次大保時的行車紀錄器里程</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        [value]="correctionForm().lastMajorMaintenanceKm"
+                        (input)="updateCorrectionField('lastMajorMaintenanceKm', $event)"
+                        (keydown.enter)="$event.preventDefault(); submitMileageCorrection()"
+                      />
+                    </label>
+                    <label class="form-field form-field--wide">
+                      <span>原因（必填）</span>
+                      <input
+                        type="text"
+                        maxlength="200"
+                        placeholder="例如：司機收車多打一位數，照片上是 18450"
+                        [value]="correctionForm().reason"
+                        (input)="updateCorrectionField('reason', $event)"
+                        (keydown.enter)="$event.preventDefault(); submitMileageCorrection()"
+                      />
+                    </label>
+                  </div>
+                  @if (correctionError()) {
+                    <p class="form-error">{{ correctionError() }}</p>
+                  }
+                  <div class="correction-actions">
+                    <button type="button" class="plain-button" [disabled]="correctionSaving()" (click)="closeMileageCorrection()">取消</button>
+                    <button type="button" class="primary-action" [disabled]="correctionSaving()" (click)="submitMileageCorrection()">
+                      {{ correctionSaving() ? '更正中...' : '送出更正' }}
+                    </button>
+                  </div>
+                </section>
+              } @else {
+                <button type="button" class="plain-button correction-toggle" (click)="openMileageCorrection()">
+                  更正里程（打錯時用）
+                </button>
+              }
+            }
+
+            <!-- 編輯時才有：目前的保養狀況與送修歷史 -->
+            @if (formType === 'edit-vehicle') {
+              @if (vehicleForm().maintenance; as maintenance) {
+                <section [class]="'maintenance-status is-' + maintenance.decision.toLowerCase()" aria-label="保養狀況">
+                  <dl>
+                    <div><dt>距離小保</dt><dd>{{ remainingKm(maintenance.minorRemainingKm) }}</dd></div>
+                    <div><dt>距離大保</dt><dd>{{ remainingKm(maintenance.majorRemainingKm) }}</dd></div>
+                    <div><dt>距離退役</dt><dd>{{ remainingKm(maintenance.retirementRemainingKm) }}</dd></div>
+                  </dl>
+                  <p class="maintenance-counts">
+                    已完成：小保 {{ maintenance.minorCount }} 次 · 大保 {{ maintenance.majorCount }} 次 · 維修 {{ maintenance.repairCount }} 次
+                  </p>
+                  @if (maintenance.reasons.length > 0) {
+                    <p class="maintenance-reasons">{{ maintenance.reasons.join('；') }}</p>
+                  }
+                </section>
+              }
+              <section class="maintenance-history" aria-label="保養與維修紀錄">
+                <h4>保養與維修紀錄</h4>
+                @if (historyLoading()) {
+                  <p>載入中…</p>
+                }
+                @if (historyError()) {
+                  <p class="form-error">{{ historyError() }}</p>
+                }
+                @for (record of maintenanceHistory(); track record.id) {
+                  <article>
+                    <strong>{{ maintenanceTypeLabel(record) }} · {{ maintenanceStatusLabel(record) }}</strong>
+                    <span>
+                      送修 {{ record.sentAt ? (record.sentAt | date: 'yyyy/MM/dd HH:mm') : '時間未記錄' }}
+                      · {{ record.sentOdometerKm === null ? '里程未記錄' : (record.sentOdometerKm | number) + ' km' }}
+                    </span>
+                    @if (record.completedAt) {
+                      <span>
+                        完成 {{ record.completedAt | date: 'yyyy/MM/dd HH:mm' }}
+                        · {{ record.completedOdometerKm === null ? '里程未記錄' : (record.completedOdometerKm | number) + ' km' }}
+                      </span>
+                    }
+                    @if (record.cancelledAt) {
+                      <span>取消 {{ record.cancelledAt | date: 'yyyy/MM/dd HH:mm' }}</span>
+                    }
+                    @if (record.status === 'ACTIVE') {
+                      <button type="button" class="plain-button" [disabled]="isSaving()" (click)="cancelVehicleMaintenance()">
+                        取消這次送修（不計次數、不重設基準）
+                      </button>
+                    }
+                  </article>
+                } @empty {
+                  @if (!historyLoading() && !historyError()) {
+                    <p>還沒有保養或維修紀錄。</p>
+                  }
+                }
+              </section>
+
+              @if (mileageCorrections().length > 0) {
+                <section class="maintenance-history" aria-label="里程更正紀錄">
+                  <h4>里程更正紀錄</h4>
+                  @for (correction of mileageCorrections(); track correction.id) {
+                    <article>
+                      <strong>
+                        {{ correctionFieldLabel(correction) }}：{{ correction.oldKm === null ? '空白' : (correction.oldKm | number) }}
+                        → {{ correction.newKm | number }} km
+                      </strong>
+                      <span>
+                        {{ correction.correctedAt | date: 'yyyy/MM/dd HH:mm' }} · {{ correction.correctedBy ?? '未記錄' }}
+                        @if (correction.mileageLogId !== null) { · 這趟的出車讀數一起改 }
+                      </span>
+                      <span>原因：{{ correction.reason }}</span>
+                    </article>
+                  }
+                </section>
+              }
+            }
 
             @if (formError()) {
               <p class="form-error">{{ formError() }}</p>
@@ -759,6 +989,55 @@
                 {{
                   isSaving() ? '儲存中...' : formType === 'edit-warehouse' ? '儲存修改' : '新增倉庫'
                 }}
+              </button>
+            </div>
+          </form>
+        }
+      </section>
+    </div>
+  }
+
+  <!-- 全車共用的保養提醒；小保、大保間隔和退役總里程在每台車的編輯表單裡設定 -->
+  @if (settingsOpen()) {
+    <div class="modal-backdrop" (click)="closeMaintenanceSettings()">
+      <section
+        class="resource-modal settings-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="maintenance-settings-title"
+        (click)="stopEvent($event)"
+      >
+        <header class="modal-header">
+          <div>
+            <p class="section-eyebrow">車輛保養</p>
+            <h3 id="maintenance-settings-title">保養提醒設定</h3>
+          </div>
+          <button type="button" class="icon-button" title="關閉" aria-label="關閉" (click)="closeMaintenanceSettings()">
+            <mat-icon aria-hidden="true">close</mat-icon>
+          </button>
+        </header>
+
+        @if (settingsLoading()) {
+          <p>載入設定中…</p>
+        } @else {
+          <form class="resource-form" (submit)="$event.preventDefault(); saveMaintenanceSettings()">
+            <label class="form-field">
+              <span>提前提醒公里數（全車共用）</span>
+              <input type="number" min="0" step="1" [value]="warningKm()" (input)="updateWarningKm($event)" />
+            </label>
+            <p class="maintenance-help">
+              跑完這趟剩 0～{{ warningKm() }} km 會提醒；任何一項會變負數（超過）就不能發布、不能出車。
+              每台車的小保、大保間隔和退役總里程，在新增或編輯車輛時設定。
+            </p>
+
+            @if (settingsError()) {
+              <p class="form-error">{{ settingsError() }}</p>
+            }
+
+            <div class="modal-actions">
+              <button type="button" class="plain-button" (click)="closeMaintenanceSettings()">取消</button>
+              <button type="submit" class="primary-action" [disabled]="settingsSaving()">
+                {{ settingsSaving() ? '儲存中...' : '儲存設定' }}
               </button>
             </div>
           </form>

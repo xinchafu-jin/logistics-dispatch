@@ -30,9 +30,30 @@ public class VehiclesEntity {
     @Column
     private Double fuelConsumption;
 
-    /** 車輛儀表板顯示的累積總里程。 */
+    /** 目前的行車紀錄器里程（累計）；司機每次出車、收車時寫回。 */
     @Column
     private Integer currentOdometerKm;
+
+    /**
+     * 這台車自己的保養與退役規則：每跑多少公里小保、大保，以及退役總里程（不會因為保養而重設）。
+     * 三個一起填或都不填，null＝還沒設定；主管隨時可以改，跟下面「只能補一次」的基準不同
+     */
+    @Column
+    private Integer minorMaintenanceIntervalKm;
+
+    @Column
+    private Integer majorMaintenanceIntervalKm;
+
+    @Column
+    private Integer retirementKm;
+
+    /** 上次小保完成時的行車紀錄器里程（小保基準）；null＝還沒設定 */
+    @Column
+    private Integer lastMinorMaintenanceKm;
+
+    /** 上次大保完成時的行車紀錄器里程（大保基準）；null＝還沒設定 */
+    @Column
+    private Integer lastMajorMaintenanceKm;
 
     /**
      * 車輛自加入系統後，以每趟 GPS 道路距離結算的永久累積里程（公里）。
@@ -90,6 +111,46 @@ public class VehiclesEntity {
 
     public void setCurrentOdometerKm(Integer currentOdometerKm) {
         this.currentOdometerKm = currentOdometerKm;
+    }
+
+    public Integer getMinorMaintenanceIntervalKm() {
+        return minorMaintenanceIntervalKm;
+    }
+
+    public void setMinorMaintenanceIntervalKm(Integer minorMaintenanceIntervalKm) {
+        this.minorMaintenanceIntervalKm = minorMaintenanceIntervalKm;
+    }
+
+    public Integer getMajorMaintenanceIntervalKm() {
+        return majorMaintenanceIntervalKm;
+    }
+
+    public void setMajorMaintenanceIntervalKm(Integer majorMaintenanceIntervalKm) {
+        this.majorMaintenanceIntervalKm = majorMaintenanceIntervalKm;
+    }
+
+    public Integer getRetirementKm() {
+        return retirementKm;
+    }
+
+    public void setRetirementKm(Integer retirementKm) {
+        this.retirementKm = retirementKm;
+    }
+
+    public Integer getLastMinorMaintenanceKm() {
+        return lastMinorMaintenanceKm;
+    }
+
+    public void setLastMinorMaintenanceKm(Integer lastMinorMaintenanceKm) {
+        this.lastMinorMaintenanceKm = lastMinorMaintenanceKm;
+    }
+
+    public Integer getLastMajorMaintenanceKm() {
+        return lastMajorMaintenanceKm;
+    }
+
+    public void setLastMajorMaintenanceKm(Integer lastMajorMaintenanceKm) {
+        this.lastMajorMaintenanceKm = lastMajorMaintenanceKm;
     }
 
     public Double getCumulativeMileageKm() {

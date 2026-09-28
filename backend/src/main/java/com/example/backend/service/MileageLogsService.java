@@ -31,6 +31,11 @@ import java.util.List;
 public class MileageLogsService {
 
     private static final ZoneId TAIPEI = ZoneId.of("Asia/Taipei");
+    /**
+     * 一趟（一天）最多可能跑的公里數：時速 80 開 12 小時也才 960 公里，高雄到台北來回也不到 800。
+     * 收車讀數比出車多出這麼多，幾乎都是多打一位數；照收的話車上的里程就錯了，保養會被誤判成超過
+     */
+    private static final int MAX_TRIP_KM = 1000;
 
     private final MileageLogsDAO mileageLogsDAO;
     private final DriversDAO driversDAO;
@@ -44,6 +49,8 @@ public class MileageLogsService {
     private final WarehouseProximityService warehouseProximityService;
     private final RouteLegMileageService routeLegMileageService;
     private final MileagePhotoStorageService mileagePhotoStorageService;
+    private final PreTripInspectionService preTripInspectionService;
+    private final DispatchVehicleMaintenanceGuard maintenanceGuard;
 
     public MileageLogsService(
             MileageLogsDAO mileageLogsDAO,
@@ -57,7 +64,9 @@ public class MileageLogsService {
             EmergencyLeaveService emergencyLeaveService,
             WarehouseProximityService warehouseProximityService,
             RouteLegMileageService routeLegMileageService,
-            MileagePhotoStorageService mileagePhotoStorageService
+            MileagePhotoStorageService mileagePhotoStorageService,
+            PreTripInspectionService preTripInspectionService,
+            DispatchVehicleMaintenanceGuard maintenanceGuard
     ) {
         this.mileageLogsDAO = mileageLogsDAO;
         this.driversDAO = driversDAO;
@@ -71,6 +80,8 @@ public class MileageLogsService {
         this.warehouseProximityService = warehouseProximityService;
         this.routeLegMileageService = routeLegMileageService;
         this.mileagePhotoStorageService = mileagePhotoStorageService;
+        this.preTripInspectionService = preTripInspectionService;
+        this.maintenanceGuard = maintenanceGuard;
     }
 
     public MileageLogResponse start(Long driverId, MileageRequestDTO request) {
@@ -87,6 +98,9 @@ public class MileageLogsService {
             throw new IllegalStateException("同一位司機今天存在多條已發布路線，無法判斷出車車輛");
         }
         RoutesEntity route = routes.getFirst();
+        // 出車前安全檢查通過才能記出車里程；requirePassed 會鎖路線，跟撤回用同一把鎖，
+        // 撤回跟出車同時發生時會排隊，不會撤回到一半還能出車
+        preTripInspectionService.requirePassed(driverId, route.getId());
         if (route.getVehicleId() == null) {
             throw new IllegalStateException("已發布路線尚未指派車輛");
         }
@@ -100,7 +114,7 @@ public class MileageLogsService {
             throw new IllegalArgumentException("這台車仍有其他司機尚未結束的里程，請完成交接後再出車");
         }
         if (request.getOdometer() == null) {
-            throw new IllegalArgumentException("出車總里程不能留空");
+            throw new IllegalArgumentException("請填出車時的行車紀錄器里程");
         }
         VehiclesEntity vehicle = vehiclesDAO.findByIdForUpdate(route.getVehicleId())
                 .orElseThrow(() -> new EntityNotFoundException("找不到已發布路線的車輛，ID：" + route.getVehicleId()));
@@ -108,6 +122,8 @@ public class MileageLogsService {
         // 差額就是系統外里程，從同一台車前後兩筆里程紀錄算得出來。
         // 一定要寫回車輛：收車時 updateCurrentOdometer 只在車輛讀數等於這趟出車讀數時才更新，不寫回會改成在收車時被擋。
         vehicle.setCurrentOdometerKm(request.getOdometer());
+        // 用司機剛填的行車紀錄器里程再算一次保養：跑完這趟會超過就不能出車（整筆退回，里程也不會寫進去）
+        maintenanceGuard.assertCanStart(route, vehicle);
         vehiclesDAO.save(vehicle);
 
         MileageLogsEntity mileage = new MileageLogsEntity();
@@ -141,10 +157,14 @@ public class MileageLogsService {
         }
 
         if (request.getOdometer() == null) {
-            throw new IllegalArgumentException("收車總里程不能留空");
+            throw new IllegalArgumentException("請填收車時的行車紀錄器里程");
         }
         if (mileage.getStartOdometer() != null && request.getOdometer() < mileage.getStartOdometer()) {
-            throw new IllegalArgumentException("收車里程不能小於出車里程");
+            throw new IllegalArgumentException("收車里程不能小於出車里程；如果是出車時打錯了，請主管在車輛資料裡「更正里程」");
+        }
+        if (mileage.getStartOdometer() != null && request.getOdometer() - mileage.getStartOdometer() > MAX_TRIP_KM) {
+            throw new IllegalArgumentException("收車里程比出車多了 " + (request.getOdometer() - mileage.getStartOdometer())
+                    + " 公里，一天跑不了這麼遠，請確認是不是多打了一位數");
         }
 
         List<String> unfinishedOrders = ordersDAO.findByRouteIdOrderBySequence(mileage.getRouteId())
@@ -175,7 +195,7 @@ public class MileageLogsService {
         int updatedVehicles = vehiclesDAO.updateCurrentOdometer(
                 mileage.getVehicleId(), mileage.getStartOdometer(), request.getOdometer());
         if (updatedVehicles != 1) {
-            throw new IllegalStateException("車輛總里程已變更，請重新確認儀表板讀數");
+            throw new IllegalStateException("車輛里程已變更，請重新確認行車紀錄器上的里程");
         }
         vehicleMileageSettlementService.settle(mileage, now);
         emergencyLeaveService.finalizeApprovedHandover(
@@ -189,7 +209,7 @@ public class MileageLogsService {
         MileageLogsEntity mileage = mileageLogsDAO.findForUpdate(driverId, LocalDate.now(TAIPEI))
                 .orElseThrow(() -> new IllegalArgumentException("今天尚未登記出車里程"));
         if (mileage.getStartMileagePhotoUrl() != null) {
-            throw new IllegalArgumentException("今天已上傳出車里程照片");
+            throw new IllegalArgumentException("今天已上傳出車時的行車紀錄器照片");
         }
         mileage.setStartMileagePhotoUrl(mileagePhotoStorageService.store(photo));
         mileage.setStartMileagePhotoRecordedAt(LocalDateTime.now(TAIPEI));

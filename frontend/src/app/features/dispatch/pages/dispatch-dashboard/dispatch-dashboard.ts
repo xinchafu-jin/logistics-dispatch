@@ -40,6 +40,7 @@ import {
   TemplateRouteRequest,
   UnassignedOrderDto,
   VehicleDto,
+  VehicleMaintenanceSummary,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
@@ -926,6 +927,18 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
+   * 路線卡片上的保養提醒：只顯示「快到了」和「跑完會超過」。
+   * 資料不齊（UNKNOWN）不顯示在看板，免得每張卡都有灰字；到人車資源頁的車輛裡看得到
+   */
+  laneMaintenance(route: BoardRoute): VehicleMaintenanceSummary | null {
+    const maintenance = this.routeMetricsByRouteId().get(route.routeId)?.maintenance;
+    if (!maintenance || (maintenance.decision !== 'WARNING' && maintenance.decision !== 'BLOCKED')) {
+      return null;
+    }
+    return maintenance;
+  }
+
+  /**
    * 派出後右側「需要處理」：偏離路線的司機、送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
    * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。偏離最急，排最前面，警報又排在提示前面。
    */
@@ -1142,7 +1155,7 @@ export class DispatchDashboard implements OnInit {
         return lane;
       }
       if (lane.vehicleId === null || lane.isMaintenance || lane.hasLockedStops) {
-        const reason = lane.vehicleId === null ? '還沒選車' : lane.isMaintenance ? '車輛維修中' : '有配送中的訂單';
+        const reason = lane.vehicleId === null ? '還沒選車' : lane.isMaintenance ? '車輛保養或維修中' : '有配送中的訂單';
         notices.push(`${this.templateSlotLabel(lane.driverId, lane.vehicleId)} ${reason}，門市先不拉單`);
         return lane;
       }
@@ -1510,7 +1523,8 @@ export class DispatchDashboard implements OnInit {
       plateNumber: vehicle?.plateNumber ?? '',
       vehicleType: vehicle?.vehicleType ?? null,
       capacity: vehicle?.capacity ?? 0,
-      isMaintenance: vehicle?.status === 'MAINTENANCE',
+      // 送小保、送大保、送維修都算：不能拖單進去
+      isMaintenance: vehicle !== undefined && vehicle.status !== 'AVAILABLE',
     };
   }
 
@@ -2247,7 +2261,8 @@ export class DispatchDashboard implements OnInit {
       .map((route) => {
         const vehicle = vehicleById.get(route.vehicleId)!;
         const routeStops = route.stops ?? [];
-        const isMaintenance = vehicle.status === 'MAINTENANCE';
+        // 送小保、送大保、送維修都算（退役的車上面 isBoardVehicle 已經排掉）
+        const isMaintenance = vehicle.status !== 'AVAILABLE';
         return {
           // 同一台車沿用原本的 key，畫面不會整格重畫
           slotKey: previous.find((lane) => lane.vehicleId === route.vehicleId)?.slotKey ?? `slot-${++this.slotSeq}`,

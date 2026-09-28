@@ -1,5 +1,6 @@
 export type DriverStatus = 'ACTIVE' | 'INACTIVE';
-export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'RETIRED';
+/** MAINTENANCE＝送維修（車禍、故障）；MINOR_MAINTENANCE／MAJOR_MAINTENANCE＝送小保／送大保 */
+export type VehicleStatus = 'AVAILABLE' | 'MAINTENANCE' | 'MINOR_MAINTENANCE' | 'MAJOR_MAINTENANCE' | 'RETIRED';
 export type StoreStatus = 'ACTIVE' | 'SUSPENDED';
 export type ScheduleStatus = 'DRAFT' | 'PUBLISHED';
 export type ShiftType = 'UNASSIGNED' | 'WORK' | 'DAY_OFF' | 'LEAVE';
@@ -296,6 +297,8 @@ export interface RouteMetricsDto {
   routeId: number;
   date: string;
   plannedKm: number | null;
+  /** 這台車的保養狀況；還有待配送的單時含「跑完這趟之後」的預估 */
+  maintenance?: VehicleMaintenanceSummary | null;
   plannedDriveMinutes: number | null;
   plannedTotalMinutes: number | null;
   plannedFuelLiters: number | null;
@@ -388,6 +391,84 @@ export interface VehicleDto {
   capacity: number;
   fuelConsumption?: number;
   status: VehicleStatus;
+  /** 這台車的保養與退役規則：三個一起填或都留白，隨時可以改（跟下面的基準不同） */
+  minorMaintenanceIntervalKm?: number | null;
+  majorMaintenanceIntervalKm?: number | null;
+  retirementKm?: number | null;
+  /** 目前的行車紀錄器里程；有值之後只能由出車、收車更新，空的（舊車）可以補一次 */
+  currentOdometerKm?: number | null;
+  /** 上次小保／大保時的行車紀錄器里程；有值之後只能由保養完成更新，空的可以補一次 */
+  lastMinorMaintenanceKm?: number | null;
+  lastMajorMaintenanceKm?: number | null;
+  /** 後端唯讀：目前的保養狀況 */
+  maintenance?: VehicleMaintenanceSummary | null;
+}
+
+/**
+ * 一台車的保養狀況。剩下的公里數＝基準＋間隔－目前行車紀錄器里程，負數代表已經超過。
+ * decision：BLOCKED 擋出車、WARNING 快到了、UNKNOWN 資料不齊算不出來（只提醒不擋）、NORMAL 正常
+ */
+export interface VehicleMaintenanceSummary {
+  currentOdometerKm: number | null;
+  minorRemainingKm: number | null;
+  majorRemainingKm: number | null;
+  retirementRemainingKm: number | null;
+  warningKm: number;
+  /** 這趟預計要跑的公里數（含回倉）；沒有要評估的趟次是 null */
+  plannedKm: number | null;
+  projectedMinorKm: number | null;
+  projectedMajorKm: number | null;
+  projectedRetirementKm: number | null;
+  decision: 'NORMAL' | 'WARNING' | 'BLOCKED' | 'UNKNOWN';
+  reasons: string[];
+  minorCount: number;
+  majorCount: number;
+  repairCount: number;
+  lastMinorAt: string | null;
+  lastMajorAt: string | null;
+  lastRepairAt: string | null;
+}
+
+/** 主管更正行車紀錄器里程與保養基準（打錯時用）：不帶或跟現在一樣就是不改，一定要寫原因 */
+export interface VehicleMileageCorrectionRequest {
+  currentOdometerKm?: number | null;
+  lastMinorMaintenanceKm?: number | null;
+  lastMajorMaintenanceKm?: number | null;
+  reason: string;
+}
+
+/** 一筆里程更正紀錄：一次更正改到幾個數字就有幾筆 */
+export interface VehicleMileageCorrection {
+  id: number;
+  field: 'CURRENT_ODOMETER' | 'MINOR_BASELINE' | 'MAJOR_BASELINE';
+  /** 改之前是空的就是 null */
+  oldKm: number | null;
+  newKm: number;
+  reason: string;
+  /** 車在外面跑時一起改到出車讀數的那一趟 */
+  mileageLogId: number | null;
+  correctedBy: string | null;
+  correctedAt: string;
+}
+
+/** 全車共用的保養設定；間隔和退役總里程在每台車上（VehicleDto） */
+export interface VehicleMaintenanceSettings {
+  /** 預估跑完這趟剩多少公里以內要提醒 */
+  warningKm: number;
+}
+
+export interface VehicleMaintenanceRecord {
+  id: number;
+  vehicleId: number;
+  type: 'MINOR' | 'MAJOR' | 'REPAIR';
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  sentAt: string | null;
+  sentOdometerKm: number | null;
+  completedAt: string | null;
+  completedOdometerKm: number | null;
+  cancelledAt: string | null;
+  recordedBy: string | null;
+  completedBy: string | null;
 }
 
 export interface StoreDto {

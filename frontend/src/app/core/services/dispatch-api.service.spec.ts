@@ -487,6 +487,49 @@ describe('DispatchApiService', () => {
     request.flush([]);
   });
 
+  it('posts a mileage correction with its reason and reads the correction history', () => {
+    service.correctVehicleMileage(6, {currentOdometerKm: 18450, reason: '司機收車多打一位數'}).subscribe();
+    service.getVehicleMileageCorrections(6).subscribe();
+
+    const correct = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicles/6/mileage-corrections' && request.method === 'POST',
+    );
+    expect(correct.request.body).toEqual({currentOdometerKm: 18450, reason: '司機收車多打一位數'});
+    correct.flush({});
+
+    const history = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicles/6/mileage-corrections' && request.method === 'GET',
+    );
+    history.flush([]);
+  });
+
+  it('uses the vehicle maintenance settings, history and cancel contracts', () => {
+    service.getMaintenanceSettings().subscribe();
+    service.saveMaintenanceSettings({warningKm: 400}).subscribe();
+    service.getMaintenanceHistory(6).subscribe();
+    service.cancelMaintenance(6).subscribe();
+
+    const settings = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicle-maintenance/settings' && request.method === 'GET',
+    );
+    settings.flush({warningKm: 500});
+
+    const save = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicle-maintenance/settings' && request.method === 'PUT',
+    );
+    expect(save.request.body).toEqual({warningKm: 400});
+    save.flush(save.request.body);
+
+    const history = httpTesting.expectOne('/api/vehicle-maintenance/6/history');
+    expect(history.request.method).toBe('GET');
+    history.flush([]);
+
+    const cancel = httpTesting.expectOne('/api/vehicle-maintenance/6/cancel');
+    expect(cancel.request.method).toBe('POST');
+    expect(cancel.request.body).toBeNull();
+    cancel.flush(null);
+  });
+
   it('deletes a driver through the backend DELETE contract', () => {
     service.deleteDriver(8).subscribe();
 

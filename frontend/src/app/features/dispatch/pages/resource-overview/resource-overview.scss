@@ -510,7 +510,8 @@
 }
 
 .status-工時提醒::before,
-.status-保養排程::before {
+.status-保養中::before,
+.status-維修中::before {
   background: #e4a74d;
   box-shadow: 0 0 8px rgb(228 167 77 / 62%);
 }
@@ -996,5 +997,154 @@
   .filter-control button,
   .resource-row {
     transition: none;
+  }
+}
+
+// ── 車輛保養 ────────────────────────────────────────────
+
+// 清單上那一行小字：快到了黃色、會超過或送修中紅色、資料不齊灰色
+.maintenance-note.is-warning {
+  color: #e4a74d;
+}
+
+.maintenance-note.is-blocked {
+  color: #ee9797;
+}
+
+.maintenance-note.is-unknown {
+  color: var(--subtle);
+}
+
+.maintenance-help {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.7;
+}
+
+.maintenance-status {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &.is-warning {
+    border-color: #e4a74d;
+  }
+
+  &.is-blocked {
+    border-color: #ee9797;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+  }
+
+  dt {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  dd {
+    margin: 4px 0 0;
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.maintenance-counts,
+.maintenance-reasons {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.maintenance-status.is-blocked .maintenance-reasons {
+  color: #ee9797;
+}
+
+.maintenance-status.is-warning .maintenance-reasons {
+  color: #e4a74d;
+}
+
+.maintenance-history {
+  margin-top: 16px;
+
+  h4 {
+    margin: 0 0 8px;
+    color: var(--text);
+    font-size: 0.8125rem;
+  }
+
+  p {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  article {
+    display: grid;
+    gap: 3px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+
+    strong {
+      color: var(--text);
+    }
+
+    span {
+      color: var(--muted);
+    }
+
+    button {
+      justify-self: start;
+      margin-top: 4px;
+    }
+  }
+}
+
+.correction-toggle {
+  margin-top: 12px;
+}
+
+/* 更正里程：跟保養狀況同一種框，一眼看得出是另外一個動作 */
+.mileage-correction {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  h4 {
+    margin: 0;
+    color: var(--text);
+    font-size: 0.8125rem;
+  }
+
+  .maintenance-help {
+    margin: 6px 0 12px;
+  }
+}
+
+.correction-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 只有一個欄位，不用跟車輛表單一樣寬 */
+.settings-modal {
+  width: min(100%, 460px);
+}
+
+@media (max-width: 620px) {
+  .maintenance-status dl {
+    grid-template-columns: 1fr;
   }
 }

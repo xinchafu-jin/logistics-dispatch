@@ -8,6 +8,7 @@ import com.example.backend.dispatch.OsrmRouteResponse;
 import com.example.backend.dto.respones.FuelPriceResponse;
 import com.example.backend.dto.respones.PlannedPathResponse;
 import com.example.backend.dto.respones.RouteMetricsResponse;
+import com.example.backend.dto.respones.VehicleMaintenanceSummaryResponse;
 import com.example.backend.entity.*;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,7 @@ public class RoutePlanMetricsService {
     private final FuelPriceService fuelPriceService;
     private final GpsDistanceService gpsDistanceService;
     private final GpsPingsDAO gpsPingsDAO;
+    private final VehicleMaintenanceService vehicleMaintenanceService;
     private final int gpsFreshnessMinutes;
 
     // 只能有一個建構子：有兩個又都沒標 @Autowired 時，Spring 不知道用哪個，會改找無參數建構子而啟動失敗。
@@ -63,6 +65,7 @@ public class RoutePlanMetricsService {
             GpsPingsDAO gpsPingsDAO,
             RoutePlannedLegsDAO routePlannedLegsDAO,
             JsonMapper jsonMapper,
+            VehicleMaintenanceService vehicleMaintenanceService,
             @org.springframework.beans.factory.annotation.Value(
                     "${app.gps.freshness-minutes:10}") int gpsFreshnessMinutes
     ) {
@@ -78,6 +81,7 @@ public class RoutePlanMetricsService {
         this.fuelPriceService = fuelPriceService;
         this.gpsDistanceService = gpsDistanceService;
         this.gpsPingsDAO = gpsPingsDAO;
+        this.vehicleMaintenanceService = vehicleMaintenanceService;
         this.gpsFreshnessMinutes = gpsFreshnessMinutes;
     }
 
@@ -161,6 +165,15 @@ public class RoutePlanMetricsService {
         return leg;
     }
 
+    /**
+     * 這條路線預計要跑幾公里（倉庫 → 各門市 → 回倉，只算待配送的單），保養預檢用（DispatchVehicleMaintenanceGuard）。
+     * 只要距離，不拿道路形狀。
+     */
+    @Transactional(readOnly = true)
+    public double plannedKm(RoutesEntity route) {
+        return calculatePlan(route, true, false).totalMeters / 1000.0;
+    }
+
     @Transactional(readOnly = true)
     public RouteMetricsResponse getMetrics(Long routeId) {
         RoutesEntity route = routesDAO.findById(routeId)
@@ -182,6 +195,7 @@ public class RoutePlanMetricsService {
         response.setPricePerLiter(plan.pricePerLiter);
         response.setFuelStatus(plan.fuelStatus);
         response.setLegs(plan.legs);
+        response.setMaintenance(maintenanceOf(route, hasActiveOrders, plan));
         populateLiveEta(response, route);
 
         List<MileageLogsEntity> mileageSegments = new ArrayList<>(
@@ -430,6 +444,20 @@ public class RoutePlanMetricsService {
         return RouteLegLocationType.STORE;
     }
 
+
+    /**
+     * 看板卡片上的保養提醒：還有待配送的單時，用這趟的預計里程算「跑完之後還剩多少」；
+     * 單都結束了就只看現況，不能把已經跑完的里程再當成一趟扣一次。
+     */
+    private VehicleMaintenanceSummaryResponse maintenanceOf(RoutesEntity route, boolean hasActiveOrders, PlanCalculation plan) {
+        VehiclesEntity vehicle = vehiclesDAO.findById(route.getVehicleId())
+                .orElseThrow(() -> new EntityNotFoundException("找不到路線車輛，ID：" + route.getVehicleId()));
+        Double plannedKm = null;
+        if (hasActiveOrders) {
+            plannedKm = plan.totalMeters / 1000.0;
+        }
+        return vehicleMaintenanceService.summary(vehicle, plannedKm);
+    }
 
     private void populateLiveEta(RouteMetricsResponse response, RoutesEntity route) {
         if (route.getStatus() != RouteStatus.PUBLISHED) {

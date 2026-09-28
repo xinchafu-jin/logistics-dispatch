@@ -1183,3 +1183,16 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+// 路線卡片上的保養提醒：快到了黃色，跑完會超過紅色（發布會被擋）
+.lane-maintenance {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  color: #e4a74d;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+
+  &.is-blocked {
+    color: #ee9797;
+  }
+}

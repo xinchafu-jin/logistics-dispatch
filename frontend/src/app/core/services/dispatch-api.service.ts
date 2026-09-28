@@ -46,6 +46,10 @@ import {
   TemplateDto,
   TemplateRequest,
   VehicleDto,
+  VehicleMaintenanceRecord,
+  VehicleMaintenanceSettings,
+  VehicleMileageCorrection,
+  VehicleMileageCorrectionRequest,
   WarehouseDto,
   OptimizeSlotsRequest,
   PlannedPartialLeaveRequestDto,
@@ -366,6 +370,38 @@ export class DispatchApiService {
 
   deleteVehicle(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/vehicles/${id}`);
+  }
+
+  /** 主管更正里程與保養基準（打錯時用），回傳更正後的車輛 */
+  correctVehicleMileage(vehicleId: number, request: VehicleMileageCorrectionRequest): Observable<VehicleDto> {
+    return this.http.post<VehicleDto>(`${API_ROOT}/vehicles/${vehicleId}/mileage-corrections`, request);
+  }
+
+  /** 這台車的里程更正紀錄，新的在前 */
+  getVehicleMileageCorrections(vehicleId: number): Observable<VehicleMileageCorrection[]> {
+    return this.http.get<VehicleMileageCorrection[]>(`${API_ROOT}/vehicles/${vehicleId}/mileage-corrections`);
+  }
+
+  // ── 車輛保養與退役 ────────────────────────────────────
+  // 送小保、送大保、送維修、改回可用，以及每台車的保養間隔，都是修改車輛時一起送（updateVehicle）；
+  // 這裡只有全車共用的設定、歷史與取消
+
+  getMaintenanceSettings(): Observable<VehicleMaintenanceSettings> {
+    return this.http.get<VehicleMaintenanceSettings>(`${API_ROOT}/vehicle-maintenance/settings`);
+  }
+
+  saveMaintenanceSettings(settings: VehicleMaintenanceSettings): Observable<VehicleMaintenanceSettings> {
+    return this.http.put<VehicleMaintenanceSettings>(`${API_ROOT}/vehicle-maintenance/settings`, settings);
+  }
+
+  /** 這台車的送修歷史，新的在前 */
+  getMaintenanceHistory(vehicleId: number): Observable<VehicleMaintenanceRecord[]> {
+    return this.http.get<VehicleMaintenanceRecord[]>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/history`);
+  }
+
+  /** 取消進行中的送修：不計次數、不更新基準，車輛改回可用 */
+  cancelMaintenance(vehicleId: number): Observable<void> {
+    return this.http.post<void>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/cancel`, null);
   }
 
   getStores(): Observable<StoreDto[]> {

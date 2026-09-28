@@ -238,8 +238,14 @@
                     <h4>
                       {{ route.cards.length }} 站 · {{ loadedBoxes(route) }}/{{ route.capacity }} 箱 ·
                       {{ route.totalDistance / 1000 | number: '1.1-1' }} km
-                      @if (route.isMaintenance) { · 維修中 }
+                      @if (route.isMaintenance) { · 保養／維修中 }
                     </h4>
+                  }
+                  <!-- 保養提醒：跑完這趟快到保養（黃）或會超過（紅，這種路線發布會被擋） -->
+                  @if (laneMaintenance(route); as maintenance) {
+                    <p class="lane-maintenance" [class.is-blocked]="maintenance.decision === 'BLOCKED'">
+                      {{ maintenance.decision === 'BLOCKED' ? '保養超過，不能發布：' : '保養提醒：' }}{{ maintenance.reasons.join('；') }}
+                    </p>
                   }
                   <p class="lane-driver-status">
                     <!-- 班表有問題時標籤直接顯示原因，紅框配紅字，調度員不用點開就知道哪裡不能派 -->
