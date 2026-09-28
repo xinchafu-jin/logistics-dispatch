@@ -5,6 +5,7 @@ import {MatIconModule} from '@angular/material/icon';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
+import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, WarehouseDto,
   ReportOutcomesDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
 import {REPORT_CASE_METRICS, matchesReportCase} from '../../report-delivery-cases';
@@ -131,6 +132,8 @@ const METRICS: Partial<Record<PreviewSheet, {id: string; label: string}[]>> = {
 })
 export class ReportHistory implements OnInit, OnDestroy {
   private readonly api = inject(DispatchApiService);
+  // 日期區間選擇器的面板開在 body 底下，吃不到後台深淺色：panelClass 要帶 theme.dialogPanelClass()
+  protected readonly theme = inject(AdminThemeService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private previewRequest?: Subscription;

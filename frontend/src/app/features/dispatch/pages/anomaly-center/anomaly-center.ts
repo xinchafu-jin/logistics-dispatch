@@ -8,6 +8,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import { DriverCasesService, driverCaseCategoryLabel } from '../../../../core/services/driver-cases.service';
 import { DriverChatSocketService } from '../../../../core/services/driver-chat-socket.service';
 import {
@@ -31,6 +32,8 @@ export class AnomalyCenter implements OnInit {
   private readonly api = inject(DispatchApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
+  // 對話框開在 body 底下吃不到後台深淺色，開啟時要帶 theme.dialogPanelClass()
+  private readonly theme = inject(AdminThemeService);
   private readonly destroyRef = inject(DestroyRef);
 
   // ── 司機回報：資料在 DriverCasesService（鈴鐺、聊天室共用同一份，靠推播即時更新）──
@@ -238,6 +241,7 @@ export class AnomalyCenter implements OnInit {
     this.closeCaseDialogRef = this.dialog.open(this.closeCaseDialogTemplate(), {
       width: '520px',
       maxWidth: 'calc(100vw - 32px)',
+      panelClass: this.theme.dialogPanelClass(),
     });
     this.closeCaseDialogRef.afterClosed().subscribe(() => {
       this.closeCaseDialogRef = null;

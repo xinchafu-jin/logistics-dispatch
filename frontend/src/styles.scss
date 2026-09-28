@@ -5,6 +5,10 @@
 // custom components at https://material.angular.dev/guide/theming
 @use '@angular/material' as mat;
 
+// 全站黑體。Material 的字型一定要設成同一組：下面 body 的 font: var(--mat-sys-body-medium) 會蓋掉
+// :root 的 font-family，原本 typography: Roboto 時整個後台其實是 Roboto＋系統預設中文字，不是 Noto Sans TC
+$font-sans: ('Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+
 html {
   height: 100%;
   @include mat.theme(
@@ -13,7 +17,10 @@ html {
         primary: mat.$azure-palette,
         tertiary: mat.$blue-palette,
       ),
-      typography: Roboto,
+      typography: (
+        plain-family: $font-sans,
+        brand-family: $font-sans,
+      ),
       density: 0,
     )
   );
@@ -36,25 +43,28 @@ body {
   margin: 0;
   height: 100%;
 }
-:root {
-  font-family:
-    'Noto Sans TC',
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
-  --font-display: 'Noto Serif TC', 'Songti TC', 'PMingLiU', serif;
 
-  --app-bg: #080909;
-  --panel: rgb(20 22 23 / 76%);
-  --surface: rgb(32 35 36 / 62%);
-  --surface-active: rgb(49 53 54 / 72%);
-  --border: rgb(224 230 230 / 14%);
-  --glass-highlight: rgb(255 255 255 / 13%);
-  --glass-shadow: rgb(0 0 0 / 62%);
-  --metal-edge: rgb(255 255 255 / 18%);
-  --metal-shadow: rgb(0 0 0 / 76%);
+// ── 色票 ──────────────────────────────────────────────
+// 深色是預設（登入頁、後台都是）；後台切淺色時由 dispatch-shell 在 .dispatch-layout 加上 is-light-theme
+:root {
+  font-family: $font-sans;
+  // 舊頁面還有 font-family: var(--font-display)，先讓它跟著黑體；各頁重構時拿掉引用
+  --font-display: inherit;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --app-bg: #0b0d0e;
+  --workspace-bg: #0b0d0e;
+  --sidebar-bg: #141617;
+  --header-bg: #141617;
+  --panel: #141617;
+  --surface: #1d2021;
+  --surface-subtle: #111314;
+  --surface-active: #262a2b;
+  --input-bg: #0e1011;
+  --row-hover: rgba(99, 209, 198, 0.05);
+  --row-selected: rgba(99, 209, 198, 0.12);
+  --border: rgba(224, 230, 230, 0.14);
+  --metal-edge: var(--border);
 
   --text: #f4f7f6;
   --muted: #a3afb0;
@@ -63,18 +73,124 @@ body {
 
   --accent: #63d1c6;
   --accent-hover: #83e2d9;
+  --accent-soft: rgba(99, 209, 198, 0.14);
   --button-text: #04100f;
 
+  --ok: #38b28b;
+  --warn: #da9f36;
+  --warn-soft: rgba(218, 159, 54, 0.15);
+  --danger: #d64f4f;
+  --danger-soft: rgba(214, 79, 79, 0.15);
+
+  // 舊變數相容：還沒重構的頁面在用，各頁改完就刪
+  // --glass-highlight：9 個頁面的滑過邊框與內光；--brand-*：品牌 logo（brand-logo.scss）
+  --glass-highlight: rgb(255 255 255 / 13%);
   --brand-text: #f3f6f5;
   --brand-muted: #bdcaca;
   --brand-node: #91a2a2;
-  --brand-overlay: rgb(5 10 11 / 46%);
-  --brand-shadow: rgb(0 0 0 / 84%);
 
   color: var(--text);
   background: var(--app-bg);
+  // 原生勾選框、單選鈕、進度條用主色
+  accent-color: var(--accent);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+// color-scheme 決定 Material 的 light-dark() 取哪一邊，要跟色票一起寫在這裡。
+// 不能留在 dispatch-shell.scss：元件樣式的 .dispatch-layout[_ngcontent-xxx] 跟下面的
+// .dispatch-layout.is-light-theme 權重相同，元件樣式又載入得比較晚，會把淺色模式蓋回 dark。
+// .dispatch-dialog 是開對話框、下拉選單時帶的 panelClass（AdminThemeService.dialogPanelClass）：它們渲染在 body 底下，
+// 不在 .dispatch-layout 裡，要自己掛上主題才吃得到色票（body 是 color-scheme: light，不帶的話對話框永遠是淺色）。
+// 拖曳中的預覽卡也一樣被 CDK 搬到 body 底下，用 :has() 看後台目前是不是淺色
+.dispatch-layout,
+.dispatch-dialog {
+  color-scheme: dark;
+  // :root 也有寫，但子元素繼承的是在 :root 算好的深色主色；這裡重算一次，淺色模式才會用淺色主色
+  accent-color: var(--accent);
+}
+
+.dispatch-layout.is-light-theme,
+.dispatch-dialog.is-light-theme,
+body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
+  color-scheme: light;
+  --app-bg: #eef4f1;
+  --workspace-bg: #eef4f1;
+  --sidebar-bg: #f7fbf9;
+  --header-bg: #ffffff;
+  --panel: #ffffff;
+  --surface: #f4f8f6;
+  --surface-subtle: #f8fbf9;
+  --surface-active: #e6f0ec;
+  --input-bg: #ffffff;
+  --row-hover: rgba(8, 124, 107, 0.04);
+  --row-selected: rgba(8, 124, 107, 0.1);
+  --border: rgba(27, 52, 45, 0.15);
+  --metal-edge: var(--border);
+
+  --text: #173129;
+  --muted: #5e746b;
+  --subtle: #768980;
+  --field-label: #365148;
+
+  --accent: #087c6b;
+  --accent-hover: #046c5d;
+  --accent-soft: rgba(8, 124, 107, 0.12);
+  --button-text: #ffffff;
+
+  --ok: #0f8d75;
+  --warn: #b47014;
+  --warn-soft: rgba(180, 112, 20, 0.12);
+  --danger: #c34f45;
+  --danger-soft: rgba(195, 79, 69, 0.12);
+
+  --glass-highlight: rgb(255 255 255 / 76%);
+  --brand-text: #183128;
+  --brand-muted: #5f736a;
+  --brand-node: #6d8479;
+}
+
+// ── Material 元件接品牌色票 ─────────────────────────────
+// mat.theme() 產生的是 Material 自己的 azure 藍（再用 light-dark() 依 color-scheme 切深淺），
+// 按鈕、輸入框焦點、清單選取都是藍的，跟品牌青綠對不上。這裡把範圍內的 Material 系統色改指到色票：
+// 元件內部照樣讀 --mat-sys-*，只是值換成我們的，也就跟著 is-light-theme 一起切。
+// 目前只套外框自己的聊天室與對話框；頁面裡的 Material 元件等各頁重構時，把範圍擴到 .dispatch-layout
+.chat-panel,
+.chat-launcher,
+.dispatch-dialog {
+  --mat-sys-primary: var(--accent);
+  --mat-sys-on-primary: var(--button-text);
+  --mat-sys-primary-container: var(--accent-soft);
+  --mat-sys-on-primary-container: var(--text);
+  --mat-sys-surface: var(--panel);
+  --mat-sys-on-surface: var(--text);
+  --mat-sys-on-surface-variant: var(--muted);
+  --mat-sys-outline: var(--border);
+  --mat-sys-outline-variant: var(--border);
+  --mat-sys-error: var(--danger);
+  --mat-sys-on-error: #ffffff;
+
+  // 形狀不走系統色票，要個別指定：Material 預設對話框 28px、展開面板 12px
+  --mat-dialog-container-shape: 4px;
+  --mat-expansion-container-shape: 4px;
+  // M3 的單選清單沒有選中底色（token 是 null），跟表格選中列用同一個顏色
+  --mat-list-list-item-selected-container-color: var(--row-selected);
+  // 輸入框滑過時 Material 用 on-surface（接近白），比焦點色還搶眼；跟 .ui-input 一樣用 muted
+  --mat-form-field-outlined-hover-outline-color: var(--muted);
+}
+
+.dispatch-dialog {
+  color: var(--text);
+  --mat-dialog-subhead-size: 1rem;
+  --mat-dialog-subhead-line-height: 1.5rem;
+  --mat-dialog-subhead-weight: 600;
+  // 預設是 on-surface-variant（muted），確認執行清單這類內容要看得清楚
+  --mat-dialog-supporting-text-color: var(--text);
+}
+
+// 底部按鈕換成 .ui-btn-* 之後要自己留間距：Material 只替自己的按鈕加（.mat-mdc-button-base + .mat-mdc-button-base）
+.dispatch-dialog .mat-mdc-dialog-actions {
+  gap: 8px;
 }
 
 * {
@@ -110,6 +226,710 @@ mat-icon {
   white-space: nowrap;
   word-wrap: normal;
   direction: ltr;
+}
+
+// ── 全站共用結構 ──────────────────────────────────────
+// 視覺規則：四周均勻 1px 實線、圓角 4px（計數標籤 2px）、不用陰影與毛玻璃、控制項一律 32px 高。
+// 顏色只取上面的色票，深淺色自動跟著切換
+
+// 各頁的 <main>：寬度上限與區塊間距
+.ui-page {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 1440px);
+  margin: 0 auto;
+}
+
+.ui-page > * {
+  min-width: 0;
+}
+
+.ui-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+// 面板標題列（清單、明細、彈窗共用）：左標題、右計數或動作
+.ui-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-panel__header h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.ui-panel__body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+// 面板最上面是灰底的分頁列或標題列時，上緣跟著面板收成圓角，不然直角會蓋出圓角外
+.ui-panel > :is(.ui-tabs-bar, .ui-panel__header):first-child {
+  border-radius: 3px 3px 0 0;
+}
+
+// 雙欄工作台：左清單、右明細（明細 sticky 在外框表頭下方）；窄螢幕改上下
+.ui-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: 12px;
+  align-items: start;
+}
+
+.ui-split__detail {
+  position: sticky;
+  top: calc(var(--shell-header-height, 52px) + 12px);
+}
+
+@media (max-width: 980px) {
+  .ui-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-split__detail {
+    position: static;
+  }
+}
+
+// 控制項高度靠 .ui-btn-* / .ui-input 自己的 32px，這裡不統一改原生 input、select：
+// mat-form-field 裡面也是原生 input，一起改會把 Material 輸入框撐壞
+.ui-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+}
+
+// 狀態切換列：左邊 .ui-tab（選中加 is-active 或 aria-selected="true"），右邊 .ui-tabs-bar__actions 放按鈕
+// 一行放得下時就是 42px 高；窄螢幕放不下時右邊的按鈕換到第二行，不去擠左邊的分頁
+.ui-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  column-gap: 12px;
+  min-height: 42px;
+  padding-right: 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.ui-tabs-bar__tabs {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  height: 42px;
+  // 往下多蓋 1px：選中的 2px 底線才會壓在工具列的底框上，而不是疊成上下兩條線
+  margin-bottom: -1px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ui-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ui-tab:hover {
+  color: var(--text);
+}
+
+.ui-tab.is-active,
+.ui-tab[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.ui-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ui-tab__count {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  place-items: center;
+  color: var(--muted);
+  background: var(--surface-active);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1;
+}
+
+.ui-tab.is-active .ui-tab__count,
+.ui-tab[aria-selected='true'] .ui-tab__count {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ui-tabs-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  // 換到第二行時靠右、上下留白
+  margin-left: auto;
+  padding: 4px 0;
+}
+
+// 實線緊湊表格（NG-ZORRO bordered table）：每格只畫右框與底框，上、左、外圈由外層 .ui-panel 補齊
+.ui-table {
+  width: 100%;
+  // separate＋0 間距而不是 collapse：邊框畫在各格自己身上，之後表頭改 sticky 時框線才會跟著表頭走
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.ui-table th,
+.ui-table td {
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: middle;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+// 最右欄不畫右框：外層 .ui-panel 已經有一條，疊起來會變 2px。表格收在面板最底部時，最後一列的底框同理
+.ui-table th:last-child,
+.ui-table td:last-child {
+  border-right: 0;
+}
+
+.ui-panel > .ui-table:last-child tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+.ui-table th {
+  color: var(--field-label);
+  background: var(--surface);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ui-table tbody tr:hover > td {
+  background: var(--row-hover);
+}
+
+.ui-table tbody tr.is-selected > td,
+.ui-table tbody tr[aria-selected='true'] > td {
+  background: var(--row-selected);
+}
+
+// 點了在旁邊看明細的列（列上要有 tabindex="0" 與 Enter 事件，鍵盤才點得到）
+.ui-table tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.ui-table tbody tr.is-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+// 表格外層：欄位多時在面板裡橫向捲動，不撐破版面
+.ui-table-wrap {
+  overflow-x: auto;
+}
+
+// 鍵值明細表：左欄標題灰底、右欄內容，每格四邊實線（collapse 合併成單線）
+.ui-desc {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--text);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.ui-desc th,
+.ui-desc td {
+  padding: 9px 12px;
+  text-align: left;
+  vertical-align: top;
+  border: 1px solid var(--border);
+}
+
+.ui-desc th {
+  // 標題欄縮到剛好放得下字，剩下的寬度都給內容
+  width: 1%;
+  color: var(--field-label);
+  background: var(--surface);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ui-desc td {
+  background: var(--panel);
+}
+
+// 按鈕：primary 實心主色（一個區塊只放一顆）、secondary 淡主色底＋主色框、default 中性灰框（取消、關閉這類）、
+// danger 實心紅（刪除這類無法復原的確認）
+.ui-btn-primary,
+.ui-btn-secondary,
+.ui-btn-default,
+.ui-btn-danger {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+:is(.ui-btn-primary, .ui-btn-secondary, .ui-btn-default, .ui-btn-danger) mat-icon {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+.ui-btn-primary {
+  color: var(--button-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.ui-btn-secondary {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.ui-btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.ui-btn-default {
+  color: var(--text);
+  background: transparent;
+  border-color: var(--border);
+}
+
+.ui-btn-default:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+// 一般按鈕的紅字版：退回、刪除這類有後果但還沒到最後確認的動作（最後確認用 .ui-btn-danger）
+.ui-btn-default.is-danger,
+.ui-btn-default.is-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ui-btn-danger {
+  color: #ffffff;
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.ui-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 85%, #000000);
+}
+
+:is(.ui-btn-primary, .ui-btn-secondary, .ui-btn-default, .ui-btn-danger):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:is(.ui-btn-primary, .ui-btn-secondary, .ui-btn-default, .ui-btn-danger):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+// 只有圖示的按鈕（關閉、重新整理）：正方形，一定要配 aria-label
+.ui-btn-icon {
+  width: 32px;
+  padding: 0;
+}
+
+// 分段切換（同一組條件多選一，例如狀態篩選、年度／月度）：按鈕併成一條，選中的淡主色底。
+// 選中用 is-active 或 aria-pressed="true"
+.ui-segmented {
+  display: inline-flex;
+  max-width: 100%;
+  height: 32px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.ui-segmented > button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: var(--input-bg);
+  border: 0;
+  border-right: 1px solid var(--border);
+  font: inherit;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ui-segmented > button:last-child {
+  border-right: 0;
+}
+
+.ui-segmented > button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.ui-segmented > button:is(.is-active, [aria-pressed='true']) {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 500;
+}
+
+.ui-segmented > button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ui-segmented > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+// 文字輸入、下拉、多行輸入共用；焦點用 outline 而不是 box-shadow，Windows 高對比模式才看得到。
+// .ui-field 裡直接放的原生控制項自動套用，表單不用每個 input 都加 class
+.ui-input,
+.ui-field > :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: 0;
+  font: inherit;
+  font-size: 0.8125rem;
+  transition: border-color 120ms ease;
+
+  &::placeholder {
+    color: var(--subtle);
+  }
+
+  &:hover:not(:disabled, [readonly]) {
+    border-color: var(--muted);
+  }
+
+  &:focus {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent-soft);
+  }
+
+  &:disabled,
+  &[readonly] {
+    color: var(--muted);
+    background: var(--surface-subtle);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+  }
+}
+
+textarea.ui-input,
+.ui-field > textarea {
+  height: auto;
+  min-height: 72px;
+  padding: 6px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+// 狀態點＋文字（NG-ZORRO 的 nz-badge nzStatus）：前面 6px 圓點，顏色用 is-accent / is-ok / is-warn / is-danger 指定，
+// 沒指定是灰色。文字顏色、大小跟著所在的位置走
+.ui-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.ui-status-dot::before {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: var(--subtle);
+  border-radius: 50%;
+  content: '';
+}
+
+.ui-status-dot.is-accent::before {
+  background: var(--accent);
+}
+
+.ui-status-dot.is-ok::before {
+  background: var(--ok);
+}
+
+.ui-status-dot.is-warn::before {
+  background: var(--warn);
+}
+
+.ui-status-dot.is-danger::before {
+  background: var(--danger);
+}
+
+// 單號、車牌、日期、箱數、里程：等寬字，數字上下對齊
+.ui-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+// 小標籤：表格裡的狀態、類別（2px 方角）；顏色用 is-accent / is-ok / is-warn / is-danger
+.ui-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 6px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+
+.ui-tag.is-accent {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.ui-tag.is-ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.ui-tag.is-warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+.ui-tag.is-danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+// 提示條（錯誤、提醒、完成）：文字一律正文色，靠框線與淡底色分辨。深色的 --danger 直接當小字顏色對比不到 AA
+.ui-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.ui-alert mat-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.ui-alert.is-danger {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.ui-alert.is-warn {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+}
+
+.ui-alert.is-ok {
+  background: var(--accent-soft);
+  border-color: var(--ok);
+}
+
+// 清單沒資料、載入中
+.ui-empty {
+  margin: 0;
+  padding: 28px 16px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+// 搜尋框：放大鏡＋輸入框，外觀同 .ui-input
+.ui-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.ui-search:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent-soft);
+}
+
+.ui-search mat-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--subtle);
+  font-size: 18px;
+}
+
+.ui-search input {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  font-size: 0.8125rem;
+}
+
+// 表單：兩欄，標籤在上、控制項在下；佔滿一整列的加 .ui-form__wide。勾選框用 .ui-check
+.ui-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.ui-form__wide {
+  grid-column: 1 / -1;
+}
+
+.ui-field {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-field > span {
+  color: var(--field-label);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .ui-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+// 頁面裡自己寫的彈窗：遮罩＋置中的 .ui-panel（標題用 .ui-panel__header、內容 .ui-panel__body、按鈕 .ui-modal__actions）。
+// 它在外框 .dispatch-workspace 的堆疊裡，蓋不到表頭、側欄和聊天室；要蓋全畫面請改用 MatDialog
+.ui-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  background: rgb(0 0 0 / 50%);
+}
+
+.ui-modal {
+  width: min(560px, 100%);
+  max-height: calc(100dvh - 48px);
+  overflow: auto;
+  color: var(--text);
+}
+
+.ui-modal--wide {
+  width: min(880px, 100%);
+}
+
+.ui-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+}
+
+// 只給螢幕閱讀器讀的文字（圖示按鈕的說明、表單隱藏標籤）
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 // ── 地圖上的倉庫／門市圖示 ──────────────────────────────
@@ -195,77 +1015,19 @@ mat-icon {
   }
 }
 
-.dispatch-layout.is-light-theme app-resource-overview {
-  .summary-card,
-  .resource-list-panel,
-  .assignment-panel,
-  .resource-modal,
-  .confirm-modal {
-    background: var(--panel);
-    border-color: var(--border);
-    box-shadow:
-      inset 0 1px 0 rgb(255 255 255 / 92%),
-      0 12px 28px rgb(20 52 42 / 10%);
-    backdrop-filter: none;
-  }
-
-  .summary-card::before {
-    background: rgb(8 124 107 / 18%);
-  }
-
-  .summary-card.tone-accent {
-    border-color: rgb(8 124 107 / 32%);
-  }
-
-  .summary-card.tone-warning {
-    border-color: rgb(180 112 20 / 34%);
-  }
-
-  .summary-card.tone-warning strong,
-  .assignment-item.tone-warning .assignment-status,
-  .resource-alert mat-icon {
-    color: #89500a;
-  }
-
-  .view-switch,
-  .filter-control,
-  .search-field,
-  .form-field input,
-  .form-field select,
-  .form-field textarea,
-  .assignment-pair span,
-  .table-head {
-    background: var(--surface);
-    border-color: var(--border);
-  }
-
-  .table-head,
-  .resource-row,
-  .assignment-item,
-  .resource-alert {
-    border-color: var(--border);
-  }
-
-  .resource-row:hover {
-    background: rgb(8 124 107 / 4%);
-  }
-
-  .row-action--danger:hover,
-  .row-action--danger:focus-visible,
-  .form-error {
-    color: #a3483e;
-  }
-}
-
-// 後台頁面裡的 Material 日期欄位（歷史報表、司機月班表）。
-// Material 主題固定是淺色（見上方 mat.theme），但後台有自己的深淺色切換（--text、--border 等），
-// 不對應的話深色模式下輸入框是深色字疊在深色底上。高度調成 38px，跟旁邊原生的 select 對齊；
-// 標題沿用各頁自己的 <span>，所以不用 mat-label
+// 後台頁面裡的 Material 輸入框：.admin-field 是一般文字欄（個人設定），.admin-date-field 是日期欄（歷史報表、司機月班表）。
+// 後台有自己的深淺色切換（--text、--border 等），Material 的顏色要逐項對應，
+// 不對應的話會跟頁面上其他欄位的顏色對不起來。標題沿用各頁自己的 <span>（同 .ui-field），所以不用 mat-label。
+// 高度壓到 32px 跟 .ui-input、.ui-btn-* 對齊：除了容器高度與上下內距，右邊的日曆按鈕預設 40px 也要縮，
+// 不然外框會被它撐高（9/29 在班表頁量過，三個一起設才每層都是 32px）
+.admin-field,
 .admin-date-field {
-  --mat-form-field-container-height: 38px;
-  --mat-form-field-container-vertical-padding: 7px;
+  --mat-form-field-container-height: 32px;
+  --mat-form-field-container-vertical-padding: 4px;
+  --mat-icon-button-state-layer-size: 28px;
+  --mat-icon-button-icon-color: var(--muted);
   --mat-form-field-container-text-size: 0.8125rem;
-  --mat-form-field-outlined-container-shape: 5px;
+  --mat-form-field-outlined-container-shape: 4px;
   --mat-form-field-outlined-input-text-color: var(--text);
   --mat-form-field-outlined-input-text-placeholder-color: var(--subtle);
   --mat-form-field-outlined-caret-color: var(--accent);
@@ -273,14 +1035,33 @@ mat-icon {
   --mat-form-field-outlined-hover-outline-color: var(--muted);
   --mat-form-field-outlined-focus-outline-color: var(--accent);
   --mat-form-field-trailing-icon-color: var(--muted);
+  // 停用（個人設定的帳號）：灰字同 .ui-input:disabled
+  --mat-form-field-outlined-disabled-input-text-color: var(--muted);
+  --mat-form-field-outlined-disabled-outline-color: var(--border);
+  --mat-form-field-disabled-trailing-icon-color: var(--subtle);
+  // 驗證錯誤：框線用 --danger；下方的錯誤小字混兩成正文色，
+  // 直接用深色的 --danger 在面板上只有 4.2:1，混完深色 5.7:1、淺色 5.9:1，都過 AA 的 4.5
+  --mat-form-field-outlined-error-outline-color: var(--danger);
+  --mat-form-field-outlined-error-hover-outline-color: var(--danger);
+  --mat-form-field-outlined-error-focus-outline-color: var(--danger);
+  --mat-form-field-outlined-error-caret-color: var(--danger);
+  --mat-form-field-error-text-color: color-mix(in srgb, var(--danger) 80%, var(--text));
+  min-width: 0;
+}
+
+.admin-date-field {
   --mat-datepicker-toggle-icon-color: var(--muted);
   --mat-datepicker-toggle-active-state-icon-color: var(--accent);
   // 日期區間中間的「–」
   --mat-datepicker-range-input-separator-color: var(--muted);
-  min-width: 0;
 }
 
-.sticky-notes__header {
+// ── 備忘錄對話框 ──────────────────────────────────────
+// 內容寫在 dispatch-shell.html 的 <ng-template #stickyNotesDialog>，由 MatDialog 開在 body 底下（panelClass: dispatch-dialog）
+// 要疊上 .mat-mdc-dialog-title：它本身是 display: block，同權重時 Material 的樣式比較晚載入（對話框第一次開才載），
+// 會把 flex 蓋掉，關閉鈕就掉到標題下面。它的 ::before 是撐出 40px 行高用的空元素，
+// 在 flex 裡會變成一個項目，space-between 就把標題擠到中間，所以一起拿掉（高度由 40px 的關閉鈕撐住）
+.mat-mdc-dialog-title.sticky-notes__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -288,22 +1069,31 @@ mat-icon {
   padding-right: 12px;
 }
 
-.sticky-notes__header h2 {
-  margin: 0;
+.mat-mdc-dialog-title.sticky-notes__header::before {
+  display: none;
 }
 
+// 字級交給 mat-dialog-title（.dispatch-dialog 設成 16px），不然 h2 的預設 1.5em 會再放大一次
+.sticky-notes__header h2 {
+  margin: 0;
+  font: inherit;
+}
+
+// 跟在標題後面的計數標籤，樣式同 .ui-tab__count
 .sticky-notes__header h2 span {
   display: inline-grid;
-  min-width: 22px;
-  height: 22px;
+  min-width: 18px;
+  height: 18px;
   margin-left: 6px;
-  padding: 0 6px;
+  padding: 0 5px;
   place-items: center;
-  color: var(--button-text);
-  background: var(--accent);
-  border-radius: 999px;
-  font-family: inherit;
-  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
   vertical-align: middle;
 }
 
@@ -311,7 +1101,7 @@ mat-icon {
   display: grid;
   gap: 8px;
   padding-bottom: 16px;
-  border-bottom: 1px solid var(--metal-edge);
+  border-bottom: 1px solid var(--border);
 }
 
 .sticky-notes__form mat-form-field {
@@ -326,30 +1116,39 @@ mat-icon {
   gap: 4px;
 }
 
+.sticky-notes__form-actions {
+  gap: 8px;
+}
+
+// 錯誤訊息用正文色＋紅框紅底：深色的 --danger 直接當小字顏色對比只有 4.4:1，不到 AA 的 4.5
 .sticky-notes__error {
   margin: 12px 0 0;
-  color: #e9877b;
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  border-radius: 4px;
+  font-size: 0.8125rem;
 }
 
 .sticky-notes__notice {
   margin: 12px 0 0;
   color: var(--accent);
   font-size: 0.8125rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .sticky-notes__list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   padding: 14px 0 4px;
 }
 
 .sticky-notes__item {
-  padding: 13px;
+  padding: 12px;
   background: var(--surface);
-  border: 1px solid var(--metal-edge);
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .sticky-notes__item header {
@@ -363,22 +1162,24 @@ mat-icon {
   margin: 5px 0 0;
   color: var(--text);
   font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .sticky-notes__item-meta {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .sticky-notes__item-meta span {
   color: var(--accent);
   font-size: 0.6875rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .sticky-notes__item small {
   color: var(--muted);
+  font-family: var(--font-mono);
   font-size: 0.75rem;
 }
 
@@ -395,6 +1196,14 @@ mat-icon {
   text-align: center;
 }
 
-.sticky-notes__delete-confirm {
-  color: #c34f45;
+// 「確定刪除」：中性按鈕換成紅字紅框，提醒這一下會真的刪掉
+.sticky-notes__delete-confirm.ui-btn-default {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.sticky-notes__delete-confirm.ui-btn-default:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }

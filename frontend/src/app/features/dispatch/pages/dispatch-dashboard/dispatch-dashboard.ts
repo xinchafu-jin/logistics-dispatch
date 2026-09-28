@@ -17,6 +17,7 @@ import {catchError, debounceTime, forkJoin, map, of, startWith, switchMap, timer
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
+import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {
   DispatchDayDto,
@@ -229,6 +230,8 @@ export class DispatchDashboard implements OnInit {
   private readonly socket = inject(DriverChatSocketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
+  // 對話框開在 body 底下吃不到後台深淺色，開啟時要帶 theme.dialogPanelClass()
+  private readonly theme = inject(AdminThemeService);
   // 按「＋」清空看板前的確認視窗，寫在 dispatch-dashboard.html 最下面的 <ng-template #clearBoardDialog>
   private readonly clearBoardDialog = viewChild.required<TemplateRef<unknown>>('clearBoardDialog');
   // 在編組分頁按「儲存編組」前的確認視窗，同樣寫在 html 最下面
@@ -694,8 +697,8 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    const strip = event.currentTarget as HTMLElement;
-    strip.setPointerCapture(event.pointerId);
+    // 這裡先不 setPointerCapture，等 moveDaySwipe 確定在拖才抓：一按下就抓的話，
+    // Chrome 會把之後的 click 送給抓住指標的日期列本身，日期卡的 (click) 永遠不會觸發
     this.daySwipe = {pointerId: event.pointerId, startX: event.clientX, lastX: event.clientX};
     this.daySwipeOffset.set(0);
     this.isDaySwipeDragging.set(true);
@@ -713,6 +716,11 @@ export class DispatchDashboard implements OnInit {
     this.daySwipeOffset.set(Math.max(-96, Math.min(96, distance * 0.8)));
     if (Math.abs(distance) > 2) {
       event.preventDefault();
+      // 確定在拖才抓住指標，拖出日期列外放開也收得到 pointerup
+      const strip = event.currentTarget as HTMLElement;
+      if (!strip.hasPointerCapture(event.pointerId)) {
+        strip.setPointerCapture(event.pointerId);
+      }
     }
   }
 
@@ -1774,7 +1782,7 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    this.dialog.open(this.withdrawDialog()).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.withdrawDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「撤回」才是 true
       if (ok) {
         this.withdraw();
@@ -1918,7 +1926,7 @@ export class DispatchDashboard implements OnInit {
       this.clearBoard();
       return;
     }
-    this.dialog.open(this.clearBoardDialog()).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.clearBoardDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「直接離開」才是 true
       if (ok) {
         this.clearBoard();
@@ -2057,7 +2065,7 @@ export class DispatchDashboard implements OnInit {
           : `${who}：${slot.storeIds.map((id) => this.storeName(id)).join(' → ')}`;
       }),
     };
-    this.dialog.open(this.saveTemplateDialog(), {data}).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.saveTemplateDialog(), {data, panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「儲存」才是 true
       if (!ok || this.published() || this.busy()) {
         return;

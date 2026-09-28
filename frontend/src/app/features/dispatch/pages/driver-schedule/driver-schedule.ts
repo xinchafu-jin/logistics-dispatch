@@ -7,6 +7,7 @@ import {MatCalendarHeader, MatCalendarView, MatDatepicker, MatDatepickerModule} 
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import {
   DriverDto,
   DriverLeaveHistoryDto,
@@ -180,6 +181,8 @@ interface BatchDriverOption {
 })
 export class DriverSchedule implements OnInit {
   private readonly api = inject(DispatchApiService);
+  // 月份選擇器的面板開在 body 底下，吃不到後台深淺色：mat-datepicker 的 panelClass 要帶 theme.dialogPanelClass()
+  protected readonly theme = inject(AdminThemeService);
   protected readonly monthPickerHeader = MonthPickerHeader;
 
   readonly selectedMonth = signal(this.currentMonthValue());

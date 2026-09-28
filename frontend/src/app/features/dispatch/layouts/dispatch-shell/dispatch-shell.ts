@@ -580,6 +580,7 @@ export class DispatchShell implements OnInit {
       width: '520px',
       maxWidth: 'calc(100vw - 32px)',
       maxHeight: 'min(80vh, 720px)',
+      panelClass: this.theme.dialogPanelClass(),
     });
     this.loadAdminStickyNotes();
   }
@@ -951,7 +952,7 @@ export class DispatchShell implements OnInit {
 
   // 確認執行：先開視窗讓調度員看過清單，按「執行」才呼叫 API
   protected openConfirmPlan(): void {
-    this.dialog.open(this.confirmPlanDialog()).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.confirmPlanDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「執行」才是 true
       if (!ok) {
         return;

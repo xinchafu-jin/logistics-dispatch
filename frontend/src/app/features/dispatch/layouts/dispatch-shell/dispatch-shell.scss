@@ -3,135 +3,103 @@
   min-height: 100dvh;
 }
 
+// 色票（含淺色模式）和 color-scheme 都定義在 styles.scss，這裡只取用、不定義：
+// 寫在這裡的 .dispatch-layout[_ngcontent-xxx] 跟全域的 .dispatch-layout.is-light-theme 權重相同，
+// 元件樣式又比全域晚載入，淺色模式會被蓋回深色
 .dispatch-layout {
-  --workspace-bg: #0b0d0e;
-  --sidebar-bg: rgb(20 22 23 / 92%);
-  --header-bg: rgb(28 30 31 / 68%);
-  --nav-hover-bg: rgb(255 255 255 / 6%);
-  --nav-active-bg: rgb(99 209 198 / 10%);
-  --nav-active-border: rgb(99 209 198 / 24%);
+  // 表頭高度。頁面裡 sticky 的詳情欄（人車資源、訂單審核、異常中心、司機班表）也用它算 top，改高度只改這裡
+  --shell-header-height: 52px;
 
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  grid-template-rows: 88px minmax(0, 1fr);
+  grid-template-columns: 60px minmax(0, 1fr);
+  grid-template-rows: var(--shell-header-height) minmax(0, 1fr);
   min-height: 100dvh;
   position: relative;
   isolation: isolate;
   color: var(--text);
-  color-scheme: dark;
   background: var(--app-bg);
-}
-
-.dispatch-layout.is-light-theme {
-  color-scheme: light;
-  --app-bg: #edf2f0;
-  --panel: rgb(255 255 255 / 90%);
-  --surface: rgb(255 255 255 / 82%);
-  --surface-active: #ffffff;
-  --border: rgb(27 52 45 / 16%);
-  --glass-highlight: rgb(255 255 255 / 76%);
-  --glass-shadow: rgb(20 39 33 / 10%);
-  --metal-edge: rgb(27 52 45 / 16%);
-  --metal-shadow: rgb(20 39 33 / 12%);
-  --text: #173129;
-  --muted: #5e746b;
-  --subtle: #768980;
-  --field-label: #365148;
-  --accent: #087c6b;
-  --accent-hover: #046c5d;
-  --button-text: #ffffff;
-  --brand-text: #183128;
-  --brand-muted: #5f736a;
-  --brand-node: #6d8479;
-  --brand-overlay: rgb(255 255 255 / 44%);
-  --brand-shadow: rgb(35 66 54 / 15%);
-  --workspace-bg: #eef4f1;
-  --sidebar-bg: rgb(247 251 249 / 92%);
-  --header-bg: rgb(255 255 255 / 76%);
-  --nav-hover-bg: rgb(8 124 107 / 8%);
-  --nav-active-bg: rgb(8 124 107 / 12%);
-  --nav-active-border: rgb(8 124 107 / 24%);
 }
 
 .dispatch-sidebar {
   grid-column: 1;
   grid-row: 2;
   position: sticky;
-  top: 88px;
+  top: var(--shell-header-height);
   z-index: 2;
   align-self: start;
   display: flex;
   flex-direction: column;
-  width: 76px;
-  min-height: calc(100dvh - 88px);
-  height: calc(100dvh - 88px);
-  margin-top: 0;
-  padding: 20px 10px;
+  width: 60px;
+  height: calc(100dvh - var(--shell-header-height));
+  padding: 12px 8px;
   overflow: hidden;
-  isolation: isolate;
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--metal-edge);
-  box-shadow: inset -1px 0 0 rgb(0 0 0 / 72%),
-  18px 0 52px var(--metal-shadow);
-  backdrop-filter: blur(22px) saturate(105%);
-  -webkit-backdrop-filter: blur(22px) saturate(105%);
-  transition: width 240ms ease-out;
+  border-right: 1px solid var(--border);
+  transition:
+    width 240ms ease-out,
+    box-shadow 240ms ease-out;
 }
 
+// 展開時是蓋在內容上面（欄寬仍是 60px），留一道淡陰影分出上下層
 .dispatch-sidebar:hover,
 .dispatch-sidebar:has(:focus-visible) {
-  width: 248px;
-}
-
-.dispatch-sidebar::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgb(255 255 255 / 2%) 0,
-    rgb(255 255 255 / 2%) 1px,
-    transparent 1px,
-    transparent 5px
-  );
-  content: '';
-  pointer-events: none;
-}
-
-.dispatch-sidebar > * {
-  position: relative;
+  width: 212px;
+  box-shadow: 6px 0 16px rgb(0 0 0 / 12%);
 }
 
 app-brand-logo {
   display: block;
 }
 
+// 選單項目是 Material 的 mat-list-item：文字、圖示顏色由它自己的規則直接設在內層元素上，
+// 在 .nav-item 寫 color 蓋不到，要透過 Material 提供的 token 指定
 .sidebar-nav {
+  --mat-list-list-item-label-text-color: var(--muted);
+  --mat-list-list-item-hover-label-text-color: var(--text);
+  --mat-list-list-item-focus-label-text-color: var(--text);
+  --mat-list-list-item-leading-icon-color: var(--muted);
+  --mat-list-list-item-hover-leading-icon-color: var(--text);
+  --mat-list-list-item-focus-state-layer-color: var(--text);
+  // 滑過的底色用下面 .nav-item:hover 自己的，不再疊一層 Material 的灰
+  --mat-list-list-item-hover-state-layer-opacity: 0;
+  // 圓角也是：Material 用 .mat-mdc-nav-list .mat-mdc-list-item 設成全圓角（膠囊形），
+  // 權重跟 .nav-item 一樣又比較晚載入，直接寫 border-radius 蓋不掉
+  --mat-list-active-indicator-shape: 4px;
+  // 高度與圖示左右邊距：Material 固定 48px 高、圖示兩側各 16px，會把 212px 寬的選單文字擠到被截斷，
+  // 圖示也會在展開時往右跳 16px。歸零後間距只由 .nav-item 的 padding 與 gap 決定
+  --mat-list-list-item-one-line-container-height: 40px;
+  --mat-list-list-item-leading-icon-start-space: 0;
+  --mat-list-list-item-leading-icon-end-space: 0;
+
   position: relative;
   z-index: 1;
   display: grid;
-  width: 56px;
-  gap: 6px;
-  justify-items: center;
+  // 欄寬固定等於選單寬：不固定的話，收合時看不見（只是透明）的分組標題會把欄撐寬，
+  // 44px 的項目在變寬的欄裡置中，整排圖示會往右偏
+  grid-template-columns: minmax(0, 1fr);
+  width: 44px;
+  gap: 4px;
+  padding: 0;
+  justify-items: start;
   transition: width 240ms ease-out;
 }
 
 .dispatch-sidebar:hover .sidebar-nav,
 .dispatch-sidebar:has(:focus-visible) .sidebar-nav {
-  width: 228px;
-  justify-items: start;
+  width: 196px;
 }
 
+// 左邊距 12px：跟展開後的圖示左緣對齊
 .nav-group-title {
-  margin: 22px 10px 7px;
+  margin: 18px 12px 6px;
   color: var(--subtle);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 0.75rem;
+  font-weight: 500;
   opacity: 0;
   transform: translateX(-8px);
-  transition: opacity 140ms ease-out,
-  transform 200ms ease-out;
+  transition:
+    opacity 140ms ease-out,
+    transform 200ms ease-out;
   white-space: nowrap;
 }
 
@@ -151,46 +119,48 @@ app-brand-logo {
   z-index: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 0;
-  width: 56px;
-  min-height: 52px;
-  padding: 0;
+  width: 44px;
+  min-height: 40px;
   border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--muted);
   font-size: 0.875rem;
   font-weight: 500;
   text-decoration: none;
   pointer-events: auto;
-  transition: background-color 180ms ease,
-  border-color 180ms ease,
-  color 180ms ease,
-  width 240ms ease-out,
-  padding 240ms ease-out,
-  gap 240ms ease-out;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    width 240ms ease-out,
+    gap 240ms ease-out;
+}
+
+// 收合、展開都靠左排、左內距 11px：圖示左緣固定在 8（側欄內距）+ 1（框）+ 11 = 20px，
+// 收合時剛好置中在 60px 的側欄上，展開時也不會橫移。
+// 疊上 .sidebar-nav 提高權重：Material 的 .mdc-list-item--with-leading-icon 會把右內距設成 16px，同權重蓋不掉
+.sidebar-nav .nav-item {
+  justify-content: flex-start;
+  padding: 0 11px;
 }
 
 .dispatch-sidebar:hover .nav-item,
 .dispatch-sidebar:has(:focus-visible) .nav-item {
-  justify-content: flex-start;
   gap: 12px;
-  width: 228px;
-  padding: 0 11px;
+  width: 196px;
 }
 
 .nav-item mat-icon {
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  font-size: 22px;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
 }
 
 .nav-item span {
   opacity: 0;
   transform: translateX(-8px);
-  transition: opacity 140ms ease-out,
-  transform 200ms ease-out;
+  transition:
+    opacity 140ms ease-out,
+    transform 200ms ease-out;
   white-space: nowrap;
 }
 
@@ -202,26 +172,29 @@ app-brand-logo {
 }
 
 .nav-item:not(.is-disabled):hover {
-  color: var(--text);
-  background: var(--nav-hover-bg);
-  border-color: var(--glass-highlight);
+  background: var(--surface-active);
 }
 
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+// 目前所在頁：淡主色底＋主色字與圖示、四周 1px 細框。收合時也保留，窄欄一眼就看得出在哪一頁
 .nav-item.is-active {
-  color: var(--text);
-  background: var(--nav-active-bg);
-  border-color: var(--nav-active-border);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
-}
+  --mat-list-list-item-label-text-color: var(--accent);
+  --mat-list-list-item-hover-label-text-color: var(--accent);
+  --mat-list-list-item-focus-label-text-color: var(--accent);
+  --mat-list-list-item-leading-icon-color: var(--accent);
+  --mat-list-list-item-hover-leading-icon-color: var(--accent);
 
-.dispatch-sidebar:not(:hover):not(:has(:focus-visible)) .nav-item.is-active {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-
-.nav-item.is-active mat-icon {
   color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--border);
+}
+
+.nav-item.is-active:hover {
+  background: var(--accent-soft);
 }
 
 .nav-item.is-disabled {
@@ -229,17 +202,19 @@ app-brand-logo {
   opacity: 0.42;
 }
 
+// 原本是 100dvh：它在表頭下面那一列，加上表頭就一定比視窗高，內容再短也會多捲出一段
 .dispatch-workspace {
   grid-column: 2;
   grid-row: 2;
   position: relative;
   z-index: 0;
   min-width: 0;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--shell-header-height));
   isolation: isolate;
   background: var(--workspace-bg);
 }
 
+// 左邊距 14px：縮小後 32px 寬的 logo 圖形剛好置中在 60px 的側欄上方，跟選單圖示同一條中線
 .workspace-header {
   grid-column: 1 / -1;
   grid-row: 1;
@@ -249,47 +224,46 @@ app-brand-logo {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 88px;
-  padding: 20px 36px;
+  gap: 16px;
+  height: var(--shell-header-height);
+  padding: 0 16px 0 14px;
   background: var(--header-bg);
-  border-bottom: 1px solid var(--metal-edge);
-  box-shadow: inset 0 1px 0 var(--glass-highlight),
-  0 14px 30px rgb(0 0 0 / 24%);
-  backdrop-filter: blur(18px) saturate(105%);
-  -webkit-backdrop-filter: blur(18px) saturate(105%);
+  border-bottom: 1px solid var(--border);
 }
 
 .workspace-identity {
   display: flex;
   align-items: center;
   min-width: 0;
-  gap: 20px;
+  gap: 16px;
 }
 
+// 品牌 logo 原本 40px 高，放不進 52px 表頭。用 zoom 而不是 transform: scale：
+// zoom 會連版面佔的空間一起縮，scale 只縮畫面，原本的 40px 空間還在，後面的分隔線和標題會被推開
 .workspace-brand {
   display: inline-flex;
   flex: 0 0 auto;
   text-decoration: none;
+  zoom: 0.8;
 }
 
 .workspace-divider {
   width: 1px;
-  height: 38px;
-  background: var(--metal-edge);
+  height: 20px;
+  background: var(--border);
 }
 
 .workspace-header h1 {
   margin: 0;
+  overflow: hidden;
   color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.5rem;
+  font-size: 1rem;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   color: var(--muted);
   font-size: 0.8125rem;
 }
@@ -297,63 +271,50 @@ app-brand-logo {
 .workspace-actions {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
+// 外觀用全域的 .ui-btn-default（32px、4px 圓角、1px 框），這裡只改成正方形的圖示按鈕
 .application-notification,
+.sticky-note-launcher,
 .theme-toggle,
 .profile-link,
 .logout-button {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
+  width: 32px;
+  padding: 0;
   color: var(--muted);
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.theme-toggle:hover,
-.profile-link:hover,
-.logout-button:hover {
-  color: var(--text);
-  background: rgb(255 255 255 / 8%);
-  border-color: var(--glass-highlight);
-}
-
-.logout-button:disabled {
-  cursor: wait;
-  opacity: 0.62;
 }
 
 .application-notification mat-icon,
+.sticky-note-launcher mat-icon,
 .theme-toggle mat-icon,
 .profile-link mat-icon,
 .logout-button mat-icon {
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 16px;
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
 }
 
-.application-notification {
+// 有待辦時靠右上角的紅色數字提示，按鈕本身不再另外加紅框
+.application-notification,
+.sticky-note-launcher {
   position: relative;
 }
 
-.application-notification:hover {
-  color: var(--text);
-  background: rgb(255 255 255 / 8%);
-  border-color: var(--glass-highlight);
+.profile-link.is-active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-.application-notification.has-pending {
-  color: var(--text);
-  border-color: rgb(225 92 92 / 50%);
+// 登出中：沿用原本的等待游標，不是全域停用樣式的「禁止」
+.logout-button:disabled {
+  cursor: wait;
 }
 
-.notification-badge {
+// 疊在圖示上的數字徽章維持圓形（跟 matBadge 一致）；跟在文字後面的計數才用 2px 方角標籤。
+// 待辦是紅色（要處理），備忘錄則數是主色（只是提示有幾則）
+.notification-badge,
+.sticky-note-launcher__count {
   position: absolute;
   top: -7px;
   right: -7px;
@@ -365,28 +326,33 @@ app-brand-logo {
   border: 2px solid var(--header-bg);
   border-radius: 999px;
   color: #ffffff;
-  background: #c64e4e;
+  background: var(--danger);
   font-size: 0.625rem;
-  font-weight: 800;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
+}
+
+.sticky-note-launcher__count {
+  color: var(--button-text);
+  background: var(--accent);
 }
 
 .notification-panel {
   position: fixed;
   z-index: 70;
-  top: 78px;
-  right: 28px;
+  top: calc(var(--shell-header-height) + 6px);
+  right: 16px;
   display: grid;
   width: min(420px, calc(100vw - 32px));
   max-height: min(700px, calc(100dvh - 100px));
   overflow: auto;
   padding: 16px;
-  border: 1px solid var(--metal-edge);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   color: var(--text);
   background: var(--panel);
-  box-shadow: 0 22px 54px rgb(0 0 0 / 30%);
-  backdrop-filter: blur(24px) saturate(110%);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 16%);
 }
 
 .notification-panel__header,
@@ -402,7 +368,7 @@ app-brand-logo {
   justify-content: space-between;
   gap: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--metal-edge);
+  border-bottom: 1px solid var(--border);
 }
 
 .notification-panel__header p,
@@ -421,59 +387,21 @@ app-brand-logo {
 
 .notification-panel__header p,
 .notification-section h3 {
-  color: var(--accent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.notification-panel__header h2 {
-  margin-top: 4px;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
+  color: var(--muted);
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
-.notification-refresh,
-.notification-approve,
-.notification-reject {
-  min-height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
+.notification-panel__header h2 {
+  margin-top: 2px;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
-.notification-refresh,
-.notification-reject {
-  color: var(--muted);
-  background: transparent;
-}
-
-.notification-approve {
-  color: var(--button-text);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.notification-approve:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.notification-reject:hover:not(:disabled),
-.notification-refresh:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--glass-highlight);
-  background: rgb(255 255 255 / 7%);
-}
-
+// 按鈕外觀用全域的 .ui-btn-primary / .ui-btn-default；處理中停用時沿用等待游標
 .notification-approve:disabled,
 .notification-reject:disabled {
   cursor: wait;
-  opacity: 0.62;
 }
 
 .notification-section {
@@ -487,7 +415,7 @@ app-brand-logo {
   justify-content: space-between;
   gap: 12px;
   padding: 11px 0;
-  border-bottom: 1px solid var(--metal-edge);
+  border-bottom: 1px solid var(--border);
 }
 
 .notification-item > div:first-child {
@@ -498,6 +426,7 @@ app-brand-logo {
 
 .notification-item strong {
   font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .notification-item span,
@@ -506,6 +435,11 @@ app-brand-logo {
   color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.45;
+}
+
+// 每則最後一行是車牌、身分證遮罩、時間，用等寬字
+.notification-item small {
+  font-family: var(--font-mono);
 }
 
 .notification-item__actions,
@@ -521,18 +455,19 @@ app-brand-logo {
 
 .notification-feedback {
   margin-top: 12px;
-  padding: 9px 10px;
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   color: var(--muted);
   font-size: 0.75rem;
   line-height: 1.45;
 }
 
+// 正文色＋紅框紅底：深色的 --danger 直接當小字顏色對比不到 AA
 .notification-feedback.is-error {
-  border-color: rgb(205 105 105 / 60%);
-  color: #e5aaa5;
-  background: rgb(118 42 42 / 22%);
+  color: var(--text);
+  background: var(--danger-soft);
+  border-color: var(--danger);
 }
 
 .notification-review {
@@ -540,13 +475,14 @@ app-brand-logo {
   gap: 10px;
   margin-top: 14px;
   padding: 12px;
-  border: 1px solid var(--nav-active-border);
-  border-radius: 6px;
-  background: var(--nav-active-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
 }
 
 .notification-review h3 {
   font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .notification-review label {
@@ -555,112 +491,41 @@ app-brand-logo {
 }
 
 .notification-review label span {
-  color: var(--muted);
+  color: var(--field-label);
   font-size: 0.75rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
+// 外觀用全域的 .ui-input
 .notification-review select,
 .notification-review textarea {
   width: 100%;
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
-  outline: 0;
-  color: var(--text);
-  background: var(--surface-active);
-  font: inherit;
-  font-size: 0.8125rem;
-}
-
-.notification-review select {
-  min-height: 38px;
-  padding: 0 9px;
-}
-
-.notification-review textarea {
-  min-height: 72px;
-  padding: 9px;
-  resize: vertical;
-}
-
-.notification-review select:focus,
-.notification-review textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgb(99 209 198 / 12%);
-}
-
-.workspace-status::before {
-  width: 6px;
-  height: 6px;
-  background: var(--accent);
-  border-radius: 50%;
-  content: '';
-  box-shadow: 0 0 10px rgb(99 209 198 / 70%);
 }
 
 .workspace-content {
   position: relative;
   z-index: 0;
   min-width: 0;
-  min-height: calc(100dvh - 88px);
+  min-height: calc(100dvh - var(--shell-header-height));
   padding: 32px 36px 48px;
-}
-
-.dispatch-layout.is-light-theme {
-  .dispatch-sidebar {
-    box-shadow: inset -1px 0 0 rgb(27 52 45 / 14%),
-    18px 0 38px rgb(20 52 42 / 8%);
-  }
-
-  .workspace-header {
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 90%),
-    0 10px 24px rgb(20 52 42 / 10%);
-  }
-
-  .application-notification,
-  .theme-toggle,
-  .profile-link,
-  .logout-button {
-    background: rgb(8 124 107 / 4%);
-  }
-
-  .theme-toggle:hover,
-  .profile-link:hover,
-  .logout-button:hover {
-    background: rgb(8 124 107 / 9%);
-    border-color: rgb(8 124 107 / 28%);
-  }
-
-  .application-notification:hover {
-    background: rgb(8 124 107 / 9%);
-    border-color: rgb(8 124 107 / 28%);
-  }
-
-  .notification-feedback.is-error {
-    color: #8a4a4a;
-    background: #fbedeb;
-  }
 }
 
 @media (hover: none) and (min-width: 641px) {
   .dispatch-layout {
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: 212px minmax(0, 1fr);
   }
 
   .dispatch-sidebar {
-    width: 248px;
+    width: 212px;
   }
 
   .sidebar-nav {
-    width: 228px;
-    justify-items: start;
+    width: 196px;
   }
 
   .nav-item {
-    justify-content: flex-start;
     gap: 12px;
-    width: 228px;
-    padding: 0 11px;
+    width: 196px;
   }
 
   .nav-group-title,
@@ -688,7 +553,8 @@ app-brand-logo {
     padding: 0 16px;
     overflow: visible;
     border-right: 0;
-    border-bottom: 1px solid var(--metal-edge);
+    border-bottom: 1px solid var(--border);
+    box-shadow: none;
   }
 
   .sidebar-nav {
@@ -705,45 +571,39 @@ app-brand-logo {
     display: none;
   }
 
+  // 左右內距 11px（.sidebar-nav .nav-item）＋20px 圖示＋框線剛好 44px，圖示自然置中
   .nav-item,
   .dispatch-sidebar:hover .nav-item,
   .dispatch-sidebar:has(:focus-visible) .nav-item {
-    justify-content: center;
+    gap: 0;
     width: 44px;
-    min-height: 40px;
-    padding: 0;
   }
 
   .workspace-identity {
     gap: 12px;
   }
 
-  .workspace-brand {
-    transform: scale(0.9);
-    transform-origin: left center;
-  }
-
   .nav-item.is-disabled {
     display: none;
   }
 
+  // 手機寬度放不下 logo＋名稱＋6 顆按鈕：拿掉使用者名稱、按鈕間距縮成 4px，375px 寬才不會橫向捲動
+  .workspace-status {
+    display: none;
+  }
+
+  .workspace-actions {
+    gap: 4px;
+  }
+
   .workspace-header {
-    min-height: 78px;
-    padding: 16px 20px;
+    padding: 0 12px;
   }
 
-  .workspace-header h1 {
-    font-size: 1.25rem;
-  }
-
+  // 手機版選單是表頭下方 64px 的橫條
   .workspace-content {
-    min-height: calc(100dvh - 142px);
+    min-height: calc(100dvh - var(--shell-header-height) - 64px);
     padding: 24px 20px 36px;
-  }
-
-  .notification-panel {
-    top: 68px;
-    right: 16px;
   }
 }
 
@@ -759,7 +619,7 @@ app-brand-logo {
 
 
 // 聊天室
-// 外觀交給 matButton，這裡只負責固定位置；膠囊形貼底會被切掉一半，所以離底部留 16px
+// 外觀用全域的 .ui-btn-primary，這裡只負責固定位置；離底部留 16px，不貼齊視窗邊緣
 .chat-launcher {
   position: fixed;
   right: 24px;
@@ -767,70 +627,7 @@ app-brand-logo {
   z-index: 80;
 }
 
-.sticky-note-launcher {
-  position: fixed;
-  top: 50%;
-  z-index: 75;
-  display: grid;
-  width: 52px;
-  min-width: 52px;
-  height: 64px;
-  padding: 0;
-  place-items: center;
-  border: 1px solid var(--metal-edge);
-  color: var(--accent);
-  background: var(--panel);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 24%);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.sticky-note-launcher.is-right {
-  right: 0;
-  border-right: 0;
-  border-radius: 8px 0 0 8px;
-}
-
-.sticky-note-launcher.is-left {
-  left: 76px;
-  border-left: 0;
-  border-radius: 0 8px 8px 0;
-}
-
-.sticky-note-launcher.is-dragging {
-  z-index: 100;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 38%);
-  cursor: grabbing;
-}
-
-.sticky-note-launcher mat-icon {
-  width: 24px;
-  height: 24px;
-  overflow: visible;
-  font-size: 24px;
-  line-height: 24px;
-}
-
-.sticky-note-launcher__count {
-  position: absolute;
-  top: 7px;
-  right: 6px;
-  display: grid;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  place-items: center;
-  border: 2px solid var(--panel);
-  border-radius: 999px;
-  color: var(--button-text);
-  background: var(--accent);
-  font-size: 0.625rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
+// Material 元件的顏色、圓角由 styles.scss 的「Material 元件接品牌色票」統一對應
 .chat-panel {
   position: fixed;
   right: 24px;
@@ -839,16 +636,14 @@ app-brand-logo {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   width: min(720px, calc(100vw - 48px));
-  height: min(560px, calc(100dvh - 108px));
+  height: min(560px, calc(100dvh - var(--shell-header-height) - 20px));
   overflow: hidden;
   color: var(--text);
   background: var(--panel);
-  border: 1px solid var(--metal-edge);
+  border: 1px solid var(--border);
   border-bottom: 0;
-  border-radius: 8px 8px 0 0;
-  box-shadow: 0 -12px 40px rgb(0 0 0 / 28%);
-  backdrop-filter: blur(24px) saturate(110%);
-  -webkit-backdrop-filter: blur(24px) saturate(110%);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 16%);
   animation: chat-panel-in 180ms ease-out;
   transition: width 180ms ease-out;
 }
@@ -857,14 +652,15 @@ app-brand-logo {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px 12px 20px;
-  border-bottom: 1px solid var(--metal-edge);
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .chat-panel__header h2 {
   margin: 0;
-  color: var(--accent);
-  font-size: 1.125rem;
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .chat-panel__actions {
@@ -899,9 +695,12 @@ app-brand-logo {
 }
 
 .chat-panel__contacts {
+  // 選中底色（--row-selected）跟側欄選單一樣收成 4px 圓角
+  --mat-list-list-item-container-shape: 4px;
+
   overflow-y: auto;
-  padding: 12px;
-  border-right: 1px solid var(--metal-edge);
+  padding: 8px;
+  border-right: 1px solid var(--border);
 }
 
 // 對話區由上而下：標題 → 訊息 → 待執行清單 → 輸入框。
@@ -918,7 +717,8 @@ app-brand-logo {
 .chat-panel__title {
   margin: 0;
   color: var(--text);
-  font-size: 1rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 // 司機聊天未開放的提示維持置中
@@ -950,12 +750,25 @@ app-brand-logo {
   color: var(--accent);
 }
 
+// 訊息下方的時間與已讀
+.chat-message small {
+  display: block;
+  margin-top: 2px;
+  color: var(--subtle);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+}
+
 // 抽屜：用 Material 提供的 CSS 變數拿掉預設陰影與底色，不必跟它的選擇器比權重
 .chat-plan {
   --mat-expansion-container-elevation-shadow: none;
   --mat-expansion-container-background-color: transparent;
   flex-shrink: 0;
-  border: 1px solid var(--metal-edge);
+  border: 1px solid var(--border);
+}
+
+.chat-plan mat-action-row {
+  gap: 8px;
 }
 
 // 項目多時在抽屜內捲動，不把上面的訊息區擠沒
@@ -976,7 +789,7 @@ app-brand-logo {
 }
 
 .chat-plan__item + .chat-plan__item {
-  border-top: 1px solid var(--metal-edge);
+  border-top: 1px solid var(--border);
 }
 
 // min-width: 0 讓長的 summary 換行，而不是把右邊的刪除按鈕推出去
@@ -1033,7 +846,7 @@ app-brand-logo {
 
   .chat-panel {
     width: calc(100vw - 32px);
-    height: min(560px, calc(100dvh - 162px));
+    height: min(560px, calc(100dvh - var(--shell-header-height) - 84px));
   }
 
   .chat-panel__body {
@@ -1046,8 +859,7 @@ app-brand-logo {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-panel,
-  .sticky-note-launcher {
+  .chat-panel {
     animation: none;
     transition: none;
   }
@@ -1067,14 +879,15 @@ app-brand-logo {
 .chat-contact-avatar {
   display: grid;
   place-items: center;
+  color: var(--accent);
 }
 
 // ── 司機回報案件 ──
 
-// 司機不能繼續配送：鈴鐺的說明、聊天室的案件圖示改成警示色
+// 司機不能繼續配送：鈴鐺的說明、聊天室的案件圖示用紅色，跟異常中心同一個顏色
 .notification-case-text.is-urgent,
 .chat-contact-avatar.is-urgent {
-  color: #ed9b70;
+  color: var(--danger);
 }
 
 // 鈴鐺裡的說明最多兩行，完整內容到異常中心看
@@ -1094,12 +907,13 @@ app-brand-logo {
   padding: 8px 10px;
   color: var(--muted);
   font-size: 0.75rem;
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .chat-case-summary.is-urgent {
-  border-color: rgb(218 126 86 / 45%);
+  border-color: var(--danger);
 }
 
 .chat-case-summary__head {
@@ -1107,24 +921,6 @@ app-brand-logo {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.chat-case-summary__action {
-  flex: 0 0 auto;
-  padding: 3px 8px;
-  color: var(--accent);
-  background: transparent;
-  border: 1px solid currentcolor;
-  border-radius: 4px;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-}
-
-.chat-case-summary__action:hover,
-.chat-case-summary__action:focus-visible {
-  background: rgb(99 209 198 / 10%);
-  outline: none;
 }
 
 .chat-case-summary__text {
@@ -1142,13 +938,6 @@ app-brand-logo {
   padding: 10px 2px 0;
   color: var(--muted);
   font-size: 0.8125rem;
-  border-top: 1px solid var(--metal-edge);
+  border-top: 1px solid var(--border);
   white-space: pre-wrap;
-}
-
-.dispatch-layout.is-light-theme {
-  .notification-case-text.is-urgent,
-  .chat-contact-avatar.is-urgent {
-    color: #b4532a;
-  }
 }

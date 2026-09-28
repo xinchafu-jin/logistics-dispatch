@@ -15,10 +15,10 @@
     </div>
 
     <div class="workspace-actions">
-      <span class="workspace-status">{{ user()?.displayName ?? '物流後台' }}</span>
+      <span class="workspace-status ui-status-dot is-accent">{{ user()?.displayName ?? '物流後台' }}</span>
       <button
         type="button"
-        class="application-notification"
+        class="application-notification ui-btn-default"
         [class.has-pending]="notificationCount() > 0"
         [attr.aria-expanded]="isNotificationsOpen()"
         [attr.aria-label]="notificationCount() ? '主管待辦 ' + notificationCount() + ' 項' : '主管待辦'"
@@ -30,9 +30,22 @@
           <span class="notification-badge">{{ notificationCount() > 99 ? '99+' : notificationCount() }}</span>
         }
       </button>
+      <!-- 備忘錄：原本浮在畫面左右邊緣、可以拖曳換邊，收進表頭後不再擋內容，拖曳換邊也就用不到了 -->
       <button
         type="button"
-        class="theme-toggle"
+        class="sticky-note-launcher ui-btn-default"
+        [attr.aria-label]="adminStickyNotes().length ? '備忘錄 ' + adminStickyNotes().length + ' 則' : '備忘錄'"
+        [title]="adminStickyNotes().length ? '備忘錄 ' + adminStickyNotes().length + ' 則' : '備忘錄'"
+        (click)="openStickyNotesFromLauncher()"
+      >
+        <mat-icon aria-hidden="true">push_pin</mat-icon>
+        @if (adminStickyNotes().length > 0) {
+          <span class="sticky-note-launcher__count">{{ adminStickyNotes().length > 99 ? '99+' : adminStickyNotes().length }}</span>
+        }
+      </button>
+      <button
+        type="button"
+        class="theme-toggle ui-btn-default"
         (click)="toggleTheme()"
         [title]="isLightTheme() ? '切換為深色模式' : '切換為淺色模式'"
         [attr.aria-label]="isLightTheme() ? '切換為深色模式' : '切換為淺色模式'"
@@ -44,7 +57,7 @@
         }
       </button>
       <a
-        class="profile-link"
+        class="profile-link ui-btn-default"
         routerLink="/dispatch/profile"
         routerLinkActive="is-active"
         title="個人設定"
@@ -54,7 +67,7 @@
       </a>
       <button
         type="button"
-        class="logout-button"
+        class="logout-button ui-btn-default"
         [disabled]="isSigningOut()"
         (click)="signOut()"
         title="登出系統"
@@ -73,7 +86,7 @@
           <h2>{{ notificationCount() ? notificationCount() + ' 項待處理' : '目前沒有待辦' }}</h2>
         </div>
         <div class="notification-panel__header-actions">
-          <button type="button" class="notification-refresh" (click)="toggleNotifications()" title="關閉"
+          <button type="button" class="notification-refresh ui-btn-default" (click)="toggleNotifications()" title="關閉"
                   aria-label="關閉">
             關閉
           </button>
@@ -100,7 +113,7 @@
               <div class="notification-item__actions">
                 <button
                   type="button"
-                  class="notification-approve"
+                  class="notification-approve ui-btn-primary"
                   (click)="openDriverCaseInAnomalyCenter(item.id)"
                 >前往異常中心</button>
               </div>
@@ -126,7 +139,7 @@
                 <div class="notification-item__actions">
                   <button
                     type="button"
-                    class="notification-approve"
+                    class="notification-approve ui-btn-primary"
                     (click)="approveApplication(application)"
                     [disabled]="notificationAction() !== null"
                   >
@@ -134,7 +147,7 @@
                   </button>
                   <button
                     type="button"
-                    class="notification-reject"
+                    class="notification-reject ui-btn-default"
                     (click)="beginApplicationRejection(application)"
                     [disabled]="notificationAction() !== null"
                   >
@@ -159,7 +172,7 @@
                 <div class="notification-item__actions">
                   <button
                     type="button"
-                    class="notification-approve"
+                    class="notification-approve ui-btn-primary"
                     (click)="reviewEmergencyLeave(leave)"
                     [disabled]="notificationAction() !== null"
                   >
@@ -167,7 +180,7 @@
                   </button>
                   <button
                     type="button"
-                    class="notification-reject"
+                    class="notification-reject ui-btn-default"
                     (click)="beginEmergencyLeaveRejection(leave)"
                     [disabled]="notificationAction() !== null"
                   >
@@ -192,7 +205,7 @@
                 <div class="notification-item__actions">
                   <button
                     type="button"
-                    class="notification-approve"
+                    class="notification-approve ui-btn-primary"
                     (click)="openScheduleLeaveReview()"
                   >前往班表審核</button>
                 </div>
@@ -213,7 +226,7 @@
           @if (replacementCandidates().length) {
             <label>
               <span>接手司機</span>
-              <select (change)="selectReplacementDriver($event)">
+              <select class="ui-input" (change)="selectReplacementDriver($event)">
                 @for (candidate of replacementCandidates(); track candidate.driverId) {
                   <option [value]="candidate.driverId">
                     {{ candidate.name }} · {{ candidate.account }}{{ candidate.clockedIn ? ' · 已上班' : '' }}
@@ -223,7 +236,7 @@
             </label>
             <button
               type="button"
-              class="notification-approve"
+              class="notification-approve ui-btn-primary"
               (click)="approveEmergencyLeave()"
               [disabled]="notificationAction() !== null"
             >
@@ -240,7 +253,8 @@
           <h3>拒絕 {{ target.name }}</h3>
           <label>
             <span>拒絕原因</span>
-            <textarea rows="3"
+            <textarea class="ui-input"
+                      rows="3"
                       maxlength="500"
                       [value]="rejectionReason()"
                       (input)="updateRejectionReason($event)"
@@ -249,8 +263,8 @@
             </textarea>
           </label>
           <div class="notification-review__actions">
-            <button type="button" class="notification-reject" (click)="cancelRejection()">取消</button>
-            <button type="submit" class="notification-approve" [disabled]="notificationAction() !== null">
+            <button type="button" class="notification-reject ui-btn-default" (click)="cancelRejection()">取消</button>
+            <button type="submit" class="notification-approve ui-btn-primary" [disabled]="notificationAction() !== null">
               {{ isNotificationAction('reject-' + target.kind + '-' + target.id) ? '處理中...' : '確認拒絕' }}
             </button>
           </div>
@@ -324,28 +338,6 @@
       <router-outlet/>
     </section>
   </main>
-
-  <button
-    type="button"
-    class="sticky-note-launcher"
-    [class.is-left]="stickyNoteDockSide() === 'left'"
-    [class.is-right]="stickyNoteDockSide() === 'right'"
-    [class.is-dragging]="isStickyNoteDragging()"
-    [style.transform]="stickyNoteLauncherTransform()"
-    [attr.aria-label]="'備忘錄，目前位於' + (stickyNoteDockSide() === 'left' ? '左側' : '右側') + '；點擊開啟，按住可拖到另一側'"
-    [attr.aria-grabbed]="isStickyNoteDragging()"
-    matTooltip="備忘錄 · 按住可拖到另一側"
-    (click)="openStickyNotesFromLauncher()"
-    (pointerdown)="startStickyNoteDrag($event)"
-    (pointermove)="moveStickyNoteDrag($event)"
-    (pointerup)="endStickyNoteDrag($event)"
-    (pointercancel)="cancelStickyNoteDrag($event)"
-  >
-    <mat-icon aria-hidden="true">push_pin</mat-icon>
-    @if (adminStickyNotes().length > 0) {
-      <span class="sticky-note-launcher__count">{{ adminStickyNotes().length > 99 ? '99+' : adminStickyNotes().length }}</span>
-    }
-  </button>
 
   @if (chatView() !== 'closed') {
     <section class="chat-panel" [class.is-narrow]="chatView() === 'narrow'" aria-label="聊天室">
@@ -511,9 +503,9 @@
                     <!-- 清除與確認放在抽屜裡：收合時按不到，調度員一定得先看過清單才能確認 -->
                     <mat-action-row>
                       <!-- 邏輯還沒接：DELETE /api/ai/plan -->
-                      <button type="button" matButton (click)="delAllPlan()">全部清除</button>
+                      <button type="button" class="ui-btn-default" (click)="delAllPlan()">全部清除</button>
                       <!-- 先開確認視窗（模板在本檔最下面），按「執行」才 POST /api/ai/plan/confirm -->
-                      <button type="button" matButton="filled" (click)="openConfirmPlan()">確認執行</button>
+                      <button type="button" class="ui-btn-primary" (click)="openConfirmPlan()">確認執行</button>
                     </mat-action-row>
                   </mat-expansion-panel>
                 }
@@ -610,7 +602,7 @@
                       </span>
                       <!-- 聊天室開著時會整個蓋住異常中心的詳情欄，結案按鈕按不到；這裡先收合聊天室，再到異常中心選中這一件 -->
                       @if (current.status === 'OPEN') {
-                        <button type="button" class="chat-case-summary__action" (click)="goCloseCaseInAnomalyCenter(current.id)">
+                        <button type="button" class="chat-case-summary__action ui-btn-secondary" (click)="goCloseCaseInAnomalyCenter(current.id)">
                           到異常中心結案
                         </button>
                       }
@@ -675,8 +667,7 @@
   } @else {
     <button
       type="button"
-      matButton="filled"
-      class="chat-launcher"
+      class="chat-launcher ui-btn-primary"
       (click)="openChat()"
       [matBadge]="totalUnread() > 99 ? '99+' : totalUnread()"
       [matBadgeHidden]="totalUnread() === 0"
@@ -695,8 +686,8 @@
     }
   </mat-dialog-content>
   <mat-dialog-actions align="end">
-    <button type="button" matButton [mat-dialog-close]="false">取消</button>
-    <button type="button" matButton="filled" [mat-dialog-close]="true">執行</button>
+    <button type="button" class="ui-btn-default" [mat-dialog-close]="false">取消</button>
+    <button type="button" class="ui-btn-primary" [mat-dialog-close]="true">執行</button>
   </mat-dialog-actions>
 </ng-template>
 
@@ -726,9 +717,9 @@
       </mat-form-field>
       <div class="sticky-notes__form-actions">
         @if (editingStickyNoteId() !== null) {
-          <button type="button" matButton (click)="cancelStickyNoteEdit()">取消編輯</button>
+          <button type="button" class="ui-btn-default" (click)="cancelStickyNoteEdit()">取消編輯</button>
         }
-        <button type="submit" matButton="filled" [disabled]="stickyNotesLoading() || stickyNoteSaving() || !stickyNoteContent().trim()">
+        <button type="submit" class="ui-btn-primary" [disabled]="stickyNotesLoading() || stickyNoteSaving() || !stickyNoteContent().trim()">
           {{ stickyNoteSaving() ? '送出中…' : editingStickyNoteId() !== null ? '儲存修改' : '送出備忘錄' }}
         </button>
       </div>
@@ -760,7 +751,7 @@
                   <mat-icon aria-hidden="true">edit</mat-icon>
                 </button>
                 @if (deletingStickyNoteId() === note.id) {
-                  <button type="button" matButton class="sticky-notes__delete-confirm" [disabled]="stickyNoteDeleteBusy()" (click)="deleteStickyNote(note)">
+                  <button type="button" class="ui-btn-default sticky-notes__delete-confirm" [disabled]="stickyNoteDeleteBusy()" (click)="deleteStickyNote(note)">
                     {{ stickyNoteDeleteBusy() ? '刪除中…' : '確定刪除' }}
                   </button>
                   <button type="button" matIconButton aria-label="取消刪除" [disabled]="stickyNoteDeleteBusy()" (click)="cancelStickyNoteDelete()">

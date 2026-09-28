@@ -5,6 +5,7 @@ import { forkJoin, Observable } from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatSelectModule} from '@angular/material/select';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import {
   AdminUserCreateRequest,
   AdminUserDto,
@@ -188,6 +189,8 @@ interface VehicleResource {
 })
 export class ResourceOverview implements OnInit {
   private readonly api = inject(DispatchApiService);
+  // 下拉選單的選項面板開在 body 底下，吃不到後台深淺色：mat-select 的 panelClass 要帶 theme.dialogPanelClass()
+  protected readonly theme = inject(AdminThemeService);
 
   readonly activeView = signal<ResourceView>('vehicles');
   readonly activeFilter = signal('all');

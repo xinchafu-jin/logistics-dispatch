@@ -1,89 +1,41 @@
-<main class="driver-schedule-page">
-  <header class="schedule-toolbar">
-    <div class="month-controls" aria-label="選擇班表月份">
+<main class="driver-schedule-page ui-page">
+  <!-- 頂部單一列：班表月份、發布狀態、班次統計、操作按鈕 -->
+  <header class="ui-panel ui-toolbar schedule-toolbar">
+    <label class="month-control" aria-label="選擇班表月份">
+      <span>班表月份</span>
       <!-- Material 月份選擇器：直接開在 1～12 月（year 視圖），選完月份即關閉，不進入日期格 -->
-      <label>
-        <span>班表月份</span>
-        <mat-form-field class="admin-date-field month-field" appearance="outline" subscriptSizing="dynamic">
-          <input
-            matInput
-            readonly
-            aria-label="班表月份"
-            [matDatepicker]="monthPicker"
-            [value]="selectedMonthDate()"
-            (click)="monthPicker.open()"
-          />
-          <mat-datepicker-toggle matIconSuffix [for]="monthPicker" />
-          <mat-datepicker
-            #monthPicker
-            startView="year"
-            [calendarHeaderComponent]="monthPickerHeader"
-            (monthSelected)="selectMonth($event, monthPicker)"
-          />
-        </mat-form-field>
-      </label>
-    </div>
-  </header>
+      <mat-form-field class="admin-date-field month-field" appearance="outline" subscriptSizing="dynamic">
+        <input
+          matInput
+          readonly
+          aria-label="班表月份"
+          [matDatepicker]="monthPicker"
+          [value]="selectedMonthDate()"
+          (click)="monthPicker.open()"
+        />
+        <mat-datepicker-toggle matIconSuffix [for]="monthPicker" />
+        <mat-datepicker
+          #monthPicker
+          startView="year"
+          [panelClass]="theme.dialogPanelClass()"
+          [calendarHeaderComponent]="monthPickerHeader"
+          (monthSelected)="selectMonth($event, monthPicker)"
+        />
+      </mat-form-field>
+    </label>
 
-  @if (errorMessage()) {
-    <p class="feedback is-error">
-      <mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}
-    </p>
-  }
-  @if (actionMessage()) {
-    <p class="feedback is-success">
-      <mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}
-    </p>
-  }
-
-  @if (loading()) {
-    <section class="empty-state" aria-live="polite">
-      <mat-icon aria-hidden="true">pending_actions</mat-icon>
-      <p>正在讀取 {{ displayMonth() }} 班表...</p>
-    </section>
-  } @else if (scheduleMissing()) {
-    <section class="empty-state">
-      <mat-icon aria-hidden="true">calendar_month</mat-icon>
-      <div>
-        <h3>{{ displayMonth() }} 尚未建立班表</h3>
-        <p>建立後會依當下啟用的司機產生整月「未排定」班次。</p>
-      </div>
-      <button type="button" class="primary-action" (click)="generateMonth()" [disabled]="saving()">
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        建立草稿班表
-      </button>
-    </section>
-  } @else if (scheduleMonth(); as month) {
-    <section class="schedule-summary" aria-label="班表摘要">
-      <div class="schedule-status" [class.is-published]="isPublished()">
-        <mat-icon aria-hidden="true">calendar_month</mat-icon>
-        <div>
-          <span>發布狀態</span>
-          <strong>{{ scheduleStatusLabel() }}</strong>
-        </div>
-      </div>
-      <dl>
-        <div>
-          <dt>司機</dt>
-          <dd>{{ summary().drivers }} 位</dd>
-        </div>
-        <div>
-          <dt>上班</dt>
-          <dd>{{ summary().work }} 班</dd>
-        </div>
-        <div>
-          <dt>請假</dt>
-          <dd>{{ summary().leave }} 班</dd>
-        </div>
-        <div [class.has-warning]="summary().unassigned > 0">
-          <dt>未排定</dt>
-          <dd>{{ summary().unassigned }} 班</dd>
-        </div>
+    @if (!loading() && !scheduleMissing() && scheduleMonth()) {
+      <span class="ui-tag" [class.is-ok]="isPublished()" [class.is-warn]="!isPublished()">{{ scheduleStatusLabel() }}</span>
+      <dl class="schedule-stats" aria-label="班表摘要">
+        <div><dt>司機</dt><dd>{{ summary().drivers }} 位</dd></div>
+        <div><dt>上班</dt><dd>{{ summary().work }} 班</dd></div>
+        <div><dt>請假</dt><dd>{{ summary().leave }} 班</dd></div>
+        <div [class.has-warning]="summary().unassigned > 0"><dt>未排定</dt><dd>{{ summary().unassigned }} 班</dd></div>
       </dl>
       <div class="schedule-actions">
         <button
           type="button"
-          class="secondary-action"
+          class="ui-btn-default"
           (click)="syncDrivers()"
           [disabled]="!isDraft() || saving()"
         >
@@ -92,7 +44,7 @@
         </button>
         <button
           type="button"
-          class="primary-action"
+          class="ui-btn-primary"
           (click)="publishMonth()"
           [disabled]="!isDraft() || saving()"
         >
@@ -100,24 +52,49 @@
           發布班表
         </button>
       </div>
+    }
+  </header>
+
+  @if (errorMessage()) {
+    <p class="ui-alert is-danger">
+      <mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}
+    </p>
+  }
+  @if (actionMessage()) {
+    <p class="ui-alert is-ok">
+      <mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}
+    </p>
+  }
+
+  @if (loading()) {
+    <p class="ui-panel ui-empty" aria-live="polite">正在讀取 {{ displayMonth() }} 班表...</p>
+  } @else if (scheduleMissing()) {
+    <section class="ui-panel schedule-missing">
+      <div>
+        <h3>{{ displayMonth() }} 尚未建立班表</h3>
+        <p>建立後會依當下啟用的司機產生整月「未排定」班次。</p>
+      </div>
+      <button type="button" class="ui-btn-primary" (click)="generateMonth()" [disabled]="saving()">
+        <mat-icon aria-hidden="true">calendar_month</mat-icon>
+        建立草稿班表
+      </button>
     </section>
-
+  } @else if (scheduleMonth(); as month) {
     @if (isDraft()) {
-      <section class="batch-schedule" aria-labelledby="batch-schedule-title">
-        <div class="batch-schedule-heading">
-          <p class="page-eyebrow">每週規則</p>
+      <section class="ui-panel" aria-labelledby="batch-schedule-title">
+        <header class="ui-panel__header">
           <h3 id="batch-schedule-title">每週快速套用</h3>
-          <p>先複選司機與星期，再批量套用；請假班次會保留，並使用各司機既有的上下班時間。</p>
-        </div>
+          <span class="panel-note">請假班次會保留，並使用各司機既有的上下班時間</span>
+        </header>
 
-        <div class="batch-controls">
+        <div class="ui-panel__body">
           <section class="batch-driver-selection" aria-label="選擇要批量套用的司機">
             <div class="batch-selection-heading">
               <strong>套用司機</strong>
               <span>已選 {{ selectedBatchDriverCount() }} / {{ batchDriverOptions().length }} 位</span>
               <button
                 type="button"
-                class="batch-selection-action"
+                class="ui-btn-default"
                 (click)="selectAllBatchDrivers()"
                 [disabled]="saving() || areAllBatchDriversSelected()"
               >
@@ -125,7 +102,7 @@
               </button>
               <button
                 type="button"
-                class="batch-selection-action"
+                class="ui-btn-default"
                 (click)="clearBatchDrivers()"
                 [disabled]="saving() || selectedBatchDriverCount() === 0"
               >
@@ -134,7 +111,7 @@
             </div>
             <div class="batch-driver-options">
               @for (driver of batchDriverOptions(); track driver.id) {
-                <label class="batch-driver-option" [class.is-selected]="isBatchDriverSelected(driver.id)">
+                <label class="batch-driver-option ui-check" [class.is-selected]="isBatchDriverSelected(driver.id)">
                   <input
                     type="checkbox"
                     [checked]="isBatchDriverSelected(driver.id)"
@@ -143,31 +120,33 @@
                   />
                   <span>
                     <strong>{{ driver.name }}</strong>
-                    <small>{{ driver.account }}</small>
+                    <small class="ui-mono">{{ driver.account }}</small>
                   </span>
                 </label>
               } @empty {
-                <p>目前沒有可批量套用的啟用司機。</p>
+                <p class="panel-note">目前沒有可批量套用的啟用司機。</p>
               }
             </div>
           </section>
 
-          <div class="weekday-selector" role="group" aria-label="選擇要批次套用的星期">
-            @for (weekday of weekdayOptions; track weekday.index) {
-              <button
-                type="button"
-                class="weekday-button"
-                [class.is-selected]="isWeekdaySelected(weekday.index)"
-                [attr.aria-pressed]="isWeekdaySelected(weekday.index)"
-                (click)="toggleWeekday(weekday.index)"
-                [disabled]="saving()"
-              >
-                週{{ weekday.label }}
-              </button>
-            }
+          <div class="batch-weekdays">
+            <div class="ui-segmented" role="group" aria-label="選擇要批次套用的星期">
+              @for (weekday of weekdayOptions; track weekday.index) {
+                <button
+                  type="button"
+                  class="weekday-button"
+                  [class.is-selected]="isWeekdaySelected(weekday.index)"
+                  [attr.aria-pressed]="isWeekdaySelected(weekday.index)"
+                  (click)="toggleWeekday(weekday.index)"
+                  [disabled]="saving()"
+                >
+                  週{{ weekday.label }}
+                </button>
+              }
+            </div>
             <button
               type="button"
-              class="weekday-preset"
+              class="ui-btn-default"
               (click)="selectWeekdayGroup([1, 2, 3, 4, 5])"
               [disabled]="saving()"
             >
@@ -175,7 +154,7 @@
             </button>
             <button
               type="button"
-              class="weekday-preset"
+              class="ui-btn-default"
               (click)="selectWeekdayGroup([6])"
               [disabled]="saving()"
             >
@@ -187,7 +166,7 @@
             <span>已選 {{ selectedWeekdayDescription() || '尚未選擇' }}</span>
             <button
               type="button"
-              class="secondary-action"
+              class="ui-btn-default"
               (click)="applySelectedWeekdays('WORK')"
               [disabled]="saving() || selectedWeekdayIndexes().length === 0"
             >
@@ -195,7 +174,7 @@
             </button>
             <button
               type="button"
-              class="secondary-action"
+              class="ui-btn-default"
               (click)="applySelectedWeekdays('DAY_OFF')"
               [disabled]="saving() || selectedWeekdayIndexes().length === 0"
             >
@@ -203,7 +182,7 @@
             </button>
             <button
               type="button"
-              class="primary-action"
+              class="ui-btn-primary"
               (click)="applyStandardWeek()"
               [disabled]="saving()"
             >
@@ -215,17 +194,15 @@
     }
 
     <div class="schedule-workspace">
-      <section class="schedule-grid-panel" aria-label="整月司機班表">
-        <header>
-          <div>
-            <p class="page-eyebrow">月班表</p>
-            <h3>{{ displayMonth() }} 全部司機</h3>
-          </div>
-          <span>{{ rows().length }} 位司機</span>
+      <section class="ui-panel schedule-grid-panel" aria-label="整月司機班表">
+        <header class="ui-panel__header">
+          <h3>{{ displayMonth() }} 全部司機</h3>
+          <span class="panel-note">{{ rows().length }} 位司機</span>
         </header>
 
+        <!-- 班表矩陣：欄頭日期固定在上、司機欄固定在左，其餘在框裡捲動 -->
         <div class="schedule-grid-scroll">
-          <table>
+          <table class="ui-table schedule-table">
             <thead>
               <tr>
                 <th scope="col" class="driver-column">司機</th>
@@ -256,7 +233,7 @@
                       (click)="toggleDriverLeaveDetails(row.driverId)"
                     >
                       <strong>{{ row.driverName }}</strong>
-                      <span>{{ row.driverAccount }}</span>
+                      <span class="ui-mono">{{ row.driverAccount }}</span>
                     </button>
                   </th>
                   @for (entry of row.entries; track entry.day.iso) {
@@ -298,7 +275,7 @@
                 </tr>
               } @empty {
                 <tr>
-                  <td class="no-shifts" [attr.colspan]="days().length + 1">
+                  <td class="ui-empty" [attr.colspan]="days().length + 1">
                     此班表目前沒有可顯示的司機班次。
                   </td>
                 </tr>
@@ -310,7 +287,7 @@
 
       @if (hoveredDriver(); as driver) {
         <div
-          class="driver-leave-tooltip"
+          class="ui-panel driver-leave-tooltip"
           role="tooltip"
           [style.top.px]="leaveTooltipPosition().top"
           [style.left.px]="leaveTooltipPosition().left"
@@ -319,11 +296,11 @@
           @if (isMonthlyLeaveLoading(driver.driverId)) {
             <small>正在讀取請假紀錄...</small>
           } @else if (monthlyLeaveErrors()[driver.driverId]; as leaveError) {
-            <small class="leave-review-error">{{ leaveError }}</small>
+            <small class="review-error">{{ leaveError }}</small>
           } @else {
             @for (request of monthlyLeaveSummaries()[driver.driverId]?.records ?? []; track request.id) {
               <article>
-                <b>{{ request.workDate }} · {{ leaveModeLabel(request) }}</b>
+                <b><span class="ui-mono">{{ request.workDate }}</span> · {{ leaveModeLabel(request) }}</b>
                 <span>{{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span>
                 <small>{{ leaveTypeLabel(request.leaveType) }} · {{ leaveStatusLabel(request.status) }}</small>
               </article>
@@ -334,26 +311,25 @@
         </div>
       }
 
-      <aside class="shift-editor" aria-label="班次設定">
+      <aside class="ui-panel shift-editor" aria-label="班次設定">
         @if (selectedShift(); as shift) {
           @if (editorForm(); as form) {
-            <header>
+            <header class="ui-panel__header">
               <div>
-                <p class="page-eyebrow">班次設定</p>
                 <h3>{{ selectedDriver()?.name ?? '司機 #' + shift.driverId }}</h3>
-                <span>{{ shift.workDate }}</span>
+                <span class="panel-note ui-mono">{{ shift.workDate }}</span>
               </div>
-              <em [class.is-published]="isPublished()">{{ scheduleStatusLabel() }}</em>
+              <span class="ui-tag" [class.is-ok]="isPublished()" [class.is-warn]="!isPublished()">{{ scheduleStatusLabel() }}</span>
             </header>
 
-            @if (isPublished()) {
-              <p class="published-editor-note">
-                此處是途中突發狀況的臨時離班，不會代替司機一般請假申請與主管審核。
-              </p>
-            }
+            <div class="ui-panel__body">
+              @if (isPublished()) {
+                <p class="ui-alert is-warn editor-note">
+                  此處是途中突發狀況的臨時離班，不會代替司機一般請假申請與主管審核。
+                </p>
+              }
 
-            <div class="editor-form">
-              <label>
+              <label class="ui-field">
                 <span>班別</span>
                 <select
                   [value]="form.shiftType"
@@ -376,7 +352,7 @@
 
               @if (form.shiftType === 'WORK') {
                 <div class="time-fields">
-                  <label>
+                  <label class="ui-field">
                     <span>上班時間</span>
                     <input
                       type="time"
@@ -385,7 +361,7 @@
                       [disabled]="!isDraft() || saving()"
                     />
                   </label>
-                  <label>
+                  <label class="ui-field">
                     <span>下班時間</span>
                     <input
                       type="time"
@@ -395,7 +371,7 @@
                     />
                   </label>
                 </div>
-                <label>
+                <label class="ui-field">
                   <span>加班分鐘數</span>
                   <input
                     type="number"
@@ -408,7 +384,7 @@
                 </label>
               }
 
-              <label>
+              <label class="ui-field">
                 <span>{{ form.shiftType === 'LEAVE' ? '請假原因' : '修改原因' }}</span>
                 <input
                   type="text"
@@ -422,7 +398,7 @@
               @if (form.shiftType === 'LEAVE') {
                 <button
                   type="button"
-                  class="leave-action"
+                  class="ui-btn-secondary editor-submit"
                   (click)="markLeave()"
                   [disabled]="!canMarkLeave() || saving()"
                 >
@@ -432,7 +408,7 @@
               } @else {
                 <button
                   type="button"
-                  class="primary-action save-action"
+                  class="ui-btn-primary editor-submit"
                   (click)="saveShift()"
                   [disabled]="!isDraft() || saving()"
                 >
@@ -440,78 +416,73 @@
                   儲存班次
                 </button>
               }
+
+              <table class="ui-desc">
+                <tbody>
+                  <tr><th>原始工時</th><td class="ui-mono">{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</td></tr>
+                  <tr><th>目前原因</th><td>{{ shift.changeReason || '—' }}</td></tr>
+                </tbody>
+              </table>
+
+              @if (shift.shiftType === 'WORK') {
+                <section class="partial-leave-editor" aria-labelledby="partial-leave-title">
+                  <h4 id="partial-leave-title">預排部分時段假</h4>
+                  <p class="panel-note">{{ selectedDriver()?.name ?? '這位司機' }} · {{ shift.workDate }}；保留當日上班班次。</p>
+                  <label class="ui-field">
+                    <span>假別</span>
+                    <select
+                      [value]="plannedPartialLeaveForm().leaveType"
+                      [disabled]="saving()"
+                      (change)="updatePlannedLeaveField('leaveType', $event)"
+                    >
+                      <option value="SICK">病假</option>
+                      <option value="ANNUAL">年假</option>
+                      <option value="SPECIAL">特殊事由</option>
+                      <option value="MENSTRUAL">生理假</option>
+                    </select>
+                  </label>
+                  <div class="time-fields">
+                    <label class="ui-field">
+                      <span>開始</span>
+                      <input
+                        type="time"
+                        [value]="plannedPartialLeaveForm().leaveStart"
+                        [disabled]="saving()"
+                        (input)="updatePlannedLeaveField('leaveStart', $event)"
+                      />
+                    </label>
+                    <label class="ui-field">
+                      <span>結束</span>
+                      <input
+                        type="time"
+                        [value]="plannedPartialLeaveForm().leaveEnd"
+                        [disabled]="saving()"
+                        (input)="updatePlannedLeaveField('leaveEnd', $event)"
+                      />
+                    </label>
+                  </div>
+                  <label class="ui-field">
+                    <span>預排原因</span>
+                    <textarea
+                      rows="2"
+                      maxlength="500"
+                      [value]="plannedPartialLeaveForm().reason"
+                      [disabled]="saving()"
+                      (input)="updatePlannedLeaveField('reason', $event)"
+                    ></textarea>
+                  </label>
+                  <button
+                    type="button"
+                    class="ui-btn-default"
+                    (click)="createPlannedPartialLeave()"
+                    [disabled]="saving()"
+                  >新增部分時段預排假</button>
+                </section>
+              }
             </div>
-
-            <dl class="shift-meta">
-              <div>
-                <dt>原始工時</dt>
-                <dd>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</dd>
-              </div>
-              <div>
-                <dt>目前原因</dt>
-                <dd>{{ shift.changeReason }}</dd>
-              </div>
-            </dl>
-
-            @if (shift.shiftType === 'WORK') {
-              <section class="partial-leave-editor" aria-labelledby="partial-leave-title">
-                <p class="page-eyebrow">主管排程</p>
-                <h4 id="partial-leave-title">預排部分時段假</h4>
-                <p>{{ selectedDriver()?.name ?? '這位司機' }} · {{ shift.workDate }}；保留當日上班班次。</p>
-                <label>
-                  <span>假別</span>
-                  <select
-                    [value]="plannedPartialLeaveForm().leaveType"
-                    [disabled]="saving()"
-                    (change)="updatePlannedLeaveField('leaveType', $event)"
-                  >
-                    <option value="SICK">病假</option>
-                    <option value="ANNUAL">年假</option>
-                    <option value="SPECIAL">特殊事由</option>
-                    <option value="MENSTRUAL">生理假</option>
-                  </select>
-                </label>
-                <div class="time-fields">
-                  <label>
-                    <span>開始</span>
-                    <input
-                      type="time"
-                      [value]="plannedPartialLeaveForm().leaveStart"
-                      [disabled]="saving()"
-                      (input)="updatePlannedLeaveField('leaveStart', $event)"
-                    />
-                  </label>
-                  <label>
-                    <span>結束</span>
-                    <input
-                      type="time"
-                      [value]="plannedPartialLeaveForm().leaveEnd"
-                      [disabled]="saving()"
-                      (input)="updatePlannedLeaveField('leaveEnd', $event)"
-                    />
-                  </label>
-                </div>
-                <label>
-                  <span>預排原因</span>
-                  <textarea
-                    rows="2"
-                    maxlength="500"
-                    [value]="plannedPartialLeaveForm().reason"
-                    [disabled]="saving()"
-                    (input)="updatePlannedLeaveField('reason', $event)"
-                  ></textarea>
-                </label>
-                <button
-                  type="button"
-                  class="secondary-action"
-                  (click)="createPlannedPartialLeave()"
-                  [disabled]="saving()"
-                >新增部分時段預排假</button>
-              </section>
-            }
           }
         } @else {
-          <div class="editor-placeholder">
+          <div class="ui-empty editor-placeholder">
             <mat-icon aria-hidden="true">calendar_month</mat-icon>
             <h3>選擇一個班次</h3>
             <p>點選左側表格中的班次，即可安排上班、休假或請假。</p>
@@ -521,58 +492,62 @@
     </div>
 
     @if (selectedLeaveDetailDriverId(); as driverId) {
-      <section class="driver-leave-detail-panel" aria-labelledby="driver-leave-detail-title">
-        <header>
-          <div>
-            <p class="page-eyebrow">請假與特殊事由</p>
-            <h3 id="driver-leave-detail-title">{{ driverName(driverId) }} · {{ displayMonth() }}明細</h3>
-          </div>
-          <button type="button" class="icon-button" (click)="toggleDriverLeaveDetails(driverId)" aria-label="關閉請假明細" title="關閉">
+      <section class="ui-panel" aria-labelledby="driver-leave-detail-title">
+        <header class="ui-panel__header">
+          <h3 id="driver-leave-detail-title">{{ driverName(driverId) }} · {{ displayMonth() }}請假與特殊事由</h3>
+          <button type="button" class="ui-btn-default ui-btn-icon" (click)="toggleDriverLeaveDetails(driverId)" aria-label="關閉請假明細" title="關閉">
             <mat-icon aria-hidden="true">close</mat-icon>
           </button>
         </header>
         @if (isMonthlyLeaveLoading(driverId)) {
-          <p>正在讀取請假紀錄...</p>
+          <p class="ui-empty">正在讀取請假紀錄...</p>
         } @else if (monthlyLeaveErrors()[driverId]; as leaveError) {
-          <p class="leave-review-error">{{ leaveError }}</p>
+          <div class="ui-panel__body"><p class="ui-alert is-danger">{{ leaveError }}</p></div>
+        } @else if ((monthlyLeaveSummaries()[driverId]?.records ?? []).length === 0) {
+          <p class="ui-empty">本月沒有請假或特殊事由紀錄。</p>
         } @else {
-          <div class="driver-leave-detail-list">
-            @for (request of monthlyLeaveSummaries()[driverId]?.records ?? []; track request.id) {
-              <article>
-                <header>
-                  <div>
-                    <strong>{{ request.workDate }} · {{ leaveModeLabel(request) }}</strong>
-                    <span>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span>
-                  </div>
-                  <em [class.is-approved]="request.status === 'APPROVED'" [class.is-rejected]="request.status === 'REJECTED'">
-                    {{ leaveStatusLabel(request.status) }}
-                  </em>
-                </header>
-                <p><b>司機說明：</b>{{ request.requestReason }}</p>
-                <p><b>主管回覆：</b>{{ request.decisionReason || '尚未處理' }}</p>
-                @if (request.evidencePhotoUrl) {
-                  <a [href]="request.evidencePhotoUrl" target="_blank" rel="noopener">查看佐證照片</a>
+          <div class="ui-table-wrap">
+            <table class="ui-table leave-table">
+              <thead>
+                <tr><th>日期</th><th>類型</th><th>假別・時段</th><th>狀態</th><th>司機說明</th><th>主管回覆</th><th>佐證</th></tr>
+              </thead>
+              <tbody>
+                @for (request of monthlyLeaveSummaries()[driverId]?.records ?? []; track request.id) {
+                  <tr>
+                    <td class="ui-mono">{{ request.workDate }}</td>
+                    <td>{{ leaveModeLabel(request) }}</td>
+                    <td>{{ leaveTypeLabel(request.leaveType) }} · <span class="ui-mono">{{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span></td>
+                    <td>
+                      <span class="ui-tag" [class.is-ok]="request.status === 'APPROVED'" [class.is-danger]="request.status === 'REJECTED'">
+                        {{ leaveStatusLabel(request.status) }}
+                      </span>
+                    </td>
+                    <td>{{ request.requestReason }}</td>
+                    <td>{{ request.decisionReason || '尚未處理' }}</td>
+                    <td>
+                      @if (request.evidencePhotoUrl) {
+                        <a [href]="request.evidencePhotoUrl" target="_blank" rel="noopener">查看照片</a>
+                      } @else {
+                        —
+                      }
+                    </td>
+                  </tr>
                 }
-              </article>
-            } @empty {
-              <p>本月沒有請假或特殊事由紀錄。</p>
-            }
+              </tbody>
+            </table>
           </div>
         }
       </section>
     }
   }
 
-  <section class="leave-review-panel" aria-labelledby="planned-leave-review-title">
-    <header>
-      <div>
-        <p class="page-eyebrow">預排請假</p>
-        <h3 id="planned-leave-review-title">多日待審申請</h3>
-      </div>
-      <span>{{ pendingLeaveBatches().length }} 組</span>
+  <!-- 待審請假：沒有資料時只顯示一行空狀態，不畫空的表頭 -->
+  <section class="ui-panel" aria-labelledby="planned-leave-review-title">
+    <header class="ui-panel__header">
+      <h3 id="planned-leave-review-title">預排請假・多日待審 <span class="panel-note">{{ pendingLeaveBatches().length }} 組</span></h3>
       <button
         type="button"
-        class="icon-button"
+        class="ui-btn-default ui-btn-icon"
         title="重新整理預排請假"
         aria-label="重新整理預排請假"
         (click)="refresh()"
@@ -581,79 +556,83 @@
         <mat-icon aria-hidden="true">refresh</mat-icon>
       </button>
     </header>
-    <div class="leave-review-list">
-      @for (batch of pendingLeaveBatches(); track batch.batchId) {
-        <article>
-          <header>
-            <div>
-              <strong>{{ batch.driverName }} · {{ leaveTypeLabel(batch.leaveType) }}</strong>
-              <span>{{ batch.workDates.join('、') }}</span>
-            </div>
-            <em>待審核</em>
-          </header>
-          <p><b>司機申請原因：</b>{{ batch.requestReason }}</p>
-          <label>
-            <span>核准前可改假別（整組套用）</span>
-            <select
-              [value]="selectedBatchLeaveType(batch)"
-              [disabled]="reviewingBatchId() !== null"
-              (change)="updateBatchLeaveType(batch.batchId, $event)"
-            >
-              @for (option of batchLeaveTypes; track option.value) {
-                <option [value]="option.value">{{ option.label }}</option>
-              }
-            </select>
-          </label>
-          <label>
-            <span>處理理由（核准、退回或改假別都會提供給司機）</span>
-            <textarea
-              rows="2"
-              maxlength="500"
-              [value]="batchReviewReasons()[batch.batchId] ?? ''"
-              [disabled]="reviewingBatchId() !== null"
-              (input)="updateBatchReviewReason(batch.batchId, $event)"
-            ></textarea>
-          </label>
-          @if (batchReviewErrors()[batch.batchId]) {
-            <small class="leave-review-error">{{ batchReviewErrors()[batch.batchId] }}</small>
-          }
-          <div class="leave-review-actions">
-            <button
-              type="button"
-              class="history-action"
-              (click)="correctLeaveBatchType(batch)"
-              [disabled]="reviewingBatchId() !== null || selectedBatchLeaveType(batch) === batch.leaveType"
-            >改假別</button>
-            <button
-              type="button"
-              class="leave-reject-action"
-              (click)="reviewLeaveBatch(batch, 'reject')"
-              [disabled]="reviewingBatchId() !== null"
-            >退回</button>
-            <button
-              type="button"
-              class="primary-action"
-              (click)="reviewLeaveBatch(batch, 'approve')"
-              [disabled]="reviewingBatchId() !== null"
-            >{{ reviewingBatchId() === batch.batchId ? '處理中...' : '核准' }}</button>
-          </div>
-        </article>
-      } @empty {
-        <p class="leave-review-empty">目前沒有待審預排請假。</p>
-      }
-    </div>
+    @if (pendingLeaveBatches().length === 0) {
+      <p class="ui-empty">目前沒有待審預排請假。</p>
+    } @else {
+      <div class="ui-table-wrap">
+        <table class="ui-table review-table">
+          <thead>
+            <tr><th>司機・假別</th><th>日期</th><th>司機申請原因</th><th>核准前改假別</th><th>處理理由（會提供給司機）</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            @for (batch of pendingLeaveBatches(); track batch.batchId) {
+              <tr>
+                <td><strong>{{ batch.driverName }}</strong><small>{{ leaveTypeLabel(batch.leaveType) }}</small></td>
+                <td class="ui-mono">{{ batch.workDates.join('、') }}</td>
+                <td>{{ batch.requestReason }}</td>
+                <td>
+                  <select
+                    class="ui-input"
+                    aria-label="核准前可改假別（整組套用）"
+                    [value]="selectedBatchLeaveType(batch)"
+                    [disabled]="reviewingBatchId() !== null"
+                    (change)="updateBatchLeaveType(batch.batchId, $event)"
+                  >
+                    @for (option of batchLeaveTypes; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </td>
+                <td>
+                  <textarea
+                    class="ui-input"
+                    rows="2"
+                    maxlength="500"
+                    aria-label="處理理由（核准、退回或改假別都會提供給司機）"
+                    [value]="batchReviewReasons()[batch.batchId] ?? ''"
+                    [disabled]="reviewingBatchId() !== null"
+                    (input)="updateBatchReviewReason(batch.batchId, $event)"
+                  ></textarea>
+                  @if (batchReviewErrors()[batch.batchId]) {
+                    <small class="review-error">{{ batchReviewErrors()[batch.batchId] }}</small>
+                  }
+                </td>
+                <td>
+                  <div class="review-actions">
+                    <button
+                      type="button"
+                      class="ui-btn-default"
+                      (click)="correctLeaveBatchType(batch)"
+                      [disabled]="reviewingBatchId() !== null || selectedBatchLeaveType(batch) === batch.leaveType"
+                    >改假別</button>
+                    <button
+                      type="button"
+                      class="ui-btn-default is-danger"
+                      (click)="reviewLeaveBatch(batch, 'reject')"
+                      [disabled]="reviewingBatchId() !== null"
+                    >退回</button>
+                    <button
+                      type="button"
+                      class="ui-btn-primary"
+                      (click)="reviewLeaveBatch(batch, 'approve')"
+                      [disabled]="reviewingBatchId() !== null"
+                    >{{ reviewingBatchId() === batch.batchId ? '處理中...' : '核准' }}</button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   </section>
 
-  <section class="leave-review-panel" aria-labelledby="leave-review-title">
-    <header>
-      <div>
-        <p class="page-eyebrow">當日特殊事由／事後補請</p>
-        <h3 id="leave-review-title">單筆待審申請</h3>
-      </div>
-      <span>{{ pendingLeaveRequests().length }} 筆</span>
+  <section class="ui-panel" aria-labelledby="leave-review-title">
+    <header class="ui-panel__header">
+      <h3 id="leave-review-title">當日特殊事由／事後補請・單筆待審 <span class="panel-note">{{ pendingLeaveRequests().length }} 筆</span></h3>
       <button
         type="button"
-        class="icon-button"
+        class="ui-btn-default ui-btn-icon"
         title="重新整理待審請假"
         aria-label="重新整理待審請假"
         (click)="refresh()"
@@ -663,78 +642,85 @@
       </button>
     </header>
     @if (leaveReviewLoadError()) {
-      <p class="leave-review-error" role="alert">{{ leaveReviewLoadError() }}</p>
+      <div class="ui-panel__body"><p class="ui-alert is-danger" role="alert">{{ leaveReviewLoadError() }}</p></div>
     } @else if (leaveReviewLoading() && pendingLeaveRequests().length === 0) {
-      <p class="leave-review-empty">正在讀取待審申請...</p>
+      <p class="ui-empty">正在讀取待審申請...</p>
+    } @else if (pendingLeaveRequests().length === 0) {
+      <p class="ui-empty">目前沒有待審請假。</p>
     } @else {
-      <div class="leave-review-list">
-        @for (request of pendingLeaveRequests(); track request.id) {
-          <article>
-            <header>
-              <div>
-                <strong>{{ request.driverName }} · {{ request.workDate }}</strong>
-                <span>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span>
-              </div>
-              <em>待審核</em>
-            </header>
-            <p><b>司機申請原因：</b>{{ request.requestReason }}</p>
-            <label>
-              <span>處理理由（核准或退回都會提供給司機）</span>
-              <textarea
-                rows="2"
-                maxlength="500"
-                [value]="leaveReviewReasons()[request.id] ?? ''"
-                [disabled]="reviewingLeaveId() !== null"
-                (input)="updateLeaveReviewReason(request.id, $event)"
-              ></textarea>
-            </label>
-            @if (leaveReviewErrors()[request.id]) {
-              <small class="leave-review-error">{{ leaveReviewErrors()[request.id] }}</small>
-            }
-            <div class="leave-review-actions">
-              <button
-                type="button"
-                class="leave-reject-action"
-                (click)="reviewLeaveRequest(request, 'reject')"
-                [disabled]="reviewingLeaveId() !== null"
-              >退回</button>
-              <button
-                type="button"
-                class="primary-action"
-                (click)="reviewLeaveRequest(request, 'approve')"
-                [disabled]="reviewingLeaveId() !== null"
-              >{{ reviewingLeaveId() === request.id ? '處理中...' : '核准' }}</button>
-              <button
-                type="button"
-                class="history-action"
-                (click)="toggleReviewHistory(request)"
-              >{{ expandedReviewHistoryId() === request.id ? '收合歷程' : '查看歷程' }}</button>
-            </div>
-            @if (expandedReviewHistoryId() === request.id) {
-              <div class="leave-review-history" aria-label="請假申請歷程">
-                @if (isLeaveHistoryLoading(request.id)) {
-                  <small>正在讀取歷程...</small>
-                } @else if (leaveHistoryErrors()[request.id]; as historyError) {
-                  <small class="leave-review-error">{{ historyError }}</small>
-                } @else {
-                  @for (event of leaveRequestHistories()[request.id] ?? []; track event.id) {
-                    <p>
-                      <strong>{{ event.eventType }}</strong>
-                      · {{ formatLeaveHistoryTime(event.occurredAt) }}
-                      @if (event.reason) { <span>· {{ event.reason }}</span> }
-                    </p>
-                  } @empty {
-                    <small>目前沒有歷程資料。</small>
+      <div class="ui-table-wrap">
+        <table class="ui-table review-table">
+          <thead>
+            <tr><th>司機・日期</th><th>假別・時段</th><th>司機申請原因</th><th>處理理由（會提供給司機）</th><th>操作</th></tr>
+          </thead>
+          <tbody>
+            @for (request of pendingLeaveRequests(); track request.id) {
+              <tr>
+                <td><strong>{{ request.driverName }}</strong><small class="ui-mono">{{ request.workDate }}</small></td>
+                <td>{{ leaveTypeLabel(request.leaveType) }} · <span class="ui-mono">{{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span></td>
+                <td>{{ request.requestReason }}</td>
+                <td>
+                  <textarea
+                    class="ui-input"
+                    rows="2"
+                    maxlength="500"
+                    aria-label="處理理由（核准或退回都會提供給司機）"
+                    [value]="leaveReviewReasons()[request.id] ?? ''"
+                    [disabled]="reviewingLeaveId() !== null"
+                    (input)="updateLeaveReviewReason(request.id, $event)"
+                  ></textarea>
+                  @if (leaveReviewErrors()[request.id]) {
+                    <small class="review-error">{{ leaveReviewErrors()[request.id] }}</small>
                   }
-                }
-              </div>
+                </td>
+                <td>
+                  <div class="review-actions">
+                    <button
+                      type="button"
+                      class="ui-btn-default is-danger"
+                      (click)="reviewLeaveRequest(request, 'reject')"
+                      [disabled]="reviewingLeaveId() !== null"
+                    >退回</button>
+                    <button
+                      type="button"
+                      class="ui-btn-primary"
+                      (click)="reviewLeaveRequest(request, 'approve')"
+                      [disabled]="reviewingLeaveId() !== null"
+                    >{{ reviewingLeaveId() === request.id ? '處理中...' : '核准' }}</button>
+                    <button
+                      type="button"
+                      class="ui-btn-default"
+                      (click)="toggleReviewHistory(request)"
+                    >{{ expandedReviewHistoryId() === request.id ? '收合歷程' : '查看歷程' }}</button>
+                  </div>
+                </td>
+              </tr>
+              @if (expandedReviewHistoryId() === request.id) {
+                <tr class="history-row">
+                  <td colspan="5">
+                    <div class="review-history" aria-label="請假申請歷程">
+                      @if (isLeaveHistoryLoading(request.id)) {
+                        <small>正在讀取歷程...</small>
+                      } @else if (leaveHistoryErrors()[request.id]; as historyError) {
+                        <small class="review-error">{{ historyError }}</small>
+                      } @else {
+                        @for (event of leaveRequestHistories()[request.id] ?? []; track event.id) {
+                          <p>
+                            <strong>{{ event.eventType }}</strong>
+                            · <span class="ui-mono">{{ formatLeaveHistoryTime(event.occurredAt) }}</span>
+                            @if (event.reason) { <span>· {{ event.reason }}</span> }
+                          </p>
+                        } @empty {
+                          <small>目前沒有歷程資料。</small>
+                        }
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
             }
-          </article>
-        } @empty {
-          @if (!leaveReviewLoading()) {
-            <p class="leave-review-empty">目前沒有待審請假。</p>
-          }
-        }
+          </tbody>
+        </table>
       </div>
     }
   </section>

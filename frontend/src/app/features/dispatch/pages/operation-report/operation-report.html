@@ -1,4 +1,4 @@
-<main class="operation-report-page">
+<main class="operation-report-page ui-page">
   <ng-template #rateDial let-rate="rate" let-label="label" let-numerator="numerator" let-denominator="denominator" let-sheet="sheet" let-metric="metric">
     <button class="rate-card" type="button" (click)="openMetric(sheet, metric)" [attr.aria-label]="label + ' ' + percent(rate) + '，查看明細'">
       <span class="rate-ring" [class.is-empty]="rate === null" [style.--sweep]="dialDegrees(rate) + 'deg'" aria-hidden="true"><span><strong>{{ rate === null ? '—' : number(rate) }}<small>@if (rate !== null) { % }</small></strong></span></span>
@@ -28,27 +28,25 @@
       } @else { <div class="chart-empty"><mat-icon aria-hidden="true">{{ stacked ? 'inventory_2' : 'local_shipping' }}</mat-icon><span>{{ empty }}</span></div> }
     } @else { <p class="visual-empty">資料未載入</p> }
   </ng-template>
-  <header class="report-header">
-    <div class="report-title"><p class="eyebrow">全倉營運總覽</p><h2>營運報表</h2></div>
-    <button type="button" class="history-link" (click)="openHistory()"><mat-icon aria-hidden="true">history</mat-icon>歷史查詢</button>
-  </header>
-  <section class="period-bar" aria-label="報表期間">
-    <div class="period-tabs" role="group" aria-label="期間類型">
+  <!-- 頁面標題在外框表頭已經有了，這裡只留期間切換與歷史查詢 -->
+  <section class="period-bar ui-panel ui-toolbar" aria-label="報表期間">
+    <div class="period-tabs ui-segmented" role="group" aria-label="期間類型">
       @for (period of periods; track period.id) { <button type="button" [class.is-active]="activePeriod() === period.id" [attr.aria-pressed]="activePeriod() === period.id" (click)="setPeriod(period.id)">{{ period.label }}</button> }
     </div>
     <div class="period-stepper">
-      <button type="button" aria-label="上一期" (click)="stepPeriod(-1)"><mat-icon aria-hidden="true">chevron_left</mat-icon></button><strong>{{ periodRangeLabel() }}</strong><button type="button" aria-label="下一期" (click)="stepPeriod(1)"><mat-icon aria-hidden="true">chevron_right</mat-icon></button>
+      <button type="button" class="ui-btn-default ui-btn-icon" aria-label="上一期" (click)="stepPeriod(-1)"><mat-icon aria-hidden="true">chevron_left</mat-icon></button><strong>{{ periodRangeLabel() }}</strong><button type="button" class="ui-btn-default ui-btn-icon" aria-label="下一期" (click)="stepPeriod(1)"><mat-icon aria-hidden="true">chevron_right</mat-icon></button>
     </div>
+    <button type="button" class="history-link ui-btn-default" (click)="openHistory()"><mat-icon aria-hidden="true">history</mat-icon>歷史查詢</button>
   </section>
-  @if (loading()) { <p class="report-feedback" role="status">正在載入營運資料…</p> } @else {
+  @if (loading()) { <p class="report-feedback ui-panel ui-empty" role="status">正在載入營運資料…</p> } @else {
     @if (operationalError() || outcomeError() || exceptionError()) {
-      <div class="data-alert" role="status"><mat-icon aria-hidden="true">info_outline</mat-icon><span>部分資料未載入，相關欄位以「—」顯示。</span><button type="button" class="retry-action" (click)="retryOperationalData()">重新載入</button></div>
+      <div class="data-alert ui-alert is-warn" role="status"><mat-icon aria-hidden="true">info_outline</mat-icon><span>部分資料未載入，相關欄位以「—」顯示。</span><button type="button" class="retry-action ui-btn-default" (click)="retryOperationalData()">重新載入</button></div>
     }
     @if (operationalLoading()) { <p class="supplemental-feedback" role="status">正在更新營運成果…</p> }
     <div class="report-sections" [attr.aria-busy]="operationalLoading()">
-      <section class="detail-row" id="people" aria-labelledby="people-title">
-        <header class="area-header">
-          <div class="detail-name"><span class="section-index">01</span><mat-icon aria-hidden="true">badge</mat-icon><h3 id="people-title">人員</h3><small>打卡與工作負荷</small></div>
+      <section class="detail-row ui-panel" id="people" aria-labelledby="people-title">
+        <header class="area-header ui-panel__header">
+          <div class="detail-name"><h3 id="people-title">人員</h3></div>
           <button type="button" class="row-link" (click)="openSheet('attendance')">人員明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
@@ -66,9 +64,9 @@
           </div>
         </div>
       </section>
-      <section class="detail-row" id="fleet" aria-labelledby="fleet-title">
-        <header class="area-header">
-          <div class="detail-name"><span class="section-index">02</span><mat-icon aria-hidden="true">local_shipping</mat-icon><h3 id="fleet-title">車輛</h3><small>出車、里程與補送</small></div>
+      <section class="detail-row ui-panel" id="fleet" aria-labelledby="fleet-title">
+        <header class="area-header ui-panel__header">
+          <div class="detail-name"><h3 id="fleet-title">車輛</h3></div>
           <button type="button" class="row-link" (click)="openSheet('vehicles')">出車與里程明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
@@ -87,9 +85,9 @@
           </div>
         </div>
       </section>
-      <section class="detail-row" id="orders" aria-labelledby="orders-title">
-        <header class="area-header">
-          <div class="detail-name"><span class="section-index">03</span><mat-icon aria-hidden="true">inventory_2</mat-icon><h3 id="orders-title">訂單</h3><small>完整與及時交付</small></div>
+      <section class="detail-row ui-panel" id="orders" aria-labelledby="orders-title">
+        <header class="area-header ui-panel__header">
+          <div class="detail-name"><h3 id="orders-title">訂單</h3></div>
           <button type="button" class="row-link" (click)="openSheet('delivery-quality')">配送結果明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
@@ -110,9 +108,9 @@
           </div>
         </div>
       </section>
-      <section class="detail-row" id="exceptions" aria-labelledby="exceptions-title">
-        <header class="area-header">
-          <div class="detail-name"><span class="section-index">04</span><mat-icon aria-hidden="true">report_problem</mat-icon><h3 id="exceptions-title">異常</h3><small>配送回報與處理</small></div>
+      <section class="detail-row ui-panel" id="exceptions" aria-labelledby="exceptions-title">
+        <header class="area-header ui-panel__header">
+          <div class="detail-name"><h3 id="exceptions-title">異常</h3></div>
           <button type="button" class="row-link" (click)="openMetric('exceptions', 'open')">待處理案件明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
@@ -137,9 +135,9 @@
           </div>
         </div>
       </section>
-      <section class="detail-row" id="warehouses" aria-labelledby="warehouses-title">
-        <header class="area-header">
-          <div class="detail-name"><span class="section-index">05</span><mat-icon aria-hidden="true">warehouse</mat-icon><h3 id="warehouses-title">倉庫</h3><small>出貨點交</small></div>
+      <section class="detail-row ui-panel" id="warehouses" aria-labelledby="warehouses-title">
+        <header class="area-header ui-panel__header">
+          <div class="detail-name"><h3 id="warehouses-title">倉庫</h3></div>
           <button type="button" class="row-link" (click)="openSheet('loading-quality')">點交與各倉明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
@@ -164,7 +162,7 @@
         </div>
       </section>
     </div>
-    <details class="scope-note">
+    <details class="scope-note ui-panel">
       <summary>統計說明與計算方式</summary>
       <div class="scope-content">
         <p>所有倉庫合計，比例以加總筆數計算，不平均各倉百分比。沒有母數或資料未載入顯示「—」，不當作 0%。資料為目前紀錄，非歷史當時快照。</p>
