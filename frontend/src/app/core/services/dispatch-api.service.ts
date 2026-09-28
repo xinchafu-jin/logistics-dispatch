@@ -13,7 +13,6 @@ import {
   AiPendingActionDto,
   DispatchDayDto,
   DispatchResultDto,
-  DriverAccountApplicationDto,
   DriverCaseDto,
   DriverDto,
   DriverLeaveHistoryDto,
@@ -296,31 +295,6 @@ export class DispatchApiService {
 
   removeAiApiKey(): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/admin-users/me/ai-api-key`);
-  }
-
-  getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {
-    return this.http.get<{ count: number }>(`${API_ROOT}/driver-account-applications/pending/count`);
-  }
-
-  getPendingDriverAccountApplications(): Observable<DriverAccountApplicationDto[]> {
-    return this.http.get<DriverAccountApplicationDto[]>(`${API_ROOT}/driver-account-applications/pending`);
-  }
-
-  approveDriverAccountApplication(applicationId: number): Observable<DriverAccountApplicationDto> {
-    return this.http.patch<DriverAccountApplicationDto>(
-      `${API_ROOT}/driver-account-applications/${applicationId}/approve`,
-      null,
-    );
-  }
-
-  rejectDriverAccountApplication(
-    applicationId: number,
-    reason: string,
-  ): Observable<DriverAccountApplicationDto> {
-    return this.http.patch<DriverAccountApplicationDto>(
-      `${API_ROOT}/driver-account-applications/${applicationId}/reject`,
-      { reason },
-    );
   }
 
   getPendingEmergencyLeaveRequests(): Observable<EmergencyLeaveDto[]> {

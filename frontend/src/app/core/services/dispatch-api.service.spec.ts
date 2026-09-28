@@ -168,33 +168,11 @@ describe('DispatchApiService', () => {
     read.flush(1);
   });
 
-  it('uses driver application and emergency leave review contracts', () => {
-    service.getPendingDriverAccountApplicationCount().subscribe();
-    service.getPendingDriverAccountApplications().subscribe();
-    service.approveDriverAccountApplication(17).subscribe();
-    service.rejectDriverAccountApplication(18, '資料不完整').subscribe();
+  it('uses emergency leave review contracts', () => {
     service.getPendingEmergencyLeaveRequests().subscribe();
     service.getEmergencyLeaveReplacementCandidates(31).subscribe();
     service.approveEmergencyLeaveRequest(31, 9).subscribe();
     service.rejectEmergencyLeaveRequest(32, '請補充請假原因').subscribe();
-
-    const count = httpTesting.expectOne('/api/driver-account-applications/pending/count');
-    expect(count.request.method).toBe('GET');
-    count.flush({ count: 2 });
-
-    const applications = httpTesting.expectOne('/api/driver-account-applications/pending');
-    expect(applications.request.method).toBe('GET');
-    applications.flush([]);
-
-    const approveApplication = httpTesting.expectOne('/api/driver-account-applications/17/approve');
-    expect(approveApplication.request.method).toBe('PATCH');
-    expect(approveApplication.request.body).toBeNull();
-    approveApplication.flush({ id: 17, status: 'APPROVED' });
-
-    const rejectApplication = httpTesting.expectOne('/api/driver-account-applications/18/reject');
-    expect(rejectApplication.request.method).toBe('PATCH');
-    expect(rejectApplication.request.body).toEqual({ reason: '資料不完整' });
-    rejectApplication.flush({ id: 18, status: 'REJECTED' });
 
     const pendingLeaves = httpTesting.expectOne('/api/emergency-leave-requests/pending');
     expect(pendingLeaves.request.method).toBe('GET');

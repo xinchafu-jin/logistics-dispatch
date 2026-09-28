@@ -1,3 +1,5 @@
+// 看板上方的即時地圖。外框同 .ui-panel：四周 1px 實線、4px 圓角、不加陰影與毛玻璃。
+// 疊在地圖上的控制項（城市選單、指北針、版權列、彈出框、拖曳把手）一律淺色，理由寫在 styles.scss 的 .map-control
 :host {
   display: block;
   min-width: 0;
@@ -9,12 +11,9 @@
   min-height: 0;
   overflow: hidden;
   isolation: isolate;
-  background: #0b0e0f;
-  border: 1px solid var(--metal-edge);
-  border-radius: 8px;
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 28px 48px rgb(0 0 0 / 24%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .live-fleet-map.is-resizable .fleet-map-stage {
@@ -27,38 +26,6 @@
   user-select: none;
 }
 
-.fleet-map-resize-handle {
-  position: absolute;
-  z-index: 3;
-  bottom: 3px;
-  left: 50%;
-  display: grid;
-  width: 64px;
-  height: 22px;
-  place-items: center;
-  transform: translateX(-50%);
-  border: 1px solid rgb(49 88 77 / 28%);
-  border-radius: 12px;
-  color: #31584d;
-  background: rgb(250 253 251 / 94%);
-  box-shadow: 0 2px 8px rgb(20 52 42 / 20%);
-  cursor: ns-resize;
-  touch-action: none;
-  user-select: none;
-}
-
-.fleet-map-resize-handle mat-icon {
-  width: 22px;
-  height: 22px;
-  font-size: 20px;
-  line-height: 22px;
-}
-
-.fleet-map-resize-handle:focus-visible {
-  outline: 3px solid #0b7c6b;
-  outline-offset: 2px;
-}
-
 .fleet-map-stage {
   position: relative;
   min-width: 0;
@@ -67,6 +34,7 @@
   overflow: hidden;
 }
 
+// 底色是底圖還沒載完時露出來的顏色
 .fleet-map-canvas {
   position: relative;
   z-index: 0;
@@ -75,126 +43,108 @@
   min-width: 0;
   min-height: 0;
   isolation: isolate;
-  background: #0b0e0f;
+  background: var(--surface);
 }
 
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-top-left {
-  top: 64px;
-  left: 14px;
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-top-left .maplibregl-ctrl {
-  margin: 0;
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-group {
-  overflow: hidden;
-  border: 1px solid rgb(182 218 207 / 38%);
-  border-radius: 7px;
-  background: rgb(8 25 25 / 88%);
-  box-shadow: 0 2px 8px rgb(6 56 47 / 24%);
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-group button {
-  width: 38px;
-  height: 38px;
-  filter: invert(1);
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-attrib {
-  padding: 1px 4px;
-  border-radius: 3px 0 0;
-  color: rgb(42 76 65 / 78%);
-  background: rgb(255 255 255 / 70%);
-  font-size: 9px;
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-attrib a {
-  color: inherit;
-}
-
-:host ::ng-deep .fleet-map-canvas .maplibregl-popup-content {
-  padding: 8px 10px;
-  border: 1px solid rgb(125 210 187 / 35%);
-  border-radius: 6px;
-  color: #173129;
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.fleet-map-header,
-.fleet-map-attribution {
-  position: absolute;
-  z-index: 2;
-}
-
+// ── 左上：城市選單（同時是地圖標題），外觀用 .ui-input；下面接 MapLibre 的指北針 ──
+// 表頭整條不接滑鼠，拖地圖才不會被擋住，只有選單本身接
 .fleet-map-header {
-  top: 0;
-  right: 0;
-  left: 0;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
   pointer-events: none;
-}
-
-.fleet-map-select-wrapper {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 10px 8px 12px;
-  border: 1px solid rgb(203 221 214 / 92%);
-  border-radius: 6px;
-  background: rgb(250 253 251 / 92%);
-  box-shadow: 0 4px 12px rgb(20 52 42 / 12%);
-  backdrop-filter: blur(8px);
-  pointer-events: auto;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-
-  &:hover {
-    border-color: rgb(11 124 107 / 40%);
-  }
-
-  &:focus-within {
-    border-color: #0b7c6b;
-    box-shadow: 0 0 0 2px rgb(11 124 107 / 20%);
-  }
 }
 
 .fleet-map-city-select {
-  appearance: none;
-  -webkit-appearance: none;
-  border: none;
-  background: transparent;
-  color: #173129;
-  font-family: var(--font-display, inherit);
-  font-size: 0.9375rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  padding: 0 22px 0 0;
-  margin: 0;
+  font-weight: 600;
   cursor: pointer;
-  outline: none;
+  pointer-events: auto;
+}
 
-  option {
-    color: #173129;
-    background: #fafdfb;
-    font-size: 0.875rem;
-    font-weight: 500;
+:host ::ng-deep .fleet-map-canvas {
+  // 12px 上邊距＋32px 選單＋8px 間距
+  .maplibregl-ctrl-top-left {
+    top: 52px;
+    left: 12px;
+  }
+
+  .maplibregl-ctrl-top-left .maplibregl-ctrl {
+    margin: 0;
+  }
+
+  .maplibregl-ctrl-group {
+    overflow: hidden;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: none;
+  }
+
+  .maplibregl-ctrl-group button {
+    width: 32px;
+    height: 32px;
+  }
+
+  // 右下的版權列：OpenStreetMap 的授權要求看得到，字不小於 11px
+  .maplibregl-ctrl-attrib {
+    padding: 1px 6px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--panel) 85%, transparent);
+    border-radius: 4px 0 0;
+    font-size: 0.6875rem;
+  }
+
+  .maplibregl-ctrl-attrib a {
+    color: inherit;
+  }
+
+  // 門市名稱、路線說明的彈出框；陰影沿用 MapLibre 預設的淡陰影
+  .maplibregl-popup-content {
+    padding: 8px 10px;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.45;
   }
 }
 
-.fleet-map-select-arrow {
+// ── 下緣中間的拖曳把手：拖曳或用上下鍵調整地圖高度 ──
+.fleet-map-resize-handle {
   position: absolute;
-  right: 6px;
-  pointer-events: none;
-  color: #31584d;
-  width: 22px;
-  height: 22px;
-  font-size: 22px;
-  line-height: 22px;
+  bottom: 6px;
+  left: 50%;
+  z-index: 3;
+  display: grid;
+  width: 64px;
+  height: 20px;
+  place-items: center;
+  transform: translateX(-50%);
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+
+  &:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
 }
 
 @media (max-width: 680px) {
@@ -205,9 +155,5 @@
 
   .live-fleet-map.is-resizable {
     min-height: 300px;
-  }
-
-  .fleet-map-header {
-    padding: 14px;
   }
 }

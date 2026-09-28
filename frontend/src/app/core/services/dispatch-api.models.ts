@@ -34,7 +34,6 @@ export type ExceptionType =
   | 'DRIVER_REPORT'
   | 'PHONE_HANDLED'
   | 'LOADING_MISMATCH';
-export type DriverApplicationStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
@@ -112,28 +111,6 @@ export interface AiApiKeyStatusDto {
 /** 只在儲存時送出，不寫入瀏覽器儲存空間。 */
 export interface AiApiKeyRequest {
   apiKey: string;
-}
-
-/** 司機登入前提交的帳號申請。nationalId 只會被後端當成初始密碼雜湊。 */
-export interface DriverAccountApplicationRequest {
-  account: string;
-  name: string;
-  phone: string;
-  nationalId: string;
-}
-
-export interface DriverAccountApplicationDto {
-  id: number;
-  account: string;
-  name: string;
-  phone: string;
-  nationalIdMasked: string;
-  status: DriverApplicationStatus;
-  appliedAt: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  rejectionReason: string | null;
-  approvedDriverId: number | null;
 }
 
 export interface EmergencyLeaveDto {

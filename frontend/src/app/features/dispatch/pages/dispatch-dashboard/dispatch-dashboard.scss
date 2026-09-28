@@ -10,24 +10,21 @@
 // 頁面最下方「正在同步資料...」與載入錯誤的說明文字
 .dashboard-description { max-width: 520px; margin: 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.65; }
 
-// ── 地圖圖層選單：疊在淺色底圖右上，所以固定淺色，不跟深淺色切換 ──
+// ── 地圖圖層選單：疊在淺色底圖右上，加了 .map-control 不分深淺色都用淺色色票（理由見 styles.scss）──
+// 按鈕外觀是 .ui-btn-default .ui-btn-icon，只把透明底改成實心，不然底圖會透出來
 .map-section { position: relative; z-index: 0; }
-.map-layer-menu { position: absolute; top: 14px; right: 14px; z-index: 3; }
+.map-layer-menu { position: absolute; top: 12px; right: 12px; z-index: 3; }
 
 .map-layer-menu summary {
-  display: grid; width: 40px; height: 40px; place-items: center; cursor: pointer; list-style: none;
-  color: #31584d; background: #fafdfb; border: 1px solid rgb(203 221 214); border-radius: 4px;
-  box-shadow: 0 2px 6px rgb(20 52 42 / 12%);
+  list-style: none; background: var(--panel);
   &::-webkit-details-marker { display: none; }
-  &:focus-visible { outline: 2px solid #0b7c6b; outline-offset: 2px; }
-  mat-icon { width: 22px; height: 22px; font-size: 22px; }
+  mat-icon { width: 18px; height: 18px; font-size: 18px; }
 }
 
 .map-layer-menu-panel {
-  --mat-switch-label-text-color: #31584d;
-  position: absolute; top: 48px; right: 0; display: grid; min-width: 190px; gap: 8px; padding: 12px;
-  background: #fafdfb; border: 1px solid rgb(203 221 214); border-radius: 4px;
-  box-shadow: 0 4px 12px rgb(20 52 42 / 16%); font-size: 0.75rem;
+  position: absolute; top: 40px; right: 0; display: grid; min-width: 180px; gap: 8px; padding: 12px;
+  color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 16%); font-size: 0.75rem;
 }
 
 // ── 日期列：單行橫排的日期按鈕；整列可左右拖曳切換前後一天（位移量由 --day-swipe-offset 帶進來）──

@@ -48,8 +48,6 @@ body {
 // 深色是預設（登入頁、後台都是）；後台切淺色時由 dispatch-shell 在 .dispatch-layout 加上 is-light-theme
 :root {
   font-family: $font-sans;
-  // 舊頁面還有 font-family: var(--font-display)，先讓它跟著黑體；各頁重構時拿掉引用
-  --font-display: inherit;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   --app-bg: #0b0d0e;
@@ -64,7 +62,6 @@ body {
   --row-hover: rgba(99, 209, 198, 0.05);
   --row-selected: rgba(99, 209, 198, 0.12);
   --border: rgba(224, 230, 230, 0.14);
-  --metal-edge: var(--border);
 
   --text: #f4f7f6;
   --muted: #a3afb0;
@@ -82,9 +79,7 @@ body {
   --danger: #d64f4f;
   --danger-soft: rgba(214, 79, 79, 0.15);
 
-  // 舊變數相容：還沒重構的頁面在用，各頁改完就刪
-  // --glass-highlight：9 個頁面的滑過邊框與內光；--brand-*：品牌 logo（brand-logo.scss）
-  --glass-highlight: rgb(255 255 255 / 13%);
+  // 品牌 logo（brand-logo.scss）的字、副標、圖形節點
   --brand-text: #f3f6f5;
   --brand-muted: #bdcaca;
   --brand-node: #91a2a2;
@@ -112,7 +107,13 @@ body {
 
 .dispatch-layout.is-light-theme,
 .dispatch-dialog.is-light-theme,
-body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
+body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview,
+// 疊在地圖上的控制項：底圖（OpenFreeMap liberty）不分深淺色都是淺色的，控制項在深色模式也用淺色色票才看得清楚。
+// .map-control 是我們自己的（城市選單、拖曳把手、圖層選單）；另外兩個是 MapLibre 產生的指北針／版權列與彈出框。
+// 地圖上的標記（.map-badge、.fleet-driver-marker）不在裡面，維持原本的配色
+.map-control,
+.maplibregl-control-container,
+.maplibregl-popup {
   color-scheme: light;
   --app-bg: #eef4f1;
   --workspace-bg: #eef4f1;
@@ -126,7 +127,6 @@ body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
   --row-hover: rgba(8, 124, 107, 0.04);
   --row-selected: rgba(8, 124, 107, 0.1);
   --border: rgba(27, 52, 45, 0.15);
-  --metal-edge: var(--border);
 
   --text: #173129;
   --muted: #5e746b;
@@ -144,7 +144,6 @@ body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
   --danger: #c34f45;
   --danger-soft: rgba(195, 79, 69, 0.12);
 
-  --glass-highlight: rgb(255 255 255 / 76%);
   --brand-text: #183128;
   --brand-muted: #5f736a;
   --brand-node: #6d8479;
@@ -154,10 +153,12 @@ body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
 // mat.theme() 產生的是 Material 自己的 azure 藍（再用 light-dark() 依 color-scheme 切深淺），
 // 按鈕、輸入框焦點、清單選取都是藍的，跟品牌青綠對不上。這裡把範圍內的 Material 系統色改指到色票：
 // 元件內部照樣讀 --mat-sys-*，只是值換成我們的，也就跟著 is-light-theme 一起切。
-// 目前只套外框自己的聊天室與對話框；頁面裡的 Material 元件等各頁重構時，把範圍擴到 .dispatch-layout
-.chat-panel,
-.chat-launcher,
-.dispatch-dialog {
+// 範圍：整個後台（.dispatch-layout，含聊天室）、開在 body 底下的對話框與下拉（.dispatch-dialog），
+// 以及地圖上的控制項（.map-control）。.map-control 要另外列：var(--text) 是在宣告的那個元素上算好才往下繼承，
+// 只靠 .dispatch-layout 的話，地圖圖層選單裡拿到的是深色的 --text，淺色面板上會變成白字
+.dispatch-layout,
+.dispatch-dialog,
+.map-control {
   --mat-sys-primary: var(--accent);
   --mat-sys-on-primary: var(--button-text);
   --mat-sys-primary-container: var(--accent-soft);
@@ -177,6 +178,13 @@ body:has(.dispatch-layout.is-light-theme) > .cdk-drag-preview {
   --mat-list-list-item-selected-container-color: var(--row-selected);
   // 輸入框滑過時 Material 用 on-surface（接近白），比焦點色還搶眼；跟 .ui-input 一樣用 muted
   --mat-form-field-outlined-hover-outline-color: var(--muted);
+  // 開關（看板的地圖圖層）：關閉時的圓點與外框預設取 outline，對應到 --border 太淡會看不見；
+  // 開啟時滑過／聚焦／按下的圓點預設取 primary-container，對應到半透明的 --accent-soft 會變透明，改成跟平常一樣實心
+  --mat-slide-toggle-unselected-handle-color: var(--muted);
+  --mat-slide-toggle-track-outline-color: var(--muted);
+  --mat-slide-toggle-selected-hover-handle-color: var(--button-text);
+  --mat-slide-toggle-selected-focus-handle-color: var(--button-text);
+  --mat-slide-toggle-selected-pressed-handle-color: var(--button-text);
 }
 
 .dispatch-dialog {
@@ -886,8 +894,7 @@ textarea.ui-input,
   }
 }
 
-// 頁面裡自己寫的彈窗：遮罩＋置中的 .ui-panel（標題用 .ui-panel__header、內容 .ui-panel__body、按鈕 .ui-modal__actions）。
-// 它在外框 .dispatch-workspace 的堆疊裡，蓋不到表頭、側欄和聊天室；要蓋全畫面請改用 MatDialog
+// 頁面裡自己寫的彈窗：遮罩＋置中的 .ui-panel（標題用 .ui-panel__header、內容 .ui-panel__body、按鈕 .ui-modal__actions）
 .ui-modal-backdrop {
   position: fixed;
   inset: 0;
@@ -897,6 +904,17 @@ textarea.ui-input,
   padding: 24px;
   overflow: auto;
   background: rgb(0 0 0 / 50%);
+}
+
+// 彈窗開著時，外框包住頁面的兩層（.dispatch-workspace、裡面的 .workspace-content）暫時不自成一層，
+// 遮罩的 z-index 1000 才比得過表頭（60）、通知面板（70）、聊天室（80）。
+// 這兩層平常自成一層（dispatch-shell.scss 的 isolation: isolate 與 z-index: 0），是為了讓頁面裡有 z-index 的東西
+// （班表的 sticky 表頭、地圖控制項）不會蓋過滑出來的側欄；彈窗開著時整個畫面都被遮罩擋住，暫時拿掉沒有影響。
+// 只拿掉外面一層不夠，9/29 實測遮罩還是被表頭蓋住。
+// 多一層 .dispatch-layout：元件樣式 .dispatch-workspace[_ngcontent] 權重跟這裡少一層時相同，又比全域晚載入，會蓋回去
+.dispatch-layout :is(.dispatch-workspace, .workspace-content):has(.ui-modal-backdrop) {
+  z-index: auto;
+  isolation: auto;
 }
 
 .ui-modal {

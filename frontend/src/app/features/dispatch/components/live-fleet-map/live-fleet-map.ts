@@ -72,8 +72,8 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   /** 今天這一倉的倉庫位置，還沒載到時為 null */
   readonly warehousePoint = input<MapPoint | null>(null);
   /**
-   * 今天要配送的門市。兩個 input 都給預設值是必要的 ——
-   * fleet-monitor 用同一支元件但不傳資料，改成 input.required() 那頁會直接壞掉。
+   * 今天要配送的門市。兩個 input 都給預設值，原本是為了不傳資料的 fleet-monitor 頁；
+   * 那頁 9/21 拿掉路由、9/29 刪除，現在只有看板在用而且都有傳值，預設值留著不影響行為。
    */
   readonly storePoints = input<MapPoint[]>([]);
   /** 圖層開關。關掉只是不畫，資料仍在，重開不必重新取得 */

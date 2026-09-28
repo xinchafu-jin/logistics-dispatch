@@ -125,40 +125,6 @@
       @if (isLoadingNotifications()) {
         <p class="notification-empty">正在取得待辦資料...</p>
       } @else {
-        @if (pendingApplications().length) {
-          <section class="notification-section" aria-labelledby="account-application-heading">
-            <h3 id="account-application-heading">司機帳號申請</h3>
-            @for (application of pendingApplications(); track application.id) {
-              <article class="notification-item">
-                <div>
-                  <strong>{{ application.name }}</strong>
-                  <span>{{ application.account }} · {{ application.phone }}</span>
-                  <small>{{ application.nationalIdMasked }}
-                    · {{ formatNotificationTime(application.appliedAt) }}</small>
-                </div>
-                <div class="notification-item__actions">
-                  <button
-                    type="button"
-                    class="notification-approve ui-btn-primary"
-                    (click)="approveApplication(application)"
-                    [disabled]="notificationAction() !== null"
-                  >
-                    {{ isNotificationAction('approve-application-' + application.id) ? '核准中...' : '核准' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="notification-reject ui-btn-default"
-                    (click)="beginApplicationRejection(application)"
-                    [disabled]="notificationAction() !== null"
-                  >
-                    拒絕
-                  </button>
-                </div>
-              </article>
-            }
-          </section>
-        }
-
         @if (pendingEmergencyLeaves().length) {
           <section class="notification-section" aria-labelledby="emergency-leave-heading">
             <h3 id="emergency-leave-heading">臨時離班接手安排</h3>
@@ -214,7 +180,7 @@
           </section>
         }
 
-        @if (!pendingApplications().length && !pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length
+        @if (!pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length
           && !driverCases.waitingCases().length) {
           <p class="notification-empty">目前沒有需要主管處理的申請。</p>
         }

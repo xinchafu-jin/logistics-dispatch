@@ -6,21 +6,19 @@
   aria-labelledby="fleet-map-title"
 >
   <div class="fleet-map-stage">
+    <!-- 疊在地圖上的控制項加 map-control：底圖是淺色的，不分深淺色都用淺色色票（styles.scss） -->
     <header class="fleet-map-header">
-      <div class="fleet-map-select-wrapper">
-        <select
-          id="fleet-map-title"
-          class="fleet-map-city-select"
-          [value]="selectedCityId()"
-          (change)="onCityChange($event)"
-          aria-label="選擇配送區域地圖"
-        >
-          @for (city of cities; track city.id) {
-            <option [value]="city.id">{{ city.label }}</option>
-          }
-        </select>
-        <mat-icon class="fleet-map-select-arrow" aria-hidden="true">arrow_drop_down</mat-icon>
-      </div>
+      <select
+        id="fleet-map-title"
+        class="fleet-map-city-select ui-input map-control"
+        [value]="selectedCityId()"
+        (change)="onCityChange($event)"
+        aria-label="選擇配送區域地圖"
+      >
+        @for (city of cities; track city.id) {
+          <option [value]="city.id">{{ city.label }}</option>
+        }
+      </select>
     </header>
 
     <div #mapCanvas class="fleet-map-canvas" aria-label="配送區域地圖"></div>
@@ -29,7 +27,7 @@
 
   @if (resizable()) {
     <div
-      class="fleet-map-resize-handle"
+      class="fleet-map-resize-handle map-control"
       role="separator"
       aria-orientation="horizontal"
       aria-label="調整地圖高度"

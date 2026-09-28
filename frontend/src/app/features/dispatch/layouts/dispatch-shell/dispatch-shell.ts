@@ -29,7 +29,7 @@ import {
   AdminStickyNoteRequestDto,
   AiPendingActionDto,
   DriverLeaveRequestDto,
-  DriverAccountApplicationDto, DriverCaseDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
+  DriverCaseDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
 } from '../../../../core/services/dispatch-api.models';
@@ -46,9 +46,10 @@ type ChatContact =
   | { kind: 'driver'; driverId: number; name: string }
   | { kind: 'case'; caseId: number; name: string };
 
-type RejectionTarget =
-  | { kind: 'application'; id: number; name: string }
-  | { kind: 'leave'; id: number; name: string };
+// 鈴鐺裡能拒絕的只剩臨時離班。司機帳號由後台在人車資源直接開通，沒有「司機申請、主管審核」這條流程
+// （9/29 拿掉前端的帳號申請區塊；它呼叫的 /api/driver-account-applications 後端在 9/20 的合併就不存在了）。
+// kind 留著：拒絕按鈕的處理中狀態用 'reject-' + kind + '-' + id 比對
+type RejectionTarget = { kind: 'leave'; id: number; name: string };
 
 // 聊天室狀態
 type ChatView = 'closed' | 'narrow' | 'wide';
@@ -90,8 +91,6 @@ export class DispatchShell implements OnInit {
   protected readonly isSigningOut = signal(false);
   protected readonly isLightTheme = this.theme.isLightTheme;
   protected readonly isNotificationsOpen = signal(false);
-  protected readonly pendingApplicationCount = signal(0);
-  protected readonly pendingApplications = signal<DriverAccountApplicationDto[]>([]);
   protected readonly pendingEmergencyLeaves = signal<EmergencyLeaveDto[]>([]);
   protected readonly pendingTemporaryLeaveRequests = signal<DriverLeaveRequestDto[]>([]);
   protected readonly selectedEmergencyLeave = signal<EmergencyLeaveDto | null>(null);
@@ -219,8 +218,7 @@ export class DispatchShell implements OnInit {
 
   // 案件的部分靠推播即時加減（DriverCasesService），其他待辦只在載入頁面和打開鈴鐺時抓
   protected readonly notificationCount = computed(
-    () => this.pendingApplicationCount()
-      + this.pendingEmergencyLeaves().length
+    () => this.pendingEmergencyLeaves().length
       + this.pendingTemporaryLeaveRequests().length
       + this.driverCases.waitingCases().length,
   );
@@ -310,20 +308,6 @@ export class DispatchShell implements OnInit {
       this.rejectionTarget.set(null);
       this.rejectionReason.set('');
     }
-  }
-
-  protected approveApplication(application: DriverAccountApplicationDto): void {
-    const action = `approve-application-${application.id}`;
-    this.runNotificationAction(action, this.api.approveDriverAccountApplication(application.id), () => {
-      this.pendingApplications.update((items) => items.filter((item) => item.id !== application.id));
-      this.pendingApplicationCount.update((count) => Math.max(0, count - 1));
-    });
-  }
-
-  protected beginApplicationRejection(application: DriverAccountApplicationDto): void {
-    this.rejectionTarget.set({kind: 'application', id: application.id, name: application.name});
-    this.rejectionReason.set('');
-    this.notificationError.set('');
   }
 
   protected reviewEmergencyLeave(leave: EmergencyLeaveDto): void {
@@ -443,17 +427,8 @@ export class DispatchShell implements OnInit {
     }
 
     const action = `reject-${target.kind}-${target.id}`;
-    const request =
-      target.kind === 'application'
-        ? this.api.rejectDriverAccountApplication(target.id, reason)
-        : this.api.rejectEmergencyLeaveRequest(target.id, reason);
-    this.runNotificationAction(action, request, () => {
-      if (target.kind === 'application') {
-        this.pendingApplications.update((items) => items.filter((item) => item.id !== target.id));
-        this.pendingApplicationCount.update((count) => Math.max(0, count - 1));
-      } else {
-        this.removeEmergencyLeave(target.id);
-      }
+    this.runNotificationAction(action, this.api.rejectEmergencyLeaveRequest(target.id, reason), () => {
+      this.removeEmergencyLeave(target.id);
       this.rejectionTarget.set(null);
       this.rejectionReason.set('');
     });
@@ -491,14 +466,10 @@ export class DispatchShell implements OnInit {
     this.isLoadingNotifications.set(true);
     this.notificationError.set('');
     forkJoin({
-      count: this.api.getPendingDriverAccountApplicationCount(),
-      applications: this.api.getPendingDriverAccountApplications(),
       leaves: this.api.getPendingEmergencyLeaveRequests(),
       leaveRequests: this.api.getPendingLeaveRequests(),
     }).subscribe({
-      next: ({count, applications, leaves, leaveRequests}) => {
-        this.pendingApplicationCount.set(count.count);
-        this.pendingApplications.set(applications);
+      next: ({leaves, leaveRequests}) => {
         this.pendingEmergencyLeaves.set(leaves);
         this.pendingTemporaryLeaveRequests.set(
           leaveRequests
