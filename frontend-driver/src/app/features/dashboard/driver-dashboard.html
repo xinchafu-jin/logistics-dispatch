@@ -52,7 +52,7 @@
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
-      <!-- 轉彎提示列：只在導航中、而且後端有回轉彎資料時顯示；右邊讓出位置給聊天、定位按鈕 -->
+      <!-- 轉彎提示列：獨佔最上方一整行（100% 滿寬），右側支援中心與定位鈕自動退到下一行 -->
       @if (isNavigating() && currentManeuver(); as step) {
         <section class="turn-banner" [class.is-arrived]="hasArrived()" aria-label="轉彎提示">
           <mat-icon class="turn-banner__icon" aria-hidden="true">{{ maneuverIconFor(step) }}</mat-icon>
@@ -74,7 +74,10 @@
           </button>
         </section>
       }
-      <div class="map-quick-actions">
+      <div
+        class="map-quick-actions"
+        [class.has-turn-banner]="isNavigating() && !!currentManeuver()"
+      >
         <!-- 支援中心：回報問題、案件對話、一般對話都從這裡進；紅點是一般對話加上所有案件的未讀 -->
         <button
           type="button"
@@ -108,7 +111,7 @@
         [class.is-dragging]="isAttendanceSheetDragging()"
         [class.is-navigation-active]="isNavigating()"
         [style.--attendance-sheet-drag.px]="attendanceSheetDragOffset()"
-        aria-labelledby="attendance-title"
+        aria-label="當前站點導航抽屜"
       >
         <button
           type="button"
@@ -123,8 +126,18 @@
         >
           <span class="attendance-drawer-grip" aria-hidden="true"></span>
           <span class="attendance-drawer-summary">
-            <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
-            <strong>{{ statusLabel() }}</strong>
+            @if (attendanceViewState() === 'not-clocked-in') {
+              <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
+              <strong>尚未完成今日上班打卡</strong>
+            } @else if (selectedTask(); as currentTask) {
+              <small>
+                下一站 · {{ navigationRouteDetail() || (attendance()?.gpsAllowed ? 'GPS 回報中' : statusLabel()) }}
+              </small>
+              <strong>第 {{ currentTask.stop.sequence }} 站 · {{ currentTask.stop.storeName }}</strong>
+            } @else {
+              <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
+              <strong>{{ destinationName() }}</strong>
+            }
           </span>
           @if (isAttendanceSheetExpanded()) {
             <mat-icon aria-hidden="true">keyboard_arrow_down</mat-icon>
@@ -132,194 +145,362 @@
             <mat-icon aria-hidden="true">keyboard_arrow_up</mat-icon>
           }
         </button>
+
         <div id="attendance-drawer-content" class="attendance-drawer-content">
-        <div class="sheet-heading">
-          <div>
-            <p class="eyebrow">出勤狀態</p>
-            <h2 id="attendance-title">{{ statusLabel() }}</h2>
-          </div>
-          @if (attendance()?.gpsAllowed) {
-            <span class="gps-status is-active"
-            ><mat-icon aria-hidden="true">location_on</mat-icon> GPS 回報中</span
-            >
-          } @else {
-            <span class="gps-status">GPS 已停止</span>
-          }
-        </div>
-
-        <div class="route-summary" aria-label="配送路線狀態">
-          <div class="route-stop">
-            <span class="route-marker is-current" aria-hidden="true">A</span>
-            <span>
-              <strong>目前位置</strong>
-              <small>{{ mapLocationStatus() }}</small>
-            </span>
-          </div>
-          <span class="route-connector" aria-hidden="true"></span>
-          <div class="route-stop" [class.is-pending]="!selectedTask()">
-            <span class="route-marker" aria-hidden="true">B</span>
-            <span>
-              <strong>下一送達點</strong>
-              <small>{{ destinationName() }}</small>
-            </span>
-          </div>
-        </div>
-
-        @if (hasNavigationDestination()) {
-          @if (navigationRouteState() === 'loading') {
-            <p class="navigation-route-detail">正在規劃道路路線...</p>
-          } @else if (navigationRouteState() === 'ready' && navigationRouteDetail(); as detail) {
-            <p class="navigation-route-detail">{{ detail }}</p>
-          } @else if (navigationRouteState() === 'error') {
-            <p class="navigation-route-detail is-error">道路路線暫時無法取得。</p>
-          }
-        } @else {
-          <p class="destination-copy">{{ destinationDetail() }}</p>
-        }
-
-        <button
-          type="button"
-          [class]="isNavigating() ? 'danger-action' : 'primary-action'"
-          (click)="isNavigating() ? stopNavigation() : startNavigation()"
-          [disabled]="!selectedTask()"
-        >
-          {{ isNavigating() ? '結束導航' : '開始導航' }}
-        </button>
-
-        @if (attendanceViewState() === 'loading') {
-          <p class="sheet-copy">正在取得今日出勤狀態...</p>
-        } @else if (attendanceViewState() === 'error') {
-          <p class="sheet-copy">今日出勤資料暫時無法取得。</p>
-          <button type="button" class="outline-action" (click)="refreshAttendance()">
-            重新取得狀態
-          </button>
-        } @else if (attendanceViewState() === 'not-clocked-in') {
-          <p class="sheet-copy">尚未完成今日上班打卡。</p>
-          <button
-            type="button"
-            class="primary-action"
-            (click)="clockIn()"
-            [disabled]="isSubmitting()"
-          >
-            <mat-icon aria-hidden="true">play_arrow</mat-icon>
-            {{ isSubmitting() ? '處理中...' : '上班打卡' }}
-          </button>
-          } @else if (attendance(); as todayAttendance) {
-          <div class="attendance-meta">
-            <span>
-              <small>上班</small>
-              <strong>{{ formatTime(todayAttendance.clockInAt) }}</strong>
-            </span>
-            <span>
-              <small>下班</small>
-              <strong>{{ formatTime(todayAttendance.clockOutAt) }}</strong>
-            </span>
-            <span class="attendance-meta-status">
-              <small>定位</small>
-              <strong>{{ gpsTracking.lastUploadedAt() ? '已回報' : '等待定位' }}</strong>
-            </span>
-            @if (todayAttendance.punctualityStatus) {
-              <span class="attendance-meta-status">
-                <small>出勤判定</small>
-                <strong>{{ attendancePunctualityLabel(todayAttendance) }}</strong>
-              </span>
-            }
-          </div>
-
-          @if (todayAttendance.status === 'WORKING' || todayAttendance.status === 'OVERTIME') {
-            <div class="attendance-actions">
-              <button
-                type="button"
-                class="outline-action"
-                (click)="startBreak()"
-                [disabled]="isSubmitting() || todayAttendance.breakUsed"
-              >
-                <mat-icon aria-hidden="true">coffee</mat-icon>
-                {{ todayAttendance.breakUsed ? '今日休息已使用' : '休息' }}
-              </button>
-              <button
-                type="button"
-                class="danger-action"
-                (click)="clockOut()"
-                [disabled]="isSubmitting()"
-              >
-                <mat-icon aria-hidden="true">stop_circle</mat-icon>
-                下班
-              </button>
-            </div>
-          } @else if (todayAttendance.status === 'ON_BREAK') {
-            <div class="break-status">
-              <span>休息倒數</span>
-              <strong>{{ formatBreakCountdown() }}</strong>
-            </div>
-          } @else {
-            <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
-          }
-        }
-
-        <section class="mileage-panel mileage-panel--drawer" aria-labelledby="mileage-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">車輛</p>
-              <h2 id="mileage-title">今日里程</h2>
-            </div>
-            <mat-icon aria-hidden="true">speed</mat-icon>
-          </div>
-          <!-- 出車里程已經併進「任務」分頁的出車前安全檢查（通過時後端同一個交易記下），這裡只留收車 -->
-          <p>出車時的行車紀錄器里程在「任務」分頁的安全檢查一起填；下班前在這裡記收車時的行車紀錄器里程。</p>
-          <div class="mileage-form-row">
-            <label>
-              <span>收車時行車紀錄器里程（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18438"
-                [value]="endMileageReading()"
-                (input)="updateEndMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
+          @if (attendanceViewState() === 'loading') {
+            <p class="sheet-copy">正在取得今日出勤狀態...</p>
+          } @else if (attendanceViewState() === 'error') {
+            <p class="sheet-copy">今日出勤資料暫時無法取得。</p>
+            <button type="button" class="outline-action" (click)="refreshAttendance()">
+              重新取得狀態
+            </button>
+          } @else if (attendanceViewState() === 'not-clocked-in') {
+            <p class="sheet-copy">尚未完成今日上班打卡，打卡後即可開始路線導航與點交作業。</p>
             <button
               type="button"
-              class="mileage-end-button"
-              (click)="submitEndMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              class="primary-action"
+              (click)="clockIn()"
+              [disabled]="isSubmitting()"
             >
-              <mat-icon aria-hidden="true">stop_circle</mat-icon>
-              收車
+              <mat-icon aria-hidden="true">play_arrow</mat-icon>
+              {{ isSubmitting() ? '處理中...' : '立即上班打卡' }}
             </button>
-          </div>
-          <button
-            type="button"
-            class="outline-action mileage-recalculate-button"
-            (click)="recalculateMileage()"
-            [disabled]="isMileageSubmitting()"
-          >
-            <mat-icon aria-hidden="true">sync</mat-icon>
-            依 GPS 重新結算
-          </button>
-          @if (!canRecordMileage()) {
-            <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
+          } @else if (selectedTask(); as currentTask) {
+            <div class="map-stop-overview">
+              <div class="map-stop-overview__copy">
+                <p class="map-stop-address">
+                  <mat-icon aria-hidden="true">place</mat-icon>
+                  <span>{{ currentTask.stop.address }}</span>
+                </p>
+                <p class="map-stop-meta">
+                  <strong>應送 {{ currentTask.stop.expectedBoxCount }} 箱</strong>
+                  @if (currentTask.stop.receivingStart && currentTask.stop.receivingEnd) {
+                    <span>
+                      · 收貨 {{ formatTime(currentTask.stop.receivingStart) }} -
+                      {{ formatTime(currentTask.stop.receivingEnd) }}
+                    </span>
+                  }
+                </p>
+              </div>
+              <em [class]="'task-status is-' + currentTask.stop.orderStatus.toLowerCase()">
+                {{ taskStatusLabel(currentTask.stop.orderStatus) }}
+              </em>
+            </div>
+
+            @if (navigationRouteState() === 'loading') {
+              <p class="navigation-route-detail">正在規劃道路路線...</p>
+            } @else if (navigationRouteState() === 'error') {
+              <p class="navigation-route-detail is-error">道路路線暫時無法取得。</p>
+            }
+
+            @if (taskActionMessage()) {
+              <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
+            }
+            @if (taskActionError()) {
+              <p class="task-feedback is-error">{{ taskActionError() }}</p>
+            }
+
+            <div class="map-stop-actions">
+              <button
+                type="button"
+                [class]="isNavigating() ? 'danger-action' : 'primary-action'"
+                (click)="isNavigating() ? stopNavigation() : startNavigation()"
+                [disabled]="!canNavigate(currentTask.stop)"
+              >
+                <mat-icon aria-hidden="true">{{ isNavigating() ? 'stop_circle' : 'near_me' }}</mat-icon>
+                {{ isNavigating() ? '結束導航' : '開始導航' }}
+              </button>
+
+              @if (canLoad(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="setActiveTab('tasks'); openLoadingAction(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">fact_check</mat-icon>
+                  點交作業
+                </button>
+              } @else if (canMarkArrived(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="arriveAtStop(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">location_on</mat-icon>
+                  {{ isTaskSubmitting() ? '處理中...' : '抵達門市' }}
+                </button>
+              } @else if (canCompleteDelivery(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="openDeliveryAction(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">inventory_2</mat-icon>
+                  交貨處理
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="outline-action"
+                  (click)="setActiveTab('tasks')"
+                >
+                  <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
+                  查看任務清單
+                </button>
+              }
+            </div>
+
+            @if (isDeliveryActionOpen(currentTask.stop)) {
+              <section class="delivery-action-panel" aria-label="交貨處理">
+                <p>預計 {{ currentTask.stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
+                <label>
+                  <span>備註（選填）</span>
+                  <textarea
+                    rows="2"
+                    maxlength="500"
+                    placeholder="例如收貨人、現場狀況"
+                    [value]="deliveryNotes()"
+                    (input)="updateDeliveryNotes($event)"
+                  ></textarea>
+                </label>
+                <label class="delivery-photo-input">
+                  <span>交貨照片（選填）</span>
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    [disabled]="isTaskSubmitting()"
+                    (change)="selectDeliveryPhoto($event)"
+                  />
+                  @if (deliveryPhoto(); as photo) {
+                    <small>已選擇：{{ photo.name }}</small>
+                  }
+                </label>
+                <div class="delivery-action-buttons">
+                  <button
+                    type="button"
+                    class="delivery-complete-button"
+                    (click)="completeDelivery(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">check_circle</mat-icon>
+                    {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-exception-button"
+                    (click)="reportNoSignature(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                    無人簽收
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-exception-button"
+                    (click)="reportStopIssue(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">report_problem</mat-icon>
+                    貨況異常
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-cancel-button"
+                    (click)="closeDeliveryAction()"
+                  >
+                    取消
+                  </button>
+                </div>
+              </section>
+            }
+          } @else {
+            <p class="destination-copy">{{ destinationDetail() }}</p>
           }
-          @if (mileageMessage()) {
-            <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>
-          }
-          @if (mileageError()) {
-            <p class="mileage-feedback is-error">{{ mileageError() }}</p>
-          }
-        </section>
         </div>
       </section>
     </section>
   } @else {
     <section class="content-panel">
       @if (activeTab() === 'tasks') {
-        <div class="panel-heading">
-          <p class="eyebrow">任務</p>
-          <h1>今日任務</h1>
-        </div>
+        <section class="duty-stage-card" aria-label="今日勤務階段">
+          <header class="duty-stage-card__header">
+            <div>
+              <p class="eyebrow">今日勤務階段</p>
+              <h1>{{ attendanceHeading() }}</h1>
+            </div>
+            <span class="gps-status" [class.is-active]="gpsTracking.isTracking()">
+              <mat-icon aria-hidden="true">my_location</mat-icon>
+              {{ gpsTracking.statusLabel() }}
+            </span>
+          </header>
+
+          @if (attendanceViewState() === 'loading') {
+            <p class="sheet-copy">{{ attendanceCopy() }}</p>
+          } @else if (attendanceViewState() === 'error') {
+            <p class="task-feedback is-error">{{ attendanceError() }}</p>
+            <button type="button" class="outline-action" (click)="retryAttendance()">
+              <mat-icon aria-hidden="true">refresh</mat-icon>
+              重新載入出勤狀態
+            </button>
+          } @else if (attendanceViewState() === 'not-clocked-in') {
+            <p class="sheet-copy">請先完成今日上班打卡，再進行出車前安全檢查與倉庫點交。</p>
+            <button
+              type="button"
+              class="primary-action"
+              (click)="clockIn()"
+              [disabled]="isAttendanceSubmitting()"
+            >
+              <mat-icon aria-hidden="true">play_arrow</mat-icon>
+              {{ isAttendanceSubmitting() ? '打卡中...' : '上班打卡' }}
+            </button>
+          } @else if (attendance(); as record) {
+            <p class="duty-stage-meta">
+              <span>上班 {{ formatTime(record.clockInTime) }}</span>
+              @if (record.clockOutTime) {
+                <span>· 下班 {{ formatTime(record.clockOutTime) }}</span>
+              }
+              <span>· 出勤判定：<strong>{{ attendancePunctualityLabel(record) }}</strong></span>
+            </p>
+
+            @if (attendanceError()) {
+              <p class="task-feedback is-error">{{ attendanceError() }}</p>
+            }
+            @if (emergencyLeaveMessage()) {
+              <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
+            }
+            @if (emergencyLeaveError()) {
+              <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
+            }
+
+            <div class="duty-stage-actions">
+              <button
+                type="button"
+                class="outline-action"
+                (click)="toggleBreak()"
+                [disabled]="!canToggleBreak()"
+              >
+                <mat-icon aria-hidden="true">{{
+                  isOnBreak() ? 'play_arrow' : 'free_breakfast'
+                }}</mat-icon>
+                {{ breakActionLabel() }}
+              </button>
+              <button
+                type="button"
+                class="outline-action"
+                (click)="toggleEndWorkPanel()"
+              >
+                <mat-icon aria-hidden="true">{{
+                  isEndWorkPanelOpen() ? 'expand_less' : 'flag'
+                }}</mat-icon>
+                收車 / 下班
+              </button>
+              <button
+                type="button"
+                class="outline-action duty-stage-actions__emergency"
+                (click)="
+                  isEmergencyLeaveFormOpen()
+                    ? closeEmergencyLeaveForm()
+                    : openEmergencyLeaveForm()
+                "
+                [disabled]="!canRequestEmergencyLeave() && !isEmergencyLeaveFormOpen()"
+                title="途中臨時請假（由主管指派接手司機）"
+              >
+                <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                途中換手
+              </button>
+            </div>
+
+            @if (isEndWorkPanelOpen()) {
+              <div class="end-work-panel" aria-label="收車里程與下班打卡">
+                <p class="end-work-panel__title">收車里程登記與下班</p>
+                @if (mileageMessage()) {
+                  <p class="task-feedback is-success">{{ mileageMessage() }}</p>
+                }
+                @if (mileageError()) {
+                  <p class="task-feedback is-error">{{ mileageError() }}</p>
+                }
+                <div class="mileage-form-row">
+                  <label>
+                    <span>收車里程（km）</span>
+                    <input
+                      type="number"
+                      inputmode="decimal"
+                      min="0"
+                      step="0.1"
+                      placeholder="輸入收車時儀表板或行車紀錄器讀數"
+                      [value]="endMileageReading()"
+                      [disabled]="isMileageSubmitting()"
+                      (input)="updateEndMileage($event)"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="mileage-end-button"
+                    (click)="submitEndMileage()"
+                    [disabled]="isMileageSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">flag</mat-icon>
+                    登記收車
+                  </button>
+                </div>
+                <div class="end-work-panel__actions">
+                  <button
+                    type="button"
+                    class="outline-action"
+                    (click)="recalculateMileage()"
+                    [disabled]="isMileageSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">route</mat-icon>
+                    依 GPS 重新結算
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-action"
+                    (click)="clockOut()"
+                    [disabled]="!canClockOut()"
+                  >
+                    <mat-icon aria-hidden="true">stop_circle</mat-icon>
+                    {{ clockOutActionLabel() }}
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (isEmergencyLeaveFormOpen()) {
+              <div class="end-work-panel" aria-label="途中換手臨時請假">
+                <p class="end-work-panel__title">途中臨時請假（請求主管指派接手司機）</p>
+                <label class="delivery-action-panel emergency-leave-reason">
+                  <span>請假原因</span>
+                  <textarea
+                    rows="2"
+                    maxlength="500"
+                    placeholder="請簡述需要臨時換手的原因"
+                    [value]="emergencyLeaveReason()"
+                    [disabled]="isEmergencyLeaveSubmitting()"
+                    (input)="updateEmergencyLeaveReason($event)"
+                  ></textarea>
+                </label>
+                <div class="end-work-panel__actions">
+                  <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-action"
+                    (click)="submitEmergencyLeave()"
+                    [disabled]="isEmergencyLeaveSubmitting()"
+                  >
+                    {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
+                  </button>
+                </div>
+              </div>
+            }
+          }
+        </section>
+
         @if (taskActionMessage()) {
           <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
         }
@@ -349,265 +530,287 @@
               <article class="task-route-card">
                 <header class="task-route-heading">
                   <div>
-                    <p>路線 {{ route.routeId }}</p>
+                    <p>路線 #{{ route.routeId }} · {{ route.stopCount }} 個站點 · 共 {{ route.totalBoxes }} 箱</p>
                     <h2>{{ route.warehouse.name }}</h2>
                   </div>
                   <span>{{ route.vehicle.plateNumber }}</span>
                 </header>
-                <p class="task-route-meta">
-                  {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
-                </p>
                 <!-- 出車前安全檢查：通過才開放這條路線的點交；記出車里程時後端也會再擋一次 -->
                 <app-pre-trip-check
                   [route]="route"
                   (passedChange)="setInspectionReady(route.routeId, $event)"
                 />
-                <ol class="task-stop-list">
-                  @for (stop of route.stops; track stop.orderId) {
-                    <li
-                      class="task-stop"
-                      [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)"
-                    >
-                      <span class="stop-sequence">{{ stop.sequence }}</span>
-                      <div class="task-stop-copy">
-                        <strong>{{ stop.storeName }}</strong>
-                        <small>{{ stop.address }}</small>
-                        <span>
-                          {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
-                          · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
-                        }
-                          {{ stop.expectedBoxCount }} 箱
-                          @if (stop.receivingStart && stop.receivingEnd) {
-                            · {{ formatTime(stop.receivingStart) }} -
-                            {{ formatTime(stop.receivingEnd) }}
-                          }
-                        </span>
-                        <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
-                          {{ taskStatusLabel(stop.orderStatus) }}
-                        </em>
-                      </div>
-                      <div class="task-stop-actions">
-                        <button
-                          type="button"
-                          class="task-navigation-button"
-                          (click)="selectTaskForNavigation(route, stop)"
-                          [disabled]="!canNavigate(stop)"
-                          [title]="
-                            canNavigate(stop)
-                              ? '在地圖顯示並開始導航'
-                              : '此站點尚未設定座標'
-                          "
+                @if (activeRouteStops(route); as activeStops) {
+                  @if (activeStops.length > 0) {
+                    <ol class="task-stop-list">
+                      @for (stop of activeStops; track stop.orderId) {
+                        <li
+                          class="task-stop"
+                          [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)"
                         >
-                          <mat-icon aria-hidden="true">near_me</mat-icon>
-                          <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
-                        </button>
-                        @if (canLoad(stop)) {
-                          <button
-                            type="button"
-                            class="task-loading-button"
-                            (click)="openLoadingAction(stop)"
-                            [disabled]="isTaskSubmitting() || !inspectionReady()[route.routeId]"
-                            [title]="inspectionReady()[route.routeId] ? '開始倉庫點交' : '請先通過出車前安全檢查'"
-                          >
-                            <mat-icon aria-hidden="true">fact_check</mat-icon>
-                            <span>點交</span>
-                          </button>
-                        } @else if (canMarkArrived(stop)) {
-                          <button
-                            type="button"
-                            class="task-arrive-button"
-                            (click)="arriveAtStop(stop)"
-                            [disabled]="isTaskSubmitting()"
-                          >
-                            <mat-icon aria-hidden="true">location_on</mat-icon>
-                            <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
-                          </button>
-                        } @else if (canCompleteDelivery(stop)) {
-                          <button
-                            type="button"
-                            class="task-delivery-button"
-                            (click)="openDeliveryAction(stop)"
-                            [disabled]="isTaskSubmitting()"
-                          >
-                            <mat-icon aria-hidden="true">inventory_2</mat-icon>
-                            <span>交貨</span>
-                          </button>
-                        }
-                      </div>
-                        @if (isLoadingActionOpen(stop)) {
-                          <section class="delivery-action-panel" aria-label="倉庫點交">
-                            <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
-                          @if (stop.items.length > 0) {
-                            <section class="loading-item-list" aria-label="商品逐項點交">
-                              <header><strong>商品明細</strong><span>每項都要勾選與實點</span></header>
-                              @for (item of stop.items; track item.id) {
-                                <article>
-                                  <label class="loading-item-check">
-                                    <input
-                                      type="checkbox"
-                                      [checked]="loadingItemForm(item.id).checked"
-                                      [disabled]="isTaskSubmitting()"
-                                      (change)="updateLoadingItemChecked(item.id, $event)"
-                                    />
-                                    <span>
-                                      <strong>{{ item.itemName }}</strong>
-                                      <small>
-                                        @if (item.productCode) { {{ item.productCode }} · }
-                                        應到 {{ item.expectedQuantity }} {{ item.unit }}
-                                      </small>
-                                    </span>
-                                  </label>
-                                  <label>
-                                    <span>實點數量</span>
-                                    <input
-                                      type="number"
-                                      inputmode="numeric"
-                                      min="0"
-                                      step="1"
-                                      [max]="item.expectedQuantity"
-                                      [value]="loadingItemForm(item.id).loadedQuantity"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemQuantity(item.id, $event)"
-                                    />
-                                  </label>
-                                  <label class="loading-item-note">
-                                    <span>商品備註</span>
-                                    <input
-                                      type="text"
-                                      maxlength="255"
-                                      placeholder="選填"
-                                      [value]="loadingItemForm(item.id).notes"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemNotes(item.id, $event)"
-                                    />
-                                  </label>
-                                </article>
+                          <span class="stop-sequence">{{ stop.sequence }}</span>
+                          <div class="task-stop-copy">
+                            <strong>{{ stop.storeName }}</strong>
+                            <small>{{ stop.address }}</small>
+                            <span>
+                              {{ stop.expectedBoxCount }} 箱
+                              @if (stop.receivingStart && stop.receivingEnd) {
+                                · {{ formatTime(stop.receivingStart) }} -
+                                {{ formatTime(stop.receivingEnd) }}
                               }
+                            </span>
+                            <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                              {{ taskStatusLabel(stop.orderStatus) }}
+                            </em>
+                          </div>
+                          <div class="task-stop-actions">
+                            <button
+                              type="button"
+                              class="task-navigation-button"
+                              (click)="selectTaskForNavigation(route, stop)"
+                              [disabled]="!canNavigate(stop)"
+                              [title]="
+                                canNavigate(stop)
+                                  ? '在地圖顯示並開始導航'
+                                  : '此站點尚未設定座標'
+                              "
+                            >
+                              <mat-icon aria-hidden="true">near_me</mat-icon>
+                              <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
+                            </button>
+                            @if (canLoad(stop)) {
+                              <button
+                                type="button"
+                                class="task-loading-button"
+                                (click)="openLoadingAction(stop)"
+                                [disabled]="isTaskSubmitting() || !inspectionReady()[route.routeId]"
+                                [title]="inspectionReady()[route.routeId] ? '開始倉庫點交' : '請先通過出車前安全檢查'"
+                              >
+                                <mat-icon aria-hidden="true">fact_check</mat-icon>
+                                <span>點交</span>
+                              </button>
+                            } @else if (canMarkArrived(stop)) {
+                              <button
+                                type="button"
+                                class="task-arrive-button"
+                                (click)="arriveAtStop(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                <mat-icon aria-hidden="true">location_on</mat-icon>
+                                <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
+                              </button>
+                            } @else if (canCompleteDelivery(stop)) {
+                              <button
+                                type="button"
+                                class="task-delivery-button"
+                                (click)="openDeliveryAction(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                <mat-icon aria-hidden="true">inventory_2</mat-icon>
+                                <span>交貨</span>
+                              </button>
+                            }
+                          </div>
+                          @if (isLoadingActionOpen(stop)) {
+                            <section class="delivery-action-panel" aria-label="倉庫點交">
+                              <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
+                              @if (stop.items.length > 0) {
+                                <section class="loading-item-list" aria-label="商品逐項點交">
+                                  <header><strong>商品明細</strong><span>每項都要勾選與實點</span></header>
+                                  @for (item of stop.items; track item.id) {
+                                    <article>
+                                      <label class="loading-item-check">
+                                        <input
+                                          type="checkbox"
+                                          [checked]="loadingItemForm(item.id).checked"
+                                          [disabled]="isTaskSubmitting()"
+                                          (change)="updateLoadingItemChecked(item.id, $event)"
+                                        />
+                                        <span>
+                                          <strong>{{ item.itemName }}</strong>
+                                          <small>
+                                            @if (item.productCode) { {{ item.productCode }} · }
+                                            應到 {{ item.expectedQuantity }} {{ item.unit }}
+                                          </small>
+                                        </span>
+                                      </label>
+                                      <label>
+                                        <span>實點數量</span>
+                                        <input
+                                          type="number"
+                                          inputmode="numeric"
+                                          min="0"
+                                          step="1"
+                                          [max]="item.expectedQuantity"
+                                          [value]="loadingItemForm(item.id).loadedQuantity"
+                                          [disabled]="isTaskSubmitting()"
+                                          (input)="updateLoadingItemQuantity(item.id, $event)"
+                                        />
+                                      </label>
+                                      <label class="loading-item-note">
+                                        <span>商品備註</span>
+                                        <input
+                                          type="text"
+                                          maxlength="255"
+                                          placeholder="選填"
+                                          [value]="loadingItemForm(item.id).notes"
+                                          [disabled]="isTaskSubmitting()"
+                                          (input)="updateLoadingItemNotes(item.id, $event)"
+                                        />
+                                      </label>
+                                    </article>
+                                  }
+                                </section>
+                              }
+                              <label>
+                                <span>實點箱數</span>
+                                <input
+                                  type="number"
+                                  inputmode="numeric"
+                                  min="0"
+                                  step="1"
+                                  [max]="stop.expectedBoxCount"
+                                  [value]="loadingBoxCount()"
+                                  [disabled]="isTaskSubmitting()"
+                                  (input)="updateLoadingBoxCount($event)"
+                                />
+                              </label>
+                              <label>
+                                <span>備註（選填）</span>
+                                <textarea
+                                  rows="2"
+                                  maxlength="500"
+                                  placeholder="例如少了哪一箱、外箱破損"
+                                  [value]="loadingNotes()"
+                                  [disabled]="isTaskSubmitting()"
+                                  (input)="updateLoadingNotes($event)"
+                                ></textarea>
+                              </label>
+                              @if (loadingMismatchPending()) {
+                                <p class="task-feedback is-error">
+                                  實點內容與訂單不符。
+                                  送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
+                                </p>
+                              }
+                              <div class="delivery-action-buttons">
+                                <button
+                                  type="button"
+                                  class="delivery-complete-button"
+                                  (click)="submitLoading(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">fact_check</mat-icon>
+                                  {{
+                                    isTaskSubmitting()
+                                      ? '處理中...'
+                                      : loadingMismatchPending()
+                                        ? '確定送出'
+                                        : '確認點交'
+                                  }}
+                                </button>
+                                <button
+                                  type="button"
+                                  class="delivery-cancel-button"
+                                  (click)="closeLoadingAction()"
+                                >
+                                  取消
+                                </button>
+                              </div>
                             </section>
                           }
-                          <label>
-                            <span>實點箱數</span>
-                            <input
-                              type="number"
-                              inputmode="numeric"
-                              min="0"
-                              step="1"
-                              [max]="stop.expectedBoxCount"
-                              [value]="loadingBoxCount()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingBoxCount($event)"
-                            />
-                          </label>
-                          <label>
-                            <span>備註（選填）</span>
-                            <textarea
-                              rows="2"
-                              maxlength="500"
-                              placeholder="例如少了哪一箱、外箱破損"
-                              [value]="loadingNotes()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingNotes($event)"
-                            ></textarea>
-                          </label>
-                          @if (loadingMismatchPending()) {
-                            <p class="task-feedback is-error">
-                              實點內容與訂單不符。
-                              送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
-                            </p>
+                          @if (isDeliveryActionOpen(stop)) {
+                            <section class="delivery-action-panel" aria-label="交貨處理">
+                              <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
+                              <label>
+                                <span>備註（選填）</span>
+                                <textarea
+                                  rows="2"
+                                  maxlength="500"
+                                  placeholder="例如收貨人、現場狀況"
+                                  [value]="deliveryNotes()"
+                                  (input)="updateDeliveryNotes($event)"
+                                ></textarea>
+                              </label>
+                              <label class="delivery-photo-input">
+                                <span>交貨照片（選填）</span>
+                                <input
+                                  type="file"
+                                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                  [disabled]="isTaskSubmitting()"
+                                  (change)="selectDeliveryPhoto($event)"
+                                />
+                                @if (deliveryPhoto(); as photo) {
+                                  <small>已選擇：{{ photo.name }}</small>
+                                }
+                              </label>
+                              <div class="delivery-action-buttons">
+                                <button
+                                  type="button"
+                                  class="delivery-complete-button"
+                                  (click)="completeDelivery(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">check_circle</mat-icon>
+                                  {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
+                                </button>
+                                <button
+                                  type="button"
+                                  class="delivery-exception-button"
+                                  (click)="reportNoSignature(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                                  無人簽收
+                                </button>
+                                <!-- 開支援中心的建立案件：分類是貨物問題、帶入這張單 -->
+                                <button
+                                  type="button"
+                                  class="delivery-exception-button"
+                                  (click)="reportStopIssue(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">report_problem</mat-icon>
+                                  貨況異常
+                                </button>
+                                <button
+                                  type="button"
+                                  class="delivery-cancel-button"
+                                  (click)="closeDeliveryAction()"
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            </section>
                           }
-                          <div class="delivery-action-buttons">
-                            <button
-                              type="button"
-                              class="delivery-complete-button"
-                              (click)="submitLoading(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">fact_check</mat-icon>
-                              {{
-                                isTaskSubmitting()
-                                  ? '處理中...'
-                                  : loadingMismatchPending()
-                                    ? '確定送出'
-                                    : '確認點交'
-                              }}
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-cancel-button"
-                              (click)="closeLoadingAction()"
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </section>
+                        </li>
                       }
-                      @if (isDeliveryActionOpen(stop)) {
-                        <section class="delivery-action-panel" aria-label="交貨處理">
-                          <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
-                          <label>
-                            <span>備註（選填）</span>
-                            <textarea
-                              rows="2"
-                              maxlength="500"
-                              placeholder="例如收貨人、現場狀況"
-                              [value]="deliveryNotes()"
-                              (input)="updateDeliveryNotes($event)"
-                            ></textarea>
-                          </label>
-                          <label class="delivery-photo-input">
-                            <span>交貨照片（選填）</span>
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                              [disabled]="isTaskSubmitting()"
-                              (change)="selectDeliveryPhoto($event)"
-                            />
-                            @if (deliveryPhoto(); as photo) {
-                              <small>已選擇：{{ photo.name }}</small>
-                            }
-                          </label>
-                          <div class="delivery-action-buttons">
-                            <button
-                              type="button"
-                              class="delivery-complete-button"
-                              (click)="completeDelivery(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">check_circle</mat-icon>
-                              {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-exception-button"
-                              (click)="reportNoSignature(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">warning_amber</mat-icon>
-                              無人簽收
-                            </button>
-                            <!-- 開支援中心的建立案件：分類是貨物問題、帶入這張單 -->
-                            <button
-                              type="button"
-                              class="delivery-exception-button"
-                              (click)="reportStopIssue(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">report_problem</mat-icon>
-                              貨況異常
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-cancel-button"
-                              (click)="closeDeliveryAction()"
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </section>
-                      }
-                    </li>
+                    </ol>
                   }
-                </ol>
+                }
+                @if (finishedRouteStops(route); as doneStops) {
+                  @if (doneStops.length > 0) {
+                    <details class="completed-stops-group">
+                      <summary>
+                        <span>✓ 已完成／結束站點（{{ doneStops.length }} 站）</span>
+                        <span class="completed-stops-group__toggle">點擊展開 ▾</span>
+                      </summary>
+                      <ol class="task-stop-list is-finished-list">
+                        @for (stop of doneStops; track stop.orderId) {
+                          <li class="task-stop is-finished">
+                            <span class="stop-sequence">{{ stop.sequence }}</span>
+                            <div class="task-stop-copy">
+                              <strong>{{ stop.storeName }}</strong>
+                              <small>{{ stop.address }} · {{ stop.expectedBoxCount }} 箱</small>
+                            </div>
+                            <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                              {{ taskStatusLabel(stop.orderStatus) }}
+                            </em>
+                          </li>
+                        }
+                      </ol>
+                    </details>
+                  }
+                }
               </article>
             }
           </div>

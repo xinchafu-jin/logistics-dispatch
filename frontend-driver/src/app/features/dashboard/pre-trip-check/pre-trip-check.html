@@ -1,11 +1,17 @@
-<section class="pre-trip" aria-label="出車前安全檢查">
-  <header>
-    <div>
-      <p>出車前必做</p>
-      <h3>安全檢查</h3>
-    </div>
-    <span class="plate">{{ route().vehicle.plateNumber }}</span>
-  </header>
+<section
+  class="pre-trip"
+  [class.is-passed-compact]="result()?.completed && result()?.passed && !showForm() && !detailsExpanded()"
+  aria-label="出車前安全檢查"
+>
+  @if (!result()?.completed || !result()?.passed || showForm()) {
+    <header>
+      <div>
+        <p>出車前必做</p>
+        <h3>安全檢查</h3>
+      </div>
+      <span class="plate">{{ route().vehicle.plateNumber }}</span>
+    </header>
+  }
 
   @if (loading()) {
     <p class="notice" role="status">正在確認檢查紀錄…</p>
@@ -22,37 +28,78 @@
   <!-- 送過了而且不在重新檢查中：顯示結果 -->
   @if (result(); as current) {
     @if (current.completed && !showForm()) {
-      <div class="notice" [class.is-error]="!current.passed" role="status">
-        <strong>{{ current.message }}</strong>
-        <p>酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L · {{ formatTime(current.submittedAt) }}</p>
-        @if (current.departed) {
-          <p>出車里程（行車紀錄器）：{{ current.startOdometer }} km</p>
-        }
-        @if (current.abnormalItems.length > 0) {
-          <p>異常：{{ current.abnormalItems.join('、') }}</p>
-        }
-        @if (current.note) {
-          <p>說明：{{ current.note }}</p>
-        }
-      </div>
-      <div class="result-actions">
-        <button type="button" (click)="viewPhoto('alcohol')">查看酒測照片</button>
-        @if (current.hasFaultPhoto) {
-          <button type="button" (click)="viewPhoto('fault')">查看故障照片</button>
-        }
-        @if (!current.passed) {
-          <button type="button" class="primary" (click)="startRetry()">重新檢查</button>
-        }
-      </div>
-      @if (previews().alcohol || previews().fault) {
-        <div class="saved-photos">
-          @if (previews().alcohol; as url) {
-            <img [src]="url" alt="酒測器讀數照片" />
+      @if (current.passed) {
+        <div class="pre-trip-passed-bar" role="status">
+          <div class="pre-trip-passed-bar__info">
+            <span class="pre-trip-passed-badge">✓ 車檢通過</span>
+            <span>
+              @if (current.departed) {
+                出車里程（行車紀錄器）：{{ current.startOdometer }} km
+              } @else {
+                酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L
+              }
+            </span>
+          </div>
+          <button type="button" class="pre-trip-passed-toggle" (click)="toggleDetails()">
+            {{ detailsExpanded() ? '收起明細 ▴' : '照片/明細 ▾' }}
+          </button>
+        </div>
+        @if (detailsExpanded()) {
+          <div class="notice" role="status">
+            <strong>{{ current.message }}</strong>
+            <p>酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L · {{ formatTime(current.submittedAt) }}</p>
+            @if (current.departed) {
+              <p>出車里程（行車紀錄器）：{{ current.startOdometer }} km</p>
+            }
+          </div>
+          <div class="result-actions">
+            <button type="button" (click)="viewPhoto('alcohol')">查看酒測照片</button>
+            @if (current.hasFaultPhoto) {
+              <button type="button" (click)="viewPhoto('fault')">查看故障照片</button>
+            }
+          </div>
+          @if (previews().alcohol || previews().fault) {
+            <div class="saved-photos">
+              @if (previews().alcohol; as url) {
+                <img [src]="url" alt="酒測器讀數照片" />
+              }
+              @if (previews().fault; as url) {
+                <img [src]="url" alt="故障照片" />
+              }
+            </div>
           }
-          @if (previews().fault; as url) {
-            <img [src]="url" alt="故障照片" />
+        }
+      } @else {
+        <div class="notice is-error" role="status">
+          <strong>{{ current.message }}</strong>
+          <p>酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L · {{ formatTime(current.submittedAt) }}</p>
+          @if (current.departed) {
+            <p>出車里程（行車紀錄器）：{{ current.startOdometer }} km</p>
+          }
+          @if (current.abnormalItems.length > 0) {
+            <p>異常：{{ current.abnormalItems.join('、') }}</p>
+          }
+          @if (current.note) {
+            <p>說明：{{ current.note }}</p>
           }
         </div>
+        <div class="result-actions">
+          <button type="button" (click)="viewPhoto('alcohol')">查看酒測照片</button>
+          @if (current.hasFaultPhoto) {
+            <button type="button" (click)="viewPhoto('fault')">查看故障照片</button>
+          }
+          <button type="button" class="primary" (click)="startRetry()">重新檢查</button>
+        </div>
+        @if (previews().alcohol || previews().fault) {
+          <div class="saved-photos">
+            @if (previews().alcohol; as url) {
+              <img [src]="url" alt="酒測器讀數照片" />
+            }
+            @if (previews().fault; as url) {
+              <img [src]="url" alt="故障照片" />
+            }
+          </div>
+        }
       }
     }
   }

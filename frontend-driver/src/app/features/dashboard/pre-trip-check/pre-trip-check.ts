@@ -115,6 +115,8 @@ export class PreTripCheck implements OnDestroy {
   protected readonly error = signal('');
   /** 沒通過之後，按「重新檢查」才把表單再打開 */
   protected readonly retrying = signal(false);
+  /** 檢查通過後預設收合成單行綠條，點「照片/明細」才展開 */
+  protected readonly detailsExpanded = signal(false);
   protected readonly alcohol = signal('');
   /** 出車時行車紀錄器上的里程 */
   protected readonly odometer = signal('');
@@ -226,6 +228,10 @@ export class PreTripCheck implements OnDestroy {
     this.error.set('');
   }
 
+  protected toggleDetails(): void {
+    this.detailsExpanded.update((expanded) => !expanded);
+  }
+
   protected submit(event: Event): void {
     event.preventDefault();
     const alcoholPhoto = this.files().alcohol;
@@ -241,6 +247,7 @@ export class PreTripCheck implements OnDestroy {
           this.saving.set(false);
           this.result.set(result);
           this.retrying.set(false);
+          this.detailsExpanded.set(false);
           this.passedChange.emit(result.passed);
         },
         error: (error: unknown) => {
@@ -276,6 +283,7 @@ export class PreTripCheck implements OnDestroy {
     this.clearPreviews();
     this.result.set(null);
     this.retrying.set(false);
+    this.detailsExpanded.set(false);
     this.alcohol.set('');
     this.odometer.set('');
     this.answers.set(emptyAnswers());

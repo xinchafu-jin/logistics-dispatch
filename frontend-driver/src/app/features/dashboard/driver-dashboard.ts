@@ -653,7 +653,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly navigationDurationSeconds = signal<number | null>(null);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
-  protected readonly isAttendanceSheetExpanded = signal(false);
+  protected readonly isAttendanceSheetExpanded = signal(true);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
   protected readonly chatMessages = signal<DriverMessageDto[]>([]);
@@ -1558,6 +1558,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  protected readonly isEndWorkPanelOpen = signal(false);
+
+  protected toggleEndWorkPanel(): void {
+    this.isEndWorkPanelOpen.update((open) => !open);
+  }
+
   protected setActiveTab(tab: DriverTab): void {
     this.activeTab.set(tab);
 
@@ -1572,7 +1578,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       }, 0);
     }
 
-    if (tab === 'profile') {
+    if (tab === 'tasks' || tab === 'profile') {
       this.loadEmergencyLeaves();
     }
   }
@@ -1611,6 +1617,22 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected canCompleteDelivery(stop: DriverTaskStop): boolean {
     return stop.orderStatus === 'IN_DELIVERY';
+  }
+
+  protected isFinishedStop(stop: DriverTaskStop): boolean {
+    return (
+      stop.orderStatus === 'COMPLETED' ||
+      stop.orderStatus === 'CANCELLED' ||
+      stop.orderStatus === 'FAILED'
+    );
+  }
+
+  protected activeRouteStops(route: DriverRouteTask): DriverTaskStop[] {
+    return route.stops.filter((stop) => !this.isFinishedStop(stop));
+  }
+
+  protected finishedRouteStops(route: DriverRouteTask): DriverTaskStop[] {
+    return route.stops.filter((stop) => this.isFinishedStop(stop));
   }
 
   protected taskStatusLabel(status: DriverTaskOrderStatus): string {

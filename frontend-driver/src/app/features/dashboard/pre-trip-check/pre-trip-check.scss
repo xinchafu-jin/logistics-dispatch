@@ -5,11 +5,56 @@
 }
 
 .pre-trip {
-  margin: 16px 0 20px;
-  padding: 18px;
+  margin: 12px 0 14px;
+  padding: 14px;
   border: 1px solid #bdd5cb;
-  border-radius: 12px;
+  border-radius: 10px;
   background: #f1f8f5;
+}
+
+.pre-trip.is-passed-compact {
+  padding: 8px 12px;
+  background: #e5f2ec;
+  border-color: #a9c9be;
+}
+
+.pre-trip-passed-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pre-trip-passed-bar__info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #174c40;
+  font-weight: 700;
+}
+
+.pre-trip-passed-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #fff;
+  background: #0e7663;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.pre-trip-passed-toggle {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 0;
+  color: #0e7663;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: underline;
 }
 
 header {
