@@ -26,6 +26,13 @@ describe('DispatchApiService', () => {
     request.flush({from: '2026-09-21', to: '2026-09-27', workforce: {}, fleet: {}, warehouses: [], shifts: [], trips: []});
   });
 
+  it('sends a selected tonnage group as comma-separated vehicle IDs', () => {
+    service.getReportSummary({from: '2026-09-28', to: '2026-09-28', vehicleIds: [7, 9]}).subscribe();
+    const request = httpTesting.expectOne('/api/reports/summary?from=2026-09-28&to=2026-09-28&vehicleIds=7,9');
+    expect(request.request.method).toBe('GET');
+    request.flush({from: '2026-09-28', to: '2026-09-28'});
+  });
+
   it('withdraws publication for the selected date without rewriting orders', () => {
     service.withdrawDispatch('2026-09-27').subscribe((boards) => expect(boards).toEqual([]));
     const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-27');

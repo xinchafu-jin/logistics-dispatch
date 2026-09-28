@@ -28,21 +28,28 @@
 
   <section class="query-panel" aria-label="報表查詢條件">
     <div class="query-fields">
-      <!-- 起訖日期合成一個 Material 日期區間：同一個月曆點兩下選完，結束日不會選到起始日之前 -->
-      <label class="date-range-field">
-        <span>查詢期間</span>
+      <label class="date-field">
+        <span>開始日期</span>
         <mat-form-field class="admin-date-field" appearance="outline" subscriptSizing="dynamic">
-          <mat-date-range-input [rangePicker]="reportRangePicker" aria-label="查詢期間">
-            <input matStartDate placeholder="起始日期" [value]="fromDate()" (dateChange)="updateDate('from', $event.value)" />
-            <input matEndDate placeholder="結束日期" [value]="toDate()" (dateChange)="updateDate('to', $event.value)" />
-          </mat-date-range-input>
-          <mat-datepicker-toggle matIconSuffix [for]="reportRangePicker" />
-          <mat-date-range-picker #reportRangePicker />
+          <input matInput [matDatepicker]="fromPicker" aria-label="開始日期" placeholder="選擇開始日期"
+            [value]="fromDate()" (dateChange)="updateDate('from', $event.value)" />
+          <mat-datepicker-toggle matIconSuffix [for]="fromPicker" />
+          <mat-datepicker #fromPicker />
+        </mat-form-field>
+      </label>
+      <label class="date-field">
+        <span>結束日期</span>
+        <mat-form-field class="admin-date-field" appearance="outline" subscriptSizing="dynamic">
+          <input matInput [matDatepicker]="toPicker" aria-label="結束日期" placeholder="選擇結束日期"
+            [value]="toDate()" (dateChange)="updateDate('to', $event.value)" />
+          <mat-datepicker-toggle matIconSuffix [for]="toPicker" />
+          <mat-datepicker #toPicker />
         </mat-form-field>
       </label>
       <label><span>出貨倉庫</span><select [value]="warehouseId() ?? ''" (change)="updateFilter('warehouse', $event)"><option value="">全部倉庫</option>@for (warehouse of warehouses(); track warehouse.id) { <option [value]="warehouse.id">{{ warehouse.name }}</option> }</select></label>
       <label><span>配送門市</span><select [value]="storeId() ?? ''" (change)="updateFilter('store', $event)"><option value="">全部門市</option>@for (store of stores(); track store.id) { <option [value]="store.id">{{ store.name }}</option> }</select></label>
       <label><span>司機</span><select [value]="driverId() ?? ''" (change)="updateFilter('driver', $event)"><option value="">全部司機</option>@for (driver of drivers(); track driver.id) { <option [value]="driver.id">{{ driver.name }}</option> }</select></label>
+      <label><span>車輛噸位</span><select [value]="tonnage() ?? ''" (change)="updateFilter('tonnage', $event)"><option value="">全部噸位</option>@for (option of tonnageOptions(); track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
     </div>
     <button class="preview-button" type="button" (click)="createPreview()" [disabled]="loading()">
       <mat-icon aria-hidden="true">visibility</mat-icon>{{ loading() ? '正在產生預覽' : '預覽匯出內容' }}

@@ -4,8 +4,9 @@ import {catchError, forkJoin, Observable, of, Subscription, throwError} from 'rx
 import {MatIconModule} from '@angular/material/icon';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
+import {MatInputModule} from '@angular/material/input';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, WarehouseDto,
+import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, VehicleDto, WarehouseDto,
   ReportOutcomesDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
 import {REPORT_CASE_METRICS, matchesReportCase} from '../../report-delivery-cases';
 import {ORDER_PROGRESS_METRICS, matchesOrderProgress} from '../../report-unsettled-orders';
@@ -131,7 +132,7 @@ const METRICS: Partial<Record<PreviewSheet, {id: string; label: string}[]>> = {
 
 @Component({
   selector: 'app-report-history',
-  imports: [MatIconModule, MatDatepickerModule, MatFormFieldModule],
+  imports: [MatIconModule, MatDatepickerModule, MatFormFieldModule, MatInputModule],
   templateUrl: './report-history.html',
   styleUrl: './report-history.scss',
 })
@@ -157,9 +158,16 @@ export class ReportHistory implements OnInit, OnDestroy {
   readonly warehouseId = signal<number | null>(null);
   readonly storeId = signal<number | null>(null);
   readonly driverId = signal<number | null>(null);
+  readonly tonnage = signal<string | null>(null);
   readonly warehouses = signal<WarehouseDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
   readonly drivers = signal<DriverDto[]>([]);
+  readonly vehicles = signal<VehicleDto[]>([]);
+  readonly tonnageOptions = computed(() => {
+    const values = new Set(this.vehicles().map((vehicle) => this.vehicleTonnage(vehicle)));
+    return [...values].sort((left, right) => left === null ? 1 : right === null ? -1 : left - right)
+      .map((value) => ({value: value === null ? 'unknown' : String(value), label: value === null ? '未設定噸位' : `${value} 噸`}));
+  });
   readonly preview = signal<ReportPreview | null>(null);
   readonly selectedSheet = signal<PreviewSheet>('overview');
   readonly loading = signal(false);
@@ -183,11 +191,15 @@ export class ReportHistory implements OnInit, OnDestroy {
     if (query.has('warehouseId') && Number.isSafeInteger(warehouseId) && warehouseId > 0) {
       this.warehouseId.set(warehouseId);
     }
+    const tonnage = query.get('tonnage');
+    if (tonnage === 'unknown' || (tonnage !== null && /^\d+(?:\.\d+)?$/.test(tonnage))) {
+      this.tonnage.set(tonnage === 'unknown' ? tonnage : String(Number(tonnage)));
+    }
     this.loadFilterOptions();
-    this.createPreview();
+    if (this.tonnage() === null) this.createPreview();
   }
 
-  /** 重選起始日時，Material 會先把結束日清成 null，要等使用者點第二下才有值；空字串交給 createPreview 擋下 */
+  /** 起訖日期分別選取；空白或起日較晚的區間由 createPreview 擋下。 */
   protected updateDate(bound: 'from' | 'to', date: Date | null): void {
     const value = date ? this.toIsoDate(date) : '';
     if (bound === 'from') this.from.set(value);
@@ -280,12 +292,13 @@ export class ReportHistory implements OnInit, OnDestroy {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
-  protected updateFilter(kind: 'warehouse' | 'store' | 'driver', event: Event): void {
+  protected updateFilter(kind: 'warehouse' | 'store' | 'driver' | 'tonnage', event: Event): void {
     const raw = (event.target as HTMLSelectElement).value;
     const value = raw ? Number(raw) : null;
     if (kind === 'warehouse') this.warehouseId.set(value);
     if (kind === 'store') this.storeId.set(value);
     if (kind === 'driver') this.driverId.set(value);
+    if (kind === 'tonnage') this.tonnage.set(raw || null);
     this.invalidatePreview();
   }
 
@@ -310,7 +323,9 @@ export class ReportHistory implements OnInit, OnDestroy {
     this.errorMessage.set('');
     this.detailError.set('');
     const query = this.reportQuery();
-    void this.router.navigate([], {relativeTo: this.route, queryParams: {from: this.from(), to: this.to()}, queryParamsHandling: 'merge'});
+    void this.router.navigate([], {relativeTo: this.route, queryParams: {
+      from: this.from(), to: this.to(), vehicleId: null, tonnage: this.tonnage(),
+    }, queryParamsHandling: 'merge'});
     this.previewRequest?.unsubscribe();
     this.previewRequest = forkJoin({
       performance: this.previewSource('人員與出車統計', this.api.getReportPerformance(query)),
@@ -368,6 +383,7 @@ export class ReportHistory implements OnInit, OnDestroy {
         ['倉庫', this.selectedWarehouseLabel()],
         ['門市', this.selectedStoreLabel()],
         ['司機', this.selectedDriverLabel()],
+        ['噸位', this.selectedTonnageLabel()],
         ['匯出時間', new Intl.DateTimeFormat('zh-TW', {dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Taipei'}).format(new Date())],
       ]);
       this.appendSheet(xlsx, workbook, '營運總覽', this.overviewExportRows(preview.summary));
@@ -563,6 +579,8 @@ export class ReportHistory implements OnInit, OnDestroy {
         i.loadedQuantity, i.missingQuantity, i.unit, this.loadingItemLabel(i), i.checkedAt, i.notes]))];
   }
   protected orderRows(preview: ReportPreview): ReportRow[] {
+    const selectedVehicleIds = this.selectedVehicleIds();
+    const vehicleIds = selectedVehicleIds === undefined ? null : new Set(selectedVehicleIds);
     const storesById = new Map(preview.storeDirectory.filter((store) => store.id != null).map((store) => [store.id!, store]));
     const routeByOrderId = new Map<number, ReportRow>();
     for (const route of this.rows(preview.routes, 'routes')) {
@@ -576,6 +594,12 @@ export class ReportHistory implements OnInit, OnDestroy {
       .filter((order) => this.warehouseId() === null || order.warehouseId === this.warehouseId())
       .filter((order) => this.storeId() === null || order.storeId === this.storeId())
       .filter((order) => this.driverId() === null || order.assignedDriverId === this.driverId())
+      .filter((order) => {
+        if (vehicleIds === null) return true;
+        const routeVehicleId = order.id == null ? undefined : routeByOrderId.get(order.id)?.vehicleId;
+        return (order.assignedVehicleId != null && vehicleIds.has(order.assignedVehicleId))
+          || (typeof routeVehicleId === 'number' && vehicleIds.has(routeVehicleId));
+      })
       .filter((order) => this.selectedSheet() !== 'orders' || matchesOrderProgress(order, this.metric()))
       .sort((left, right) => left.deliveryDate.localeCompare(right.deliveryDate) || left.orderNumber.localeCompare(right.orderNumber))
       .map((order) => {
@@ -627,18 +651,39 @@ export class ReportHistory implements OnInit, OnDestroy {
       warehouses: read('倉庫選項', this.api.getWarehouses()),
       stores: read('門市選項', this.api.getStores()),
       drivers: read('司機選項', this.api.getDrivers()),
+      vehicles: read('車輛選項', this.api.getVehicles()),
     }).subscribe({
-      next: ({warehouses, stores, drivers}) => {
+      next: ({warehouses, stores, drivers, vehicles}) => {
         this.warehouses.set(warehouses);
         this.stores.set(stores);
         this.drivers.set(drivers);
+        this.vehicles.set(vehicles);
+        if (this.tonnage() !== null) this.createPreview();
       },
     });
+  }
+
+  private vehicleTonnage(vehicle: VehicleDto): number | null {
+    const match = /([0-9]+(?:\.[0-9]+)?)\s*噸/.exec(vehicle.vehicleType ?? '');
+    return match ? Number(match[1]) : null;
+  }
+
+  private selectedVehicleIds(): number[] | undefined {
+    const selected = this.tonnage();
+    if (selected === null) return undefined;
+    return this.vehicles().filter((vehicle) => {
+      const tonnage = this.vehicleTonnage(vehicle);
+      return selected === 'unknown' ? tonnage === null : tonnage === Number(selected);
+    }).map((vehicle) => vehicle.id).filter((id): id is number => typeof id === 'number');
   }
 
   private validRange(): boolean {
     if (!this.from() || !this.to() || this.from() > this.to()) {
       this.errorMessage.set('請確認查詢起訖日期。');
+      return false;
+    }
+    if (this.tonnage() !== null && this.selectedVehicleIds()?.length === 0) {
+      this.errorMessage.set('所選噸位沒有可查詢的車輛，請重新選擇噸位。');
       return false;
     }
     return true;
@@ -650,6 +695,7 @@ export class ReportHistory implements OnInit, OnDestroy {
       warehouseId: this.warehouseId() ?? undefined,
       storeId: this.storeId() ?? undefined,
       driverId: this.driverId() ?? undefined,
+      vehicleIds: this.selectedVehicleIds(),
     };
   }
 
@@ -770,5 +816,8 @@ export class ReportHistory implements OnInit, OnDestroy {
   private selectedWarehouseLabel(): string { return this.warehouses().find((warehouse) => warehouse.id === this.warehouseId())?.name ?? '全部倉庫'; }
   private selectedStoreLabel(): string { return this.stores().find((store) => store.id === this.storeId())?.name ?? '全部門市'; }
   private selectedDriverLabel(): string { return this.drivers().find((driver) => driver.id === this.driverId())?.name ?? '全部司機'; }
+  private selectedTonnageLabel(): string {
+    return this.tonnageOptions().find((option) => option.value === this.tonnage())?.label ?? '全部噸位';
+  }
   private today(): string { return new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Taipei'}).format(new Date()); }
 }

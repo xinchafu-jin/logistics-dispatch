@@ -344,6 +344,7 @@ export interface ReportQuery {
   warehouseId?: number;
   driverId?: number;
   vehicleId?: number;
+  vehicleIds?: number[];
   storeId?: number;
   routeId?: number;
   includeDetails?: boolean;

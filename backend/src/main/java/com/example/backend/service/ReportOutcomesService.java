@@ -34,7 +34,19 @@ public class ReportOutcomesService {
         return outcomes(range, warehouseId, false);
     }
     public ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId, boolean includeDetails) {
-        return outcomes(range, warehouseId, LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
+        return outcomes(range, warehouseId, (Long) null, includeDetails);
+    }
+
+    public ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId,
+            Long vehicleId, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleId == null ? null : Set.of(vehicleId),
+                LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
+    }
+
+    public ReportOutcomesResponse outcomesForVehicles(ReportService.Range range, Long warehouseId,
+            Set<Long> vehicleIds, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleIds,
+                LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
     }
 
     // Explicit as-of time makes cutoff and overnight-window behavior deterministic in tests.
@@ -42,9 +54,23 @@ public class ReportOutcomesService {
         return outcomes(range, warehouseId, now, false);
     }
     ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId, LocalDateTime now, boolean includeDetails) {
+        return outcomes(range, warehouseId, null, now, includeDetails);
+    }
+
+    ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId,
+            Long vehicleId, LocalDateTime now, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleId == null ? null : Set.of(vehicleId), now, includeDetails);
+    }
+
+    ReportOutcomesResponse outcomesForVehicles(ReportService.Range range, Long warehouseId,
+            Set<Long> vehicleIds, LocalDateTime now, boolean includeDetails) {
         Map<Long, StoresEntity> byStore = stores.findAll().stream()
                 .collect(Collectors.toMap(StoresEntity::getId, Function.identity()));
-        List<OrdersEntity> allOrders = reads.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<OrdersEntity> allOrders = vehicleIds == null
+                ? reads.orders(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reads.orders(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reads.ordersForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
         List<OrdersEntity> orders = allOrders.stream()
                 .filter(o -> o.getStatus() != OrderStatus.CANCELLED && o.getStatus() != OrderStatus.PENDING_CONFIRM)
                 .toList();
@@ -85,6 +111,7 @@ public class ReportOutcomesService {
         for (var warehouse : directory) {
             if (warehouseId != null && !warehouseId.equals(warehouse.getId())) continue;
             var rows = observations.stream().filter(o -> warehouse.getId().equals(o.order().getWarehouseId())).toList();
+            if (vehicleIds != null && rows.isEmpty()) continue;
             byWarehouse.add(new WarehouseOutcome(warehouse.getId(), warehouse.getName(), delivery(rows), loading(rows), problems(rows)));
         }
         Set<Long> knownWarehouses = byWarehouse.stream().map(WarehouseOutcome::warehouseId).collect(Collectors.toSet());
@@ -95,7 +122,11 @@ public class ReportOutcomesService {
                 .collect(Collectors.groupingBy(o -> o.order().getDeliveryDate(), TreeMap::new, Collectors.toList()));
         List<DeliveryDay> daily = byDay.entrySet().stream().map(e ->
                 new DeliveryDay(e.getKey(), e.getValue().size(), count(e.getValue(), Observation::full))).toList();
-        var allRoutes = reads.routes(range.getFrom(), range.getTo(), warehouseId);
+        var allRoutes = vehicleIds == null
+                ? reads.routes(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reads.routes(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reads.routesForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
         var driverByRoute = new HashMap<Long, Long>();
         allRoutes.forEach(r -> { if (r.getDriverId() != null) driverByRoute.put(r.getId(), r.getDriverId()); });
         List<Long> detailIds = includeDetails ? java.util.stream.Stream.concat(ids.stream(),

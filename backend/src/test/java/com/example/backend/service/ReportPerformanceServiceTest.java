@@ -133,6 +133,42 @@ class ReportPerformanceServiceTest {
         assertEquals(1, result.workforce().missingTimeShifts()); assertNull(result.workforce().attendanceRate());
         verify(vehicles, never()).save(any());
     }
+    @Test void vehicleFilterKeepsMatchingShiftsTripsAndWarehouses() {
+        shift(1, 1, day, LocalTime.of(8, 0), LocalTime.of(17, 0));
+        var selectedAttendance = new ReportResponses.Attendance();
+        selectedAttendance.setShifts(List.of(shifts.getFirst()));
+        when(reports.attendance(range, null, 10L)).thenReturn(selectedAttendance);
+        when(reads.routes(range.getFrom(), range.getTo(), null)).thenReturn(List.of(route(1L, 1L)));
+        var selectedTrip = trip(1L, 1L, LocalTime.of(16, 0));
+        var otherTrip = trip(2L, 1L, LocalTime.of(16, 0));
+        otherTrip.setVehicleId(20L);
+        when(reads.mileage(range.getFrom(), range.getTo())).thenReturn(List.of(selectedTrip, otherTrip));
+
+        var result = service.performance(range, null, null, 10L);
+
+        assertEquals(1, result.workforce().scheduledWorkShifts());
+        assertEquals(1, result.fleet().startedTrips());
+        assertEquals(1, result.warehouses().size());
+        assertEquals(1L, result.warehouses().getFirst().warehouseId());
+        verify(reports).attendance(range, null, 10L);
+    }
+    @Test void tonnageGroupIncludesTripsFromEverySelectedVehicle() {
+        var selectedAttendance = new ReportResponses.Attendance();
+        selectedAttendance.setShifts(List.of());
+        Set<Long> vehicleIds = Set.of(10L, 20L);
+        when(reports.attendanceForVehicles(range, null, vehicleIds)).thenReturn(selectedAttendance);
+        var first = trip(1L, null, LocalTime.of(16, 0));
+        var second = trip(2L, null, LocalTime.of(16, 0));
+        second.setVehicleId(20L);
+        var other = trip(3L, null, LocalTime.of(16, 0));
+        other.setVehicleId(30L);
+        when(reads.mileage(range.getFrom(), range.getTo())).thenReturn(List.of(first, second, other));
+
+        var result = service.performanceForVehicles(range, null, null, vehicleIds);
+
+        assertEquals(2, result.fleet().startedTrips());
+        verify(reports).attendanceForVehicles(range, null, vehicleIds);
+    }
     private RoutesEntity route(long id, long warehouse) {
         var route = new RoutesEntity(); route.setId(id); route.setDriverId(1L); route.setVehicleId(10L);
         route.setDate(day); route.setWarehouseId(warehouse); return route;

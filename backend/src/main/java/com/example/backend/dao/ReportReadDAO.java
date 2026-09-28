@@ -19,6 +19,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Date-bounded report reads kept separate from the existing write-path DAOs. */
 @Repository
@@ -42,12 +43,56 @@ public class ReportReadDAO {
         return query.getResultList();
     }
 
+    public List<OrdersEntity> orders(LocalDate from, LocalDate to, Long warehouseId, Long vehicleId) {
+        return ordersForVehicles(from, to, warehouseId, vehicleId == null ? null : Set.of(vehicleId));
+    }
+
+    public List<OrdersEntity> ordersForVehicles(LocalDate from, LocalDate to, Long warehouseId, Set<Long> vehicleIds) {
+        if (vehicleIds == null) {
+            return orders(from, to, warehouseId);
+        }
+        if (vehicleIds.isEmpty()) return List.of();
+        String jpql = "select o from OrdersEntity o where o.deliveryDate between :from and :to"
+                + (warehouseId == null ? "" : " and o.warehouseId = :warehouseId")
+                + " and (o.assignedVehicleId in :vehicleIds or exists (select r.id from RoutesEntity r"
+                + " where r.id = o.routeId and r.vehicleId in :vehicleIds))"
+                + " order by o.deliveryDate, o.id";
+        var query = entityManager.createQuery(jpql, OrdersEntity.class)
+                .setParameter("from", from).setParameter("to", to)
+                .setParameter("vehicleIds", vehicleIds);
+        if (warehouseId != null) {
+            query.setParameter("warehouseId", warehouseId);
+        }
+        return query.getResultList();
+    }
+
     public List<RoutesEntity> routes(LocalDate from, LocalDate to, Long warehouseId) {
         String jpql = "select r from RoutesEntity r where r.date between :from and :to"
                 + (warehouseId == null ? "" : " and r.warehouseId = :warehouseId")
                 + " order by r.date, r.id";
         var query = entityManager.createQuery(jpql, RoutesEntity.class)
                 .setParameter("from", from).setParameter("to", to);
+        if (warehouseId != null) {
+            query.setParameter("warehouseId", warehouseId);
+        }
+        return query.getResultList();
+    }
+
+    public List<RoutesEntity> routes(LocalDate from, LocalDate to, Long warehouseId, Long vehicleId) {
+        return routesForVehicles(from, to, warehouseId, vehicleId == null ? null : Set.of(vehicleId));
+    }
+
+    public List<RoutesEntity> routesForVehicles(LocalDate from, LocalDate to, Long warehouseId, Set<Long> vehicleIds) {
+        if (vehicleIds == null) {
+            return routes(from, to, warehouseId);
+        }
+        if (vehicleIds.isEmpty()) return List.of();
+        String jpql = "select r from RoutesEntity r where r.date between :from and :to"
+                + (warehouseId == null ? "" : " and r.warehouseId = :warehouseId")
+                + " and r.vehicleId in :vehicleIds order by r.date, r.id";
+        var query = entityManager.createQuery(jpql, RoutesEntity.class)
+                .setParameter("from", from).setParameter("to", to)
+                .setParameter("vehicleIds", vehicleIds);
         if (warehouseId != null) {
             query.setParameter("warehouseId", warehouseId);
         }

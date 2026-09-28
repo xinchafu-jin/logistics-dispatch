@@ -11,7 +11,7 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import {Observable, filter, forkJoin, map} from 'rxjs';
+import {Observable, catchError, filter, forkJoin, map, of} from 'rxjs';
 import {MatSelectModule} from '@angular/material/select';
 import {MatInputModule} from '@angular/material/input';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -100,6 +100,7 @@ export class DispatchShell implements OnInit {
   protected readonly rejectionTarget = signal<RejectionTarget | null>(null);
   protected readonly rejectionReason = signal('');
   protected readonly notificationError = signal('');
+  protected readonly notificationLoadFailed = signal(false);
   protected readonly isLoadingNotifications = signal(false);
   protected readonly notificationAction = signal<string | null>(null);
   //司機名單
@@ -490,14 +491,27 @@ export class DispatchShell implements OnInit {
 
     this.isLoadingNotifications.set(true);
     this.notificationError.set('');
+    this.notificationLoadFailed.set(false);
+    const failedSections: string[] = [];
     forkJoin({
-      count: this.api.getPendingDriverAccountApplicationCount(),
-      applications: this.api.getPendingDriverAccountApplications(),
-      leaves: this.api.getPendingEmergencyLeaveRequests(),
-      leaveRequests: this.api.getPendingLeaveRequests(),
+      // 帳號申請的後端流程尚未建立；404 代表此項目未啟用，不應擋住其他待辦。
+      applications: this.api.getPendingDriverAccountApplications().pipe(catchError((error: unknown) => {
+        if (!(error instanceof HttpErrorResponse) || error.status !== 404) {
+          failedSections.push('司機帳號申請');
+        }
+        return of([] as DriverAccountApplicationDto[]);
+      })),
+      leaves: this.api.getPendingEmergencyLeaveRequests().pipe(catchError(() => {
+        failedSections.push('臨時離班');
+        return of([] as EmergencyLeaveDto[]);
+      })),
+      leaveRequests: this.api.getPendingLeaveRequests().pipe(catchError(() => {
+        failedSections.push('當日請假');
+        return of([] as DriverLeaveRequestDto[]);
+      })),
     }).subscribe({
-      next: ({count, applications, leaves, leaveRequests}) => {
-        this.pendingApplicationCount.set(count.count);
+      next: ({applications, leaves, leaveRequests}) => {
+        this.pendingApplicationCount.set(applications.length);
         this.pendingApplications.set(applications);
         this.pendingEmergencyLeaves.set(leaves);
         this.pendingTemporaryLeaveRequests.set(
@@ -510,10 +524,15 @@ export class DispatchShell implements OnInit {
         );
         const selectedId = this.selectedEmergencyLeave()?.id;
         this.selectedEmergencyLeave.set(leaves.find((leave) => leave.id === selectedId) ?? null);
+        if (failedSections.length) {
+          this.notificationError.set(`${failedSections.join('、')}待辦未載入，其他待辦仍可使用；請稍後重新開啟再試。`);
+          this.notificationLoadFailed.set(true);
+        }
         this.isLoadingNotifications.set(false);
       },
       error: () => {
         this.notificationError.set('暫時無法取得主管待辦，請重新整理後再試。');
+        this.notificationLoadFailed.set(true);
         this.isLoadingNotifications.set(false);
       },
     });

@@ -30,13 +30,22 @@ public class ReportPerformanceService {
     }
 
     public ReportPerformanceResponse performance(ReportService.Range range, Long warehouseId, Long driverId, Long vehicleId) {
+        return performanceForVehicles(range, warehouseId, driverId, vehicleId == null ? null : Set.of(vehicleId));
+    }
+
+    public ReportPerformanceResponse performanceForVehicles(ReportService.Range range, Long warehouseId,
+            Long driverId, Set<Long> vehicleIds) {
         LocalDateTime now = LocalDateTime.now(ZoneId.of("Asia/Taipei"));
         Map<Long, DriversEntity> driverById = drivers.findAll().stream().collect(Collectors.toMap(DriversEntity::getId, Function.identity()));
         Map<Long, VehiclesEntity> vehicleById = vehicles.findAll().stream().collect(Collectors.toMap(VehiclesEntity::getId, Function.identity()));
         Map<Long, String> names = warehouses.findAll().stream().collect(Collectors.toMap(WarehousesEntity::getId, WarehousesEntity::getName));
         Map<Long, List<DriverLeaveRequestsEntity>> approvedLeaves = reads.approvedLeaves(range.getFrom(), range.getTo()).stream()
                 .collect(Collectors.groupingBy(DriverLeaveRequestsEntity::getDriverShiftId));
-        List<ReportResponses.AttendanceRow> workRows = reports.attendance(range, driverId).getShifts().stream()
+        ReportResponses.Attendance attendanceReport = vehicleIds == null
+                ? reports.attendance(range, driverId) : vehicleIds.size() == 1
+                ? reports.attendance(range, driverId, vehicleIds.iterator().next())
+                : reports.attendanceForVehicles(range, driverId, vehicleIds);
+        List<ReportResponses.AttendanceRow> workRows = attendanceReport.getShifts().stream()
                 .filter(row -> row.getShiftType() == ShiftType.WORK)
                 .filter(row -> warehouseId == null || (driverById.containsKey(row.getDriverId())
                         && warehouseId.equals(driverById.get(row.getDriverId()).getWarehouseId()))).toList();
@@ -84,7 +93,7 @@ public class ReportPerformanceService {
             Long v = log.getVehicleId() != null ? log.getVehicleId() : route == null ? null : route.getVehicleId();
             Long wh = route == null ? null : route.getWarehouseId();
             if (warehouseId != null && !warehouseId.equals(wh)) continue;
-            if (vehicleId != null && !vehicleId.equals(v)) continue;
+            if (vehicleIds != null && (v == null || !vehicleIds.contains(v))) continue;
             LocalDateTime end = log.getEndTime();
             String state = end == null ? "OPEN" : end.isBefore(log.getStartTime()) || end.isAfter(now) ? "INVALID" : "RETURNED";
             Double km = null; String source = "MISSING";
@@ -105,6 +114,8 @@ public class ReportPerformanceService {
         }
         List<WarehousePerformance> byWarehouse = names.entrySet().stream()
                 .filter(entry -> warehouseId == null || warehouseId.equals(entry.getKey())).sorted(Map.Entry.comparingByKey())
+                .filter(entry -> vehicleIds == null || attendance.stream().anyMatch(row -> entry.getKey().equals(row.warehouseId()))
+                        || trips.stream().anyMatch(row -> entry.getKey().equals(row.warehouseId())))
                 .map(entry -> new WarehousePerformance(entry.getKey(), entry.getValue(), workforce(attendance.stream()
                         .filter(row -> entry.getKey().equals(row.warehouseId())).toList()), fleet(trips.stream()
                         .filter(row -> entry.getKey().equals(row.warehouseId())).toList()))).collect(Collectors.toCollection(ArrayList::new));

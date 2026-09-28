@@ -30,6 +30,7 @@ describe('ReportHistory links from the supervisor summary', () => {
     api['getWarehouses'] = vi.fn(() => of([{id: 1, name: '第一倉'}]));
     api['getStores'] = vi.fn(() => of([{id: 2, name: '第一店'}]));
     api['getDrivers'] = vi.fn(() => of([{id: 3, name: '第一位司機'}]));
+    api['getVehicles'] = vi.fn(() => of([{id: 4, plateNumber: 'ABC-1234', vehicleType: '3.5噸貨車'}]));
     return api;
   }
 
@@ -70,7 +71,52 @@ describe('ReportHistory links from the supervisor summary', () => {
     expect(page.warehouses()).toEqual([{id: 1, name: '第一倉'}]);
     expect(page.stores()).toEqual([{id: 2, name: '第一店'}]);
     expect(page.drivers()).toEqual([]);
+    expect(page.vehicles().map((vehicle: any) => vehicle.id)).toEqual([4]);
     expect(page.filterError()).toContain('司機選項');
+  });
+
+  it('groups the vehicle filter by tonnage and includes every vehicle in the selected group', () => {
+    const page = open({tonnage: '1.75'}) as any;
+    const api = TestBed.inject(DispatchApiService) as any;
+    Object.assign(api, previewApi());
+    api.getVehicles = vi.fn(() => of([
+      {id: 7, plateNumber: 'ZZZ-0007', vehicleType: '3.5噸冷藏車'},
+      {id: 8, plateNumber: 'AAA-0008', vehicleType: '未設定車型'},
+      {id: 9, plateNumber: 'BBB-0009', vehicleType: '1.75噸貨車'},
+      {id: 10, plateNumber: 'AAA-0010', vehicleType: '3.5噸貨車'},
+      {id: 11, plateNumber: 'CCC-0011', vehicleType: '1.5噸貨車'},
+    ]));
+
+    (ReportHistory.prototype as any).loadFilterOptions.call(page);
+
+    expect(page.tonnageOptions().map((option: any) => option.label)).toEqual([
+      '1.5 噸', '1.75 噸', '3.5 噸', '未設定噸位',
+    ]);
+    expect(page.tonnage()).toBe('1.75');
+    expect(page.reportQuery().vehicleIds).toEqual([9]);
+    page.updateFilter('tonnage', {target: {value: '3.5'}});
+    expect(page.reportQuery().vehicleIds).toEqual([7, 10]);
+  });
+
+  it('sends every matching vehicle to each report preview source', () => {
+    const page = open({from: '2026-09-28', to: '2026-09-28', tonnage: '1.75'}) as any;
+    page.vehicles.set([{id: 7, vehicleType: '1.75噸貨車'}, {id: 9, vehicleType: '1.75噸冷藏車'},
+      {id: 8, vehicleType: '3.5噸貨車'}]);
+    const api = TestBed.inject(DispatchApiService) as any;
+    Object.assign(api, previewApi());
+
+    (ReportHistory.prototype as any).createPreview.call(page);
+
+    for (const name of ['getReportPerformance', 'getReportSummary', 'getReportAttendance', 'getReportRoutes',
+      'getReportDrivers', 'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions']) {
+      expect(api[name].mock.lastCall[0].vehicleIds).toEqual([7, 9]);
+    }
+    expect(api.getReportOutcomes.mock.lastCall[0].vehicleIds).toEqual([7, 9]);
+    expect(TestBed.inject(Router).navigate).toHaveBeenLastCalledWith([], {
+      relativeTo: TestBed.inject(ActivatedRoute),
+      queryParams: {from: '2026-09-28', to: '2026-09-28', vehicleId: null, tonnage: '1.75'},
+      queryParamsHandling: 'merge',
+    });
   });
 
   it('clears an older preview before refreshing so it cannot export the wrong period', () => {
@@ -105,6 +151,26 @@ describe('ReportHistory links from the supervisor summary', () => {
     expect(element.querySelector('[role="alert"]')?.textContent).toContain('異常案件');
     expect(element.querySelector('.empty-preview button')?.textContent).toContain('重新載入報表');
     expect(element.querySelector('.export-button')).toBeNull();
+  });
+
+  it('shows separate calendar fields for the start and end dates', () => {
+    TestBed.configureTestingModule({imports: [ReportHistory], providers: [
+      provideNativeDateAdapter(),
+      {provide: ActivatedRoute, useValue: {snapshot: {queryParamMap: convertToParamMap({from: '2026-09-01', to: '2026-09-24'})}}},
+      {provide: Router, useValue: {navigate: vi.fn(() => Promise.resolve(true))}},
+      {provide: DispatchApiService, useValue: {}},
+    ]});
+    const fixture = TestBed.createComponent(ReportHistory);
+    vi.spyOn(fixture.componentInstance as any, 'loadFilterOptions').mockImplementation(() => undefined);
+    vi.spyOn(fixture.componentInstance as any, 'createPreview').mockImplementation(() => undefined);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelectorAll('.date-field')).toHaveLength(2);
+    expect(element.querySelector('input[aria-label="開始日期"]')).not.toBeNull();
+    expect(element.querySelector('input[aria-label="結束日期"]')).not.toBeNull();
+    expect(element.querySelectorAll('.date-field mat-datepicker-toggle')).toHaveLength(2);
+    fixture.destroy();
   });
 
   it('shows recorded return times and counts without a return-completion percentage', () => {
@@ -174,6 +240,22 @@ describe('ReportHistory links from the supervisor summary', () => {
     })), storeDirectory: [], routes: {routes: []}};
     expect(page.orderRows(data)).toEqual([]);
     expect(page.orderExportRows(data)).toHaveLength(1);
+  });
+
+  it('filters displayed and exported orders by all vehicles in a tonnage group', () => {
+    const page = open({from: '2026-09-28', to: '2026-09-28', tonnage: '1.75'}) as any;
+    page.vehicles.set([{id: 7, vehicleType: '1.75噸貨車'}, {id: 9, vehicleType: '1.75噸冷藏車'},
+      {id: 8, vehicleType: '3.5噸貨車'}]);
+    const order = (id: number, assignedVehicleId?: number) => ({
+      id, orderNumber: `O-${id}`, deliveryDate: '2026-09-28', status: 'CONFIRMED',
+      storeId: 10, warehouseId: 1, boxCount: 10, assignedVehicleId,
+    });
+    const data = {orders: [order(1, 7), order(2, 8), order(3)], storeDirectory: [], routes: {routes: [
+      {vehicleId: 9, deliveryOrder: [{orderId: 3}]},
+    ]}};
+
+    expect(page.orderRows(data).map((row: any) => row.orderNumber)).toEqual(['O-1', 'O-3']);
+    expect(page.orderExportRows(data).slice(1).map((row: any[]) => row[1])).toEqual(['O-1', 'O-3']);
   });
 
   it.each([
@@ -257,7 +339,7 @@ describe('ReportHistory links from the supervisor summary', () => {
       page.createPreview.mockImplementation(() => (ReportHistory.prototype as any).createPreview.call(page));
       page.setPeriod('day');
       const query = {period: 'CUSTOM', from: '2026-09-28', to: '2026-09-28', warehouseId: 12,
-        storeId: undefined, driverId: undefined};
+        storeId: undefined, driverId: undefined, vehicleIds: undefined};
       for (const name of reads) expect(api[name]).toHaveBeenLastCalledWith(query);
       expect(api.getReportSummary).toHaveBeenLastCalledWith(query);
       expect(api.getReportOutcomes).toHaveBeenLastCalledWith({...query, includeDetails: true});
@@ -265,7 +347,7 @@ describe('ReportHistory links from the supervisor summary', () => {
       expect(page.selectedSheet()).toBe('attendance');
       expect(page.metric()).toBe('late');
       expect(TestBed.inject(Router).navigate).toHaveBeenLastCalledWith([], {
-        relativeTo: TestBed.inject(ActivatedRoute), queryParams: {from: query.from, to: query.to},
+        relativeTo: TestBed.inject(ActivatedRoute), queryParams: {from: query.from, to: query.to, vehicleId: null, tonnage: null},
         queryParamsHandling: 'merge',
       });
     } finally { vi.useRealTimers(); }
