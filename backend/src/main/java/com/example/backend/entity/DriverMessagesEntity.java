@@ -6,7 +6,10 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
- * 司機與調度中心之間的聊天訊息。一位司機只有一串對話，driverId 就是對話編號。
+ * 司機與調度中心之間的聊天訊息。
+ *
+ * <p>一位司機有一串一般對話（exceptionCaseId 是 null），加上每件例外回報案件各一串。
+ * 一般對話的查詢一律要加 exceptionCaseId IS NULL，不然案件訊息會混進一般對話。</p>
  */
 @Entity
 @Table(name = "driver_messages")
@@ -38,6 +41,10 @@ public class DriverMessagesEntity {
     /** 對方讀到的時間，null 代表未讀。司機發的由任一位管理員讀，管理員發的由司機讀 */
     @Column
     private LocalDateTime readAt;
+
+    /** 屬於哪件例外回報案件的對話；null＝一般對話 */
+    @Column
+    private Long exceptionCaseId;
 
     public Long getId() {
         return id;
@@ -93,5 +100,13 @@ public class DriverMessagesEntity {
 
     public void setReadAt(LocalDateTime readAt) {
         this.readAt = readAt;
+    }
+
+    public Long getExceptionCaseId() {
+        return exceptionCaseId;
+    }
+
+    public void setExceptionCaseId(Long exceptionCaseId) {
+        this.exceptionCaseId = exceptionCaseId;
     }
 }

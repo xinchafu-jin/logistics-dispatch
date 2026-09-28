@@ -877,6 +877,8 @@ export interface DriverMessageDto {
   createdAt: string;
   /** 對方讀到的時間；null 或沒有這個欄位都代表還沒讀 */
   readAt?: string | null;
+  /** 屬於哪件例外回報案件的對話；null 或沒有這個欄位＝一般對話 */
+  exceptionCaseId?: number | null;
 }
 
 /** POST /api/drivers/{driverId}/messages 的請求本體。對話屬於誰、誰發的、時間都由後端決定，只送內容 */
@@ -910,21 +912,74 @@ export interface AdminStickyNoteRequestDto {
   sortOrder: number;
 }
 
-/** 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀 */
-export type DriverMessagePushType = 'MESSAGE' | 'READ';
+/**
+ * 對應後端 DriverMessagePushType：MESSAGE＝新訊息，READ＝已讀，
+ * CASE_OPENED／CASE_ACCEPTED／CASE_CLOSED＝司機回報案件建立、接收、結案
+ */
+export type DriverMessagePushType = 'MESSAGE' | 'READ' | 'CASE_OPENED' | 'CASE_ACCEPTED' | 'CASE_CLOSED';
 
 /**
  * WebSocket 推播的內容。對應後端 DriverMessagePushResponse。
- * 管理員頻道 /topic/admin/driver-messages 會收到所有司機的 MESSAGE 與 READ。
+ * 管理員頻道 /topic/admin/driver-messages 會收到所有司機的訊息、已讀，以及案件的建立、接收、結案。
  */
 export interface DriverMessagePushDto {
   type: DriverMessagePushType;
-  /** 哪位司機的對話串；兩種 type 都有 */
+  /** 哪位司機的對話串；每種 type 都有（舊版 API 建的案件沒有司機，會是 null） */
   driverId: number;
-  /** 新訊息本體；只有 MESSAGE 有 */
+  /** 新訊息本體；只有 MESSAGE 有。message.exceptionCaseId 有值＝案件的對話，不能併進一般對話 */
   message?: DriverMessageDto | null;
   /** 被讀的是哪一方發的訊息；只有 READ 有。DRIVER＝管理員讀了司機的訊息，ADMIN＝司機讀了調度中心的回覆 */
   readSenderType?: MessageSender | null;
   /** 標已讀的時間；只有 READ 有 */
   readAt?: string | null;
+  /** READ 有值＝只標那件案件的對話，沒有＝一般對話；CASE_* 一定有值 */
+  exceptionCaseId?: number | null;
+  /** 案件本體；只有 CASE_* 有。推播裡的 unreadCount 固定 0，本機的未讀數要留著 */
+  exceptionCase?: DriverCaseDto | null;
+}
+
+// ── 司機例外回報案件（對應後端 /api/exceptions/driver-cases）──────────────────
+// 異常中心管案件本身（清單、接收、結案），聊天室管對話；兩邊的資料都從 DriverCasesService 來
+
+/** 司機回報的分類；中文名稱見 driver-cases.service.ts 的 driverCaseCategoryLabel */
+export type DriverCaseCategory =
+  | 'VEHICLE'
+  | 'ACCIDENT'
+  | 'ROAD'
+  | 'STORE'
+  | 'GOODS'
+  | 'PERSONAL'
+  | 'SYSTEM'
+  | 'OTHER';
+
+/** 異常中心看到的一件司機回報。對應後端 AdminDriverCaseResponse */
+export interface DriverCaseDto {
+  id: number;
+  /** 舊版 API 建的回報沒有分類，會是 null */
+  category: DriverCaseCategory | null;
+  status: ExceptionStatus;
+  orderId: number | null;
+  orderNumber: string | null;
+  storeName: string | null;
+  description: string;
+  /** 司機說還能不能繼續配送；舊版回報是 null */
+  canContinue: boolean | null;
+  /** 交貨照片上傳 API 給的網址，公開路徑，可以直接放進 <img> */
+  photoUrl: string | null;
+  createdAt: string;
+  /** 接收時間；null＝還沒有人接收（鈴鐺只列這種） */
+  acceptedAt: string | null;
+  handledAt: string | null;
+  resolution: string | null;
+  /** 司機發的、還沒被管理員讀的訊息數；推播裡固定 0 */
+  unreadCount: number;
+  /** 舊版回報沒有記司機，會是 null */
+  driverId: number | null;
+  driverName: string | null;
+  routeId: number | null;
+  vehiclePlateNumber: string | null;
+  acceptedAdminId: number | null;
+  acceptedAdminName: string | null;
+  /** 結案的管理員名稱 */
+  handledBy: string | null;
 }

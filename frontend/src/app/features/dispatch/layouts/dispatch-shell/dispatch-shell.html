@@ -83,6 +83,32 @@
       @if (notificationError()) {
         <p class="notification-feedback is-error">{{ notificationError() }}</p>
       }
+
+      <!-- 司機回報放最上面：路上發生的事，要馬上有人接。資料靠推播即時更新，不跟著下面的待辦重新載入 -->
+      @if (driverCases.waitingCases().length) {
+        <section class="notification-section" aria-labelledby="driver-case-heading">
+          <h3 id="driver-case-heading">司機回報・等待接收</h3>
+          @for (item of driverCases.waitingCases(); track item.id) {
+            <article class="notification-item">
+              <div>
+                <strong>{{ caseCategoryLabel(item) }} · {{ item.driverName ?? '舊版回報' }}</strong>
+                <span class="notification-case-text" [class.is-urgent]="item.canContinue === false">
+                  {{ item.canContinue === false ? '無法繼續配送 · ' : '' }}{{ item.description }}
+                </span>
+                <small>{{ item.vehiclePlateNumber ?? '沒有排車' }} · {{ formatNotificationTime(item.createdAt) }}</small>
+              </div>
+              <div class="notification-item__actions">
+                <button
+                  type="button"
+                  class="notification-approve"
+                  (click)="openDriverCaseInAnomalyCenter(item.id)"
+                >前往異常中心</button>
+              </div>
+            </article>
+          }
+        </section>
+      }
+
       @if (isLoadingNotifications()) {
         <p class="notification-empty">正在取得待辦資料...</p>
       } @else {
@@ -175,7 +201,8 @@
           </section>
         }
 
-        @if (!pendingApplications().length && !pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length) {
+        @if (!pendingApplications().length && !pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length
+          && !driverCases.waitingCases().length) {
           <p class="notification-empty">目前沒有需要主管處理的申請。</p>
         }
       }
@@ -371,6 +398,33 @@
               <span matListItemTitle>AI 調度助理</span>
             </mat-list-option>
 
+            <!-- 只列已接收、還沒結案的案件；還沒接收的在異常中心，接收後才進聊天室 -->
+            @if (driverCases.acceptedCases().length) {
+              <div matSubheader>處理中的案件</div>
+              @for (item of driverCases.acceptedCases(); track item.id) {
+                <!-- value 要寫成樣板裡的物件字面值（Angular 會快取，內容沒變就是同一個物件），不能呼叫方法回傳新物件：
+                     MatListOption 發現 value 換成另一個物件，會把自己取消選取，選中的底色就消失了 -->
+                <mat-list-option
+                  [value]="{ kind: 'case', caseId: item.id, name: caseContactName(item) }"
+                  [selected]="isSelectedChatContact({ kind: 'case', caseId: item.id, name: caseContactName(item) })"
+                >
+                  <span
+                    matListItemAvatar
+                    class="chat-contact-avatar"
+                    [class.is-urgent]="item.canContinue === false"
+                    [matBadge]="item.unreadCount"
+                    [matBadgeHidden]="item.unreadCount === 0"
+                    [matBadgeDescription]="item.unreadCount + ' 則未讀'"
+                    matBadgeSize="small"
+                  >
+                    <mat-icon aria-hidden="true">report</mat-icon>
+                  </span>
+                  <span matListItemTitle>{{ caseCategoryLabel(item) }}</span>
+                  <span matListItemLine>{{ item.driverName ?? '舊版回報' }} · #{{ item.id }}</span>
+                </mat-list-option>
+              }
+            }
+
             <div matSubheader>司機</div>
             @for (driver of chatDrivers(); track driver.account) {
               <mat-list-option
@@ -487,7 +541,7 @@
                     <mat-icon aria-hidden="true">send</mat-icon>
                   </button>
                 </form>
-              } @else {
+              } @else if (contact.kind === 'driver') {
                 <!-- 司機對話：資料來自後端 driver_messages，換人時由 loadDriverConversation 重新載入 -->
                 <h3 class="chat-panel__title">{{ contact.name }}</h3>
                 <div class="chat-messages">
@@ -539,6 +593,79 @@
                     <mat-icon aria-hidden="true">send</mat-icon>
                   </button>
                 </form>
+              } @else {
+                <!-- 案件對話：driver_messages 裡 exception_case_id 是這件的訊息；接收、結案在異常中心做 -->
+                <h3 class="chat-panel__title">{{ contact.name }}</h3>
+                @if (selectedCase(); as current) {
+                  <div class="chat-case-summary" [class.is-urgent]="current.canContinue === false && current.status === 'OPEN'">
+                    <div class="chat-case-summary__head">
+                      <span>
+                        案件 #{{ current.id }} · {{ current.status === 'CLOSED' ? '已結案' : '處理中' }}
+                        @if (current.acceptedAdminName) {
+                          · {{ current.acceptedAdminName }} 接收
+                        }
+                        @if (current.canContinue === false) {
+                          · 無法繼續配送
+                        }
+                      </span>
+                      <!-- 聊天室開著時會整個蓋住異常中心的詳情欄，結案按鈕按不到；這裡先收合聊天室，再到異常中心選中這一件 -->
+                      @if (current.status === 'OPEN') {
+                        <button type="button" class="chat-case-summary__action" (click)="goCloseCaseInAnomalyCenter(current.id)">
+                          到異常中心結案
+                        </button>
+                      }
+                    </div>
+                    <span class="chat-case-summary__text">{{ current.description }}</span>
+                  </div>
+                }
+                <div class="chat-messages">
+                  @for (message of caseMessages(); track message.id) {
+                    <p class="chat-message" [class.is-user]="message.senderType === 'ADMIN'">
+                      {{ message.content }}
+                      <small>
+                        {{ formatNotificationTime(message.createdAt) }}
+                        @if (message.senderType === 'ADMIN' && message.readAt) {
+                          · 已讀
+                        }
+                      </small>
+                    </p>
+                  } @empty {
+                    <p class="chat-panel__placeholder">還沒有對話；回覆後司機會在支援中心的這件案件裡看到</p>
+                  }
+                </div>
+
+                @if (caseChatError()) {
+                  <p class="chat-panel__contacts-error" role="alert">{{ caseChatError() }}</p>
+                }
+
+                <!-- 結案後只能看：後端也會擋留言，這裡把輸入框換成處理結果 -->
+                @if (selectedCase()?.status === 'CLOSED') {
+                  <p class="chat-case-closed">已結案：{{ selectedCase()?.resolution }}</p>
+                } @else {
+                  <form class="chat-composer" (ngSubmit)="sendCaseMessage()">
+                    <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                      <textarea
+                        matInput
+                        cdkTextareaAutosize
+                        cdkAutosizeMinRows="1"
+                        cdkAutosizeMaxRows="5"
+                        maxlength="1000"
+                        [placeholder]="'回覆案件 #' + contact.caseId"
+                        name="caseChatInput"
+                        [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
+                        [(ngModel)]="caseChatInput"
+                      ></textarea>
+                    </mat-form-field>
+                    <button
+                      type="submit"
+                      matIconButton
+                      aria-label="送出"
+                      [disabled]="isSendingCaseMessage() || !caseChatInput().trim()"
+                    >
+                      <mat-icon aria-hidden="true">send</mat-icon>
+                    </button>
+                  </form>
+                }
               }
             }
           </div>

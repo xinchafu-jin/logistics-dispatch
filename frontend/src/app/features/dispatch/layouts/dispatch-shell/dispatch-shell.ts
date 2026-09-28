@@ -29,19 +29,22 @@ import {
   AdminStickyNoteRequestDto,
   AiPendingActionDto,
   DriverLeaveRequestDto,
-  DriverAccountApplicationDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
+  DriverAccountApplicationDto, DriverCaseDto, DriverDto, DriverMessageDto, DriverMessagePushDto,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
 } from '../../../../core/services/dispatch-api.models';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
+import {DriverCasesService, driverCaseCategoryLabel} from '../../../../core/services/driver-cases.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
 
+// case：已接收、還沒結案的司機回報，一件一串；對話仍屬於回報的司機，但跟一般對話分開
 type ChatContact =
   | { kind: 'ai' }
-  | { kind: 'driver'; driverId: number; name: string };
+  | { kind: 'driver'; driverId: number; name: string }
+  | { kind: 'case'; caseId: number; name: string };
 
 type RejectionTarget =
   | { kind: 'application'; id: number; name: string }
@@ -146,10 +149,42 @@ export class DispatchShell implements OnInit {
   protected readonly unreadByDriver = signal<Record<number, number>>({});
   // 大頭照載入失敗的司機；記下來改顯示名字第一個字，不然會一直顯示破圖
   private readonly failedDriverPhotoIds = signal<ReadonlySet<number>>(new Set());
-  // 聊天室按鈕上的總數
+  // 聊天室按鈕上的總數：一般對話加上聊天室裡列出的案件（已接收的）。還沒接收的案件不在聊天室，未讀顯示在異常中心
   protected readonly totalUnread = computed(() =>
-    Object.values(this.unreadByDriver()).reduce((sum, count) => sum + count, 0),
+    Object.values(this.unreadByDriver()).reduce((sum, count) => sum + count, 0)
+    + this.driverCases.acceptedCases().reduce((sum, item) => sum + item.unreadCount, 0),
   );
+
+  // ── 案件對話：跟一般對話分開存，換到別串時才不會混在一起 ──
+  protected readonly caseMessages = signal<DriverMessageDto[]>([]);
+  protected readonly caseChatInput = signal('');
+  protected readonly isSendingCaseMessage = signal(false);
+  protected readonly caseChatError = signal('');
+  // 聊天室開著的那件；剛被結案時會從已結案清單找到，畫面改成只能看
+  protected readonly selectedCase = computed(() => {
+    const contact = this.selectedChatContact();
+    return contact.kind === 'case' ? this.driverCases.findCase(contact.caseId) : null;
+  });
+
+  /** 看著某件案件的對話、而且有未讀，就標已讀；跟 markViewingDriverRead 同一套想法 */
+  private readonly markViewingCaseRead = effect(() => {
+    const contact = this.selectedChatContact();
+    if (this.chatView() !== 'wide' || contact.kind !== 'case') {
+      return;
+    }
+    const caseId = contact.caseId;
+    const hasUnread =
+      (this.driverCases.findCase(caseId)?.unreadCount ?? 0) > 0 ||
+      this.caseMessages().some((message) => message.senderType === 'DRIVER' && !message.readAt);
+    if (!hasUnread) {
+      return;
+    }
+
+    // 先在畫面上清掉，理由同 markViewingDriverRead：不清的話 effect 重跑會連打好幾次 API
+    this.driverCases.clearUnread(caseId);
+    this.markCaseMessagesAsRead('DRIVER', new Date().toISOString());
+    this.api.markDriverCaseMessagesRead(caseId).subscribe({error: () => undefined});
+  });
 
   /**
    * 「調度員正看著某位司機的對話」而且有未讀，就標已讀。
@@ -182,10 +217,12 @@ export class DispatchShell implements OnInit {
   });
 
 
+  // 案件的部分靠推播即時加減（DriverCasesService），其他待辦只在載入頁面和打開鈴鐺時抓
   protected readonly notificationCount = computed(
     () => this.pendingApplicationCount()
       + this.pendingEmergencyLeaves().length
-      + this.pendingTemporaryLeaveRequests().length,
+      + this.pendingTemporaryLeaveRequests().length
+      + this.driverCases.waitingCases().length,
   );
 
   protected readonly aiPendingAction = signal<AiPendingActionDto[]>([]);
@@ -196,6 +233,8 @@ export class DispatchShell implements OnInit {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly chatSocket = inject(DriverChatSocketService);
+  // 司機回報案件：鈴鐺、聊天室的案件聯絡人都讀這裡；異常中心是另一個頁面，也讀同一份
+  protected readonly driverCases = inject(DriverCasesService);
   private readonly destroyRef = inject(DestroyRef);
   // 確認執行視窗的內容，寫在 dispatch-shell.html 最下面的 <ng-template #confirmPlanDialog>
   private readonly confirmPlanDialog = viewChild.required<TemplateRef<unknown>>('confirmPlanDialog');
@@ -220,6 +259,10 @@ export class DispatchShell implements OnInit {
   ngOnInit(): void {
     this.loadPendingNotifications();
     this.loadAdminStickyNotes();
+    // 異常中心按「接收」「開啟對話」時，由這裡打開聊天室的那一件（兩者不是父子元件，只能靠 service 傳話）
+    this.driverCases.openChatRequests$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((caseId) => this.openCaseChat(caseId));
     this.connectChatSocket();
   }
 
@@ -334,6 +377,26 @@ export class DispatchShell implements OnInit {
   protected openScheduleLeaveReview(): void {
     this.closeNotifications();
     void this.router.navigateByUrl('/dispatch/schedules');
+  }
+
+  /** 鈴鐺裡的司機回報：到異常中心選中那一件，接收、結案都在那邊做 */
+  protected openDriverCaseInAnomalyCenter(caseId: number): void {
+    this.closeNotifications();
+    void this.router.navigate(['/dispatch/anomalies'], {queryParams: {case: caseId}});
+  }
+
+  /**
+   * 聊天室裡的「到異常中心結案」。聊天室是寬 720px 的浮動面板，開著時會蓋住異常中心整個詳情欄
+   * （900px 高的螢幕，面板上緣約在 340px，詳情欄的按鈕在 400px 左右），所以先收合聊天室再選中這一件。
+   * 結案本身仍只在異常中心做，不在這裡另寫一份。
+   */
+  protected goCloseCaseInAnomalyCenter(caseId: number): void {
+    this.closeChat();
+    void this.router.navigate(['/dispatch/anomalies'], {queryParams: {case: caseId}});
+  }
+
+  protected caseCategoryLabel(item: DriverCaseDto): string {
+    return driverCaseCategoryLabel(item.category);
   }
 
   protected temporaryLeaveRequestLabel(request: DriverLeaveRequestDto): string {
@@ -730,6 +793,8 @@ export class DispatchShell implements OnInit {
     this.selectedChatContact.set(contact);
     if (contact.kind === 'driver') {
       this.loadDriverConversation(contact.driverId);
+    } else if (contact.kind === 'case') {
+      this.loadCaseConversation(contact.caseId);
     }
   }
 
@@ -740,7 +805,101 @@ export class DispatchShell implements OnInit {
       return selected.kind === 'ai';
     }
     // 模板每次重畫都會建立新物件，=== 比的是不是同一個物件，所以要比內容
+    if (contact.kind === 'case') {
+      return selected.kind === 'case' && selected.caseId === contact.caseId;
+    }
     return selected.kind === 'driver' && selected.driverId === contact.driverId;
+  }
+
+  /** 程式裡切到某件案件用；樣板的 [value] 不能用它（每次呼叫都是新物件，理由見 dispatch-shell.html） */
+  private caseContact(item: DriverCaseDto): ChatContact {
+    return {kind: 'case', caseId: item.id, name: this.caseContactName(item)};
+  }
+
+  /** 異常中心按了「接收」或「開啟對話」：打開聊天室並切到這一件 */
+  private openCaseChat(caseId: number): void {
+    const item = this.driverCases.findCase(caseId);
+    if (!item) {
+      return;
+    }
+    this.openChat();
+    this.selectChatContact(this.caseContact(item));
+  }
+
+  protected caseContactName(item: DriverCaseDto): string {
+    return `${driverCaseCategoryLabel(item.category)} · ${item.driverName ?? '舊版回報'}`;
+  }
+
+  private loadCaseConversation(caseId: number): void {
+    this.caseMessages.set([]);
+    // 換串時輸入框一起清空，理由同 loadDriverConversation
+    this.caseChatInput.set('');
+    this.caseChatError.set('');
+    this.api.getDriverCaseMessages(caseId).subscribe({
+      next: (messages) => {
+        if (this.isOpenCase(caseId)) {
+          this.caseMessages.set(messages);
+        }
+      },
+      error: () => {
+        if (this.isOpenCase(caseId)) {
+          this.caseChatError.set('無法取得案件對話，請稍後再試。');
+        }
+      },
+    });
+  }
+
+  /** 在案件裡回覆司機；跟 sendDriverMessage 同一種寫法。結案後後端會擋，畫面也會把輸入框換成處理結果 */
+  protected sendCaseMessage(): void {
+    const contact = this.selectedChatContact();
+    const content = this.caseChatInput().trim();
+    if (contact.kind !== 'case' || !content || this.isSendingCaseMessage()) {
+      return;
+    }
+
+    const caseId = contact.caseId;
+    this.isSendingCaseMessage.set(true);
+    this.caseChatError.set('');
+    this.api.sendDriverCaseMessage(caseId, content).subscribe({
+      next: (saved) => {
+        this.isSendingCaseMessage.set(false);
+        if (!this.isOpenCase(caseId)) {
+          return;
+        }
+        this.caseChatInput.set('');
+        this.mergeCaseMessages([saved]);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.isSendingCaseMessage.set(false);
+        if (this.isOpenCase(caseId)) {
+          this.caseChatError.set(error.error?.message ?? '訊息沒有送出，請稍後再試。');
+        }
+      },
+    });
+  }
+
+  /** 用 id 去重、依 id 由舊到新；理由同 mergeDriverMessages（送出的那則會從回應和推播各收到一次） */
+  private mergeCaseMessages(incoming: DriverMessageDto[]): void {
+    this.caseMessages.update((current) => {
+      const byId = new Map<number, DriverMessageDto>();
+      for (const message of [...current, ...incoming]) {
+        byId.set(message.id, message);
+      }
+      return [...byId.values()].sort((a, b) => a.id - b.id);
+    });
+  }
+
+  private markCaseMessagesAsRead(senderType: DriverMessageDto['senderType'], readAt: string | null): void {
+    this.caseMessages.update((messages) =>
+      messages.map((message) =>
+        message.senderType === senderType && !message.readAt ? {...message, readAt} : message,
+      ),
+    );
+  }
+
+  private isOpenCase(caseId: number): boolean {
+    const contact = this.selectedChatContact();
+    return contact.kind === 'case' && contact.caseId === caseId;
   }
 
   protected chatSend(): void {
@@ -917,6 +1076,18 @@ export class DispatchShell implements OnInit {
    * 開著的那位是否要標已讀，交給 markViewingDriverRead 判斷，這裡只管把數字加上去。
    */
   private handleChatPush(push: DriverMessagePushDto): void {
+    // 案件建立、接收、結案：DriverCasesService 處理（鈴鐺、異常中心、聊天室的案件清單都讀那邊）
+    if (push.type === 'CASE_OPENED' || push.type === 'CASE_ACCEPTED' || push.type === 'CASE_CLOSED') {
+      return;
+    }
+    // 帶 exceptionCaseId 的是案件那一串：不能併進一般對話、也不能算進司機的紅點，
+    // 不然案件訊息會出現在一般對話裡。案件的未讀數由 DriverCasesService 算
+    const caseId = push.type === 'MESSAGE' ? push.message?.exceptionCaseId : push.exceptionCaseId;
+    if (caseId != null) {
+      this.handleCaseChatPush(caseId, push);
+      return;
+    }
+
     if (push.type === 'MESSAGE' && push.message) {
       // 只有司機發的才算未讀；管理員發的（自己或同事）不用提醒
       if (push.message.senderType === 'DRIVER') {
@@ -938,6 +1109,20 @@ export class DispatchShell implements OnInit {
         // 把這一方發的、還沒讀的訊息，在畫面上標成已讀（不用再打一次 API）
         this.markDriverMessagesAsRead(push.readSenderType, push.readAt ?? null);
       }
+    }
+  }
+
+  /** 案件對話的訊息、已讀：只更新聊天室開著的那一件 */
+  private handleCaseChatPush(caseId: number, push: DriverMessagePushDto): void {
+    if (!this.isOpenCase(caseId)) {
+      return;
+    }
+    if (push.type === 'MESSAGE' && push.message) {
+      this.mergeCaseMessages([push.message]);
+      return;
+    }
+    if (push.type === 'READ' && push.readSenderType) {
+      this.markCaseMessagesAsRead(push.readSenderType, push.readAt ?? null);
     }
   }
 
@@ -990,6 +1175,10 @@ export class DispatchShell implements OnInit {
    */
   private catchUpOpenConversation(): void {
     const contact = this.selectedChatContact();
+    if (contact.kind === 'case') {
+      this.catchUpOpenCase(contact.caseId);
+      return;
+    }
     if (contact.kind !== 'driver') {
       return;
     }
@@ -1005,6 +1194,23 @@ export class DispatchShell implements OnInit {
       next: (newer) => {
         if (this.isOpenDriver(driverId)) {
           this.mergeDriverMessages(newer);
+        }
+      },
+    });
+  }
+
+  /** 案件對話的重連補抓；做法同上。案件清單（含未讀數）由 DriverCasesService 在連上時重抓 */
+  private catchUpOpenCase(caseId: number): void {
+    const lastId = this.caseMessages().at(-1)?.id;
+    if (lastId === undefined) {
+      this.loadCaseConversation(caseId);
+      return;
+    }
+
+    this.api.getDriverCaseMessages(caseId, lastId).subscribe({
+      next: (newer) => {
+        if (this.isOpenCase(caseId)) {
+          this.mergeCaseMessages(newer);
         }
       },
     });

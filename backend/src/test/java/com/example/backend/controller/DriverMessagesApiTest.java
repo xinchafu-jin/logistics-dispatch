@@ -380,9 +380,11 @@ class DriverMessagesApiTest {
                 "SELECT read_at IS NOT NULL FROM driver_messages WHERE id = ?", Boolean.class, id);
     }
 
+    /** 只算一般對話：案件對話的未讀不歸這裡的 API 管（見 DriverCasesApiTest） */
     private int countUnread(long driverId, String senderType) {
         return jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM driver_messages WHERE driver_id = ? AND sender_type = ? AND read_at IS NULL",
+                "SELECT COUNT(*) FROM driver_messages WHERE driver_id = ? AND exception_case_id IS NULL "
+                        + "AND sender_type = ? AND read_at IS NULL",
                 Integer.class, driverId, senderType);
     }
 

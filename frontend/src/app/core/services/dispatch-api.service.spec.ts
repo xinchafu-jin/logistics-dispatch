@@ -105,6 +105,54 @@ describe('DispatchApiService', () => {
     confirm.flush({ id: 47, status: 'CLOSED' });
   });
 
+  it('uses the driver-case contracts for the anomaly center and the chat panel', () => {
+    service.getDriverCases().subscribe();
+    service.getDriverCases('CLOSED').subscribe();
+    service.acceptDriverCase(12).subscribe();
+    service.closeDriverCase(12, '已派人支援').subscribe();
+    service.getDriverCaseMessages(12).subscribe();
+    service.getDriverCaseMessages(12, 30).subscribe();
+    service.sendDriverCaseMessage(12, '收到').subscribe();
+    service.markDriverCaseMessagesRead(12).subscribe();
+
+    // 不帶 status 才是進行中；帶成 "undefined" 字串後端會轉 enum 失敗
+    const open = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases' && !request.params.has('status'),
+    );
+    expect(open.request.method).toBe('GET');
+    open.flush([]);
+    const closed = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases' && request.params.get('status') === 'CLOSED',
+    );
+    closed.flush([]);
+
+    const accept = httpTesting.expectOne('/api/exceptions/driver-cases/12/accept');
+    expect(accept.request.method).toBe('PATCH');
+    accept.flush({ id: 12 });
+    const close = httpTesting.expectOne('/api/exceptions/driver-cases/12/close');
+    expect(close.request.method).toBe('PATCH');
+    expect(close.request.body).toEqual({ resolution: '已派人支援' });
+    close.flush({ id: 12 });
+
+    const messages = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages'
+        && request.method === 'GET' && !request.params.has('afterId'),
+    );
+    messages.flush([]);
+    const newer = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages' && request.params.get('afterId') === '30',
+    );
+    newer.flush([]);
+    const send = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages' && request.method === 'POST',
+    );
+    expect(send.request.body).toEqual({ content: '收到' });
+    send.flush({ id: 31 });
+    const read = httpTesting.expectOne('/api/exceptions/driver-cases/12/messages/read');
+    expect(read.request.method).toBe('POST');
+    read.flush(1);
+  });
+
   it('uses driver application and emergency leave review contracts', () => {
     service.getPendingDriverAccountApplicationCount().subscribe();
     service.getPendingDriverAccountApplications().subscribe();

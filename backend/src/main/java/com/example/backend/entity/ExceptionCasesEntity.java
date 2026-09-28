@@ -1,13 +1,18 @@
 package com.example.backend.entity;
 
+import com.example.backend.constants.DriverCaseCategory;
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * 異常案件。來源包含司機無人簽收、司機例外回報，以及電話處理後的補登。
+ *
+ * <p>司機例外回報（type = DRIVER_REPORT）另外用到 driverId 以下七個欄位（見 V14）；
+ * 其他類型的異常，這幾欄都是 null。</p>
  */
 @Entity
 @Table(name = "exception_cases")
@@ -60,9 +65,38 @@ public class ExceptionCasesEntity {
     @Column(nullable = false, length = 20)
     private ExceptionStatus status = ExceptionStatus.OPEN;
 
+    /** 回報的司機；只有司機回報有值 */
+    @Column
+    private Long driverId;
+
+    /** 回報當下這位司機今天已發布的路線；今天沒排路線是 null */
+    @Column
+    private Long routeId;
+
+    /** 司機回報的分類。資料表是 VARCHAR(30)，存 enum 名稱 */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private DriverCaseCategory category;
+
+    /** 司機說還能不能繼續配送；後台清單把不能繼續的排前面 */
+    @Column
+    private Boolean canContinue;
+
+    /** 司機附的照片，只收交貨照片上傳 API 回傳的網址 */
+    @Column(length = 500)
+    private String photoUrl;
+
+    /** 在異常中心按「接收」的管理員；null＝還沒有人接收 */
+    @Column
+    private Long acceptedAdminId;
+
+    @Column
+    private LocalDateTime acceptedAt;
+
     @PrePersist
     public void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        // 指定台北時間：正式機的 JVM 是 UTC，不指定的話建立時間會比 Service 寫的處理、接收時間慢 8 小時
+        this.createdAt = LocalDateTime.now(ZoneId.of("Asia/Taipei"));
     }
 
     public Long getId() {
@@ -167,5 +201,61 @@ public class ExceptionCasesEntity {
 
     public void setStatus(ExceptionStatus status) {
         this.status = status;
+    }
+
+    public Long getDriverId() {
+        return driverId;
+    }
+
+    public void setDriverId(Long driverId) {
+        this.driverId = driverId;
+    }
+
+    public Long getRouteId() {
+        return routeId;
+    }
+
+    public void setRouteId(Long routeId) {
+        this.routeId = routeId;
+    }
+
+    public DriverCaseCategory getCategory() {
+        return category;
+    }
+
+    public void setCategory(DriverCaseCategory category) {
+        this.category = category;
+    }
+
+    public Boolean getCanContinue() {
+        return canContinue;
+    }
+
+    public void setCanContinue(Boolean canContinue) {
+        this.canContinue = canContinue;
+    }
+
+    public String getPhotoUrl() {
+        return photoUrl;
+    }
+
+    public void setPhotoUrl(String photoUrl) {
+        this.photoUrl = photoUrl;
+    }
+
+    public Long getAcceptedAdminId() {
+        return acceptedAdminId;
+    }
+
+    public void setAcceptedAdminId(Long acceptedAdminId) {
+        this.acceptedAdminId = acceptedAdminId;
+    }
+
+    public LocalDateTime getAcceptedAt() {
+        return acceptedAt;
+    }
+
+    public void setAcceptedAt(LocalDateTime acceptedAt) {
+        this.acceptedAt = acceptedAt;
     }
 }

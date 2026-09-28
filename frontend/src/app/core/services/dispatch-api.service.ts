@@ -14,6 +14,7 @@ import {
   DispatchDayDto,
   DispatchResultDto,
   DriverAccountApplicationDto,
+  DriverCaseDto,
   DriverDto,
   DriverLeaveHistoryDto,
   DriverLeaveBatchDto,
@@ -26,6 +27,7 @@ import {
   DriverShiftUpdateRequest,
   DriverStatusPayload,
   ExceptionCaseDto,
+  ExceptionStatus,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
   FuelPriceDto,
@@ -707,6 +709,47 @@ export class DispatchApiService {
   /** 紅點：每位司機有幾則未讀。只列有未讀的司機，用 driverId 對到司機名單 */
   getDriverMessageSummary(): Observable<DriverMessageSummaryDto[]> {
     return this.http.get<DriverMessageSummaryDto[]>(`${API_ROOT}/drivers/messages/summary`);
+  }
+
+  // ── 司機例外回報案件：異常中心管案件，聊天室管對話 ──────────────────
+
+  /** 不帶 status 是進行中的全部（還沒接收的排前面）；CLOSED 是最近結案的 50 件 */
+  getDriverCases(status?: ExceptionStatus): Observable<DriverCaseDto[]> {
+    let params = new HttpParams();
+    if (status !== undefined) {
+      params = params.set('status', status);
+    }
+    return this.http.get<DriverCaseDto[]>(`${API_ROOT}/exceptions/driver-cases`, {params});
+  }
+
+  /** 接收案件；別人已經接收時後端回 400「這件案件已由某某接收」 */
+  acceptDriverCase(caseId: number): Observable<DriverCaseDto> {
+    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/accept`, null);
+  }
+
+  /** 填處理結果結案；還沒接收也能結（例如司機重複送出） */
+  closeDriverCase(caseId: number, resolution: string): Observable<DriverCaseDto> {
+    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/close`, {resolution});
+  }
+
+  /** 案件對話；afterId 的用法跟一般對話一樣 */
+  getDriverCaseMessages(caseId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages`, {params});
+  }
+
+  /** 在案件裡回覆司機；要先接收，不然後端回 400 */
+  sendDriverCaseMessage(caseId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages`, request);
+  }
+
+  /** 把這件案件裡司機發的訊息標成已讀，回傳標了幾筆；已讀是所有管理員共用的 */
+  markDriverCaseMessagesRead(caseId: number): Observable<number> {
+    return this.http.post<number>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages/read`, {});
   }
 
   // ── 主管備忘錄 ────────────────────────────────────────

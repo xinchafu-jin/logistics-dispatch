@@ -1,176 +1,399 @@
 <main class="anomaly-center-page">
   <section class="page-intro" aria-label="異常中心">
+    <!-- 兩種異常的時機和處理方式不同，不混在同一組篩選裡：司機回報是即時的，到期配送異常要等隔日 06:00 -->
+    <div class="filter-control view-switch" role="group" aria-label="切換異常類型">
+      <button
+        type="button"
+        [class.is-active]="view() === 'driver'"
+        [attr.aria-pressed]="view() === 'driver'"
+        (click)="setView('driver')"
+      >
+        司機回報
+        @if (caseSummary().waiting > 0) {
+          <span class="view-switch__count" [attr.aria-label]="caseSummary().waiting + ' 件等待接收'">{{ caseSummary().waiting }}</span>
+        }
+      </button>
+      <button
+        type="button"
+        [class.is-active]="view() === 'delivery'"
+        [attr.aria-pressed]="view() === 'delivery'"
+        (click)="setView('delivery')"
+      >
+        到期配送異常
+        @if (summary().total > 0) {
+          <span class="view-switch__count" [attr.aria-label]="summary().total + ' 筆待確認'">{{ summary().total }}</span>
+        }
+      </button>
+    </div>
     <div class="intro-actions">
-      <p class="updated-at">上次讀取：{{ formatRefreshTime(lastLoadedAt()) }}</p>
+      @if (view() === 'driver') {
+        <p class="updated-at">{{ isSocketConnected() ? '即時更新中' : '連線中斷，資料可能不是最新' }}</p>
+      } @else {
+        <p class="updated-at">上次讀取：{{ formatRefreshTime(lastLoadedAt()) }}</p>
+      }
       <button
         type="button"
         class="icon-button"
-        title="重新整理提醒"
-        aria-label="重新整理提醒"
+        title="重新整理"
+        aria-label="重新整理"
         (click)="refresh()"
-        [disabled]="loading() || confirming()"
+        [disabled]="isRefreshing()"
       >
         <mat-icon aria-hidden="true">refresh</mat-icon>
       </button>
     </div>
   </section>
 
-  @if (errorMessage()) {
-    <p class="feedback is-error"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
-  }
-  @if (actionMessage()) {
-    <p class="feedback is-success"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
-  }
+  @if (view() === 'driver') {
+    @if (caseError()) {
+      <p class="feedback is-error"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ caseError() }}</p>
+    }
+    @if (caseNotice()) {
+      <p class="feedback is-success"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ caseNotice() }}</p>
+    }
 
-  <section class="anomaly-summary" aria-label="到期異常摘要">
-    <article class="summary-card tone-critical">
-      <p>待主管確認</p>
-      <strong>{{ summary().total }}<span>筆</span></strong>
-      <span>已到隔日確認時間</span>
-    </article>
-    <article class="summary-card tone-warning">
-      <p>無人簽收</p>
-      <strong>{{ summary().noSignature }}<span>筆</span></strong>
-      <span>等待主管重新確認配送</span>
-    </article>
-    <article class="summary-card tone-critical">
-      <p>貨況異常</p>
-      <strong>{{ summary().goodsIssue }}<span>筆</span></strong>
-      <span>短少或毀損待確認</span>
-    </article>
-    <article class="summary-card tone-accent">
-      <p>待補送數量</p>
-      <strong>{{ summary().replacementBoxes }}<span>箱</span></strong>
-      <span>依異常紀錄加總</span>
-    </article>
-  </section>
-
-  <section class="anomaly-workspace" aria-label="到期異常提醒">
-    <section class="incident-list-panel" aria-labelledby="incident-list-title">
-      <header class="list-header">
-        <div>
-          <p class="section-eyebrow">待確認清單</p>
-          <h3 id="incident-list-title">到期配送異常</h3>
-        </div>
-        <span>{{ filteredIncidents().length }} 筆顯示中</span>
-      </header>
-
-      <div class="list-tools">
-        <div class="filter-control" role="group" aria-label="異常類型篩選">
-          @for (filter of filters; track filter.key) {
-            <button
-              type="button"
-              [class.is-active]="activeFilter() === filter.key"
-              [attr.aria-pressed]="activeFilter() === filter.key"
-              (click)="setFilter(filter.key)"
-              [disabled]="loading() || confirming()"
-            >
-              {{ filter.label }}
-            </button>
-          }
-        </div>
-      </div>
-
-      @if (loading()) {
-        <p class="empty-state">正在讀取到期異常提醒...</p>
-      } @else if (errorMessage()) {
-        <p class="empty-state">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
-      } @else if (filteredIncidents().length === 0) {
-        <p class="empty-state">
-          目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
-        </p>
-      } @else {
-        <div class="incident-list">
-          @for (incident of filteredIncidents(); track incident.id) {
-            <button
-              type="button"
-              class="incident-row"
-              [class.is-selected]="selectedIncident()?.id === incident.id"
-              (click)="selectIncident(incident.id)"
-            >
-              <span class="severity-mark" [class]="'severity-' + severityClass(incident.type)"></span>
-              <span class="incident-main">
-                <span class="incident-line">
-                  <strong>{{ exceptionTypeLabel(incident.type) }}</strong>
-                  <span class="severity-label" [class]="'severity-' + severityClass(incident.type)">
-                    待確認
-                  </span>
-                </span>
-                <span>來源訂單：{{ incident.sourceOrderNumber ?? '--' }}</span>
-                <span>後續訂單：{{ incident.followUpOrderNumber ?? '--' }}</span>
-              </span>
-              <span class="incident-meta">
-                <small>異常 #{{ incident.id }}</small>
-                <small>送審 {{ formatDateTime(incident.queuedAt) }}</small>
-              </span>
-            </button>
-          }
-        </div>
-      }
+    <section class="anomaly-summary" aria-label="司機回報摘要">
+      <article class="summary-card tone-critical">
+        <p>等待接收</p>
+        <strong>{{ caseSummary().waiting }}<span>件</span></strong>
+        <span>上方鈴鐺也會提醒</span>
+      </article>
+      <article class="summary-card tone-warning">
+        <p>處理中</p>
+        <strong>{{ caseSummary().handling }}<span>件</span></strong>
+        <span>已接收，在聊天室溝通</span>
+      </article>
+      <article class="summary-card tone-critical">
+        <p>無法繼續配送</p>
+        <strong>{{ caseSummary().stuck }}<span>件</span></strong>
+        <span>進行中的案件裡</span>
+      </article>
+      <article class="summary-card tone-accent">
+        <p>司機未讀訊息</p>
+        <strong>{{ caseSummary().unread }}<span>則</span></strong>
+        <span>進行中的案件加總</span>
+      </article>
     </section>
 
-    <aside class="incident-detail-panel" aria-labelledby="incident-detail-title">
-      @if (selectedIncident(); as incident) {
-        <header class="detail-header">
+    <section class="anomaly-workspace" aria-label="司機回報">
+      <section class="incident-list-panel" aria-labelledby="case-list-title">
+        <header class="list-header">
           <div>
-            <p class="section-eyebrow">案件詳情</p>
-            <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }}</h3>
-            <span>異常 #{{ incident.id }}</span>
+            <p class="section-eyebrow">即時回報</p>
+            <h3 id="case-list-title">司機回報</h3>
           </div>
-          <span class="detail-status" [class]="'severity-' + severityClass(incident.type)">待確認</span>
+          <span>{{ visibleCases().length }} 件</span>
         </header>
 
-        <dl class="incident-facts">
-          <div>
-            <dt>來源訂單</dt>
-            <dd>{{ incident.sourceOrderNumber ?? '--' }}</dd>
+        <div class="list-tools">
+          <div class="filter-control" role="group" aria-label="案件狀態篩選">
+            <button
+              type="button"
+              [class.is-active]="caseFilter() === 'OPEN'"
+              [attr.aria-pressed]="caseFilter() === 'OPEN'"
+              (click)="setCaseFilter('OPEN')"
+            >進行中</button>
+            <button
+              type="button"
+              [class.is-active]="caseFilter() === 'CLOSED'"
+              [attr.aria-pressed]="caseFilter() === 'CLOSED'"
+              (click)="setCaseFilter('CLOSED')"
+            >最近結案</button>
           </div>
-          <div>
-            <dt>後續訂單</dt>
-            <dd>{{ incident.followUpOrderNumber ?? '--' }}</dd>
-          </div>
-          <div>
-            <dt>應到數量</dt>
-            <dd>{{ quantity(incident.expectedBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>實到數量</dt>
-            <dd>{{ quantity(incident.deliveredBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>待補送數量</dt>
-            <dd>{{ quantity(incident.replacementRequiredBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>送審時間</dt>
-            <dd>{{ formatDateTime(incident.queuedAt) }}</dd>
-          </div>
-        </dl>
-
-        <section class="detail-block">
-          <p>異常說明</p>
-          <span>{{ incident.description || '尚無額外異常說明。' }}</span>
-        </section>
-
-        <section class="detail-block recommendation-block">
-          <p>確認後處理</p>
-          <span>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</span>
-        </section>
-
-        <p class="action-message">確認前請核對來源訂單與待補送數量。</p>
-        <div class="detail-actions">
-          <button type="button" class="button-secondary" (click)="refresh()" [disabled]="confirming()">
-            重新整理
-          </button>
-          <button type="button" class="button-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
-            確認並待排車
-          </button>
         </div>
-      } @else {
-        <p class="empty-state">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
-      }
-    </aside>
-  </section>
+
+        @if (caseListState() === 'error') {
+          <p class="empty-state">司機回報暫時無法讀取，請使用右上角重新整理。</p>
+        } @else if (visibleCases().length === 0) {
+          <p class="empty-state">
+            @if (caseListState() === 'loading') {
+              正在讀取司機回報...
+            } @else if (caseFilter() === 'OPEN') {
+              目前沒有進行中的司機回報。司機在支援中心送出後，這裡和上方鈴鐺會馬上出現。
+            } @else {
+              最近沒有結案的司機回報。
+            }
+          </p>
+        } @else {
+          <div class="incident-list">
+            @for (item of visibleCases(); track item.id) {
+              <button
+                type="button"
+                class="incident-row"
+                [class.is-selected]="selectedCase()?.id === item.id"
+                (click)="selectCase(item.id)"
+              >
+                <span class="severity-mark" [class]="'severity-' + caseSeverity(item)"></span>
+                <span class="incident-main">
+                  <span class="incident-line">
+                    <strong>{{ caseCategoryLabel(item) }} · {{ item.driverName ?? '舊版回報' }}</strong>
+                    <span class="severity-label" [class]="'severity-' + caseSeverity(item)">{{ caseStatusLabel(item) }}</span>
+                  </span>
+                  <span>{{ item.canContinue === false ? '無法繼續配送 · ' : '' }}{{ item.description }}</span>
+                  <span>{{ item.vehiclePlateNumber ?? '沒有排車' }}{{ item.storeName ? ' · ' + item.storeName : '' }}</span>
+                </span>
+                <span class="incident-meta">
+                  <small>案件 #{{ item.id }}</small>
+                  <small>{{ formatDateTime(item.createdAt) }}</small>
+                  @if (item.unreadCount > 0) {
+                    <small class="unread-count">{{ item.unreadCount }} 則未讀</small>
+                  }
+                </span>
+              </button>
+            }
+          </div>
+        }
+      </section>
+
+      <aside class="incident-detail-panel" aria-labelledby="case-detail-title">
+        @if (selectedCase(); as item) {
+          <header class="detail-header">
+            <div>
+              <p class="section-eyebrow">司機回報</p>
+              <h3 id="case-detail-title">{{ caseCategoryLabel(item) }}</h3>
+              <span>案件 #{{ item.id }}</span>
+            </div>
+            <span class="detail-status" [class]="'severity-' + caseSeverity(item)">{{ caseStatusLabel(item) }}</span>
+          </header>
+
+          <!-- 動作放在詳情最上面：聊天室固定在畫面右下角，開著時會蓋住詳情欄的下半部 -->
+          @if (item.status === 'OPEN') {
+            <div class="detail-actions case-actions">
+              @if (item.acceptedAt === null) {
+                <button type="button" class="button-secondary" (click)="openCloseCaseDialog()" [disabled]="caseAction() !== null">
+                  直接結案
+                </button>
+                <button type="button" class="button-primary" (click)="acceptSelectedCase()" [disabled]="caseAction() !== null">
+                  {{ caseAction() === 'accept' ? '接收中...' : '接收並開啟對話' }}
+                </button>
+              } @else {
+                <button type="button" class="button-secondary" (click)="openSelectedCaseChat()">
+                  開啟對話{{ item.unreadCount > 0 ? '（' + item.unreadCount + ' 則未讀）' : '' }}
+                </button>
+                <button type="button" class="button-primary" (click)="openCloseCaseDialog()" [disabled]="caseAction() !== null">
+                  填寫結果並結案
+                </button>
+              }
+            </div>
+          }
+
+          <dl class="incident-facts">
+            <div>
+              <dt>回報司機</dt>
+              <dd>{{ item.driverName ?? '--' }}</dd>
+            </div>
+            <div>
+              <dt>車輛</dt>
+              <dd>{{ item.vehiclePlateNumber ?? '沒有排車' }}</dd>
+            </div>
+            <div>
+              <dt>訂單</dt>
+              <dd>{{ item.orderNumber ?? '整台車的狀況' }}</dd>
+            </div>
+            <div>
+              <dt>門市</dt>
+              <dd>{{ item.storeName ?? '--' }}</dd>
+            </div>
+            <div>
+              <dt>能否繼續配送</dt>
+              <dd [class.is-urgent]="item.canContinue === false">{{ canContinueLabel(item) }}</dd>
+            </div>
+            <div>
+              <dt>回報時間</dt>
+              <dd>{{ formatDateTime(item.createdAt) }}</dd>
+            </div>
+            <div>
+              <dt>接收</dt>
+              <dd>{{ item.acceptedAt ? (item.acceptedAdminName ?? '--') + ' · ' + formatDateTime(item.acceptedAt) : '還沒有人接收' }}</dd>
+            </div>
+            @if (item.status === 'CLOSED') {
+              <div>
+                <dt>結案</dt>
+                <dd>{{ item.handledBy ?? '--' }} · {{ formatDateTime(item.handledAt) }}</dd>
+              </div>
+            }
+          </dl>
+
+          <section class="detail-block">
+            <p>司機說明</p>
+            <span>{{ item.description }}</span>
+          </section>
+
+          @if (item.photoUrl) {
+            <a class="case-photo" [href]="item.photoUrl" target="_blank" rel="noopener" title="開啟原圖">
+              <img [src]="item.photoUrl" alt="司機附的照片" loading="lazy" />
+            </a>
+          }
+
+          @if (item.status === 'CLOSED') {
+            <section class="detail-block recommendation-block">
+              <p>處理結果</p>
+              <span>{{ item.resolution }}</span>
+            </section>
+          }
+        } @else {
+          <p class="empty-state">選取一件司機回報，可以接收、開啟對話或結案。</p>
+        }
+      </aside>
+    </section>
+  } @else {
+    @if (errorMessage()) {
+      <p class="feedback is-error"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
+    }
+    @if (actionMessage()) {
+      <p class="feedback is-success"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
+    }
+
+    <section class="anomaly-summary" aria-label="到期異常摘要">
+      <article class="summary-card tone-critical">
+        <p>待主管確認</p>
+        <strong>{{ summary().total }}<span>筆</span></strong>
+        <span>已到隔日確認時間</span>
+      </article>
+      <article class="summary-card tone-warning">
+        <p>無人簽收</p>
+        <strong>{{ summary().noSignature }}<span>筆</span></strong>
+        <span>等待主管重新確認配送</span>
+      </article>
+      <article class="summary-card tone-critical">
+        <p>貨況異常</p>
+        <strong>{{ summary().goodsIssue }}<span>筆</span></strong>
+        <span>短少或毀損待確認</span>
+      </article>
+      <article class="summary-card tone-accent">
+        <p>待補送數量</p>
+        <strong>{{ summary().replacementBoxes }}<span>箱</span></strong>
+        <span>依異常紀錄加總</span>
+      </article>
+    </section>
+
+    <section class="anomaly-workspace" aria-label="到期異常提醒">
+      <section class="incident-list-panel" aria-labelledby="incident-list-title">
+        <header class="list-header">
+          <div>
+            <p class="section-eyebrow">待確認清單</p>
+            <h3 id="incident-list-title">到期配送異常</h3>
+          </div>
+          <span>{{ filteredIncidents().length }} 筆顯示中</span>
+        </header>
+
+        <div class="list-tools">
+          <div class="filter-control" role="group" aria-label="異常類型篩選">
+            @for (filter of filters; track filter.key) {
+              <button
+                type="button"
+                [class.is-active]="activeFilter() === filter.key"
+                [attr.aria-pressed]="activeFilter() === filter.key"
+                (click)="setFilter(filter.key)"
+                [disabled]="loading() || confirming()"
+              >
+                {{ filter.label }}
+              </button>
+            }
+          </div>
+        </div>
+
+        @if (loading()) {
+          <p class="empty-state">正在讀取到期異常提醒...</p>
+        } @else if (errorMessage()) {
+          <p class="empty-state">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
+        } @else if (filteredIncidents().length === 0) {
+          <p class="empty-state">
+            目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
+          </p>
+        } @else {
+          <div class="incident-list">
+            @for (incident of filteredIncidents(); track incident.id) {
+              <button
+                type="button"
+                class="incident-row"
+                [class.is-selected]="selectedIncident()?.id === incident.id"
+                (click)="selectIncident(incident.id)"
+              >
+                <span class="severity-mark" [class]="'severity-' + severityClass(incident.type)"></span>
+                <span class="incident-main">
+                  <span class="incident-line">
+                    <strong>{{ exceptionTypeLabel(incident.type) }}</strong>
+                    <span class="severity-label" [class]="'severity-' + severityClass(incident.type)">
+                      待確認
+                    </span>
+                  </span>
+                  <span>來源訂單：{{ incident.sourceOrderNumber ?? '--' }}</span>
+                  <span>後續訂單：{{ incident.followUpOrderNumber ?? '--' }}</span>
+                </span>
+                <span class="incident-meta">
+                  <small>異常 #{{ incident.id }}</small>
+                  <small>送審 {{ formatDateTime(incident.queuedAt) }}</small>
+                </span>
+              </button>
+            }
+          </div>
+        }
+      </section>
+
+      <aside class="incident-detail-panel" aria-labelledby="incident-detail-title">
+        @if (selectedIncident(); as incident) {
+          <header class="detail-header">
+            <div>
+              <p class="section-eyebrow">案件詳情</p>
+              <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }}</h3>
+              <span>異常 #{{ incident.id }}</span>
+            </div>
+            <span class="detail-status" [class]="'severity-' + severityClass(incident.type)">待確認</span>
+          </header>
+
+          <dl class="incident-facts">
+            <div>
+              <dt>來源訂單</dt>
+              <dd>{{ incident.sourceOrderNumber ?? '--' }}</dd>
+            </div>
+            <div>
+              <dt>後續訂單</dt>
+              <dd>{{ incident.followUpOrderNumber ?? '--' }}</dd>
+            </div>
+            <div>
+              <dt>應到數量</dt>
+              <dd>{{ quantity(incident.expectedBoxCount) }}</dd>
+            </div>
+            <div>
+              <dt>實到數量</dt>
+              <dd>{{ quantity(incident.deliveredBoxCount) }}</dd>
+            </div>
+            <div>
+              <dt>待補送數量</dt>
+              <dd>{{ quantity(incident.replacementRequiredBoxCount) }}</dd>
+            </div>
+            <div>
+              <dt>送審時間</dt>
+              <dd>{{ formatDateTime(incident.queuedAt) }}</dd>
+            </div>
+          </dl>
+
+          <section class="detail-block">
+            <p>異常說明</p>
+            <span>{{ incident.description || '尚無額外異常說明。' }}</span>
+          </section>
+
+          <section class="detail-block recommendation-block">
+            <p>確認後處理</p>
+            <span>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</span>
+          </section>
+
+          <p class="action-message">確認前請核對來源訂單與待補送數量。</p>
+          <div class="detail-actions">
+            <button type="button" class="button-secondary" (click)="refresh()" [disabled]="confirming()">
+              重新整理
+            </button>
+            <button type="button" class="button-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
+              確認並待排車
+            </button>
+          </div>
+        } @else {
+          <p class="empty-state">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
+        }
+      </aside>
+    </section>
+  }
 
   @if (confirmDialogOpen()) {
     @if (selectedIncident(); as incident) {
@@ -204,3 +427,43 @@
     }
   }
 </main>
+
+<!-- 結案視窗：用 MatDialog 開（理由見 anomaly-center.ts 的 closeCaseDialogTemplate），寫法同 dispatch-shell 的確認執行視窗 -->
+<ng-template #closeCaseDialog>
+  @if (closingCase(); as item) {
+    <h2 mat-dialog-title>結案：{{ caseCategoryLabel(item) }} · {{ item.driverName ?? '舊版回報' }}</h2>
+    <mat-dialog-content class="close-case-dialog">
+      <p>
+        結案後，司機端的輸入框會換成下面的處理結果，雙方都不能再留言。
+        @if (item.acceptedAt === null) {
+          這件還沒有人接收，適合用在重複回報，或已經用電話處理完的情況。
+        }
+      </p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>處理結果（司機看得到）</mat-label>
+        <textarea
+          matInput
+          rows="4"
+          maxlength="1000"
+          placeholder="例如：已派人支援，剩下的站改由明天補送"
+          [value]="closeResolution()"
+          (input)="updateCloseResolution($event)"
+        ></textarea>
+      </mat-form-field>
+      @if (closeError()) {
+        <p class="close-case-dialog__error" role="alert">{{ closeError() }}</p>
+      }
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button type="button" matButton mat-dialog-close [disabled]="caseAction() === 'close'">取消</button>
+      <button
+        type="button"
+        matButton="filled"
+        (click)="submitCloseCase()"
+        [disabled]="caseAction() === 'close' || !closeResolution().trim()"
+      >
+        {{ caseAction() === 'close' ? '結案中...' : '確認結案' }}
+      </button>
+    </mat-dialog-actions>
+  }
+</ng-template>

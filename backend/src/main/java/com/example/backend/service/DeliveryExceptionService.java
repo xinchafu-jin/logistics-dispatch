@@ -87,6 +87,15 @@ public class DeliveryExceptionService {
         if (exceptionCase.getType() == ExceptionType.NO_SIGNATURE) {
             throw new IllegalArgumentException("無人簽收請使用確認補送或恢復原單流程");
         }
+        if (exceptionCase.getType() == ExceptionType.DRIVER_REPORT) {
+            // 要走 DriverCaseService.close：那邊才會推 CASE_CLOSED，司機端才知道結案了
+            throw new IllegalArgumentException("司機回報請在異常中心的司機回報清單結案");
+        }
+        if (exceptionCase.getFollowUpOrderId() != null) {
+            // 有補送單的要走 confirm：在這裡結案的話補送單會一直停在待確認，
+            // 而 confirm 只收 OPEN 的案件，之後就沒有路把補送單送進待排車
+            throw new IllegalArgumentException("這筆異常有補送單，請使用確認送入待排車");
+        }
         if (exceptionCase.getStatus() != ExceptionStatus.OPEN) {
             throw new IllegalArgumentException("此配送異常已經結案");
         }

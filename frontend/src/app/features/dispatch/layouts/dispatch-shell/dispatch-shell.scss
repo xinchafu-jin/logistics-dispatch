@@ -1068,3 +1068,87 @@ app-brand-logo {
   display: grid;
   place-items: center;
 }
+
+// ── 司機回報案件 ──
+
+// 司機不能繼續配送：鈴鐺的說明、聊天室的案件圖示改成警示色
+.notification-case-text.is-urgent,
+.chat-contact-avatar.is-urgent {
+  color: #ed9b70;
+}
+
+// 鈴鐺裡的說明最多兩行，完整內容到異常中心看
+.notification-case-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+// 案件對話上方的摘要；flex-shrink: 0 讓訊息多的時候也不會被擠掉
+.chat-case-summary {
+  display: grid;
+  flex-shrink: 0;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  border: 1px solid var(--metal-edge);
+  border-radius: 6px;
+}
+
+.chat-case-summary.is-urgent {
+  border-color: rgb(218 126 86 / 45%);
+}
+
+.chat-case-summary__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chat-case-summary__action {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.chat-case-summary__action:hover,
+.chat-case-summary__action:focus-visible {
+  background: rgb(99 209 198 / 10%);
+  outline: none;
+}
+
+.chat-case-summary__text {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+// 結案後取代輸入框的位置
+.chat-case-closed {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 2px 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  border-top: 1px solid var(--metal-edge);
+  white-space: pre-wrap;
+}
+
+.dispatch-layout.is-light-theme {
+  .notification-case-text.is-urgent,
+  .chat-contact-avatar.is-urgent {
+    color: #b4532a;
+  }
+}

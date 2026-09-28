@@ -10,7 +10,7 @@ import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.dto.respones.EmergencyLeaveResponse;
-import com.example.backend.dto.respones.ExceptionCaseResponse;
+import com.example.backend.dto.respones.DriverCaseResponse;
 import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.dto.respones.PhotoUploadResponse;
 import com.example.backend.dto.respones.PreTripInspectionResponse;
@@ -54,7 +54,7 @@ public class DriverPortalController {
     private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
-    private final DriverExceptionService driverExceptionService;
+    private final DriverCaseService driverCaseService;
     private final GPSRouteService gpsRouteService;
     private final DriversService driversService;
     private final EmergencyLeaveService emergencyLeaveService;
@@ -72,7 +72,7 @@ public class DriverPortalController {
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
-            DriverExceptionService driverExceptionService,
+            DriverCaseService driverCaseService,
             GPSRouteService gpsRouteService,
             DriversService driversService,
             EmergencyLeaveService emergencyLeaveService,
@@ -89,7 +89,7 @@ public class DriverPortalController {
         this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
-        this.driverExceptionService = driverExceptionService;
+        this.driverCaseService = driverCaseService;
         this.gpsRouteService = gpsRouteService;
         this.driversService = driversService;
         this.emergencyLeaveService = emergencyLeaveService;
@@ -275,7 +275,7 @@ public class DriverPortalController {
         return deliveryService.noSignature(driverId(jwt), request);
     }
 
-    /** 上傳交貨或無人簽收照片；回傳網址再放入 deliver/no-signature 請求。 */
+    /** 上傳交貨、無人簽收或例外回報的照片；回傳網址再放入 deliver／no-signature／建立案件的請求。 */
     @PostMapping(value = "/delivery-photo", consumes = "multipart/form-data")
     public PhotoUploadResponse uploadDeliveryPhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -283,14 +283,6 @@ public class DriverPortalController {
     ) {
         driverId(jwt);
         return new PhotoUploadResponse(deliveryPhotoStorageService.store(file));
-    }
-
-    /** 司機回報配送途中發生的異常。 */
-    @PostMapping("/exception")
-    public ExceptionCaseResponse reportException(
-            @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody DriverExceptionRequestDTO request) {
-        return driverExceptionService.report(driverId(jwt), request);
     }
 
     /** 查這條路線目前這組人車的出車前安全檢查：檢查過沒、通過沒、哪幾項異常。 */
@@ -404,6 +396,49 @@ public class DriverPortalController {
     @PostMapping("/messages/read")
     public int markMessagesRead(@AuthenticationPrincipal Jwt jwt) {
         return driverMessagesService.markReadByDriver(driverId(jwt));
+    }
+
+    // ── 例外回報案件（支援中心）：案件是不是本人的，一律用 JWT 的司機 ID 判斷 ──
+
+    /** 自己的案件：進行中的全部，已結案的最近 20 件。 */
+    @GetMapping("/cases")
+    public List<DriverCaseResponse> findCases(@AuthenticationPrincipal Jwt jwt) {
+        return driverCaseService.findForDriver(driverId(jwt));
+    }
+
+    /** 建立案件；路線、建立時間由後端決定，建立後推 CASE_OPENED 給後台。 */
+    @PostMapping("/cases")
+    public DriverCaseResponse createCase(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverCaseRequestDTO request
+    ) {
+        return driverCaseService.create(driverId(jwt), request);
+    }
+
+    /** 案件對話；afterId 的用法跟一般對話一樣。 */
+    @GetMapping("/cases/{caseId}/messages")
+    public List<DriverMessageResponse> findCaseMessages(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId,
+            @RequestParam(required = false) Long afterId
+    ) {
+        return driverCaseService.findMessagesForDriver(driverId(jwt), caseId, afterId);
+    }
+
+    /** 在案件裡留言；結案後不能再留。 */
+    @PostMapping("/cases/{caseId}/messages")
+    public DriverMessageResponse sendCaseMessage(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId,
+            @Valid @RequestBody DriverMessageRequestDTO request
+    ) {
+        return driverCaseService.sendFromDriver(driverId(jwt), caseId, request.getContent());
+    }
+
+    /** 把這件案件裡調度中心的回覆標成已讀。 */
+    @PostMapping("/cases/{caseId}/messages/read")
+    public int markCaseMessagesRead(@AuthenticationPrincipal Jwt jwt, @PathVariable Long caseId) {
+        return driverCaseService.markReadByDriver(driverId(jwt), caseId);
     }
 
     /** 檔名的副檔名是存檔時依檔案內容決定的（PreTripPhotoStorageService），照著回傳對應的類型 */
