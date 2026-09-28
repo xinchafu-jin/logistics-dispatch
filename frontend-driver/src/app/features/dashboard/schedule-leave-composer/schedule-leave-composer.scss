@@ -1,10 +1,10 @@
 :host { display: block; margin: 14px 6px 0; color: #1d392f; }
-.leave-calendar-modes { display: flex; gap: 6px; }
+.leave-calendar-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .55; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid #087c6b; outline-offset: 3px; }
-.leave-calendar-modes button { display: flex; flex: 1; flex-direction: column; align-items: center; gap: 5px; padding: 12px 4px; border: 1px solid #c8dad3; border-radius: 10px; color: #516860; background: #fff; }
+.leave-calendar-modes button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 4px; border: 1px solid #c8dad3; border-radius: 10px; color: #516860; background: #fff; }
 .leave-calendar-modes button.is-active { color: #087c6b; border-color: #087c6b; background: #e5f2ec; }
 .leave-calendar-modes mat-icon { width: 21px; height: 21px; font-size: 21px; }
 .leave-calendar-modes strong { font-size: 15px; }

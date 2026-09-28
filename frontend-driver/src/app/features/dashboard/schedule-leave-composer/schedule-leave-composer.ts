@@ -32,7 +32,6 @@ export class ScheduleLeaveComposer {
   readonly requests = input<DriverLeaveRequestResponse[]>([]);
   readonly requestsLoading = input(false);
   readonly requestsAvailable = input(false);
-  readonly makeupOnly = input(false);
   readonly submitted = output<DriverLeaveRequestResponse[]>();
   readonly calendarChange = output<void>();
   readonly goToToday = output<void>();
@@ -51,7 +50,6 @@ export class ScheduleLeaveComposer {
     {value: 'temporary', label: '當日臨請', hint: '特殊事由・限今天', icon: 'today'},
     {value: 'makeup', label: '事後補請', hint: '過去・可複選', icon: 'history'},
   ] as const;
-  readonly visibleModes = computed(() => this.makeupOnly() ? this.modes.filter(mode => mode.value === 'makeup') : this.modes);
   readonly types = [
     {value: 'SICK', label: '病假'}, {value: 'ANNUAL', label: '年假'},
     {value: 'PERSONAL', label: '事假'}, {value: 'BEREAVEMENT', label: '喪假'},

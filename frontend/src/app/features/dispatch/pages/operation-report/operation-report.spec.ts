@@ -3,13 +3,7 @@ import {Router} from '@angular/router';
 import {of, Subject, throwError} from 'rxjs';
 import {OperationReport} from './operation-report';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
-import {OrderDto, ReportOutcomesDto, ReportPerformanceDto, ReportWorkforceDto} from '../../../../core/services/dispatch-api.models';
-
-const orders = (): OrderDto[] => (['PENDING_CONFIRM', 'CONFIRMED', 'LOADED', 'IN_DELIVERY',
-  'COMPLETED', 'CANCELLED', 'FAILED', 'NO_SIGNATURE'] as OrderDto['status'][]).map((status, i) => ({
-    id: i + 1, orderNumber: `TEST-${i + 1}`, storeId: 1, warehouseId: 1, boxCount: 15, notes: '',
-    deliveryDate: '2026-09-28', status,
-  }));
+import {ReportOutcomesDto, ReportPerformanceDto, ReportWorkforceDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
 
 const emptyWorkforce = (): ReportWorkforceDto => ({scheduledWorkShifts: 0, excusedFullDayShifts: 0, dueShifts: 0,
   attendedShifts: 0, onTimeShifts: 0, lateShifts: 0, missingClockInShifts: 0, finishedShifts: 0,
@@ -34,19 +28,31 @@ const outcomes = (): ReportOutcomesDto => {
     recovery: {attemptedOrders: 3, recoveryOrders: 2, attemptedRecoveryOrders: 1, deliveredRecoveryOrders: 1, outstandingRecoveryOrders: 1, recoveryShare: 100 / 3},
     warehouses: [{warehouseId: 1, warehouseName: '左營倉', delivery, loading, problems},
       {warehouseId: 2, warehouseName: '台南倉', delivery, loading: {...loading, checkedOrders: 0, matchedOrders: 0, matchRate: null}, problems}],
-    daily: [{date: '2026-09-28', dueOrders: 4, fullOrders: 2}], orders: [],
+    daily: [{date: '2026-09-28', dueOrders: 4, fullOrders: 2}], orders: [
+      {orderId: 10, date: '2026-09-28', due: true, noSignature: false, delivered: false, deliveredAt: null,
+        windowEnd: '2026-09-28T18:00:00', status: 'IN_DELIVERY'} as ReportOrderOutcomeDto,
+      {orderId: 11, date: '2026-09-28', due: true, noSignature: false, delivered: true, deliveredAt: '2026-09-28T19:00:00',
+        windowEnd: '2026-09-28T18:00:00', status: 'COMPLETED'} as ReportOrderOutcomeDto,
+    ],
   };
 };
 
 describe('OperationReport purpose-specific visualizations', () => {
   let fixture: ReturnType<typeof TestBed.createComponent<OperationReport>>;
   let navigate: ReturnType<typeof vi.fn>;
-  let api: {getReportPerformance: ReturnType<typeof vi.fn>; getReportOutcomes: ReturnType<typeof vi.fn>; getOrders: ReturnType<typeof vi.fn>};
+  let api: {getReportPerformance: ReturnType<typeof vi.fn>; getReportOutcomes: ReturnType<typeof vi.fn>; getReportExceptions: ReturnType<typeof vi.fn>};
   beforeEach(() => {
     vi.useFakeTimers({toFake: ['Date']}); vi.setSystemTime(new Date('2026-09-28T12:00:00Z'));
     navigate = vi.fn(() => Promise.resolve(true));
     api = {getReportPerformance: vi.fn(() => of(performance())), getReportOutcomes: vi.fn(() => of(outcomes())),
-      getOrders: vi.fn(() => of(orders()))};
+      getReportExceptions: vi.fn(() => of({recordedCases: 6, openCases: 4, closedCases: 2, cases: [
+        {exceptionId: 1, type: 'NO_SIGNATURE', status: 'OPEN', createdAt: '2026-09-28T08:00:00'},
+        {exceptionId: 2, type: 'DRIVER_REPORT', status: 'CLOSED', createdAt: '2026-09-28T09:00:00'},
+        {exceptionId: 3, type: 'SHORTAGE', status: 'OPEN', createdAt: '2026-09-28T10:00:00'},
+        {exceptionId: 4, type: 'LOADING_MISMATCH', status: 'OPEN', createdAt: '2026-09-28T11:00:00'},
+        {exceptionId: 5, type: 'PHONE_HANDLED', status: 'CLOSED', createdAt: '2026-09-28T12:00:00'},
+        {exceptionId: 6, type: 'DAMAGE', status: 'OPEN', createdAt: '2026-09-28T13:00:00'},
+      ]}))};
     TestBed.configureTestingModule({imports: [OperationReport], providers: [
       {provide: Router, useValue: {navigate}}, {provide: DispatchApiService, useValue: api}]});
     fixture = TestBed.createComponent(OperationReport);
@@ -72,12 +78,13 @@ describe('OperationReport purpose-specific visualizations', () => {
     expect(text('.period-stepper strong')).toBe('2026/09/01 — 2026/09/30');
     expect(text('.period-tabs .is-active')).toBe('月度');
     const query = {period: 'CUSTOM', from: '2026-09-01', to: '2026-09-30'};
-    for (const read of [api.getReportPerformance, api.getReportOutcomes]) expect(read).toHaveBeenLastCalledWith(query);
-    expect(api.getOrders).toHaveBeenLastCalledWith();
+    expect(api.getReportPerformance).toHaveBeenLastCalledWith(query);
+    expect(api.getReportExceptions).toHaveBeenLastCalledWith(query);
+    expect(api.getReportOutcomes).toHaveBeenLastCalledWith({...query, includeDetails: true});
     expect(text('#people .rate-card')).toContain('75');
     expect(text('#fleet .score-item')).toContain('2次');
     expect(text('#orders .score-item')).toContain('50.0%');
-    expect(text('#unsettled-orders .score-item')).toContain('4筆');
+    expect(text('#exceptions .score-item')).toContain('4件');
     expect(text('#warehouses .score-item')).toContain('66.7%');
     expect(fixture.componentInstance.tripBuckets()?.[3]).toMatchObject({from: '2026-09-21', to: '2026-09-27', count: 2});
     expect(fixture.componentInstance.orderBuckets()?.[3]).toMatchObject({count: 2, other: 2});
@@ -103,10 +110,17 @@ describe('OperationReport purpose-specific visualizations', () => {
     expect(fixture.nativeElement.querySelectorAll('.rate-ring.is-empty')).toHaveLength(3);
   });
 
-  it('keeps personnel, fleet, delivery outcomes, unfinished orders and warehouses in order', () => {
+  it('keeps personnel, fleet, orders, exceptions and warehouses in order', () => {
     expect([...fixture.nativeElement.querySelectorAll('.report-sections > section')].map((s: HTMLElement) => s.id))
-      .toEqual(['people', 'fleet', 'orders', 'unsettled-orders', 'warehouses']);
-    expect(api.getReportOutcomes).toHaveBeenCalledWith({period: 'CUSTOM', from: '2026-09-28', to: '2026-10-04'});
+      .toEqual(['people', 'fleet', 'orders', 'exceptions', 'warehouses']);
+    expect(api.getReportOutcomes).toHaveBeenCalledWith({period: 'CUSTOM', from: '2026-09-28', to: '2026-10-04', includeDetails: true});
+  });
+
+  it('omits redundant order and warehouse chips and the explanatory line below the anomaly total', () => {
+    expect(fixture.nativeElement.querySelector('#orders .status-chips')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#warehouses .status-chips')).toBeNull();
+    expect(text('#exceptions .score-item')).not.toContain('右側三類件數加總');
+    expect(text('#exceptions .score-item')).toContain('本期累積異常');
   });
 
   it('offers a daily view and scopes every request, chart and drill-down to that day', () => {
@@ -120,8 +134,9 @@ describe('OperationReport purpose-specific visualizations', () => {
     expect(fixture.componentInstance.activePeriod()).toBe('day');
     expect(text('.period-stepper strong')).toBe('2026/09/28');
     const query = {period: 'CUSTOM', from: '2026-09-28', to: '2026-09-28'};
-    for (const read of [api.getReportPerformance, api.getReportOutcomes]) expect(read).toHaveBeenLastCalledWith(query);
-    expect(api.getOrders).toHaveBeenLastCalledWith();
+    expect(api.getReportPerformance).toHaveBeenLastCalledWith(query);
+    expect(api.getReportExceptions).toHaveBeenLastCalledWith(query);
+    expect(api.getReportOutcomes).toHaveBeenLastCalledWith({...query, includeDetails: true});
     expect(fixture.componentInstance.tripBuckets()).toHaveLength(1);
     expect(fixture.componentInstance.tripBuckets()?.[0]).toMatchObject({from: query.from, to: query.to, count: 2});
     expect(fixture.componentInstance.orderBuckets()).toHaveLength(1);
@@ -192,20 +207,41 @@ describe('OperationReport purpose-specific visualizations', () => {
     bar.click();
     expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-09-28', sheet: 'delivery-quality'}});
   });
-  it('uses colored order-progress categories and opens the corresponding unfinished orders', () => {
-    expect(text('#unsettled-orders .score-item')).toContain('本期未結單');
-    expect(text('#unsettled-orders .score-item')).toContain('本期訂單 8 筆 · 已完成 1 筆');
-    expect(fixture.componentInstance.unsettledStats()).toEqual({total: 8, unsettled: 4, completed: 1});
-    expect(fixture.componentInstance.unsettledTiles()?.map(tile => tile.value)).toEqual([1, 2, 1]);
-    expect(fixture.nativeElement.querySelectorAll('#unsettled-orders .issue-column')).toHaveLength(3);
-    expect(text('#unsettled-orders')).toContain('待確認');
-    expect(text('#unsettled-orders')).toContain('待出貨');
-    expect(text('#unsettled-orders')).toContain('配送中');
-    expect(text('#unsettled-orders')).not.toContain('倉庫點交不符');
-    click('#unsettled-orders .row-link');
-    expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'orders', metric: 'unsettled'}});
-    click('#unsettled-orders .issue-column:nth-child(2)');
-    expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'orders', metric: 'awaiting-delivery'}});
+  it('uses exactly three colored categories and totals their counts on the left', () => {
+    expect(text('#exceptions .score-item')).toContain('本期累積異常4件');
+    expect(fixture.componentInstance.issueTiles()?.map(tile => tile.value)).toEqual([1, 1, 2]);
+    expect(fixture.componentInstance.issueTotal()).toBe(4);
+    expect(fixture.nativeElement.querySelectorAll('#exceptions .issue-column')).toHaveLength(3);
+    expect(text('#exceptions')).toContain('無人簽收');
+    expect(text('#exceptions')).toContain('倉庫點交不符');
+    expect(text('#exceptions')).toContain('未結訂單異常');
+    expect(text('#exceptions')).not.toContain('其他異常通報');
+    expect(text('#exceptions .chart-heading')).toContain('累積異常案件區分');
+    expect(text('#exceptions .chart-heading')).toContain('單位：件');
+    click('#exceptions .row-link');
+    expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'exceptions'}});
+    click('#exceptions .issue-column:nth-child(2)');
+    expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'exceptions', metric: 'all-loading-mismatch'}});
+    click('#exceptions .issue-column:nth-child(3)');
+    expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'delivery-quality', metric: 'overdue-unsettled'}});
+    expect(text('#exceptions .issue-column:nth-child(3) .issue-fill')).toContain('2件');
+  });
+
+  it('does not remove an occurrence from the cumulative chart when its case is closed', () => {
+    const values = fixture.componentInstance.issueTiles()?.map(tile => tile.value);
+    fixture.componentInstance.operationalData.update(source => ({...source!, exceptions: {...source!.exceptions!,
+      cases: fixture.componentInstance.exceptionCases()!.map(row => ({...row, status: 'CLOSED'}))}}));
+    fixture.detectChanges();
+    expect(fixture.componentInstance.issueTiles()?.map(tile => tile.value)).toEqual(values);
+    expect(text('#exceptions .score-item')).toContain('4件');
+    expect(fixture.nativeElement.querySelectorAll('#exceptions .issue-column')).toHaveLength(3);
+    expect((values ?? []).reduce<number>((sum, value) => sum + (value ?? 0), 0)).toBe(4);
+  });
+  it('does not show an intrusive demo-data banner in the summary', () => {
+    const d = outcomes();
+    d.orders.push({...d.orders[0], orderId: 100, orderNumber: 'DEMO-LOAD-RPT-20260928-01'} as ReportOrderOutcomeDto);
+    update(d);
+    expect(fixture.nativeElement.querySelector('[role="note"]')).toBeNull();
   });
   it('compares all warehouses and shows no track for an undefined rate', () => {
     expect(text('#warehouses')).toContain('左營倉'); expect(text('#warehouses')).toContain('台南倉');
@@ -214,22 +250,6 @@ describe('OperationReport purpose-specific visualizations', () => {
     expect(text('.warehouse-no-data')).toContain('尚無點交紀錄');
     click('.warehouse-comparison button');
     expect(navigate).toHaveBeenLastCalledWith(['/dispatch/history'], {queryParams: {from: '2026-09-28', to: '2026-10-04', sheet: 'loading-quality', warehouseId: 1}});
-  });
-
-  it('scopes unfinished counts to the selected day, week, month or year by delivery date', () => {
-    const page = fixture.componentInstance;
-    const dates = ['2025-12-31', '2026-01-01', '2026-09-01', '2026-09-27', '2026-09-28', '2026-09-30', '2026-10-01', '2027-01-01'];
-    page.operationalData.update(source => ({...source!, orders: dates.map((deliveryDate, i) => ({
-      ...orders()[0], id: i + 1, deliveryDate, status: 'CONFIRMED',
-    }))}));
-    page.activePeriod.set('day');
-    expect(page.unsettledStats()?.unsettled).toBe(1);
-    page.activePeriod.set('week');
-    expect(page.unsettledStats()?.unsettled).toBe(3);
-    page.activePeriod.set('month');
-    expect(page.unsettledStats()?.unsettled).toBe(4);
-    page.activePeriod.set('year');
-    expect(page.unsettledStats()?.unsettled).toBe(6);
   });
   it('deep links each personnel circle and distance metric to their exact rows', () => {
     for (const [i, metric] of ['clocked-in', 'on-time', 'overtime'].entries()) {
@@ -242,14 +262,14 @@ describe('OperationReport purpose-specific visualizations', () => {
   it('renders clean empty states without fake zero-percent success or empty bar tracks', () => {
     fixture.componentInstance.operationalData.update(source => ({...source!, performance: {
       ...source!.performance!, workforce: emptyWorkforce(), trips: [], fleet: {...source!.performance!.fleet, startedTrips: 0, actualKm: null}}}));
-    const d = outcomes(); d.daily = []; d.delivery.fullDeliveryRate = null;
+    const d = outcomes(); d.daily = []; d.orders = []; d.delivery.fullDeliveryRate = null;
     d.problems = {...d.problems, affectedOrders: 0, shortageOrders: 0, damagedOrders: 0, noSignatureOrders: 0, issueRate: null};
-    fixture.componentInstance.operationalData.update(source => ({...source!, orders: []}));
+    fixture.componentInstance.operationalData.update(source => ({...source!, exceptions: {from: '2026-09-28', to: '2026-10-04', cases: []}}));
     update(d);
     expect(fixture.nativeElement.querySelectorAll('.rate-ring.is-empty')).toHaveLength(3);
     expect(text('#fleet .chart-empty')).toContain('無出車紀錄');
     expect(text('#orders .chart-empty')).toContain('無到期應配送訂單');
-    expect(text('#unsettled-orders .chart-empty')).toContain('無未結單訂單');
+    expect(text('#exceptions .chart-empty')).toContain('未登錄異常案件');
     expect(fixture.nativeElement.querySelector('.issue-fill')).toBeNull();
     expect(text('#fleet')).not.toContain('0 km');
   });
@@ -281,13 +301,61 @@ describe('OperationReport purpose-specific visualizations', () => {
     expect(text('#people')).toContain('人員資料未載入'); expect(text('#fleet .score-item')).toContain('—');
     expect(text('#orders .score-item')).toContain('50.0%');
   });
-  it('shows missing order data instead of claiming zero unsettled orders when the source fails', () => {
-    api.getOrders.mockReturnValue(throwError(() => new Error('503')));
+  it('shows missing case data rather than claiming zero delivery cases when the exception source fails', () => {
+    api.getReportExceptions.mockReturnValue(throwError(() => new Error('503')));
     click('.period-tabs button'); fixture.detectChanges();
-    expect(text('#unsettled-orders .score-item')).toContain('—');
-    expect(text('#unsettled-orders .chart-empty')).toContain('訂單資料未載入');
+    expect(text('#exceptions .score-item')).toContain('—');
+    expect(text('#exceptions')).toContain('部分異常資料未載入');
     expect(text('#orders .score-item')).toContain('50.0%');
     expect(fixture.nativeElement.querySelector('.data-alert')).not.toBeNull();
+  });
+  it('does not classify on-time completions or future unfinished orders as overdue incidents', () => {
+    const d = outcomes(); d.orders.push(
+      {...d.orders[0], orderId: 12, date: '2026-09-28', deliveredAt: '2026-09-28T17:00:00', delivered: true,
+        status: 'COMPLETED'} as ReportOrderOutcomeDto,
+      {...d.orders[0], orderId: 13, due: false, date: '2026-10-05', status: 'CONFIRMED'} as ReportOrderOutcomeDto,
+      {...d.orders[0], orderId: 14, status: 'COMPLETED', deliveredAt: null} as ReportOrderOutcomeDto,
+    );
+    update(d);
+    expect(fixture.componentInstance.issueTiles()?.map(tile => tile.value)).toEqual([1, 1, 2]);
+    expect(fixture.componentInstance.issueTotal()).toBe(4);
+  });
+  it('does not invent a three-category total when delivery evidence fails', () => {
+    api.getReportOutcomes.mockReturnValue(throwError(() => new Error('503')));
+    click('.period-tabs button'); fixture.detectChanges();
+    expect(fixture.componentInstance.issueTiles()?.map(tile => tile.value)).toEqual([1, 1, null]);
+    expect(fixture.componentInstance.issueTotal()).toBeNull();
+    expect(text('#exceptions .score-item')).toContain('—');
+    expect(fixture.nativeElement.querySelector('.data-alert')).not.toBeNull();
+  });
+  it('distinguishes zero incidents from a missing source', () => {
+    fixture.componentInstance.operationalData.update(source => ({...source!, exceptions: {
+      from: '2026-09-28', to: '2026-10-04', cases: [{status: 'CLOSED', type: 'NO_SIGNATURE'}],
+    }})); fixture.detectChanges();
+    expect(text('#exceptions .score-item')).toContain('3件');
+    fixture.componentInstance.operationalData.update(source => ({...source!, exceptions: {
+      from: '2026-09-28', to: '2026-10-04', cases: [],
+    }})); fixture.detectChanges();
+    expect(text('#exceptions .score-item')).toContain('2件');
+    fixture.componentInstance.operationalData.update(source => ({...source!, exceptions: null, outcomes: null})); fixture.detectChanges();
+    expect(text('#exceptions .score-item')).toContain('—');
+  });
+  it('recalculates the cumulative total with the exact year, month, week and day request', () => {
+    api.getReportExceptions.mockImplementation((query: {from: string; to: string}) => {
+      const size = query.from === query.to ? 2 : query.from === '2026-01-01' ? 10 : query.from === '2026-09-01' ? 4 : 5;
+      return of({from: query.from, to: query.to, cases: Array.from({length: size}, (_, index) => ({
+        exceptionId: index + 1, type: 'NO_SIGNATURE', status: index === 0 ? 'OPEN' : 'CLOSED',
+      }))});
+    });
+    for (const [button, from, to, total] of [
+      [1, '2026-01-01', '2026-12-31', '12件'], [2, '2026-09-01', '2026-09-30', '6件'],
+      [3, '2026-09-28', '2026-10-04', '7件'], [4, '2026-09-28', '2026-09-28', '4件'],
+    ] as const) {
+      click(`.period-tabs button:nth-child(${button})`); fixture.detectChanges();
+      expect(api.getReportExceptions).toHaveBeenLastCalledWith({period: 'CUSTOM', from, to});
+      expect(api.getReportOutcomes).toHaveBeenLastCalledWith({period: 'CUSTOM', from, to, includeDetails: true});
+      expect(text('#exceptions .score-item')).toContain(total);
+    }
   });
   it('cancels older period requests instead of replacing newer data', () => {
     const stale = new Subject<ReportOutcomesDto>(); api.getReportOutcomes.mockReturnValueOnce(stale);

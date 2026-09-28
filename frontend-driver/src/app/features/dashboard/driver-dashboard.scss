@@ -2398,8 +2398,33 @@ button:disabled {
 
 .schedule-legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+.driver-app .shift-type.is-pending {
+  color: #73510c;
+  background: #fff1c8;
+}
+
+.schedule-pending-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 6px 0;
+  color: #73510c;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.schedule-pending-hint mat-icon {
+  flex: 0 0 16px;
+  height: 16px;
+  width: 16px;
+  margin-top: 2px;
+  font-size: 16px;
 }
 
 .schedule-state {

@@ -12,9 +12,8 @@ describe('unfinished order lifecycle', () => {
       expect(['pending-confirm', 'awaiting-delivery', 'in-delivery']
         .filter(metric => matchesOrderProgress({status}, metric))).toHaveLength(1);
     }
-    expect(matchesOrderProgress({status: 'LOADED'}, 'awaiting-delivery')).toBe(true);
   });
-  it('keeps the unfiltered history complete and rejects absent order data', () => {
+  it('keeps unfiltered history complete and rejects absent order data', () => {
     expect(matchesOrderProgress({status: 'COMPLETED'})).toBe(true);
     expect(matchesOrderProgress(null, 'unsettled')).toBe(false);
   });

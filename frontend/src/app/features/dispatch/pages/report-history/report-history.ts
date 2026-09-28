@@ -1,6 +1,6 @@
 import {Component, computed, inject, OnDestroy, OnInit, signal} from '@angular/core';
 import {ActivatedRoute, Router} from '@angular/router';
-import {catchError, forkJoin, of, Subscription} from 'rxjs';
+import {catchError, forkJoin, Observable, of, Subscription, throwError} from 'rxjs';
 import {MatIconModule} from '@angular/material/icon';
 import {MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -9,6 +9,8 @@ import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto,
   ReportOutcomesDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
 import {REPORT_CASE_METRICS, matchesReportCase} from '../../report-delivery-cases';
 import {ORDER_PROGRESS_METRICS, matchesOrderProgress} from '../../report-unsettled-orders';
+import {ReportLoadingItem, loadingItemStatusLabel, loadingMismatchSummary, reportLoadingItems} from '../../report-loading-items';
+import {isOverdueUnsettledOrder} from '../../report-overdue-orders';
 
 type PreviewSheet = 'overview' | 'orders' | 'routes' | 'attendance' | 'vehicles' | 'warehouses' | 'stores' | 'exceptions' | 'notes'
   | 'delivery-quality' | 'recovery' | 'loading-quality';
@@ -35,6 +37,8 @@ interface ReportRow {
   driverId?: unknown;
   driverName?: unknown;
   exceptionId?: unknown;
+  loadingItems?: ReportLoadingItem[];
+  loadingItemSummary?: string;
   failedOrders?: unknown;
   mileageComparisonStatus?: unknown;
   noSignatureAttempts?: unknown;
@@ -119,7 +123,7 @@ const METRICS: Partial<Record<PreviewSheet, {id: string; label: string}[]>> = {
   'delivery-quality': [{id: 'full', label: '完整交付'}, {id: 'incomplete', label: '交貨不完整'},
     {id: 'outstanding', label: '未確認交付'}, {id: 'missing-quality', label: '箱數待核對'},
     {id: 'within-window', label: '收貨時段內抵達'}, {id: 'late-arrival', label: '逾時抵達'},
-    {id: 'no-signature', label: '無人簽收'}],
+    {id: 'no-signature', label: '無人簽收'}, {id: 'overdue-unsettled', label: '未結訂單異常'}],
   'loading-quality': [{id: 'matched', label: '點交相符'}, {id: 'mismatched', label: '點交不符'},
     {id: 'missing-loading', label: '點交紀錄缺漏'}, {id: 'unassigned', label: '到期未排車'}],
   exceptions: REPORT_CASE_METRICS.map(({id, label}) => ({id, label})),
@@ -136,6 +140,7 @@ export class ReportHistory implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private previewRequest?: Subscription;
+  private filterRequest?: Subscription;
 
   readonly sheets = SHEETS;
   readonly from = signal(this.today());
@@ -161,6 +166,7 @@ export class ReportHistory implements OnInit, OnDestroy {
   readonly exporting = signal(false);
   readonly errorMessage = signal('');
   readonly detailError = signal('');
+  readonly filterError = signal('');
   readonly metric = signal('');
 
   ngOnInit(): void {
@@ -255,7 +261,7 @@ export class ReportHistory implements OnInit, OnDestroy {
     return 'custom';
   }
 
-  ngOnDestroy(): void { this.previewRequest?.unsubscribe(); }
+  ngOnDestroy(): void { this.previewRequest?.unsubscribe(); this.filterRequest?.unsubscribe(); }
 
   private invalidatePreview(): void {
     this.previewRequest?.unsubscribe();
@@ -300,37 +306,51 @@ export class ReportHistory implements OnInit, OnDestroy {
     if (!this.validRange()) return;
 
     this.loading.set(true);
+    this.preview.set(null);
     this.errorMessage.set('');
     this.detailError.set('');
     const query = this.reportQuery();
     void this.router.navigate([], {relativeTo: this.route, queryParams: {from: this.from(), to: this.to()}, queryParamsHandling: 'merge'});
     this.previewRequest?.unsubscribe();
     this.previewRequest = forkJoin({
-      performance: this.api.getReportPerformance(query),
-      summary: this.api.getReportSummary(query),
-      attendance: this.api.getReportAttendance(query),
-      routes: this.api.getReportRoutes(query),
-      drivers: this.api.getReportDrivers(query),
-      vehicles: this.api.getReportVehicles(query),
-      warehouses: this.api.getReportWarehouses(query),
-      stores: this.api.getReportStores(query),
-      exceptions: this.api.getReportExceptions(query),
-      orders: this.api.getOrders(),
-      storeDirectory: this.api.getStores(),
-      outcomes: this.api.getReportOutcomes({...query, includeDetails: true}).pipe(catchError(() => {
-        this.detailError.set('配送／補送／點交明細未載入，請重新預覽。'); return of(null);
+      performance: this.previewSource('人員與出車統計', this.api.getReportPerformance(query)),
+      summary: this.previewSource('營運總覽', this.api.getReportSummary(query)),
+      attendance: this.previewSource('司機打卡', this.api.getReportAttendance(query)),
+      routes: this.previewSource('路線里程', this.api.getReportRoutes(query)),
+      drivers: this.previewSource('司機統計', this.api.getReportDrivers(query)),
+      vehicles: this.previewSource('車輛使用', this.api.getReportVehicles(query)),
+      warehouses: this.previewSource('倉庫統計', this.api.getReportWarehouses(query)),
+      stores: this.previewSource('門市表現', this.api.getReportStores(query)),
+      exceptions: this.previewSource('異常案件', this.api.getReportExceptions(query)),
+      orders: this.previewSource('訂單明細', this.api.getOrders()),
+      storeDirectory: this.previewSource('門市資料', this.api.getStores()),
+      outcomes: this.api.getReportOutcomes({...query, includeDetails: true}).pipe(catchError((error: unknown) => {
+        this.detailError.set(this.loadError('配送／補送／點交明細', error)); return of(null);
       })),
     }).subscribe({
       next: (preview) => {
         this.preview.set(preview);
         this.loading.set(false);
       },
-      error: () => {
+      error: (error: unknown) => {
         this.preview.set(null);
-        this.errorMessage.set('目前無法產生預覽，請確認後端服務與登入狀態。');
+        this.errorMessage.set(error instanceof Error ? error.message : '報表未載入，請重新預覽。');
         this.loading.set(false);
       },
     });
+  }
+
+  private previewSource<T>(label: string, source: Observable<T>): Observable<T> {
+    return source.pipe(catchError((error: unknown) => throwError(() => new Error(this.loadError(label, error)))));
+  }
+
+  private loadError(label: string, error: unknown): string {
+    const status = typeof error === 'object' && error !== null && 'status' in error ? Number(error.status) : NaN;
+    if (status === 401) return `「${label}」未載入：登入已失效，請重新登入。`;
+    if (status === 403) return `「${label}」未載入：目前帳號沒有查詢權限。`;
+    if (status === 0) return `「${label}」未載入：無法連線到後端服務，請確認服務已啟動後重試。`;
+    if (status >= 500) return `「${label}」未載入：後端查詢失敗（HTTP ${status}），請確認資料庫更新完成後重試。`;
+    return `「${label}」未載入，請重新預覽。`;
   }
 
   protected async exportWorkbook(): Promise<void> {
@@ -356,16 +376,20 @@ export class ReportHistory implements OnInit, OnDestroy {
       this.appendSheet(xlsx, workbook, '司機出勤', this.attendanceExportRows(preview));
       this.appendSheet(xlsx, workbook, '出車收車明細', this.tripExportRows(preview));
       this.appendSheet(xlsx, workbook, '各倉人車比較', [
-        ['倉庫', '已打上班卡', '應打上班卡', '打卡率', '準時班次', '準時上班率', '已完成打卡班次', '加班班次', '加班率', '加班分鐘', '出車趟次', '收車趟次', '收車完成率', '已記錄實際公里'],
+        ['倉庫', '已打上班卡', '應打上班卡', '打卡率', '準時班次', '準時上班率', '已完成打卡班次', '加班班次', '加班率', '加班分鐘', '出車趟次', '收車趟次', '已記錄實際公里'],
         ...preview.performance.warehouses.map(row => [row.warehouseName, row.workforce.attendedShifts, row.workforce.dueShifts,
           this.percent(row.workforce.attendanceRate), row.workforce.onTimeShifts, this.percent(row.workforce.onTimeRate),
           row.workforce.finishedShifts, row.workforce.overtimeShifts, this.percent(row.workforce.overtimeRate), row.workforce.overtimeMinutes,
-          row.fleet.startedTrips, row.fleet.returnedTrips, this.percent(row.fleet.returnRate), row.fleet.actualKm]),
+          row.fleet.startedTrips, row.fleet.returnedTrips, row.fleet.actualKm]),
         ['口徑', '人員依目前倉庫歸屬，出車依記錄出貨倉庫；比率無分母不補0%；加班為打卡超過排定下班分鐘，非核准薪資加班。'],
       ]);
       this.appendSheet(xlsx, workbook, '車輛使用', this.vehicleExportRows(preview));
       this.appendSheet(xlsx, workbook, '倉庫門市', this.warehouseExportRows(preview));
       this.appendSheet(xlsx, workbook, '異常案件', this.exceptionExportRows(preview));
+      const loadingExceptionItems = this.loadingExceptionExportRows(preview);
+      if (loadingExceptionItems.length > 1) {
+        this.appendSheet(xlsx, workbook, '點交異常商品', loadingExceptionItems);
+      }
       if (preview.outcomes) {
         this.appendSheet(xlsx, workbook, '配送結果明細', this.deliveryOutcomeExportRows(preview));
         this.appendSheet(xlsx, workbook, '出貨點交明細', this.loadingOutcomeExportRows(preview));
@@ -396,8 +420,18 @@ export class ReportHistory implements OnInit, OnDestroy {
   protected exceptionRows(report: ReportPreview): ReportRow[] {
     const rows = this.rows(report.exceptions, 'cases');
     const metric = this.selectedSheet() === 'exceptions' ? this.metric() : '';
-    return metric ? rows.filter(row => matchesReportCase(row, metric)) : rows;
+    const ordersById = new Map((report.orders ?? []).filter(order => order.id != null).map(order => [order.id!, order]));
+    return (metric ? rows.filter(row => matchesReportCase(row, metric)) : rows).map(row => {
+      if (row.type !== 'LOADING_MISMATCH') return row;
+      // Use the case's original order, not the follow-up order or the report's delivery-date-filtered orders.
+      const order = typeof row.orderId === 'number' ? ordersById.get(row.orderId) : undefined;
+      const items = reportLoadingItems(order?.items);
+      return {...row, loadingItems: items, loadingItemSummary: order ? loadingMismatchSummary(items)
+        : typeof row.orderId === 'number' ? '原訂單商品明細未載入' : '案件未關聯原訂單'};
+    });
   }
+
+  protected loadingItemLabel(item: ReportLoadingItem): string { return loadingItemStatusLabel(item.status); }
 
   protected exceptionStatusCount(rows: ReportRow[], status: 'OPEN' | 'CLOSED'): number {
     return rows.filter(row => row.status === status).length;
@@ -444,7 +478,9 @@ export class ReportHistory implements OnInit, OnDestroy {
           }
         }
         if (!row.due) return false;
+        if (row.status === 'PENDING_CONFIRM' && metric !== 'overdue-unsettled') return false;
         switch (metric) {
+          case 'overdue-unsettled': return isOverdueUnsettledOrder(row);
           case 'full': return row.full;
           case 'incomplete': return row.delivered && !row.full && !row.missingQuality;
           case 'outstanding': return !row.delivered;
@@ -483,6 +519,10 @@ export class ReportHistory implements OnInit, OnDestroy {
     return row.noSignature ? '無人簽收' : row.full ? '完整交付' : row.missingQuality ? '箱數待核對'
       : row.delivered ? '交貨不完整' : '未確認交付';
   }
+  protected overdueResult(row: ReportOrderOutcomeDto): string | null {
+    if (!isOverdueUnsettledOrder(row)) return null;
+    return row.deliveredAt ? '逾期才交付' : '到期未交付';
+  }
   protected expectedDeliveryBoxes(row: ReportOrderOutcomeDto): number | null {
     return row.expectedBoxCount ?? row.orderedBoxCount;
   }
@@ -497,6 +537,18 @@ export class ReportHistory implements OnInit, OnDestroy {
     return row.loadingMismatch ? '點交不符' : row.loadingMatched ? '點交相符' : row.dueUnassigned ? '到期未排車' : '點交紀錄缺漏';
   }
 
+  protected loadingItemsForOutcome(row: ReportOrderOutcomeDto, report: ReportPreview): ReportLoadingItem[] {
+    const source = report.orders?.find(order => order.id === row.orderId);
+    return reportLoadingItems(source?.items?.length ? source.items
+      : (row.items ?? []).map(item => ({...item, loadingNotes: item.notes})));
+  }
+
+  protected loadingRecordedAt(row: ReportOrderOutcomeDto, report: ReportPreview): string | null {
+    // A failed handoff has no successful loadedAt; its recorded item-check time is still valid evidence.
+    return row.loadedAt || this.loadingItemsForOutcome(row, report).map(item => item.checkedAt)
+      .filter((time): time is string => typeof time === 'string' && time.length > 0).sort().at(-1) || null;
+  }
+
   private deliveryOutcomeExportRows(preview: ReportPreview): unknown[][] {
     return [['日期', '訂單', '出貨倉庫', '門市', '收貨開始', '收貨截止', '實際抵達', '實際交貨', '應送箱數', '實送箱數', '交付結果', '抵達結果'],
       ...this.outcomeRows(preview).map(r => [r.date, r.orderNumber, r.warehouseName, r.storeName, r.windowStart, r.windowEnd,
@@ -504,10 +556,11 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
   private loadingOutcomeExportRows(preview: ReportPreview): unknown[][] {
     const orders = this.outcomeRows(preview, true);
-    return [['日期', '訂單', '出貨倉庫', '門市', '訂單箱數', '成功點交時間', '點交結果', '異常描述'],
-      ...orders.map(r => [r.date, r.orderNumber, r.warehouseName, r.storeName, r.orderedBoxCount, r.loadedAt, this.loadingResult(r), r.loadingIssue]),
-      [], ['訂單', '商品代碼', '品項', '應點數量', '實點數量', '單位', '備註'],
-      ...orders.flatMap(r => r.items.map(i => [r.orderNumber, i.productCode, i.itemName, i.expectedQuantity, i.loadedQuantity, i.unit, i.notes]))];
+    return [['日期', '訂單', '出貨倉庫', '門市', '訂單箱數', '點交時間', '點交結果', '異常描述'],
+      ...orders.map(r => [r.date, r.orderNumber, r.warehouseName, r.storeName, r.orderedBoxCount, this.loadingRecordedAt(r, preview), this.loadingResult(r), r.loadingIssue]),
+      [], ['訂單', '商品代碼', '品項', '應點數量', '實點數量', '缺少數量', '單位', '點交結果', '點交時間', '備註'],
+      ...orders.flatMap(r => this.loadingItemsForOutcome(r, preview).map(i => [r.orderNumber, i.productCode, i.itemName, i.expectedQuantity,
+        i.loadedQuantity, i.missingQuantity, i.unit, this.loadingItemLabel(i), i.checkedAt, i.notes]))];
   }
   protected orderRows(preview: ReportPreview): ReportRow[] {
     const storesById = new Map(preview.storeDirectory.filter((store) => store.id != null).map((store) => [store.id!, store]));
@@ -519,11 +572,11 @@ export class ReportHistory implements OnInit, OnDestroy {
       }
     }
     return preview.orders
-      .filter(order => matchesOrderProgress(order, this.selectedSheet() === 'orders' ? this.metric() : ''))
       .filter((order) => order.deliveryDate >= this.from() && order.deliveryDate <= this.to())
       .filter((order) => this.warehouseId() === null || order.warehouseId === this.warehouseId())
       .filter((order) => this.storeId() === null || order.storeId === this.storeId())
       .filter((order) => this.driverId() === null || order.assignedDriverId === this.driverId())
+      .filter((order) => this.selectedSheet() !== 'orders' || matchesOrderProgress(order, this.metric()))
       .sort((left, right) => left.deliveryDate.localeCompare(right.deliveryDate) || left.orderNumber.localeCompare(right.orderNumber))
       .map((order) => {
         const route = order.id == null ? undefined : routeByOrderId.get(order.id);
@@ -564,7 +617,17 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
 
   private loadFilterOptions(): void {
-    forkJoin({warehouses: this.api.getWarehouses(), stores: this.api.getStores(), drivers: this.api.getDrivers()}).subscribe({
+    this.filterError.set('');
+    const read = <T>(label: string, source: Observable<T[]>): Observable<T[]> => source.pipe(catchError((error: unknown) => {
+      this.filterError.update(message => [message, this.loadError(label, error)].filter(Boolean).join(' '));
+      return of([]);
+    }));
+    this.filterRequest?.unsubscribe();
+    this.filterRequest = forkJoin({
+      warehouses: read('倉庫選項', this.api.getWarehouses()),
+      stores: read('門市選項', this.api.getStores()),
+      drivers: read('司機選項', this.api.getDrivers()),
+    }).subscribe({
       next: ({warehouses, stores, drivers}) => {
         this.warehouses.set(warehouses);
         this.stores.set(stores);
@@ -651,7 +714,7 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
 
   private tripExportRows(preview: ReportPreview): unknown[][] {
-    return [['日期', '車牌', '出貨倉庫', '路線ID', '出車時間', '收車時間', '狀態', '實際公里', '里程來源'],
+    return [['日期', '車牌', '出貨倉庫', '路線ID', '出車時間', '實際收車時間', '狀態', '實際公里', '里程來源'],
       ...this.tripRows(preview).map(row => [row['date'], row['plateNumber'], row['warehouseName'], row['routeId'], row['startAt'], row['endAt'],
         this.performanceLabel(row['status']), row['actualKm'], this.performanceLabel(row['distanceSource'])])];
   }
@@ -670,7 +733,17 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
 
   private exceptionExportRows(preview: ReportPreview): unknown[][] {
-    return [['建立時間', '異常類型', '狀態', '訂單', '倉庫', '門市', '司機', '路線', '異常原因', '處理結果', '處理時間分鐘'], ...this.exceptionRows(preview).map((row) => [row.createdAt, this.exceptionTypeLabel(row.type), row.status, row.orderNumber, row.warehouseId, row.storeId, row.driverId, row.routeId, row.description, row.resolution, row.resolutionMinutes])];
+    return [['建立時間', '異常類型', '狀態', '訂單', '倉庫', '門市', '司機', '路線', '不符商品', '異常原因', '處理結果', '處理時間分鐘'], ...this.exceptionRows(preview).map((row) => [row.createdAt, this.exceptionTypeLabel(row.type), row.status, row.orderNumber, row.warehouseId, row.storeId, row.driverId, row.routeId, row.loadingItemSummary ?? '', row.description, row.resolution, row.resolutionMinutes])];
+  }
+
+  private loadingExceptionExportRows(preview: ReportPreview): unknown[][] {
+    return [['案件編號', '建立時間', '訂單', '案件狀態', '商品代碼', '商品名稱', '應點數量', '實點數量', '缺少數量', '單位', '點交結果', '點交時間', '點交備註'],
+      ...this.exceptionRows(preview).filter(row => row.type === 'LOADING_MISMATCH').flatMap(row => {
+        const prefix = [row.exceptionId, row.createdAt, row.orderNumber, row.status === 'OPEN' ? '待處理' : row.status === 'CLOSED' ? '已結案' : row.status];
+        return row.loadingItems?.length ? row.loadingItems.map(item => [...prefix, item.productCode, item.itemName,
+          item.expectedQuantity, item.loadedQuantity, item.missingQuantity, item.unit, this.loadingItemLabel(item), item.checkedAt, item.notes])
+          : [[...prefix, null, null, null, null, null, null, row.loadingItemSummary, null, null]];
+      })];
   }
 
   private notesExportRows(): unknown[][] {

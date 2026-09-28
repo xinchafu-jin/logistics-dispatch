@@ -99,9 +99,8 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .issue-fill { position: relative; width: min(55%, 46px); border-radius: 5px 5px 0 0; background: var(--report-warning); }
 .issue-column:nth-child(2) .issue-fill { background: #be7164; }
 .issue-column:nth-child(3) .issue-fill { background: #8a80af; }
-.order-progress-chart .issue-column:nth-child(2) .issue-fill { background: var(--accent); }
-.order-progress-chart .issue-column:nth-child(3) .issue-fill { background: #7d83ba; }
 .issue-fill strong { position: absolute; top: -23px; left: 0; width: 100%; font-size: .85rem; }
+.issue-fill strong small { margin-left: 4px; color: var(--subtle); font-size: .63rem; font-weight: 400; }
 .issue-column > span:last-child { display: inline-flex; align-items: center; gap: 5px; font-size: .7rem; text-align: center; }
 .issue-column mat-icon { width: 16px; height: 16px; font-size: 16px; color: var(--subtle); }
 .issue-column:hover .issue-fill { filter: brightness(1.12); }

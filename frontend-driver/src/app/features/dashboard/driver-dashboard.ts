@@ -508,6 +508,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly selectedShift = computed(
     () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
   );
+  protected readonly pendingScheduleDates = computed(() => pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()));
   private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
   protected readonly calendarLeaveComposer = viewChild<ScheduleLeaveComposer>('calendarLeaveComposer');
   protected readonly scheduleDateFilter = (date: Date) => this.calendarLeaveComposer()?.canSelectDate(date) ?? true;
@@ -517,11 +518,17 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.calendarLeaveComposer()?.toggleDate(date);
   }
   protected refreshScheduleCalendar(): void { this.scheduleCalendar()?.updateTodaysDate(); }
-  protected onCalendarLeaveSubmitted(saved: DriverLeaveRequestResponse[]): void {
-    this.leaveRequests.update(current => {
-      const ids = new Set(saved.map(request => request.id));
-      return [...saved, ...current.filter(request => !ids.has(request.id))];
-    });
+  protected showScheduleToday(): void {
+    const today = new Date();
+    this.selectedScheduleDate.set(today);
+    const calendar = this.scheduleCalendar();
+    if (calendar) calendar.activeDate = today;
+  }
+  protected applyCalendarLeaves(saved: DriverLeaveRequestResponse[]): void {
+    const ids = new Set(saved.map(request => request.id));
+    this.leaveRequests.update(requests => [...saved, ...requests.filter(request => !ids.has(request.id))]
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)));
+    this.refreshScheduleCalendar();
     this.loadLeaveRequests();
   }
 
@@ -534,10 +541,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return '';
     }
     const shift = this.shiftsByDate().get(this.toIsoDate(date));
-    const selection = this.calendarLeaveComposer()?.dateClass(date) ?? '';
-    const pending = pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()).has(this.toIsoDate(date));
-    return [shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : 'shift-cell shift-not-published',
-      selection, pending ? 'leave-request-pending' : ''].filter(Boolean).join(' ');
+    const status = this.scheduleViewState() === 'loading' ? 'loading'
+      : this.scheduleViewState() === 'error' ? 'unavailable' : shift?.shiftType.toLowerCase() ?? 'not-published';
+    const pending = this.pendingScheduleDates().has(this.toIsoDate(date));
+    return `shift-cell shift-${status} ${pending ? 'leave-request-pending' : ''} ${this.calendarLeaveComposer()?.dateClass(date) ?? ''}`;
   };
 
   /**

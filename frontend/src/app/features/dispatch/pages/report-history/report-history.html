@@ -49,34 +49,35 @@
     </button>
   </section>
 
-  @if (errorMessage()) { <p class="feedback"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p> }
+  @if (errorMessage()) { <p class="feedback" role="alert"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p> }
+  @if (filterError()) { <p class="feedback" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ filterError() }}</p> }
   @if (detailError()) { <p class="feedback" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ detailError() }}</p> }
-  @if (loading()) {
-    <section class="loading-state">正在整理主管報表資料...</section>
-  } @else if (preview(); as report) {
-    <section class="preview-shell" aria-label="主管歷史報表預覽">
+  <section class="preview-shell" aria-label="主管歷史報表預覽" [attr.aria-busy]="loading()">
       <header class="preview-header">
-        <div><p class="section-eyebrow">匯出前預覽</p><h3>{{ report.summary.from }} 至 {{ report.summary.to }}</h3></div>
+        <div><p class="section-eyebrow">匯出前預覽</p><h3>{{ periodRangeLabel() }}</h3></div>
         <p>預覽內容會原樣匯出成多分頁 Excel</p>
       </header>
       <nav class="sheet-tabs" aria-label="報表預覽分頁">
         @for (sheet of sheets; track sheet.id) {
-          <button type="button" [class.is-active]="selectedSheet() === sheet.id" (click)="selectSheet(sheet.id)"><mat-icon aria-hidden="true">{{ sheet.icon }}</mat-icon>{{ sheet.label }}</button>
+          <button type="button" [class.is-active]="selectedSheet() === sheet.id" [attr.aria-pressed]="selectedSheet() === sheet.id" (click)="selectSheet(sheet.id)"><mat-icon aria-hidden="true">{{ sheet.icon }}</mat-icon>{{ sheet.label }}</button>
         }
       </nav>
 
+      @if (loading()) {
+        <section class="loading-state" role="status">正在整理主管報表資料...</section>
+      } @else if (preview(); as report) {
       <section class="sheet-content" [attr.aria-label]="sheetTitle()">
         @if (metricOptions().length) {
           <label class="metric-filter"><span>顯示項目</span><select [value]="metric()" (change)="updateMetric($event)"><option value="">全部</option>@for (item of metricOptions(); track item.id) { <option [value]="item.id">{{ item.label }}</option> }</select></label>
         }
         @switch (selectedSheet()) {
           @case ('delivery-quality') {
-            <p class="performance-note">按到期應配送訂單列出司機交貨紀錄；應送以訂單箱數為準，實送依交貨紀錄，無人簽收記 0 箱。缺少實送紀錄顯示「--」，不當作 0 箱或門市驗收。</p>
+            <p class="performance-note">按到期應配送訂單列出司機交貨紀錄；「未結訂單異常」包含超過收貨截止仍未交付，及逾期才交付的訂單。應送以訂單箱數為準，實送依交貨紀錄，無人簽收記 0 箱。缺少實送紀錄顯示「--」，不當作 0 箱或門市驗收。</p>
             @if (report.outcomes) {
               <div class="preview-table quality-table">
                 <div class="table-row table-head"><span>日期 / 訂單</span><span>出貨倉庫 / 門市</span><span>交付結果</span><span>抵達判定</span><span>收貨時段</span><span>抵達時間</span><span>交貨時間</span><span>應送</span><span>實送</span></div>
                 @for (row of outcomeRows(report); track row.orderId) {
-                  <div class="table-row"><span>{{ row.date }}<small>{{ row.orderNumber }}</small></span><span>{{ row.warehouseName }}<small>{{ row.storeName }}</small></span><span>{{ deliveryResult(row) }}</span><span>{{ arrivalResult(row) }}</span><span>{{ value(row.windowStart) }}<small>至 {{ value(row.windowEnd) }}</small></span><span>{{ value(row.arrivedAt) }}</span><span>{{ value(row.deliveredAt) }}</span><span>{{ value(expectedDeliveryBoxes(row)) }}</span><span>{{ value(actualDeliveryBoxes(row)) }}</span></div>
+                  <div class="table-row"><span>{{ row.date }}<small>{{ row.orderNumber }}</small></span><span>{{ row.warehouseName }}<small>{{ row.storeName }}</small></span><span>{{ deliveryResult(row) }}@if (overdueResult(row); as overdue) { <small>{{ overdue }}</small> }</span><span>{{ arrivalResult(row) }}</span><span>{{ value(row.windowStart) }}<small>至 {{ value(row.windowEnd) }}</small></span><span>{{ value(row.arrivedAt) }}</span><span>{{ value(row.deliveredAt) }}</span><span>{{ value(expectedDeliveryBoxes(row)) }}</span><span>{{ value(actualDeliveryBoxes(row)) }}</span></div>
                 } @empty { <p class="empty-state">此項目沒有符合條件的到期訂單。</p> }
               </div>
             } @else { <p class="empty-state">配送明細未載入，請重新預覽。</p> }
@@ -102,13 +103,13 @@
                 </div>
               }
               <div class="preview-table loading-quality-table">
-                <div class="table-row table-head"><span>日期 / 訂單</span><span>出貨倉庫 / 門市</span><span>訂單箱數</span><span>成功點交時間</span><span>點交結果</span></div>
+                <div class="table-row table-head"><span>日期 / 訂單</span><span>出貨倉庫 / 門市</span><span>訂單箱數</span><span>點交時間</span><span>點交結果</span></div>
                 @for (row of outcomeRows(report, true); track row.orderId) {
-                  <div class="table-row"><span>{{ row.date }}<small>{{ row.orderNumber }}</small></span><span>{{ row.warehouseName }}<small>{{ row.storeName }}</small></span><span>{{ value(row.orderedBoxCount) }}</span><span>{{ value(row.loadedAt) }}</span><span>{{ loadingResult(row) }}</span></div>
+                  <div class="table-row"><span>{{ row.date }}<small>{{ row.orderNumber }}</small></span><span>{{ row.warehouseName }}<small>{{ row.storeName }}</small></span><span>{{ value(row.orderedBoxCount) }}</span><span>{{ value(loadingRecordedAt(row, report)) }}</span><span>{{ loadingResult(row) }}</span></div>
                   <details class="item-details"><summary>{{ row.orderNumber }} · 查看商品點交與原因</summary>
                     @if (row.loadingIssue) { <p class="performance-note">{{ row.loadingIssue }}</p> }
-                    <div class="item-check-table"><div class="table-row table-head"><span>商品代碼</span><span>品項</span><span>應點數量</span><span>實點數量</span><span>單位</span><span>備註</span></div>
-                      @for (item of row.items; track $index) { <div class="table-row"><span>{{ value(item.productCode) }}</span><span>{{ value(item.itemName) }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span>{{ value(item.unit) }}</span><span>{{ value(item.notes) }}</span></div> } @empty { <p class="performance-note">未記錄逐項商品點交。</p> }
+                    <div class="item-check-table"><div class="table-row table-head"><span>商品代碼</span><span>品項</span><span>應點數量</span><span>實點數量</span><span>缺少數量</span><span>單位</span><span>點交結果</span><span>點交時間</span><span>備註</span></div>
+                      @for (item of loadingItemsForOutcome(row, report); track $index) { <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS'"><span>{{ value(item.productCode) }}</span><span>{{ value(item.itemName) }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span>{{ value(item.missingQuantity) }}</span><span>{{ value(item.unit) }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span>{{ value(item.notes) }}</span></div> } @empty { <p class="performance-note">未記錄逐項商品點交。</p> }
                     </div>
                   </details>
                 } @empty { <p class="empty-state">此項目沒有符合條件的點交或待排車訂單。</p> }
@@ -129,9 +130,11 @@
             </div>
           }
           @case ('orders') {
+            @if (metric() === 'unsettled') { <p class="performance-note">只列出本期目前待確認、已確認／已點交待出貨、配送中的訂單；不含已完成、已取消、無人簽收或配送失敗。</p> }
             <div class="preview-table order-table">
               <div class="table-row table-head"><span>日期</span><span>訂單</span><span>順序</span><span>門市</span><span>箱數</span><span>狀態</span><span>司機</span><span>車牌</span></div>
               @for (order of orderRows(report); track order.orderNumber) { <div class="table-row"><span>{{ value(order.date) }}</span><span>{{ value(order.orderNumber) }}</span><span>{{ value(order.sequence) }}</span><span>{{ value(order.storeName) }}</span><span>{{ value(order.boxes) }}</span><span>{{ value(order.status) }}</span><span>{{ value(order.driverName) }}</span><span>{{ value(order.plateNumber) }}</span></div> }
+              @empty { <p class="empty-state">這個期間沒有符合條件的訂單。</p> }
             </div>
           }
           @case ('routes') {
@@ -164,12 +167,12 @@
           @case ('vehicles') {
             <div class="performance-summary">
               <span>實際出車 <b>{{ report.performance.fleet.startedTrips }}</b> 趟</span>
-              <span>收車完成率 <b>{{ percent(report.performance.fleet.returnRate) }}</b> · {{ report.performance.fleet.returnedTrips }}/{{ report.performance.fleet.startedTrips }} 趟</span>
+              <span>已收車 <b>{{ report.performance.fleet.returnedTrips }}</b> 趟</span>
               <span>尚未收車 <b>{{ report.performance.fleet.openTrips }}</b> 趟</span>
               <span>已記錄實際里程 <b>{{ value(report.performance.fleet.actualKm) }}</b> km</span>
             </div>
-            <p class="performance-note">出車與收車每筆紀錄各計一趟，不以已發布路線冒充實際出車。倉庫依出車路線紀錄；舊資料無法唯一對應時不猜測倉庫。收車完成率＝已收車趟次/實際出車趟次 × 100%。</p>
-            <div class="preview-table trip-table"><div class="table-row table-head"><span>日期</span><span>車牌</span><span>出貨倉庫</span><span>路線ID</span><span>出車時間</span><span>收車時間</span><span>狀態</span><span>實際公里</span><span>里程來源</span></div>
+            <p class="performance-note">出車與收車以實際紀錄計數，不以已發布路線冒充出車；每趟的實際收車時間見下表。倉庫依出車路線紀錄，舊資料無法唯一對應時不猜測倉庫。</p>
+            <div class="preview-table trip-table"><div class="table-row table-head"><span>日期</span><span>車牌</span><span>出貨倉庫</span><span>路線ID</span><span>出車時間</span><span>實際收車時間</span><span>狀態</span><span>實際公里</span><span>里程來源</span></div>
               @for (row of tripRows(report); track row['mileageId']) { <div class="table-row"><span>{{ value(row['date']) }}</span><span>{{ value(row['plateNumber']) }}</span><span>{{ value(row['warehouseName']) }}</span><span>{{ value(row['routeId']) }}</span><span>{{ value(row['startAt']) }}</span><span>{{ value(row['endAt']) }}</span><span>{{ performanceLabel(row['status']) }}</span><span>{{ value(row['actualKm']) }}</span><span>{{ performanceLabel(row['distanceSource']) }}</span></div> } @empty { <p class="performance-note">此項目沒有符合條件的出車紀錄。</p> }
             </div>
             <details class="planning-details"><summary>車輛規劃資料（不是實際出車成果）</summary>
@@ -180,8 +183,8 @@
           }
           @case ('warehouses') {
             <p class="performance-note">人員依目前倉庫歸屬；人車比例均保留分子與分母，空白母數不補 0%。</p>
-            <div class="preview-table warehouse-performance-table"><div class="table-row table-head"><span>倉庫</span><span>打卡率</span><span>準時上班率</span><span>加班率</span><span>加班分鐘</span><span>實際出車</span><span>收車完成率</span><span>實際公里</span></div>
-              @for (row of report.performance.warehouses; track row.warehouseId) { <div class="table-row"><span>{{ row.warehouseName }}</span><span>{{ percent(row.workforce.attendanceRate) }} · {{ row.workforce.attendedShifts }}/{{ row.workforce.dueShifts }}</span><span>{{ percent(row.workforce.onTimeRate) }} · {{ row.workforce.onTimeShifts }}/{{ row.workforce.attendedShifts }}</span><span>{{ percent(row.workforce.overtimeRate) }} · {{ row.workforce.overtimeShifts }}/{{ row.workforce.finishedShifts }}</span><span>{{ row.workforce.overtimeMinutes }}</span><span>{{ row.fleet.startedTrips }} 趟</span><span>{{ percent(row.fleet.returnRate) }} · {{ row.fleet.returnedTrips }}/{{ row.fleet.startedTrips }}</span><span>{{ value(row.fleet.actualKm) }}</span></div> }
+            <div class="preview-table warehouse-performance-table"><div class="table-row table-head"><span>倉庫</span><span>打卡率</span><span>準時上班率</span><span>加班率</span><span>加班分鐘</span><span>實際出車</span><span>已收車</span><span>實際公里</span></div>
+              @for (row of report.performance.warehouses; track row.warehouseId) { <div class="table-row"><span>{{ row.warehouseName }}</span><span>{{ percent(row.workforce.attendanceRate) }} · {{ row.workforce.attendedShifts }}/{{ row.workforce.dueShifts }}</span><span>{{ percent(row.workforce.onTimeRate) }} · {{ row.workforce.onTimeShifts }}/{{ row.workforce.attendedShifts }}</span><span>{{ percent(row.workforce.overtimeRate) }} · {{ row.workforce.overtimeShifts }}/{{ row.workforce.finishedShifts }}</span><span>{{ row.workforce.overtimeMinutes }}</span><span>{{ row.fleet.startedTrips }} 趟</span><span>{{ row.fleet.returnedTrips }} 趟</span><span>{{ value(row.fleet.actualKm) }}</span></div> }
             </div>
             <div class="preview-table warehouse-table"><div class="table-row table-head"><span>倉庫</span><span>訂單</span><span>箱數</span><span>門市</span><span>路線</span><span>已發布</span><span>待排訂單</span><span>已完成</span><span>平均裝載率</span></div>
               @for (row of rows(report.warehouses, 'warehouses'); track row.warehouseId) { <div class="table-row"><span>{{ value(row.warehouseName) }}</span><span>{{ value(row.orders) }}</span><span>{{ value(row.boxes) }}</span><span>{{ value(row.distinctStores) }}</span><span>{{ value(row.routes) }}</span><span>{{ value(row.publishedRoutes) }}</span><span>{{ value(row.unassignedConfirmedOrders) }}</span><span>{{ value(row.completedOrders) }}</span><span>{{ percent(row.averageLoadRatePercent) }}</span></div> }
@@ -195,8 +198,21 @@
           @case ('exceptions') {
             @let cases = exceptionRows(report);
             <div class="exception-summary"><span>符合條件 {{ cases.length }} 件</span><span>待處理 {{ exceptionStatusCount(cases, 'OPEN') }} 件</span><span>已結案 {{ exceptionStatusCount(cases, 'CLOSED') }} 件</span></div>
-            <div class="preview-table exception-table"><div class="table-row table-head"><span>建立時間</span><span>類型</span><span>訂單</span><span>司機</span><span>路線</span><span>異常原因</span><span>處理結果</span><span>狀態</span></div>
-              @for (row of cases; track row.exceptionId) { <div class="table-row"><span>{{ value(row.createdAt) }}</span><span>{{ exceptionTypeLabel(row.type) }}</span><span>{{ value(row.orderNumber) }}</span><span>#{{ value(row.driverId) }}</span><span>#{{ value(row.routeId) }}</span><span>{{ value(row.description) }}</span><span>{{ value(row.resolution) }}</span><span>{{ row.status === 'OPEN' ? '待處理' : row.status === 'CLOSED' ? '已結案' : value(row.status) }}</span></div> }
+            <div class="preview-table exception-table"><div class="table-row table-head"><span>建立時間</span><span>類型</span><span>訂單</span><span>不符商品</span><span>司機</span><span>路線</span><span>異常原因</span><span>處理結果</span><span>狀態</span></div>
+              @for (row of cases; track row.exceptionId) {
+                <div class="table-row"><span>{{ value(row.createdAt) }}</span><span>{{ exceptionTypeLabel(row.type) }}</span><span class="exception-copy">{{ value(row.orderNumber) }}</span><span class="loading-item-summary">{{ value(row.loadingItemSummary) }}</span><span>#{{ value(row.driverId) }}</span><span>#{{ value(row.routeId) }}</span><span class="exception-copy">{{ value(row.description) }}</span><span class="exception-copy">{{ value(row.resolution) }}</span><span>{{ row.status === 'OPEN' ? '待處理' : row.status === 'CLOSED' ? '已結案' : value(row.status) }}</span></div>
+                @if (row.type === 'LOADING_MISMATCH' && row.loadingItems?.length) {
+                  <details class="item-details loading-exception-details">
+                    <summary [attr.aria-label]="value(row.orderNumber) + '，查看商品點交明細'">查看商品點交明細 · {{ value(row.orderNumber) }}</summary>
+                    <div class="loading-exception-item-table">
+                      <div class="table-row table-head"><span>商品代碼</span><span>商品名稱</span><span>應點數量</span><span>實點數量</span><span>缺少數量</span><span>單位</span><span>點交結果</span><span>點交時間</span><span>點交備註</span></div>
+                      @for (item of row.loadingItems; track $index) {
+                        <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS'"><span>{{ value(item.productCode) }}</span><span>{{ item.itemName }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span class="item-missing-quantity">{{ value(item.missingQuantity) }}</span><span>{{ item.unit }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span class="item-loading-note">{{ value(item.notes) }}</span></div>
+                      }
+                    </div>
+                  </details>
+                }
+              }
               @empty { <p class="empty-state">這個期間沒有符合條件的案件。</p> }
             </div>
           }
@@ -205,6 +221,11 @@
           }
         }
       </section>
-    </section>
-  } @else { <section class="empty-preview">設定查詢條件後，按預覽匯出內容查看主管報表。</section> }
+      } @else {
+        <section class="empty-preview" role="status">
+          <p>{{ errorMessage() ? '報表資料尚未載入，查詢分頁仍保留。請排除上方錯誤後重新載入。' : '設定查詢條件後，按預覽匯出內容查看主管報表。' }}</p>
+          @if (errorMessage()) { <button type="button" class="preview-button" (click)="createPreview()"><mat-icon aria-hidden="true">refresh</mat-icon>重新載入報表</button> }
+        </section>
+      }
+  </section>
 </main>

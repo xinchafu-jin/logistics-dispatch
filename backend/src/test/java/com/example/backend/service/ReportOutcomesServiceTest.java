@@ -69,6 +69,17 @@ class ReportOutcomesServiceTest {
         assertEquals(4, result.daily().getFirst().dueOrders());
     }
 
+    @Test void exposesOverduePendingConfirmationOnlyInDetailsWithoutChangingDeliveryKpis() {
+        order(1, 1, day, OrderStatus.PENDING_CONFIRM);
+        order(2, 1, day.plusDays(1), OrderStatus.PENDING_CONFIRM);
+        var result = service.outcomes(range, null, now, true);
+        assertEquals(0, result.delivery().dueOrders());
+        assertEquals(1, result.orders().size());
+        assertEquals(1L, result.orders().getFirst().orderId());
+        assertTrue(result.orders().getFirst().due());
+        assertEquals(OrderStatus.PENDING_CONFIRM.name(), result.orders().getFirst().status());
+    }
+
     @Test void comparesArrivalNotHandoffAndCountsMissingAndEarlyArrivalsSeparately() {
         var one = order(1, 1, day, OrderStatus.COMPLETED); var a = deliver(one, 1, 10, 0, 0, 0, 17);
         a.setDeliveredAt(day.atTime(18, 30)); // arrival is still on time

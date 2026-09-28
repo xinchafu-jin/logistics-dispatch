@@ -44,7 +44,8 @@ public class ReportOutcomesService {
     ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId, LocalDateTime now, boolean includeDetails) {
         Map<Long, StoresEntity> byStore = stores.findAll().stream()
                 .collect(Collectors.toMap(StoresEntity::getId, Function.identity()));
-        List<OrdersEntity> orders = reads.orders(range.getFrom(), range.getTo(), warehouseId).stream()
+        List<OrdersEntity> allOrders = reads.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<OrdersEntity> orders = allOrders.stream()
                 .filter(o -> o.getStatus() != OrderStatus.CANCELLED && o.getStatus() != OrderStatus.PENDING_CONFIRM)
                 .toList();
         List<Long> ids = orders.stream().map(OrdersEntity::getId).toList();
@@ -72,6 +73,12 @@ public class ReportOutcomesService {
         loadingCases.forEach(e -> loadingIssues.put(e.getOrderId(), e.getDescription() == null ? "點交不符" : e.getDescription()));
         List<Observation> observations = orders.stream()
                 .map(o -> observe(o, byStore.get(o.getStoreId()), deliveries.get(o.getId()), mismatches, now)).toList();
+        // Pending-confirmation orders are excluded from delivery KPIs, but an overdue one
+        // still belongs in the incident drill-down. Do not silently lose it from the chart.
+        List<Observation> overduePendingDetails = includeDetails ? allOrders.stream()
+                .filter(o -> o.getStatus() == OrderStatus.PENDING_CONFIRM)
+                .map(o -> observe(o, byStore.get(o.getStoreId()), null, mismatches, now))
+                .filter(Observation::due).toList() : List.of();
         List<WarehouseOutcome> byWarehouse = new ArrayList<>();
         var directory = warehouses.findAll().stream().sorted(Comparator.comparing(WarehousesEntity::getId)).toList();
         var names = directory.stream().collect(Collectors.toMap(WarehousesEntity::getId, WarehousesEntity::getName));
@@ -91,14 +98,16 @@ public class ReportOutcomesService {
         var allRoutes = reads.routes(range.getFrom(), range.getTo(), warehouseId);
         var driverByRoute = new HashMap<Long, Long>();
         allRoutes.forEach(r -> { if (r.getDriverId() != null) driverByRoute.put(r.getId(), r.getDriverId()); });
+        List<Long> detailIds = includeDetails ? java.util.stream.Stream.concat(ids.stream(),
+                overduePendingDetails.stream().map(o -> o.order().getId())).toList() : List.of();
         Map<Long, List<OrderItemsEntity>> itemsByOrder = includeDetails
-                ? reads.orderItemsForOrders(ids).stream().collect(Collectors.groupingBy(i -> i.getOrder().getId())) : Map.of();
+                ? reads.orderItemsForOrders(detailIds).stream().collect(Collectors.groupingBy(i -> i.getOrder().getId())) : Map.of();
         var routes = allRoutes.stream()
                 .filter(r -> r.getStatus() == RouteStatus.PUBLISHED && !r.getDate().isAfter(now.toLocalDate())).toList();
         return new ReportOutcomesResponse(range.getFrom(), range.getTo(), now, delivery(observations),
                 safety(routes, reads.inspections(range.getFrom(), range.getTo()), now),
                 loading(observations), problems(observations), byWarehouse, daily, recovery(observations, deliveries),
-                includeDetails ? observations.stream().map(o -> detail(o, deliveries.get(o.order().getId()),
+                includeDetails ? java.util.stream.Stream.concat(observations.stream(), overduePendingDetails.stream()).map(o -> detail(o, deliveries.get(o.order().getId()),
                         byStore.get(o.order().getStoreId()), names, loadingIssues, recoveryReasons, driverByRoute,
                         itemsByOrder.getOrDefault(o.order().getId(), List.of()))).toList() : List.of());
     }

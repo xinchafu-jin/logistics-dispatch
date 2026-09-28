@@ -1,4 +1,4 @@
-/** Matches the existing order lifecycle, not exception-case closure. */
+/** 訂單流程尚未結束，不等同異常案件尚未結案。 */
 export const UNSETTLED_ORDER_CATEGORIES = [
   {id: 'pending-confirm', label: '待確認', icon: 'fact_check'},
   {id: 'awaiting-delivery', label: '待出貨', icon: 'inventory_2'},
