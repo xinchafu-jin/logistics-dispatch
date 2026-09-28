@@ -181,10 +181,13 @@
           type="button"
           [class]="isNavigating() ? 'danger-action' : 'primary-action'"
           (click)="isNavigating() ? stopNavigation() : startNavigation()"
-          [disabled]="!selectedTask()"
+          [disabled]="!isNavigating() && !canStartNavigation()"
         >
           {{ isNavigating() ? '結束導航' : '開始導航' }}
         </button>
+        @if (!isNavigating() && pendingLoadingCount() > 0) {
+          <p class="sheet-copy">還有 {{ pendingLoadingCount() }} 筆訂單未完成倉庫點交，全部點交後才能導航。</p>
+        }
 
         @if (attendanceViewState() === 'loading') {
           <p class="sheet-copy">正在取得今日出勤狀態...</p>
@@ -357,6 +360,9 @@
                 <p class="task-route-meta">
                   {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
                 </p>
+                @if (pendingLoadingCount() > 0) {
+                  <p class="task-route-meta">還有 {{ pendingLoadingCount() }} 筆訂單未點交；全部點交後開放導航。</p>
+                }
                 <!-- 出車前安全檢查：通過才開放這條路線的點交；記出車里程時後端也會再擋一次 -->
                 <app-pre-trip-check
                   [route]="route"
@@ -373,9 +379,6 @@
                         <strong>{{ stop.storeName }}</strong>
                         <small>{{ stop.address }}</small>
                         <span>
-                          {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
-                          · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
-                        }
                           {{ stop.expectedBoxCount }} 箱
                           @if (stop.receivingStart && stop.receivingEnd) {
                             · {{ formatTime(stop.receivingStart) }} -
@@ -395,11 +398,11 @@
                           [title]="
                             canNavigate(stop)
                               ? '在地圖顯示並開始導航'
-                              : '此站點尚未設定座標'
+                              : navigationUnavailableReason(stop)
                           "
                         >
                           <mat-icon aria-hidden="true">near_me</mat-icon>
-                          <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
+                          <span>{{ canNavigate(stop) ? '導航' : navigationUnavailableLabel(stop) }}</span>
                         </button>
                         @if (canLoad(stop)) {
                           <button
@@ -435,13 +438,25 @@
                         }
                       </div>
                         @if (isLoadingActionOpen(stop)) {
-                          <section class="delivery-action-panel" aria-label="倉庫點交">
-                            <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
+                          <section class="delivery-action-panel loading-action-panel" aria-label="倉庫點交">
+                            <div class="loading-panel-heading">
+                              <strong>倉庫點交</strong>
+                              <span>應點 <b>{{ stop.expectedBoxCount }}</b> 箱</span>
+                            </div>
+                            <p>{{ stop.items.length > 0 ? '全部相符：全勾後按「確認點交」。有不符：只勾不符商品，按「點交不符」。' : '核對訂單品項摘要與應點箱數後，勾選確認。' }}</p>
                           @if (stop.items.length > 0) {
                             <section class="loading-item-list" aria-label="商品逐項點交">
-                              <header><strong>商品明細</strong><span>每項都要勾選與實點</span></header>
+                              <header class="loading-item-heading">
+                                <div>
+                                  <strong>商品明細</strong>
+                                  <small>勾選要確認或回報不符的商品</small>
+                                </div>
+                                <span class="loading-progress" aria-live="polite">{{ checkedLoadingItemCount(stop) }}/{{ stop.items.length }} 已選取</span>
+                              </header>
                               @for (item of stop.items; track item.id) {
-                                <article>
+                                <article class="loading-item-row"
+                                  [class.is-checked]="loadingItemForm(item.id).checked"
+                                  [class.is-mismatch]="reportingLoadingItemIds().includes(item.id)">
                                   <label class="loading-item-check">
                                     <input
                                       type="checkbox"
@@ -449,95 +464,81 @@
                                       [disabled]="isTaskSubmitting()"
                                       (change)="updateLoadingItemChecked(item.id, $event)"
                                     />
-                                    <span>
+                                    <span class="loading-item-name">
                                       <strong>{{ item.itemName }}</strong>
-                                      <small>
-                                        @if (item.productCode) { {{ item.productCode }} · }
-                                        應到 {{ item.expectedQuantity }} {{ item.unit }}
-                                      </small>
                                     </span>
-                                  </label>
-                                  <label>
-                                    <span>實點數量</span>
-                                    <input
-                                      type="number"
-                                      inputmode="numeric"
-                                      min="0"
-                                      step="1"
-                                      [max]="item.expectedQuantity"
-                                      [value]="loadingItemForm(item.id).loadedQuantity"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemQuantity(item.id, $event)"
-                                    />
-                                  </label>
-                                  <label class="loading-item-note">
-                                    <span>商品備註</span>
-                                    <input
-                                      type="text"
-                                      maxlength="255"
-                                      placeholder="選填"
-                                      [value]="loadingItemForm(item.id).notes"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemNotes(item.id, $event)"
-                                    />
+                                    <b class="loading-item-expected">{{ item.expectedQuantity }} <small>{{ item.unit }}</small></b>
                                   </label>
                                 </article>
                               }
                             </section>
+                            <p class="loading-mismatch-hint">勾選至少一項不符商品即可直接送出異常，原單停止配送並重建待確認訂單。</p>
+                          } @else {
+                            <section class="loading-item-list" aria-label="訂單品項摘要核對">
+                              <header class="loading-item-heading">
+                                <div><strong>訂單品項摘要</strong><small>舊單未提供逐項商品明細</small></div>
+                                <span class="loading-progress" [class.is-complete]="loadingSummaryChecked()" aria-live="polite">{{ loadingSummaryChecked() ? '1/1 已核對' : '0/1 已核對' }}</span>
+                              </header>
+                              <article class="loading-item-row" [class.is-checked]="loadingSummaryChecked()">
+                                <label class="loading-item-check">
+                                  <input
+                                    type="checkbox"
+                                    [checked]="loadingSummaryChecked()"
+                                    [disabled]="isTaskSubmitting()"
+                                    (change)="updateLoadingSummaryChecked($event)"
+                                  />
+                                  <span class="loading-item-name">
+                                    <strong>{{ stop.itemDescription?.trim() || '未記錄商品名稱' }}</strong>
+                                    <small>勾選表示已核對訂單摘要與箱數</small>
+                                  </span>
+                                  <b class="loading-item-expected">{{ stop.expectedBoxCount }} <small>箱</small></b>
+                                </label>
+                              </article>
+                            </section>
                           }
-                          <label>
-                            <span>實點箱數</span>
-                            <input
-                              type="number"
-                              inputmode="numeric"
-                              min="0"
-                              step="1"
-                              [max]="stop.expectedBoxCount"
-                              [value]="loadingBoxCount()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingBoxCount($event)"
-                            />
-                          </label>
-                          <label>
-                            <span>備註（選填）</span>
-                            <textarea
-                              rows="2"
-                              maxlength="500"
-                              placeholder="例如少了哪一箱、外箱破損"
-                              [value]="loadingNotes()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingNotes($event)"
-                            ></textarea>
-                          </label>
-                          @if (loadingMismatchPending()) {
-                            <p class="task-feedback is-error">
-                              實點內容與訂單不符。
-                              送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
-                            </p>
-                          }
-                          <div class="delivery-action-buttons">
+                          <details class="loading-order-note">
+                            <summary>補充備註（選填）</summary>
+                            <label>
+                              <span>整單交接說明</span>
+                              <textarea
+                                rows="2"
+                                maxlength="500"
+                                placeholder="需要補充交接說明時再填寫"
+                                [value]="loadingNotes()"
+                                [disabled]="isTaskSubmitting()"
+                                (input)="updateLoadingNotes($event)"
+                              ></textarea>
+                            </label>
+                          </details>
+                          <div class="delivery-action-buttons" [class.has-mismatch-action]="stop.items.length > 0">
                             <button
                               type="button"
                               class="delivery-complete-button"
                               (click)="submitLoading(stop)"
-                              [disabled]="isTaskSubmitting()"
+                              [disabled]="isTaskSubmitting() || !loadingChecklistComplete(stop)"
                             >
                               <mat-icon aria-hidden="true">fact_check</mat-icon>
-                              {{
-                                isTaskSubmitting()
-                                  ? '處理中...'
-                                  : loadingMismatchPending()
-                                    ? '確定送出'
-                                    : '確認點交'
-                              }}
+                              {{ isTaskSubmitting() ? '處理中...' : '確認點交' }}
                             </button>
                             <button
                               type="button"
                               class="delivery-cancel-button"
                               (click)="closeLoadingAction()"
+                              [disabled]="isTaskSubmitting()"
                             >
                               取消
                             </button>
+                            @if (stop.items.length > 0) {
+                              <button
+                                type="button"
+                                class="loading-mismatch-button"
+                                (click)="handleLoadingMismatch(stop)"
+                                [disabled]="isTaskSubmitting() || checkedLoadingItemCount(stop) === 0"
+                              >
+                                <mat-icon aria-hidden="true">report_problem</mat-icon>
+                                {{ reportingLoadingItemIds().length > 0 ? '送出中…' : '點交不符' }}
+                              </button>
+                            }
                           </div>
                         </section>
                       }

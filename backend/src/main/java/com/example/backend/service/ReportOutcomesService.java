@@ -148,7 +148,8 @@ public class ReportOutcomesService {
             List<OrderItemsEntity> orderItems) {
         var order = o.order(); var w = window(order.getDeliveryDate(), store);
         var items = orderItems.stream().map(i -> new ItemCheck(i.getProductCode(), i.getItemName(),
-                i.getExpectedQuantity(), i.getLoadedQuantity(), i.getUnit(), i.getLoadingNotes())).toList();
+                i.getExpectedQuantity(), i.getLoadedQuantity(), i.getUnit(), i.getLoadingNotes(),
+                i.isLoadingMismatchReported())).toList();
         return new OrderOutcome(order.getId(), order.getOrderNumber(), order.getDeliveryDate(), order.getWarehouseId(),
                 names.getOrDefault(order.getWarehouseId(), "未歸屬倉庫"), order.getStoreId(), store == null ? "未設定門市" : store.getName(),
                 order.getAssignedDriverId() != null ? order.getAssignedDriverId() : driverByRoute.get(order.getRouteId()),

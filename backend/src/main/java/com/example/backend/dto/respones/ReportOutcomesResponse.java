@@ -34,5 +34,5 @@ public record ReportOutcomesResponse(LocalDate from, LocalDate to, LocalDateTime
             Integer replacementRequiredBoxCount, String loadingIssue, List<ItemCheck> items,
             String orderType, Long parentOrderId, boolean attempted, boolean recovery, String recoveryReason) {}
     public record ItemCheck(String productCode, String itemName, Integer expectedQuantity,
-            Integer loadedQuantity, String unit, String notes) {}
+            Integer loadedQuantity, String unit, String notes, boolean loadingMismatchReported) {}
 }

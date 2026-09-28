@@ -188,6 +188,14 @@ public class DriverPortalController {
         return deliveryService.load(driverId(jwt), request);
     }
 
+    /** 商品點交不符直接送進既有倉庫異常流程，原單停止配送並重建待確認訂單。 */
+    @PostMapping("/loading/mismatch")
+    public LoadingResponse loadingMismatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody LoadingMismatchRequestDTO request) {
+        return deliveryService.reportLoadingMismatch(driverId(jwt), request);
+    }
+
     /** 在司機班表中送出一般請假；時間不填代表整天，兩個時間都有則代表部分時段。 */
     @PostMapping("/leave-requests")
     public DriverLeaveResponse requestLeave(

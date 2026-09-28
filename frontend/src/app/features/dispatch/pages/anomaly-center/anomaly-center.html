@@ -376,7 +376,7 @@
 
           <section class="detail-block recommendation-block">
             <p>確認後處理</p>
-            <span>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</span>
+            <span>{{ incident.type === 'NO_SIGNATURE' ? '無人簽收保留隔日排程，確認後送入待排車。' : '重建單的配送日期會更新為確認當天，送入當天的待排訂單區。' }}</span>
           </section>
 
           <p class="action-message">確認前請核對來源訂單與待補送數量。</p>
@@ -411,7 +411,7 @@
               <h3 id="confirm-exception-title">{{ exceptionTypeLabel(incident.type) }}</h3>
             </div>
             <p class="confirmation-copy">
-              確認後，後續訂單會送入待排車，異常案件會結案。來源訂單：{{ incident.sourceOrderNumber ?? '--' }}。
+              {{ incident.type === 'NO_SIGNATURE' ? '確認後保留無人簽收的隔日排程。' : '確認後，重建單的配送日期會更新為今天。' }}後續訂單會送入待排車，異常案件會結案。來源訂單：{{ incident.sourceOrderNumber ?? '--' }}。
             </p>
             <div class="detail-actions">
               <button type="button" class="button-secondary" (click)="closeConfirmDialog()" [disabled]="confirming()">

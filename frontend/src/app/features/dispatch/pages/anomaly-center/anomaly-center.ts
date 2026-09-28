@@ -333,12 +333,12 @@ export class AnomalyCenter implements OnInit {
     this.confirming.set(true);
     this.errorMessage.set('');
     this.api.confirmExceptionCase(incident.id).subscribe({
-      next: () => {
+      next: (confirmed) => {
         this.incidents.update((incidents) => incidents.filter((item) => item.id !== incident.id));
         this.selectedIncidentId.set(null);
         this.syncSelection();
         this.confirmDialogOpen.set(false);
-        this.actionMessage.set('已確認異常，後續訂單已送入待排車。');
+        this.actionMessage.set(`已確認異常，後續訂單已送入 ${confirmed.followUpDeliveryDate ?? '對應日期'} 的待排車區。`);
         this.confirming.set(false);
       },
       error: (error: unknown) => {

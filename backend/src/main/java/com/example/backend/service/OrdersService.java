@@ -275,6 +275,7 @@ public class OrdersService {
         dto.setCheckedAt(entity.getCheckedAt());
         dto.setCheckedByDriverId(entity.getCheckedByDriverId());
         dto.setLoadingNotes(entity.getLoadingNotes());
+        dto.setLoadingMismatchReported(entity.isLoadingMismatchReported());
         return dto;
     }
 

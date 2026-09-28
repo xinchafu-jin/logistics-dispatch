@@ -436,7 +436,7 @@ export interface ReportOrderOutcomeDto {
   orderedBoxCount: number | null; expectedBoxCount: number | null; deliveredBoxCount: number | null; shortageBoxCount: number | null;
   damagedBoxCount: number | null; replacementRequiredBoxCount: number | null; loadingIssue: string | null;
   items: {productCode: string | null; itemName: string; expectedQuantity: number | null;
-    loadedQuantity: number | null; unit: string; notes: string | null}[];
+    loadedQuantity: number | null; unit: string; notes: string | null; loadingMismatchReported?: boolean}[];
 }
 export interface ReportOutcomesDto {
   from: string; to: string; asOf: string; delivery: ReportDeliveryOutcomeDto;
@@ -598,6 +598,7 @@ export interface OrderItemDto {
   checkedAt?: string | null;
   checkedByDriverId?: number | null;
   loadingNotes?: string | null;
+  loadingMismatchReported?: boolean;
 }
 
 /**

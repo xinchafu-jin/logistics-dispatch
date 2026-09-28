@@ -21,6 +21,15 @@ describe('Original-order loading item reports', () => {
     expect(loadingMismatchSummary(items)).toBe('鮮乳：缺少 15 瓶');
   });
 
+  it('identifies the product reported by the driver without inventing a zero or marking other products as checked', () => {
+    const rows = reportLoadingItems([product({loadedQuantity: null, loadingMismatchReported: true}),
+      product({id: 2, itemName: '雞蛋', loadedQuantity: null, loadingMismatchReported: false})]);
+    expect(rows[0]).toMatchObject({loadedQuantity: null, missingQuantity: null, excessQuantity: null, status: 'MISMATCH_REPORTED'});
+    expect(rows[1].status).toBe('NOT_RECORDED');
+    expect(loadingItemStatusLabel(rows[0].status)).toBe('點交不符');
+    expect(loadingMismatchSummary(rows)).toBe('鮮乳：已回報點交不符，實點數量未記錄\n雞蛋：點交數量未記錄');
+  });
+
   it.each([undefined, null, -1, Number.NaN, Number.POSITIVE_INFINITY, 2.5, '12'])('does not invent a shortage for invalid or missing actual quantity %s', actual => {
     const items = reportLoadingItems([product({loadedQuantity: actual as any})]);
     expect(items[0]).toMatchObject({loadedQuantity: null, missingQuantity: null, excessQuantity: null, status: 'NOT_RECORDED'});

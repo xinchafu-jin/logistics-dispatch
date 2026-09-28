@@ -201,6 +201,21 @@ class ReportOutcomesServiceTest {
         assertEquals(1, result.missingLoadingOrders());
     }
 
+    @Test void includesTheReportedLoadingProductWithoutInventingActualOrMissingQuantities() {
+        var original = order(1, 1, day, OrderStatus.FAILED);
+        loadingMismatch(original, 1);
+        var item = new OrderItemsEntity(); item.setOrder(original); item.setProductCode("MILK");
+        item.setItemName("鮮乳"); item.setExpectedQuantity(4); item.setUnit("箱");
+        item.setLoadingMismatchReported(true);
+        when(reads.orderItemsForOrders(anyList())).thenReturn(List.of(item));
+        var row = service.outcomes(range, null, now, true).orders().getFirst();
+        assertTrue(row.loadingMismatch());
+        assertTrue(row.items().getFirst().loadingMismatchReported());
+        assertEquals("鮮乳", row.items().getFirst().itemName());
+        assertEquals(4, row.items().getFirst().expectedQuantity());
+        assertNull(row.items().getFirst().loadedQuantity());
+    }
+
     @Test void usesWeightedCompanyTotalsNotMeanWarehousePercentagesAndHonorsFilter() {
         for (int i = 1; i <= 9; i++) {
             var order = order(i, 1, day, OrderStatus.COMPLETED); deliver(order, i, 10, 0, 0, 0, 17);

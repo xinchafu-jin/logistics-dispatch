@@ -11,8 +11,42 @@ import {
   maneuverIcon,
   measureStepProgress,
   mergeMessagesById,
+  navigationReadyForOrder,
+  pendingLoadingOrderCount,
   validateCaseDraft,
 } from './driver-dashboard';
+
+describe('倉庫點交後才能導航', () => {
+  it('同一司機還有任何待點交訂單時，其他已點交訂單也不能導航', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'LOADED' as const},
+      {orderId: 2, orderStatus: 'CONFIRMED' as const},
+    ]}]};
+    expect(pendingLoadingOrderCount(tasks)).toBe(1);
+    expect(navigationReadyForOrder(tasks, 1)).toBe(false);
+  });
+
+  it('所有待配送訂單完成點交後，已點交的訂單可以導航', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'LOADED' as const},
+      {orderId: 2, orderStatus: 'IN_DELIVERY' as const},
+    ]}]};
+    expect(pendingLoadingOrderCount(tasks)).toBe(0);
+    expect(navigationReadyForOrder(tasks, 1)).toBe(true);
+    expect(navigationReadyForOrder(tasks, 2)).toBe(true);
+  });
+
+  it('失敗或不存在的訂單不能導航；失敗訂單不阻擋其他已點交訂單', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'FAILED' as const},
+      {orderId: 2, orderStatus: 'LOADED' as const},
+    ]}]};
+    expect(navigationReadyForOrder(tasks, 1)).toBe(false);
+    expect(navigationReadyForOrder(tasks, 2)).toBe(true);
+    expect(navigationReadyForOrder(tasks, 3)).toBe(false);
+    expect(navigationReadyForOrder(null, 2)).toBe(false);
+  });
+});
 
 describe('findNearest', () => {
   // 台南往北的三個點，間隔約 3 公里

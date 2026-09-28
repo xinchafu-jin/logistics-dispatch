@@ -51,6 +51,7 @@ import {
   DriverMessageDto,
   DriverMessagePushDto,
   DriverTaskStop,
+  DriverTaskOrderItem,
   DriverTaskOrderStatus,
   DriverTasksResponse,
   GpsRouteStep,
@@ -84,6 +85,26 @@ interface DriverTaskSelection {
   stop: DriverTaskStop;
 }
 
+type NavigationTaskSet = {
+  routes: {stops: Pick<DriverTaskStop, 'orderId' | 'orderStatus'>[]}[];
+};
+
+export function pendingLoadingOrderCount(tasks: NavigationTaskSet | null): number {
+  return (tasks?.routes ?? []).reduce(
+    (count, route) => count + route.stops.filter((stop) => stop.orderStatus === 'CONFIRMED').length,
+    0,
+  );
+}
+
+export function navigationReadyForOrder(tasks: NavigationTaskSet | null, orderId: number): boolean {
+  if (!tasks || pendingLoadingOrderCount(tasks) > 0) {
+    return false;
+  }
+  const stop = tasks.routes.flatMap((route) => route.stops)
+    .find((taskStop) => taskStop.orderId === orderId);
+  return stop?.orderStatus === 'LOADED' || stop?.orderStatus === 'IN_DELIVERY';
+}
+
 interface DriverLeaveForm {
   workDate: string;
   leaveType: DriverLeaveRequest['leaveType'];
@@ -108,8 +129,6 @@ interface DriverMakeupLeaveForm {
 
 interface LoadingItemForm {
   checked: boolean;
-  loadedQuantity: string;
-  notes: string;
 }
 
 type MapPosition = [lng: number, lat: number];
@@ -567,6 +586,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     onCleanup(() => subscription.unsubscribe());
   });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly pendingLoadingCount = computed(() => pendingLoadingOrderCount(this.todayTasks()));
   /**
    * routeId → 這條路線的出車前安全檢查通過了沒，由路線卡片上的 app-pre-trip-check 回報。
    * 重新整理任務時不清空：同一條路線、同一台車的元件不會重建，也就不會再回報一次，清掉點交按鈕會被誤鎖
@@ -579,11 +599,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly deliveryNotes = signal('');
   protected readonly deliveryPhoto = signal<File | null>(null);
   protected readonly activeLoadingOrderId = signal<number | null>(null);
-  protected readonly loadingBoxCount = signal('');
   protected readonly loadingNotes = signal('');
   protected readonly loadingItemForms = signal<Record<number, LoadingItemForm>>({});
-  /** 箱數不符時先停一次讓司機再點一遍；改了箱數就要重新確認 */
-  protected readonly loadingMismatchPending = signal(false);
+  protected readonly loadingSummaryChecked = signal(false);
+  protected readonly reportingLoadingItemIds = signal<readonly number[]>([]);
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
@@ -1569,6 +1588,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected setActiveTab(tab: DriverTab): void {
     this.activeTab.set(tab);
 
+    if (tab === 'tasks') {
+      // 路線與商品明細可能在司機登入後才發布或補齊；重新進任務頁要看到最新資料。
+      this.loadTodayTasks(true);
+    }
+
     if (tab === 'schedule') {
       this.loadLeaveRequests();
     }
@@ -1590,7 +1614,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected selectTaskForNavigation(route: DriverRouteTask, stop: DriverTaskStop): void {
-    if (!this.hasCoordinates(stop)) {
+    if (!this.canNavigate(stop)) {
       return;
     }
 
@@ -1605,7 +1629,31 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected canNavigate(stop: DriverTaskStop): boolean {
-    return this.hasCoordinates(stop);
+    return this.hasCoordinates(stop) && navigationReadyForOrder(this.todayTasks(), stop.orderId);
+  }
+
+  protected canStartNavigation(): boolean {
+    const selected = this.selectedTask();
+    return selected !== null && this.canNavigate(selected.stop);
+  }
+
+  protected navigationUnavailableLabel(stop: DriverTaskStop): string {
+    if (!this.hasCoordinates(stop)) {
+      return '無座標';
+    }
+    return this.pendingLoadingCount() > 0 || stop.orderStatus === 'CONFIRMED'
+      ? '先點交'
+      : '不可導航';
+  }
+
+  protected navigationUnavailableReason(stop: DriverTaskStop): string {
+    if (!this.hasCoordinates(stop)) {
+      return '此站點尚未設定座標';
+    }
+    if (this.pendingLoadingCount() > 0) {
+      return `尚有 ${this.pendingLoadingCount()} 筆訂單未完成倉庫點交，請全部點交後再導航`;
+    }
+    return '這張訂單目前不可導航';
   }
 
   /** 還沒在倉庫點交的單先點交；點交完才能按抵達（後端也會擋） */
@@ -1696,66 +1744,106 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
     this.closeDeliveryAction();
     this.activeLoadingOrderId.set(stop.orderId);
-    this.loadingBoxCount.set(String(stop.expectedBoxCount));
     this.loadingNotes.set('');
+    this.loadingSummaryChecked.set(false);
     this.loadingItemForms.set(
       Object.fromEntries((stop.items ?? []).map((item) => [item.id, {
         checked: false,
-        loadedQuantity: String(item.expectedQuantity),
-        notes: '',
       }])),
     );
-    this.loadingMismatchPending.set(false);
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
   }
 
   protected closeLoadingAction(): void {
     this.activeLoadingOrderId.set(null);
-    this.loadingBoxCount.set('');
     this.loadingNotes.set('');
+    this.loadingSummaryChecked.set(false);
+    this.reportingLoadingItemIds.set([]);
     this.loadingItemForms.set({});
-    this.loadingMismatchPending.set(false);
     this.taskActionError.set(null);
-  }
-
-  protected updateLoadingBoxCount(event: Event): void {
-    this.loadingBoxCount.set((event.target as HTMLInputElement).value);
-    this.loadingMismatchPending.set(false);
   }
 
   protected updateLoadingNotes(event: Event): void {
     this.loadingNotes.set((event.target as HTMLTextAreaElement).value);
   }
 
+  protected updateLoadingSummaryChecked(event: Event): void {
+    this.loadingSummaryChecked.set((event.target as HTMLInputElement).checked);
+  }
+
   protected loadingItemForm(itemId: number): LoadingItemForm {
-    return this.loadingItemForms()[itemId] ?? {checked: false, loadedQuantity: '', notes: ''};
+    return this.loadingItemForms()[itemId] ?? {checked: false};
+  }
+
+  protected checkedLoadingItemCount(stop: DriverTaskStop): number {
+    return stop.items.filter((item) => this.loadingItemForm(item.id).checked).length;
+  }
+
+  protected loadingChecklistComplete(stop: DriverTaskStop): boolean {
+    return stop.items.length > 0
+      ? this.checkedLoadingItemCount(stop) === stop.items.length
+      : this.loadingSummaryChecked();
   }
 
   protected updateLoadingItemChecked(itemId: number, event: Event): void {
+    if (this.isTaskSubmitting()) {
+      return;
+    }
     const checked = (event.target as HTMLInputElement).checked;
     this.loadingItemForms.update((items) => ({
       ...items,
       [itemId]: {...this.loadingItemForm(itemId), checked},
     }));
-    this.loadingMismatchPending.set(false);
   }
 
-  protected updateLoadingItemQuantity(itemId: number, event: Event): void {
-    const loadedQuantity = (event.target as HTMLInputElement).value;
-    this.loadingItemForms.update((items) => ({
-      ...items,
-      [itemId]: {...this.loadingItemForm(itemId), loadedQuantity},
-    }));
-    this.loadingMismatchPending.set(false);
+  protected handleLoadingMismatch(stop: DriverTaskStop): void {
+    if (!this.canLoad(stop) || this.isTaskSubmitting() || !stop.items.length) {
+      return;
+    }
+    const items = stop.items.filter((item) => this.loadingItemForm(item.id).checked);
+    if (!items.length) {
+      this.taskActionError.set('請先勾選點交不符的商品。');
+      return;
+    }
+    this.reportLoadingMismatch(stop, items);
   }
 
-  protected updateLoadingItemNotes(itemId: number, event: Event): void {
-    const notes = (event.target as HTMLInputElement).value;
-    this.loadingItemForms.update((items) => ({
-      ...items,
-      [itemId]: {...this.loadingItemForm(itemId), notes},
-    }));
+  protected reportLoadingMismatch(stop: DriverTaskStop, items: readonly DriverTaskOrderItem[]): void {
+    if (!this.canLoad(stop) || this.isTaskSubmitting() || !items.length) {
+      return;
+    }
+    const route = this.todayTasks()?.routes.find((task) => task.stops.some((row) => row.orderId === stop.orderId));
+    if (!route || !this.inspectionReady()[route.routeId]) {
+      this.taskActionError.set('請先通過這條路線的出車前安全檢查。');
+      return;
+    }
+    this.reportingLoadingItemIds.set(items.map((item) => item.id));
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+    this.operations.reportLoadingMismatch({
+      orderId: stop.orderId,
+      orderItemIds: items.map((item) => item.id),
+      notes: this.loadingNotes().trim() || undefined,
+    }).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeLoadingAction();
+        const rebuilt = response.followUpOrderNumber
+          ? `已重建訂單 ${response.followUpOrderNumber}，待主管確認。`
+          : '請主管重新建單。';
+        const products = items.map((item) => `${item.itemName}（應點 ${item.expectedQuantity} ${item.unit}）`).join('、');
+        this.taskActionMessage.set(`已送出倉庫點交不符異常：${products}。原單停止配送，${rebuilt}`);
+        this.reportingLoadingItemIds.set([]);
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.reportingLoadingItemIds.set([]);
+        this.isTaskSubmitting.set(false);
+        this.taskActionError.set(this.getErrorMessage(error, '點交不符回報失敗，尚未送出異常案件，請再試。'));
+      },
+    });
   }
 
   protected submitLoading(stop: DriverTaskStop): void {
@@ -1763,41 +1851,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const rawCount = this.loadingBoxCount().trim();
-    const loadedBoxCount = Number(rawCount);
-    if (!rawCount || !Number.isInteger(loadedBoxCount) || loadedBoxCount < 0) {
-      this.taskActionError.set('請輸入 0 以上的整數箱數。');
+    if (stop.items.length === 0 && !this.loadingSummaryChecked()) {
+      this.taskActionError.set('請先核對訂單品項摘要與應點箱數，並勾選確認。');
       return;
     }
-    if (loadedBoxCount > stop.expectedBoxCount) {
-      this.taskActionError.set(`實點箱數不能多於應點的 ${stop.expectedBoxCount} 箱，多出來的請退回倉庫。`);
-      return;
-    }
-    const items = (stop.items ?? []).map((item) => {
-      const form = this.loadingItemForm(item.id);
-      const loadedQuantity = Number(form.loadedQuantity.trim());
-      return {item, form, loadedQuantity};
-    });
-    for (const {item, form, loadedQuantity} of items) {
-      if (!form.checked) {
+    const items = stop.items ?? [];
+    for (const item of items) {
+      if (!this.loadingItemForm(item.id).checked) {
         this.taskActionError.set(`請先勾選並核對商品「${item.itemName}」。`);
         return;
       }
-      if (!form.loadedQuantity.trim() || !Number.isInteger(loadedQuantity) || loadedQuantity < 0) {
-        this.taskActionError.set(`商品「${item.itemName}」的實點數量必須是 0 以上整數。`);
-        return;
-      }
-      if (loadedQuantity > item.expectedQuantity) {
-        this.taskActionError.set(`商品「${item.itemName}」的實點數量不能超過應到數量。`);
-        return;
-      }
-    }
-    const hasItemMismatch = items.some(({item, loadedQuantity}) => loadedQuantity !== item.expectedQuantity);
-    // 箱數或商品任一不符，一送出就定案，所以第一次按先停下來讓司機再確認。
-    if ((loadedBoxCount !== stop.expectedBoxCount || hasItemMismatch) && !this.loadingMismatchPending()) {
-      this.loadingMismatchPending.set(true);
-      this.taskActionError.set(null);
-      return;
     }
 
     this.isTaskSubmitting.set(true);
@@ -1807,23 +1870,25 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const notes = this.loadingNotes().trim() || undefined;
     this.operations.loading({
       orderId: stop.orderId,
-      loadedBoxCount,
+      loadedBoxCount: stop.expectedBoxCount,
       notes,
-      items: items.length === 0 ? undefined : items.map(({item, form, loadedQuantity}) => ({
+      items: items.length === 0 ? undefined : items.map((item) => ({
         orderItemId: item.id,
-        checked: form.checked,
-        loadedQuantity,
-        notes: form.notes.trim() || undefined,
+        checked: true,
+        loadedQuantity: item.expectedQuantity,
       })),
     }).subscribe({
       next: (response) => {
         this.applyDeliveryResponse(response);
         this.closeLoadingAction();
         if (response.orderStatus === 'LOADED') {
-          this.taskActionMessage.set('點交完成，可以出發配送。');
+          const remaining = this.pendingLoadingCount();
+          this.taskActionMessage.set(remaining > 0
+            ? `這張單已完成點交，還有 ${remaining} 筆訂單待點交。`
+            : '全部訂單已完成點交，可以開始導航。');
         } else {
           const followUp = response.followUpOrderNumber
-            ? `，明日補送單 ${response.followUpOrderNumber}`
+            ? `，重建單 ${response.followUpOrderNumber} 待主管確認`
             : '';
           this.taskActionError.set(`箱數不符，已建立異常單${followUp}。這張單今天不配送。`);
         }
@@ -2573,8 +2638,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private loadTodayTasks(): void {
-    this.taskViewState.set('loading');
+  private loadTodayTasks(silent = false): void {
+    if (!silent) {
+      this.taskViewState.set('loading');
+    }
     this.taskError.set(null);
 
     this.operations.getTodayTasks().subscribe({
@@ -3207,7 +3274,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected startNavigation(): void {
-    if (this.isNavigating()) {
+    if (this.isNavigating() || !this.canStartNavigation()) {
       return;
     }
 

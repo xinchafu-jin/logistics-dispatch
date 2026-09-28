@@ -116,7 +116,7 @@
                   <details class="item-details"><summary>{{ row.orderNumber }} · 查看商品點交與原因</summary>
                     @if (row.loadingIssue) { <p class="performance-note">{{ row.loadingIssue }}</p> }
                     <div class="item-check-table"><div class="table-row table-head"><span>商品代碼</span><span>品項</span><span>應點數量</span><span>實點數量</span><span>缺少數量</span><span>單位</span><span>點交結果</span><span>點交時間</span><span>備註</span></div>
-                      @for (item of loadingItemsForOutcome(row, report); track $index) { <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS'"><span>{{ value(item.productCode) }}</span><span>{{ value(item.itemName) }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span>{{ value(item.missingQuantity) }}</span><span>{{ value(item.unit) }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span>{{ value(item.notes) }}</span></div> } @empty { <p class="performance-note">未記錄逐項商品點交。</p> }
+                      @for (item of loadingItemsForOutcome(row, report); track $index) { <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS' || item.status === 'MISMATCH_REPORTED'"><span>{{ value(item.productCode) }}</span><span>{{ value(item.itemName) }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span>{{ value(item.missingQuantity) }}</span><span>{{ value(item.unit) }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span>{{ value(item.notes) }}</span></div> } @empty { <p class="performance-note">未記錄逐項商品點交。</p> }
                     </div>
                   </details>
                 } @empty { <p class="empty-state">此項目沒有符合條件的點交或待排車訂單。</p> }
@@ -214,7 +214,7 @@
                     <div class="loading-exception-item-table">
                       <div class="table-row table-head"><span>商品代碼</span><span>商品名稱</span><span>應點數量</span><span>實點數量</span><span>缺少數量</span><span>單位</span><span>點交結果</span><span>點交時間</span><span>點交備註</span></div>
                       @for (item of row.loadingItems; track $index) {
-                        <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS'"><span>{{ value(item.productCode) }}</span><span>{{ item.itemName }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span class="item-missing-quantity">{{ value(item.missingQuantity) }}</span><span>{{ item.unit }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span class="item-loading-note">{{ value(item.notes) }}</span></div>
+                        <div class="table-row" [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS' || item.status === 'MISMATCH_REPORTED'"><span>{{ value(item.productCode) }}</span><span>{{ item.itemName }}</span><span>{{ value(item.expectedQuantity) }}</span><span>{{ value(item.loadedQuantity) }}</span><span class="item-missing-quantity">{{ value(item.missingQuantity) }}</span><span>{{ item.unit }}</span><span>{{ loadingItemLabel(item) }}</span><span>{{ value(item.checkedAt) }}</span><span class="item-loading-note">{{ value(item.notes) }}</span></div>
                       }
                     </div>
                   </details>
