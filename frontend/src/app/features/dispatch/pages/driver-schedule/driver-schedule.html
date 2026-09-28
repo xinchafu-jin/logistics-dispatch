@@ -36,182 +36,6 @@
     </p>
   }
 
-  <section class="leave-review-panel" aria-labelledby="planned-leave-review-title">
-    <header>
-      <div>
-        <p class="page-eyebrow">預排請假</p>
-        <h3 id="planned-leave-review-title">多日待審申請</h3>
-      </div>
-      <span>{{ pendingLeaveBatches().length }} 組</span>
-      <button
-        type="button"
-        class="icon-button"
-        title="重新整理預排請假"
-        aria-label="重新整理預排請假"
-        (click)="refresh()"
-        [disabled]="reviewingBatchId() !== null || saving()"
-      >
-        <mat-icon aria-hidden="true">refresh</mat-icon>
-      </button>
-    </header>
-    <div class="leave-review-list">
-      @for (batch of pendingLeaveBatches(); track batch.batchId) {
-        <article>
-          <header>
-            <div>
-              <strong>{{ batch.driverName }} · {{ leaveTypeLabel(batch.leaveType) }}</strong>
-              <span>{{ batch.workDates.join('、') }}</span>
-            </div>
-            <em>待審核</em>
-          </header>
-          <p><b>司機申請原因：</b>{{ batch.requestReason }}</p>
-          <label>
-            <span>核准前可改假別（整組套用）</span>
-            <select
-              [value]="selectedBatchLeaveType(batch)"
-              [disabled]="reviewingBatchId() !== null"
-              (change)="updateBatchLeaveType(batch.batchId, $event)"
-            >
-              @for (option of batchLeaveTypes; track option.value) {
-                <option [value]="option.value">{{ option.label }}</option>
-              }
-            </select>
-          </label>
-          <label>
-            <span>處理理由（核准、退回或改假別都會提供給司機）</span>
-            <textarea
-              rows="2"
-              maxlength="500"
-              [value]="batchReviewReasons()[batch.batchId] ?? ''"
-              [disabled]="reviewingBatchId() !== null"
-              (input)="updateBatchReviewReason(batch.batchId, $event)"
-            ></textarea>
-          </label>
-          @if (batchReviewErrors()[batch.batchId]) {
-            <small class="leave-review-error">{{ batchReviewErrors()[batch.batchId] }}</small>
-          }
-          <div class="leave-review-actions">
-            <button
-              type="button"
-              class="history-action"
-              (click)="correctLeaveBatchType(batch)"
-              [disabled]="reviewingBatchId() !== null || selectedBatchLeaveType(batch) === batch.leaveType"
-            >改假別</button>
-            <button
-              type="button"
-              class="leave-reject-action"
-              (click)="reviewLeaveBatch(batch, 'reject')"
-              [disabled]="reviewingBatchId() !== null"
-            >退回</button>
-            <button
-              type="button"
-              class="primary-action"
-              (click)="reviewLeaveBatch(batch, 'approve')"
-              [disabled]="reviewingBatchId() !== null"
-            >{{ reviewingBatchId() === batch.batchId ? '處理中...' : '核准' }}</button>
-          </div>
-        </article>
-      } @empty {
-        <p class="leave-review-empty">目前沒有待審預排請假。</p>
-      }
-    </div>
-  </section>
-
-  <section class="leave-review-panel" aria-labelledby="leave-review-title">
-    <header>
-      <div>
-        <p class="page-eyebrow">當日特殊事由／事後補請</p>
-        <h3 id="leave-review-title">單筆待審申請</h3>
-      </div>
-      <span>{{ pendingLeaveRequests().length }} 筆</span>
-      <button
-        type="button"
-        class="icon-button"
-        title="重新整理待審請假"
-        aria-label="重新整理待審請假"
-        (click)="refresh()"
-        [disabled]="leaveReviewLoading() || saving()"
-      >
-        <mat-icon aria-hidden="true">refresh</mat-icon>
-      </button>
-    </header>
-    @if (leaveReviewLoadError()) {
-      <p class="leave-review-error" role="alert">{{ leaveReviewLoadError() }}</p>
-    } @else if (leaveReviewLoading() && pendingLeaveRequests().length === 0) {
-      <p class="leave-review-empty">正在讀取待審申請...</p>
-    } @else {
-      <div class="leave-review-list">
-        @for (request of pendingLeaveRequests(); track request.id) {
-          <article>
-            <header>
-              <div>
-                <strong>{{ request.driverName }} · {{ request.workDate }}</strong>
-                <span>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span>
-              </div>
-              <em>待審核</em>
-            </header>
-            <p><b>司機申請原因：</b>{{ request.requestReason }}</p>
-            <label>
-              <span>處理理由（核准或退回都會提供給司機）</span>
-              <textarea
-                rows="2"
-                maxlength="500"
-                [value]="leaveReviewReasons()[request.id] ?? ''"
-                [disabled]="reviewingLeaveId() !== null"
-                (input)="updateLeaveReviewReason(request.id, $event)"
-              ></textarea>
-            </label>
-            @if (leaveReviewErrors()[request.id]) {
-              <small class="leave-review-error">{{ leaveReviewErrors()[request.id] }}</small>
-            }
-            <div class="leave-review-actions">
-              <button
-                type="button"
-                class="leave-reject-action"
-                (click)="reviewLeaveRequest(request, 'reject')"
-                [disabled]="reviewingLeaveId() !== null"
-              >退回</button>
-              <button
-                type="button"
-                class="primary-action"
-                (click)="reviewLeaveRequest(request, 'approve')"
-                [disabled]="reviewingLeaveId() !== null"
-              >{{ reviewingLeaveId() === request.id ? '處理中...' : '核准' }}</button>
-              <button
-                type="button"
-                class="history-action"
-                (click)="toggleReviewHistory(request)"
-              >{{ expandedReviewHistoryId() === request.id ? '收合歷程' : '查看歷程' }}</button>
-            </div>
-            @if (expandedReviewHistoryId() === request.id) {
-              <div class="leave-review-history" aria-label="請假申請歷程">
-                @if (isLeaveHistoryLoading(request.id)) {
-                  <small>正在讀取歷程...</small>
-                } @else if (leaveHistoryErrors()[request.id]; as historyError) {
-                  <small class="leave-review-error">{{ historyError }}</small>
-                } @else {
-                  @for (event of leaveRequestHistories()[request.id] ?? []; track event.id) {
-                    <p>
-                      <strong>{{ event.eventType }}</strong>
-                      · {{ formatLeaveHistoryTime(event.occurredAt) }}
-                      @if (event.reason) { <span>· {{ event.reason }}</span> }
-                    </p>
-                  } @empty {
-                    <small>目前沒有歷程資料。</small>
-                  }
-                }
-              </div>
-            }
-          </article>
-        } @empty {
-          @if (!leaveReviewLoading()) {
-            <p class="leave-review-empty">目前沒有待審請假。</p>
-          }
-        }
-      </div>
-    }
-  </section>
-
   @if (loading()) {
     <section class="empty-state" aria-live="polite">
       <mat-icon aria-hidden="true">pending_actions</mat-icon>
@@ -737,4 +561,180 @@
       </section>
     }
   }
+
+  <section class="leave-review-panel" aria-labelledby="planned-leave-review-title">
+    <header>
+      <div>
+        <p class="page-eyebrow">預排請假</p>
+        <h3 id="planned-leave-review-title">多日待審申請</h3>
+      </div>
+      <span>{{ pendingLeaveBatches().length }} 組</span>
+      <button
+        type="button"
+        class="icon-button"
+        title="重新整理預排請假"
+        aria-label="重新整理預排請假"
+        (click)="refresh()"
+        [disabled]="reviewingBatchId() !== null || saving()"
+      >
+        <mat-icon aria-hidden="true">refresh</mat-icon>
+      </button>
+    </header>
+    <div class="leave-review-list">
+      @for (batch of pendingLeaveBatches(); track batch.batchId) {
+        <article>
+          <header>
+            <div>
+              <strong>{{ batch.driverName }} · {{ leaveTypeLabel(batch.leaveType) }}</strong>
+              <span>{{ batch.workDates.join('、') }}</span>
+            </div>
+            <em>待審核</em>
+          </header>
+          <p><b>司機申請原因：</b>{{ batch.requestReason }}</p>
+          <label>
+            <span>核准前可改假別（整組套用）</span>
+            <select
+              [value]="selectedBatchLeaveType(batch)"
+              [disabled]="reviewingBatchId() !== null"
+              (change)="updateBatchLeaveType(batch.batchId, $event)"
+            >
+              @for (option of batchLeaveTypes; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            <span>處理理由（核准、退回或改假別都會提供給司機）</span>
+            <textarea
+              rows="2"
+              maxlength="500"
+              [value]="batchReviewReasons()[batch.batchId] ?? ''"
+              [disabled]="reviewingBatchId() !== null"
+              (input)="updateBatchReviewReason(batch.batchId, $event)"
+            ></textarea>
+          </label>
+          @if (batchReviewErrors()[batch.batchId]) {
+            <small class="leave-review-error">{{ batchReviewErrors()[batch.batchId] }}</small>
+          }
+          <div class="leave-review-actions">
+            <button
+              type="button"
+              class="history-action"
+              (click)="correctLeaveBatchType(batch)"
+              [disabled]="reviewingBatchId() !== null || selectedBatchLeaveType(batch) === batch.leaveType"
+            >改假別</button>
+            <button
+              type="button"
+              class="leave-reject-action"
+              (click)="reviewLeaveBatch(batch, 'reject')"
+              [disabled]="reviewingBatchId() !== null"
+            >退回</button>
+            <button
+              type="button"
+              class="primary-action"
+              (click)="reviewLeaveBatch(batch, 'approve')"
+              [disabled]="reviewingBatchId() !== null"
+            >{{ reviewingBatchId() === batch.batchId ? '處理中...' : '核准' }}</button>
+          </div>
+        </article>
+      } @empty {
+        <p class="leave-review-empty">目前沒有待審預排請假。</p>
+      }
+    </div>
+  </section>
+
+  <section class="leave-review-panel" aria-labelledby="leave-review-title">
+    <header>
+      <div>
+        <p class="page-eyebrow">當日特殊事由／事後補請</p>
+        <h3 id="leave-review-title">單筆待審申請</h3>
+      </div>
+      <span>{{ pendingLeaveRequests().length }} 筆</span>
+      <button
+        type="button"
+        class="icon-button"
+        title="重新整理待審請假"
+        aria-label="重新整理待審請假"
+        (click)="refresh()"
+        [disabled]="leaveReviewLoading() || saving()"
+      >
+        <mat-icon aria-hidden="true">refresh</mat-icon>
+      </button>
+    </header>
+    @if (leaveReviewLoadError()) {
+      <p class="leave-review-error" role="alert">{{ leaveReviewLoadError() }}</p>
+    } @else if (leaveReviewLoading() && pendingLeaveRequests().length === 0) {
+      <p class="leave-review-empty">正在讀取待審申請...</p>
+    } @else {
+      <div class="leave-review-list">
+        @for (request of pendingLeaveRequests(); track request.id) {
+          <article>
+            <header>
+              <div>
+                <strong>{{ request.driverName }} · {{ request.workDate }}</strong>
+                <span>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }}</span>
+              </div>
+              <em>待審核</em>
+            </header>
+            <p><b>司機申請原因：</b>{{ request.requestReason }}</p>
+            <label>
+              <span>處理理由（核准或退回都會提供給司機）</span>
+              <textarea
+                rows="2"
+                maxlength="500"
+                [value]="leaveReviewReasons()[request.id] ?? ''"
+                [disabled]="reviewingLeaveId() !== null"
+                (input)="updateLeaveReviewReason(request.id, $event)"
+              ></textarea>
+            </label>
+            @if (leaveReviewErrors()[request.id]) {
+              <small class="leave-review-error">{{ leaveReviewErrors()[request.id] }}</small>
+            }
+            <div class="leave-review-actions">
+              <button
+                type="button"
+                class="leave-reject-action"
+                (click)="reviewLeaveRequest(request, 'reject')"
+                [disabled]="reviewingLeaveId() !== null"
+              >退回</button>
+              <button
+                type="button"
+                class="primary-action"
+                (click)="reviewLeaveRequest(request, 'approve')"
+                [disabled]="reviewingLeaveId() !== null"
+              >{{ reviewingLeaveId() === request.id ? '處理中...' : '核准' }}</button>
+              <button
+                type="button"
+                class="history-action"
+                (click)="toggleReviewHistory(request)"
+              >{{ expandedReviewHistoryId() === request.id ? '收合歷程' : '查看歷程' }}</button>
+            </div>
+            @if (expandedReviewHistoryId() === request.id) {
+              <div class="leave-review-history" aria-label="請假申請歷程">
+                @if (isLeaveHistoryLoading(request.id)) {
+                  <small>正在讀取歷程...</small>
+                } @else if (leaveHistoryErrors()[request.id]; as historyError) {
+                  <small class="leave-review-error">{{ historyError }}</small>
+                } @else {
+                  @for (event of leaveRequestHistories()[request.id] ?? []; track event.id) {
+                    <p>
+                      <strong>{{ event.eventType }}</strong>
+                      · {{ formatLeaveHistoryTime(event.occurredAt) }}
+                      @if (event.reason) { <span>· {{ event.reason }}</span> }
+                    </p>
+                  } @empty {
+                    <small>目前沒有歷程資料。</small>
+                  }
+                }
+              </div>
+            }
+          </article>
+        } @empty {
+          @if (!leaveReviewLoading()) {
+            <p class="leave-review-empty">目前沒有待審請假。</p>
+          }
+        }
+      </div>
+    }
+  </section>
 </main>

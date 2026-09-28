@@ -7,12 +7,23 @@
 >
   <div class="fleet-map-stage">
     <header class="fleet-map-header">
-      <div>
-        <h3 id="fleet-map-title">高雄配送區域地圖</h3>
+      <div class="fleet-map-select-wrapper">
+        <select
+          id="fleet-map-title"
+          class="fleet-map-city-select"
+          [value]="selectedCityId()"
+          (change)="onCityChange($event)"
+          aria-label="選擇配送區域地圖"
+        >
+          @for (city of cities; track city.id) {
+            <option [value]="city.id">{{ city.label }}</option>
+          }
+        </select>
+        <mat-icon class="fleet-map-select-arrow" aria-hidden="true">arrow_drop_down</mat-icon>
       </div>
     </header>
 
-    <div #mapCanvas class="fleet-map-canvas" aria-label="高雄配送區域地圖"></div>
+    <div #mapCanvas class="fleet-map-canvas" aria-label="配送區域地圖"></div>
 
   </div>
 

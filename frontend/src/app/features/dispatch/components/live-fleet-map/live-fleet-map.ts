@@ -38,6 +38,23 @@ export interface RouteLine {
   followsRoad: boolean;
 }
 
+export interface CityOption {
+  id: string;
+  name: string;
+  label: string;
+  center: [number, number];
+  zoom: number;
+}
+
+export const TAIWAN_SIX_CITIES: CityOption[] = [
+  {id: 'kaohsiung', name: '高雄市', label: '高雄配送區域地圖', center: [120.3014, 22.6273], zoom: 12},
+  {id: 'taipei', name: '臺北市', label: '臺北配送區域地圖', center: [121.54, 25.04], zoom: 12},
+  {id: 'new_taipei', name: '新北市', label: '新北配送區域地圖', center: [121.46, 25.01], zoom: 11.5},
+  {id: 'taoyuan', name: '桃園市', label: '桃園配送區域地圖', center: [121.31, 24.99], zoom: 11.5},
+  {id: 'taichung', name: '臺中市', label: '臺中配送區域地圖', center: [120.67, 24.15], zoom: 12},
+  {id: 'tainan', name: '臺南市', label: '臺南配送區域地圖', center: [120.20, 22.99], zoom: 12},
+];
+
 /**
  * 路線配色。避開既有的三個寫死色：倉庫 #e0ad76、門市 #63d1c6、司機 #7ee787，
  * 否則線會跟點混成同一色。超過六條就從頭循環。
@@ -70,6 +87,8 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
   /** 路線圖層開關 */
   readonly showRouteLines = input(false);
   readonly resizable = input(false);
+  protected readonly cities = TAIWAN_SIX_CITIES;
+  protected readonly selectedCityId = signal<string>('kaohsiung');
   protected readonly mapHeight = signal(430);
   protected readonly isResizingMap = signal(false);
   private maplibre: typeof import('maplibre-gl') | null = null;
@@ -209,6 +228,30 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     return typeof window === 'undefined'
       ? 760
       : Math.max(430, Math.min(760, Math.floor(window.innerHeight * 0.75)));
+  }
+
+  protected onCityChange(event: Event): void {
+    const cityId = (event.target as HTMLSelectElement).value;
+    this.focusCity(cityId);
+  }
+
+  protected focusCity(cityId: string): void {
+    const city = this.cities.find((c) => c.id === cityId);
+    if (!city) return;
+    this.selectedCityId.set(cityId);
+
+    if (!this.map) return;
+
+    const center = (cityId === 'kaohsiung' && this.warehousePoint())
+      ? [this.warehousePoint()!.lng, this.warehousePoint()!.lat] as [number, number]
+      : city.center;
+
+    this.map.flyTo({
+      center,
+      zoom: city.zoom,
+      duration: 1200,
+      essential: true,
+    });
   }
 
   private clampMapHeight(height: number): number {
@@ -396,6 +439,9 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     }
 
     this.fittedWarehouseId = warehouseId;
+    if (this.selectedCityId() !== 'kaohsiung') {
+      return;
+    }
     const coordinates = points.map((point) => [point.lng, point.lat] as [number, number]);
     const bounds = new this.maplibre!.LngLatBounds(coordinates[0], coordinates[0]);
     coordinates.slice(1).forEach((coordinate) => bounds.extend(coordinate));

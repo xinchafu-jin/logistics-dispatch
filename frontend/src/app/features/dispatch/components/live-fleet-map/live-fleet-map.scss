@@ -79,8 +79,12 @@
 }
 
 :host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-top-left {
-  top: 8px;
-  left: 8px;
+  top: 64px;
+  left: 14px;
+}
+
+:host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-top-left .maplibregl-ctrl {
+  margin: 0;
 }
 
 :host ::ng-deep .fleet-map-canvas .maplibregl-ctrl-group {
@@ -136,26 +140,61 @@
   pointer-events: none;
 }
 
-.fleet-map-header > div {
-  padding: 9px 11px;
+.fleet-map-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 10px 8px 12px;
   border: 1px solid rgb(203 221 214 / 92%);
   border-radius: 6px;
   background: rgb(250 253 251 / 92%);
   box-shadow: 0 4px 12px rgb(20 52 42 / 12%);
   backdrop-filter: blur(8px);
+  pointer-events: auto;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+
+  &:hover {
+    border-color: rgb(11 124 107 / 40%);
+  }
+
+  &:focus-within {
+    border-color: #0b7c6b;
+    box-shadow: 0 0 0 2px rgb(11 124 107 / 20%);
+  }
 }
 
-.fleet-map-header h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-.fleet-map-header h3 {
+.fleet-map-city-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: none;
+  background: transparent;
   color: #173129;
-  font-size: 1rem;
-  line-height: 1.25;
+  font-family: var(--font-display, inherit);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 0 22px 0 0;
+  margin: 0;
+  cursor: pointer;
+  outline: none;
+
+  option {
+    color: #173129;
+    background: #fafdfb;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+}
+
+.fleet-map-select-arrow {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: #31584d;
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+  line-height: 22px;
 }
 
 @media (max-width: 680px) {
@@ -169,11 +208,6 @@
   }
 
   .fleet-map-header {
-    padding: 18px;
+    padding: 14px;
   }
-
-  .fleet-map-header h3 {
-    font-size: 1.0625rem;
-  }
-
 }
