@@ -329,19 +329,19 @@
           <header class="duty-stage-card__header">
             <div>
               <p class="eyebrow">今日勤務階段</p>
-              <h1>{{ attendanceHeading() }}</h1>
+              <h1>{{ statusLabel() }}</h1>
             </div>
-            <span class="gps-status" [class.is-active]="gpsTracking.isTracking()">
-              <mat-icon aria-hidden="true">my_location</mat-icon>
-              {{ gpsTracking.statusLabel() }}
+            <span class="gps-status" [class.is-active]="!!attendance()?.gpsAllowed">
+              <mat-icon aria-hidden="true">location_on</mat-icon>
+              {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}
             </span>
           </header>
 
           @if (attendanceViewState() === 'loading') {
-            <p class="sheet-copy">{{ attendanceCopy() }}</p>
+            <p class="sheet-copy">正在取得今日出勤狀態...</p>
           } @else if (attendanceViewState() === 'error') {
             <p class="task-feedback is-error">{{ attendanceError() }}</p>
-            <button type="button" class="outline-action" (click)="retryAttendance()">
+            <button type="button" class="outline-action" (click)="refreshAttendance()">
               <mat-icon aria-hidden="true">refresh</mat-icon>
               重新載入出勤狀態
             </button>
@@ -351,19 +351,28 @@
               type="button"
               class="primary-action"
               (click)="clockIn()"
-              [disabled]="isAttendanceSubmitting()"
+              [disabled]="isSubmitting()"
             >
               <mat-icon aria-hidden="true">play_arrow</mat-icon>
-              {{ isAttendanceSubmitting() ? '打卡中...' : '上班打卡' }}
+              {{ isSubmitting() ? '打卡中...' : '上班打卡' }}
             </button>
           } @else if (attendance(); as record) {
             <p class="duty-stage-meta">
-              <span>上班 {{ formatTime(record.clockInTime) }}</span>
-              @if (record.clockOutTime) {
-                <span>· 下班 {{ formatTime(record.clockOutTime) }}</span>
+              <span>上班 {{ formatTime(record.clockInAt) }}</span>
+              @if (record.clockOutAt) {
+                <span>· 下班 {{ formatTime(record.clockOutAt) }}</span>
               }
-              <span>· 出勤判定：<strong>{{ attendancePunctualityLabel(record) }}</strong></span>
+              @if (record.punctualityStatus) {
+                <span>· 出勤判定：<strong>{{ attendancePunctualityLabel(record) }}</strong></span>
+              }
             </p>
+
+            @if (record.status === 'ON_BREAK') {
+              <div class="break-status">
+                <span>休息倒數</span>
+                <strong>{{ formatBreakCountdown() }}</strong>
+              </div>
+            }
 
             @if (attendanceError()) {
               <p class="task-feedback is-error">{{ attendanceError() }}</p>
@@ -379,13 +388,21 @@
               <button
                 type="button"
                 class="outline-action"
-                (click)="toggleBreak()"
-                [disabled]="!canToggleBreak()"
+                (click)="startBreak()"
+                [disabled]="
+                  isSubmitting() ||
+                  record.breakUsed ||
+                  (record.status !== 'WORKING' && record.status !== 'OVERTIME')
+                "
               >
-                <mat-icon aria-hidden="true">{{
-                  isOnBreak() ? 'play_arrow' : 'free_breakfast'
-                }}</mat-icon>
-                {{ breakActionLabel() }}
+                <mat-icon aria-hidden="true">coffee</mat-icon>
+                {{
+                  record.status === 'ON_BREAK'
+                    ? '休息 ' + formatBreakCountdown()
+                    : record.breakUsed
+                      ? '今日已休息'
+                      : '休息'
+                }}
               </button>
               <button
                 type="button"
@@ -424,15 +441,15 @@
                 }
                 <div class="mileage-form-row">
                   <label>
-                    <span>收車里程（km）</span>
+                    <span>收車時行車紀錄器里程（km）</span>
                     <input
                       type="number"
-                      inputmode="decimal"
+                      inputmode="numeric"
                       min="0"
-                      step="0.1"
-                      placeholder="輸入收車時儀表板或行車紀錄器讀數"
+                      step="1"
+                      placeholder="例如 18438"
                       [value]="endMileageReading()"
-                      [disabled]="isMileageSubmitting()"
+                      [disabled]="!canRecordMileage() || isMileageSubmitting()"
                       (input)="updateEndMileage($event)"
                     />
                   </label>
@@ -440,7 +457,7 @@
                     type="button"
                     class="mileage-end-button"
                     (click)="submitEndMileage()"
-                    [disabled]="isMileageSubmitting()"
+                    [disabled]="!canRecordMileage() || isMileageSubmitting()"
                   >
                     <mat-icon aria-hidden="true">flag</mat-icon>
                     登記收車
@@ -453,17 +470,20 @@
                     (click)="recalculateMileage()"
                     [disabled]="isMileageSubmitting()"
                   >
-                    <mat-icon aria-hidden="true">route</mat-icon>
+                    <mat-icon aria-hidden="true">sync</mat-icon>
                     依 GPS 重新結算
                   </button>
                   <button
                     type="button"
                     class="danger-action"
                     (click)="clockOut()"
-                    [disabled]="!canClockOut()"
+                    [disabled]="
+                      isSubmitting() ||
+                      (record.status !== 'WORKING' && record.status !== 'OVERTIME')
+                    "
                   >
                     <mat-icon aria-hidden="true">stop_circle</mat-icon>
-                    {{ clockOutActionLabel() }}
+                    {{ record.status === 'CLOCKED_OUT' ? '已下班' : '下班打卡' }}
                   </button>
                 </div>
               </div>
