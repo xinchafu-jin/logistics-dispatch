@@ -280,6 +280,27 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     onCleanup(() => subscription.unsubscribe());
   });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly selectedTaskDate = signal(this.toIsoDate(new Date()));
+  protected readonly datedTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly datedTaskViewState = signal<TaskViewState>('loading');
+  protected readonly datedTaskError = signal<string | null>(null);
+  protected readonly isTodaySelected = computed(
+    () => this.selectedTaskDate() === this.toIsoDate(new Date()),
+  );
+  protected readonly visibleTasks = computed(
+    () => this.isTodaySelected() ? this.todayTasks() : this.datedTasks(),
+  );
+  protected readonly visibleTaskViewState = computed(
+    () => this.isTodaySelected() ? this.taskViewState() : this.datedTaskViewState(),
+  );
+  protected readonly visibleTaskError = computed(
+    () => this.isTodaySelected() ? this.taskError() : this.datedTaskError(),
+  );
+  protected readonly departureWarehouses = computed(() => {
+    const names = this.visibleTasks()?.routes.map(route => route.warehouse.name) ?? [];
+    return [...new Set(names)].join('、') || '尚未指派';
+  });
+  private datedTaskRequestId = 0;
   protected readonly inspectionReady = signal<Record<number, boolean>>({});
   protected setInspectionReady(routeId: number, passed: boolean): void {
     this.inspectionReady.update(ready => ({...ready, [routeId]: passed}));
@@ -1872,6 +1893,44 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.taskError.set(this.getErrorMessage(error, '無法取得今日配送任務。'));
       },
     });
+  }
+
+  protected selectTaskDate(date: string): void {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return;
+    }
+    this.selectedTaskDate.set(date);
+    if (this.isTodaySelected()) {
+      this.datedTaskRequestId++;
+      return;
+    }
+
+    const requestId = ++this.datedTaskRequestId;
+    this.datedTasks.set(null);
+    this.datedTaskViewState.set('loading');
+    this.datedTaskError.set(null);
+    this.operations.getTasksByDate(date).subscribe({
+      next: tasks => {
+        if (requestId !== this.datedTaskRequestId) {
+          return;
+        }
+        this.datedTasks.set(tasks);
+        this.datedTaskViewState.set(tasks.routes.length ? 'ready' : 'empty');
+      },
+      error: (error: unknown) => {
+        if (requestId !== this.datedTaskRequestId) {
+          return;
+        }
+        this.datedTasks.set(null);
+        this.datedTaskViewState.set('error');
+        this.datedTaskError.set(this.getErrorMessage(error, '無法取得所選日期的配送任務。'));
+      },
+    });
+  }
+
+  protected moveTaskDate(days: number): void {
+    const [year, month, day] = this.selectedTaskDate().split('-').map(Number);
+    this.selectTaskDate(this.toIsoDate(new Date(year, month - 1, day + days)));
   }
 
   private loadEmergencyLeaves(): void {

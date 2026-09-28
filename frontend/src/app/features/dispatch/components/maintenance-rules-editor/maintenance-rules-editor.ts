@@ -43,7 +43,8 @@ import { VehicleMaintenanceRule, VehicleMaintenanceRules } from '../../../../cor
     dialog { position: fixed; inset: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; }
     dialog::backdrop { background: transparent; }
     .backdrop { position: fixed; inset: 0; z-index: 1000; background: #000a; display: grid; place-items: center; padding: 20px; }
-    section { width: min(860px, 100%); max-height: 90vh; overflow: auto; background: var(--modal-bg); color: var(--text); padding: 24px; border: 1px solid var(--border); border-radius: 14px; box-sizing: border-box; }
+    section { width: min(860px, 100%); max-height: 90vh; overflow: auto; background: #151a1b; color: var(--text); padding: 24px; border: 1px solid var(--border); border-radius: 14px; box-sizing: border-box; }
+    :host-context(.dispatch-layout.is-light-theme) section { background: #fff; }
     header, footer { display: flex; gap: 12px; justify-content: space-between; align-items: center; } h2 { font-size: 21px; margin: 0; }
     p, small { color: var(--muted); line-height: 1.6; } small { display: block; margin: 12px 0; }
     .warning { display: grid; gap: 8px; max-width: 300px; color: var(--field-label); } input { width: 100%; box-sizing: border-box; color: var(--text); background: var(--input-bg); border: 1px solid var(--border); border-radius: 5px; padding: 10px; }

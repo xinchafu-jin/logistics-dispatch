@@ -60,10 +60,22 @@ describe('DriverOperationsService', () => {
 
   it('requests the signed-in driver\'s published tasks for today', () => {
     service.getTodayTasks().subscribe();
+    service.getUpcomingTasks().subscribe();
+    service.getTasksByDate('2026-09-03').subscribe();
 
     const request = httpTesting.expectOne('/api/driver/tasks/today');
     expect(request.request.method).toBe('GET');
     request.flush({ date: '2026-09-02', driverId: 1, driverName: '測試司機', routes: [] });
+
+    const upcoming = httpTesting.expectOne('/api/driver/tasks/upcoming');
+    expect(upcoming.request.method).toBe('GET');
+    upcoming.flush([]);
+
+    const selectedDate = httpTesting.expectOne(
+      request => request.url === '/api/driver/tasks' && request.params.get('date') === '2026-09-03',
+    );
+    expect(selectedDate.request.method).toBe('GET');
+    selectedDate.flush({ date: '2026-09-03', driverId: 1, driverName: '測試司機', routes: [] });
   });
 
   it('uses the road route and emergency leave contracts', () => {

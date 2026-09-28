@@ -221,6 +221,8 @@ export class DispatchDashboard implements OnInit {
   readonly boardError = signal('');
   /** 動作列選的排車條件，optimize / board / reassign 三支 API 共用同一組值 */
   readonly dispatchDate = signal(todayLocalDate());
+  /** 原生日期選擇器的下限；過去未結案日仍可由上方紅色日期卡進入。 */
+  readonly todayDate = todayLocalDate();
   /** 0 代表倉庫清單還沒載回來，尚未決定預設倉庫 */
   readonly warehouseId = signal(0);
   readonly optimizing = signal(false);
@@ -630,6 +632,15 @@ export class DispatchDashboard implements OnInit {
   }
 
   // ── 日期列 ────────────────────────────────────────────
+
+  /** 讓主管不必等日期卡出現，就能直接跳到任意未來配送日預先排車。 */
+  selectFutureDate(event: Event): void {
+    const date = (event.target as HTMLInputElement).value;
+    if (!date || date < this.todayDate) {
+      return;
+    }
+    this.selectDay(date);
+  }
 
   /** 點日期列的一格：換看那一天。班表也要換成那天的，司機選單的紅框才會對 */
   selectDay(date: string): void {
@@ -1379,7 +1390,7 @@ export class DispatchDashboard implements OnInit {
    * 佔用有兩種來源：同一個倉的其他車道（看板上看得到），以及當天其他倉
    * （看板看不到，要靠後端的 driversTakenElsewhere 補）。
    *
-   * 只列目前倉庫的司機；已轉倉的既有指派須明確重新指派。
+   * 司機可依訂單跨倉出車，因此列出全部在職司機；同一天被其他倉使用時仍會停用。
    * 班表有問題的司機保留原因，發布時由後端再次檢查。
    */
   driverOptions(route: BoardRoute): DriverOption[] {
@@ -1398,8 +1409,7 @@ export class DispatchDashboard implements OnInit {
     return this.drivers()
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && driver.warehouseId === this.warehouseId()
-          && (driver.isActive || driver.id === route.driverId),
+          driver.id != null && (driver.isActive || driver.id === route.driverId),
       )
       .map((driver) => ({
         id: driver.id,
@@ -1410,11 +1420,6 @@ export class DispatchDashboard implements OnInit {
             : (takenHere.get(driver.id) ?? takenElsewhere.get(driver.id) ?? null),
         scheduleNote: this.driverScheduleNote(driver.id),
       }));
-  }
-
-  assignedDriverOutsideWarehouse(route: BoardRoute): boolean {
-    return route.driverId !== null && !this.drivers().some(driver =>
-      driver.id === route.driverId && driver.warehouseId === this.warehouseId());
   }
 
   /**
@@ -1528,9 +1533,8 @@ export class DispatchDashboard implements OnInit {
     if (driverId !== null) {
       const option = this.driverOptions(route).find(driver => driver.id === driverId);
       if (!option || option.takenNote || option.scheduleNote) {
-        this.boardError.set(option?.takenNote || option?.scheduleNote || '此司機不屬於目前倉庫，請重新選擇本倉司機。');
-        select.value = route.driverId !== null && !this.assignedDriverOutsideWarehouse(route)
-          ? String(route.driverId) : '';
+        this.boardError.set(option?.takenNote || option?.scheduleNote || '此司機目前無法指派。');
+        select.value = route.driverId !== null ? String(route.driverId) : '';
         return;
       }
     }
@@ -2134,7 +2138,7 @@ export class DispatchDashboard implements OnInit {
     );
   }
 
-  private driverScheduleNote(driverId: number, warehouseId = this.warehouseId()): string | null {
+  private driverScheduleNote(driverId: number): string | null {
     const driver = this.drivers().find((item) => item.id === driverId);
     if (!driver) {
       return '司機資料不存在';
@@ -2142,8 +2146,6 @@ export class DispatchDashboard implements OnInit {
     if (!driver.isActive) {
       return '帳號已停用';
     }
-    if (driver.warehouseId == null) return '尚未設定所屬倉庫';
-    if (driver.warehouseId !== warehouseId) return '司機已轉至其他倉庫，請重新指派';
     if (this.scheduleLoadState() === 'loading') {
       return '正在同步當日班表';
     }
@@ -2173,10 +2175,10 @@ export class DispatchDashboard implements OnInit {
   }
 
   private scheduleIssuesForDispatchBoards(boards: readonly DispatchResultDto[]): string[] {
-    // 發布涵蓋整天全部倉庫，須依每條路線所屬倉庫檢查司機，而非只看目前選中的倉庫。
+    // 發布涵蓋整天全部倉庫；司機可跨倉，但班表資格仍須逐條路線檢查。
     return [...new Set(boards.flatMap(board => board.routes.flatMap(route => {
       if (route.driverId === null) return [];
-      const note = this.driverScheduleNote(route.driverId, board.warehouse.id!);
+      const note = this.driverScheduleNote(route.driverId);
       return note ? [`${this.driverName(route.driverId)}${note}`] : [];
     })))];
   }

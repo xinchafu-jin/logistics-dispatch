@@ -576,6 +576,77 @@ h2 {
   margin-bottom: 18px;
 }
 
+.task-date-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.task-date-picker {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.task-date-picker button {
+  display: grid;
+  width: 34px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #c8dad3;
+  border-radius: 7px;
+  color: #176c5b;
+  background: #fff;
+  cursor: pointer;
+}
+
+.task-date-picker button mat-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+}
+
+.task-date-input,
+.task-departure-warehouse {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-date-input span,
+.task-departure-warehouse span {
+  color: #526f66;
+  font-size: 12px;
+}
+
+.task-date-input input {
+  width: 130px;
+  height: 36px;
+  padding: 0 5px;
+  border: 1px solid #c8dad3;
+  border-radius: 7px;
+  color: #173129;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+
+.task-departure-warehouse {
+  max-width: 42%;
+  text-align: right;
+}
+
+.task-departure-warehouse strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
 .task-route-list {
   display: grid;
   gap: 12px;
@@ -625,6 +696,21 @@ h2 {
 
 .task-route-meta {
   padding: 0 16px 13px;
+}
+
+.task-route-heading small {
+  display: block;
+  margin-top: 4px;
+  color: #8ea69e;
+  font-size: 12px;
+}
+
+.future-task-card {
+  border-color: #3a5f56;
+}
+
+.future-task-stop {
+  grid-template-columns: 28px minmax(0, 1fr);
 }
 
 .task-stop-list {

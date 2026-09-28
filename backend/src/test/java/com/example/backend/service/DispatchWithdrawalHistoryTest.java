@@ -28,7 +28,8 @@ class DispatchWithdrawalHistoryTest {
         DriversDAO drivers = mock(DriversDAO.class);
         OsrmClient osrm = mock(OsrmClient.class);
         DispatchService dispatch = new DispatchService(orders, vehicles, warehouses, stores,
-                routes, drivers, osrm, mock(RouteOptimizer.class));
+                routes, drivers, osrm, mock(RouteOptimizer.class),
+                mock(OrderDispatchEligibilityService.class));
 
         RoutesEntity route = new RoutesEntity();
         route.setId(10L); route.setDate(date); route.setWarehouseId(1L);
@@ -41,7 +42,7 @@ class DispatchWithdrawalHistoryTest {
         vehicle.setId(110L); vehicle.setWarehouseId(1L); vehicle.setStatus(VehicleStatus.AVAILABLE);
         vehicle.setCapacity(100); vehicle.setPlateNumber("CAR-TEST");
         DriversEntity replacement = new DriversEntity();
-        replacement.setId(6L); replacement.setIsActive(true);
+        replacement.setId(6L); replacement.setWarehouseId(1L); replacement.setIsActive(true);
         StoresEntity store = new StoresEntity();
         store.setId(42L); store.setLat(22.7); store.setLng(120.4);
 

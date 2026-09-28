@@ -64,6 +64,26 @@ class DispatchGuardServiceTest {
     }
 
     @Test
+    void 同一路線不能混入其他倉庫的訂單() {
+        givenDriver(1L, "王小明", true);
+        givenShift(1L, ShiftType.WORK, null);
+        RoutesEntity route = givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED);
+        route.setWarehouseId(1L);
+
+        OrdersEntity wrongWarehouseOrder = new OrdersEntity();
+        wrongWarehouseOrder.setRouteId(10L);
+        wrongWarehouseOrder.setOrderNumber("DO-WRONG-WAREHOUSE");
+        wrongWarehouseOrder.setWarehouseId(2L);
+        wrongWarehouseOrder.setStatus(OrderStatus.CONFIRMED);
+        wrongWarehouseOrder.setBoxCount(5);
+        when(ordersDAO.findByRouteIdOrderBySequence(10L)).thenReturn(List.of(wrongWarehouseOrder));
+
+        String message = publishFailure();
+
+        assertTrue(message.contains("含有不同出貨倉庫的訂單：DO-WRONG-WAREHOUSE"), message);
+    }
+
+    @Test
     void 休假_請假_尚未安排都擋下_訊息有車牌與姓名() {
         givenDriver(1L, "王小明", true);
         givenDriver(2L, "李大華", true);

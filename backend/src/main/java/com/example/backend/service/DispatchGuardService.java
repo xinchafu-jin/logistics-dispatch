@@ -105,13 +105,19 @@ public class DispatchGuardService {
             VehiclesEntity vehicle = vehiclesDAO.findById(route.getVehicleId()).orElse(null);
             String label = routeLabel(route, vehicle);
 
+            List<String> wrongWarehouseOrders = activeOrders.stream()
+                    .filter(order -> !Objects.equals(route.getWarehouseId(), order.getWarehouseId()))
+                    .map(OrdersEntity::getOrderNumber)
+                    .toList();
+            if (!wrongWarehouseOrders.isEmpty()) {
+                problems.add(label + " 含有不同出貨倉庫的訂單："
+                        + String.join("、", wrongWarehouseOrders));
+            }
+
             if (route.getDriverId() == null) {
                 problems.add(label + " 尚未指派司機");
             } else {
                 DriversEntity driver = driversEntityMap.get(route.getDriverId());
-                if (driver != null && !Objects.equals(route.getWarehouseId(), driver.getWarehouseId())) {
-                    problems.add(label + "：司機 " + driver.getName() + " 不屬於這個倉庫，請重新指派司機");
-                }
                 if (monthPublished) {
                     // 月班表沒發布的情況上面已經整體列過，有發布才逐位檢查司機當天的班次
                     DriverShiftsEntity shift = shiftsEntityMap.get(route.getDriverId());

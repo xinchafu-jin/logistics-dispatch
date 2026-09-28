@@ -77,6 +77,16 @@ export class DriverOperationsService {
     return this.http.get<DriverTasksResponse>('/api/driver/tasks/today');
   }
 
+  getTasksByDate(date: string): Observable<DriverTasksResponse> {
+    return this.http.get<DriverTasksResponse>('/api/driver/tasks', {
+      params: new HttpParams().set('date', date),
+    });
+  }
+
+  getUpcomingTasks(): Observable<DriverTasksResponse[]> {
+    return this.http.get<DriverTasksResponse[]>('/api/driver/tasks/upcoming');
+  }
+
   getPreTripInspection(routeId: number): Observable<PreTripInspectionResult> {
     return this.http.get<PreTripInspectionResult>('/api/driver/pre-trip', {params: {routeId}});
   }

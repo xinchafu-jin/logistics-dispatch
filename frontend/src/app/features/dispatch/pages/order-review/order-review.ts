@@ -401,8 +401,8 @@ export class OrderReview implements OnInit {
         this.activeForm.set(null);
         this.editingOrderId.set(null);
       },
-      error: () => {
-        this.formError.set('儲存失敗，請檢查訂單欄位後再試。');
+      error: (error: unknown) => {
+        this.formError.set(describeError(error));
         this.isSaving.set(false);
       },
     });
@@ -598,8 +598,8 @@ export class OrderReview implements OnInit {
           );
           this.actionMessage.set(successMessage);
         },
-        error: () => {
-          this.actionMessage.set('訂單狀態更新失敗，請稍後再試。');
+        error: (error: unknown) => {
+          this.actionMessage.set(describeError(error));
         },
       });
   }

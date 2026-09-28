@@ -121,10 +121,16 @@
       <!-- 分頁內層：排車條件 + 編成盤面 -->
       <div class="tab-panel">
       <section class="board-toolbar" aria-label="排車條件">
-        <div class="toolbar-field toolbar-date">
-          <span>配送日期</span>
-          <strong>{{ dispatchDateLabel() }}</strong>
-        </div>
+        <label class="toolbar-field toolbar-date">
+          <span>配送日期（可預排未來日期）</span>
+          <input
+            type="date"
+            [min]="todayDate"
+            [value]="dispatchDate()"
+            [disabled]="busy()"
+            (change)="selectFutureDate($event)"
+          />
+        </label>
 
         <label class="toolbar-field">
           <span>出貨倉庫</span>
@@ -257,13 +263,11 @@
                 <select
                   class="board-driver lane-driver-select"
                   [attr.aria-label]="'指派司機 ' + (route.plateNumber || '空白格')"
-                  [class.is-unassigned]="route.driverId === null || assignedDriverOutsideWarehouse(route)"
+                  [class.is-unassigned]="route.driverId === null"
                   [disabled]="busy() || route.isMaintenance || published()"
                   (change)="onDriverChange(route, $event)"
                 >
-                  <option value="" [selected]="route.driverId === null || assignedDriverOutsideWarehouse(route)">
-                    {{ assignedDriverOutsideWarehouse(route) ? '司機歸屬已變更，請重新指派' : '未指派司機' }}
-                  </option>
+                  <option value="" [selected]="route.driverId === null">未指派司機</option>
                   @for (option of driverOptions(route); track option.id) {
                     <option
                       [value]="option.id"

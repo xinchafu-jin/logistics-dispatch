@@ -152,6 +152,21 @@ public class DriverPortalController {
         return driverTasksService.findToday(driverId(jwt));
     }
 
+    /** 取得登入司機指定日期已發布的配送任務。 */
+    @GetMapping("/tasks")
+    public DriverTasksResponse findTasksByDate(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
+    ) {
+        return driverTasksService.findByDate(driverId(jwt), date);
+    }
+
+    /** 取得登入司機今天之後所有已發布任務，讓司機先確認日期與出發倉庫。 */
+    @GetMapping("/tasks/upcoming")
+    public List<DriverTasksResponse> findUpcomingTasks(@AuthenticationPrincipal Jwt jwt) {
+        return driverTasksService.findUpcoming(driverId(jwt));
+    }
+
     @PostMapping("/emergency-leave-requests")
     public EmergencyLeaveResponse requestEmergencyLeave(
             @AuthenticationPrincipal Jwt jwt,

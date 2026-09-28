@@ -273,6 +273,9 @@
             <span>配送日期</span>
             <input type="date" required [value]="orderForm().deliveryDate" (input)="updateOrderText('deliveryDate', $event)" />
           </label>
+          <p class="order-form__wide scheduling-rule-hint">
+            訂單可指定未來配送日；核准進入待排車前，系統會檢查門市是否位於出貨倉庫的允許配送範圍內。
+          </p>
           <label>
             <span>箱數</span>
             <input type="number" min="1" required [value]="orderForm().boxCount" (input)="updateOrderNumber('boxCount', $event)" />

@@ -36,6 +36,7 @@ public class DispatchService {
     private final DriversDAO driversDAO;
     private final OsrmClient osrmClient;
     private final RouteOptimizer routeOptimizer;
+    private final OrderDispatchEligibilityService dispatchEligibilityService;
 
     public DispatchService(OrdersDAO ordersDAO,
                            VehiclesDAO vehiclesDAO,
@@ -44,7 +45,8 @@ public class DispatchService {
                            RoutesDAO routesDAO,
                            DriversDAO driversDAO,
                            OsrmClient osrmClient,
-                           RouteOptimizer routeOptimizer) {
+                           RouteOptimizer routeOptimizer,
+                           OrderDispatchEligibilityService dispatchEligibilityService) {
         this.ordersDAO = ordersDAO;
         this.vehiclesDAO = vehiclesDAO;
         this.warehousesDAO = warehousesDAO;
@@ -53,6 +55,7 @@ public class DispatchService {
         this.driversDAO = driversDAO;
         this.osrmClient = osrmClient;
         this.routeOptimizer = routeOptimizer;
+        this.dispatchEligibilityService = dispatchEligibilityService;
     }
 
     public DispatchResponse optimize(LocalDate date, Long warehouseId, List<Long> vehicleIds) {
@@ -121,6 +124,7 @@ public class DispatchService {
             if (store == null) {
                 throw new IllegalStateException("訂單 " + order.getId() + " 找不到門市：" + order.getStoreId());
             }
+            dispatchEligibilityService.assertEligible(store, warehousesEntity);
             locations.add(new double[]{store.getLng(), store.getLat()});
         }
 
@@ -302,12 +306,8 @@ public class DispatchService {
                 throw new IllegalArgumentException(
                         "司機 " + driver.getName() + " 目前非在職狀態，無法指派");
             }
-            if (!warehouseId.equals(driver.getWarehouseId())) {
-                throw new IllegalArgumentException("司機 " + driver.getName()
-                        + " 不屬於目前倉庫，請先在人車資源設定或調整所屬倉庫");
-            }
         }
-        // 司機轉倉後仍不能同一天出現在兩條路線，所以要查整天而不是只查這個倉。
+        // 司機可以依不同日期跨倉出車，但同一天只能從一個倉庫出發、跑一條路線。
         // 本倉的草稿等一下就會被 clearExistingDraftRoutes 清掉，不算佔用。
         for (RoutesEntity other : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
             if (warehouseId.equals(other.getWarehouseId())) {
@@ -336,9 +336,6 @@ public class DispatchService {
         }
         // ══ 驗證到此結束，以下開始改資料 ══
 
-        // 清掉當天既有草稿並解綁訂單；沒被重新指派的訂單就自動留在未排入池
-        Map<Long, RoutesEntity> reusableRoutes = clearExistingDraftRoutes(date, warehouseId);
-
         // 距離矩陣的索引：0 是倉庫，其後依訂單在請求中出現的順序排列
         List<OrdersEntity> assignedOrders = new ArrayList<>();
         Map<Long, Integer> locationIndex = new HashMap<>();
@@ -366,8 +363,12 @@ public class DispatchService {
                 throw new IllegalStateException(
                         "訂單 " + order.getId() + " 找不到門市：" + order.getStoreId());
             }
+            dispatchEligibilityService.assertEligible(store, warehousesEntity);
             locations.add(new double[]{store.getLng(), store.getLat()});
         }
+
+        // 所有驗證通過後才清掉既有草稿；超距離訂單不能用手動拖曳繞過規則。
+        Map<Long, RoutesEntity> reusableRoutes = clearExistingDraftRoutes(date, warehouseId);
 
         // 一次算完整矩陣，各路線再依索引累加相鄰兩點的距離
         long[][] matrix = osrmClient.table(locations);

@@ -313,39 +313,59 @@
       @if (activeTab() === 'tasks') {
         <div class="panel-heading">
           <p class="eyebrow">任務</p>
-          <h1>今日任務</h1>
+          <h1>{{ isTodaySelected() ? '今日任務' : '任務' }}</h1>
         </div>
-        @if (taskActionMessage()) {
+        <div class="task-date-bar">
+          <div class="task-date-picker">
+            <button type="button" aria-label="前一天" (click)="moveTaskDate(-1)">
+              <mat-icon aria-hidden="true">chevron_left</mat-icon>
+            </button>
+            <label class="task-date-input">
+              <span>配送日期</span>
+              <input #taskDatePicker type="date" [value]="selectedTaskDate()" (change)="selectTaskDate(taskDatePicker.value)" />
+            </label>
+            <button type="button" aria-label="後一天" (click)="moveTaskDate(1)">
+              <mat-icon aria-hidden="true">chevron_right</mat-icon>
+            </button>
+          </div>
+          <div class="task-departure-warehouse">
+            <span>出發倉庫</span>
+            <strong>{{ departureWarehouses() }}</strong>
+          </div>
+        </div>
+        @if (isTodaySelected() && taskActionMessage()) {
           <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
         }
-        @if (taskActionError()) {
+        @if (isTodaySelected() && taskActionError()) {
           <p class="task-feedback is-error">{{ taskActionError() }}</p>
         }
-        @if (taskViewState() === 'loading') {
+        @if (visibleTaskViewState() === 'loading') {
           <div class="empty-state">
             <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
-            <h2>正在取得今日任務</h2>
+            <h2>正在取得所選日期的任務</h2>
           </div>
-        } @else if (taskViewState() === 'error') {
+        } @else if (visibleTaskViewState() === 'error') {
           <div class="empty-state">
             <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
             <h2>任務暫時無法取得</h2>
-            <p>{{ taskError() }}</p>
+            <p>{{ visibleTaskError() }}</p>
           </div>
-        } @else if (taskViewState() === 'empty') {
+        } @else if (visibleTaskViewState() === 'empty') {
           <div class="empty-state">
             <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
-            <h2>今天沒有已發布任務</h2>
-            <p>主管發布路線後，任務與導航目的地會顯示在這裡。</p>
+            <h2>所選日期沒有已發布任務</h2>
+            <p>主管發布路線後，該日任務會顯示在這裡。</p>
           </div>
-        } @else if (todayTasks(); as tasks) {
+        } @else if (isTodaySelected()) {
+          @if (todayTasks(); as tasks) {
           <div class="task-route-list">
             @for (route of tasks.routes; track route.routeId) {
               <article class="task-route-card">
                 <header class="task-route-heading">
                   <div>
                     <p>路線 {{ route.routeId }}</p>
-                    <h2>{{ route.warehouse.name }}</h2>
+                    <h2>出發倉庫：{{ route.warehouse.name }}</h2>
+                    <small>{{ route.warehouse.address }}</small>
                   </div>
                   <span>{{ route.vehicle.plateNumber }}</span>
                 </header>
@@ -622,6 +642,40 @@
               </article>
             }
           </div>
+          }
+        } @else if (datedTasks(); as tasks) {
+            <div class="task-route-list">
+              @for (route of tasks.routes; track route.routeId) {
+                  <article class="task-route-card future-task-card">
+                    <header class="task-route-heading">
+                      <div>
+                        <p>路線 {{ route.routeId }}</p>
+                        <h2>出發倉庫：{{ route.warehouse.name }}</h2>
+                        <small>{{ route.warehouse.address }}</small>
+                      </div>
+                      <span>{{ route.vehicle.plateNumber }}</span>
+                    </header>
+                    <p class="task-route-meta">
+                      {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
+                    </p>
+                    <ol class="task-stop-list">
+                      @for (stop of route.stops; track stop.orderId) {
+                        <li class="task-stop future-task-stop">
+                          <span class="stop-sequence">{{ stop.sequence }}</span>
+                          <div class="task-stop-copy">
+                            <strong>{{ stop.storeName }}</strong>
+                            <small>{{ stop.address }}</small>
+                            <span>{{ stop.expectedBoxCount }} 箱</span>
+                            <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                              {{ taskStatusLabel(stop.orderStatus) }}
+                            </em>
+                          </div>
+                        </li>
+                      }
+                    </ol>
+                  </article>
+              }
+            </div>
         }
       } @else if (activeTab() === 'schedule') {
         <div class="panel-heading">

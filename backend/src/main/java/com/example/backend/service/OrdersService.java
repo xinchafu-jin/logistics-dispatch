@@ -27,15 +27,18 @@ public class OrdersService {
     private final OrdersDAO ordersDAO;
     private final StoresDAO storesDAO;
     private final WarehousesDAO warehousesDAO;
+    private final OrderDispatchEligibilityService dispatchEligibilityService;
 
     public OrdersService(
             OrdersDAO ordersDAO,
             StoresDAO storesDAO,
-            WarehousesDAO warehousesDAO
+            WarehousesDAO warehousesDAO,
+            OrderDispatchEligibilityService dispatchEligibilityService
     ) {
         this.ordersDAO = ordersDAO;
         this.storesDAO = storesDAO;
         this.warehousesDAO = warehousesDAO;
+        this.dispatchEligibilityService = dispatchEligibilityService;
     }
 
     @Transactional(readOnly = true)
@@ -91,6 +94,9 @@ public class OrdersService {
             throw new IllegalArgumentException("訂單編號已存在：" + dto.getOrderNumber());
         }
         apply(dto, entity);
+        if (entity.getStatus() == OrderStatus.CONFIRMED) {
+            dispatchEligibilityService.assertEligible(entity.getStoreId(), entity.getWarehouseId());
+        }
         return toDTO(ordersDAO.save(entity));
     }
 
@@ -114,10 +120,14 @@ public class OrdersService {
                 throw new IllegalArgumentException("只有待確認訂單可以確認");
             }
             applyReviewFields(request, entity);
+            dispatchEligibilityService.assertEligible(entity.getStoreId(), entity.getWarehouseId());
             entity.setStatus(OrderStatus.CONFIRMED);
         } else if (request.getAction() == OrderReviewAction.UPDATE) {
             requireEditable(entity);
             applyReviewFields(request, entity);
+            if (entity.getStatus() == OrderStatus.CONFIRMED) {
+                dispatchEligibilityService.assertEligible(entity.getStoreId(), entity.getWarehouseId());
+            }
         } else if (request.getAction() == OrderReviewAction.REJECT
                 || request.getAction() == OrderReviewAction.CANCEL) {
             requireEditable(entity);

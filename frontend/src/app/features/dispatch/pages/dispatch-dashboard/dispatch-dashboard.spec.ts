@@ -84,6 +84,21 @@ describe('DispatchDashboard 發布與撤回', () => {
     expect(fixture.nativeElement.querySelector('.published-route-card')).not.toBeNull();
   });
 
+  it('allows jumping directly to a future dispatch date', () => {
+    const future = new Date(now.getFullYear(), now.getMonth() + 2, 15);
+    const futureDate = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}-${String(future.getDate()).padStart(2, '0')}`;
+    const input = fixture.nativeElement.querySelector('.toolbar-date input[type="date"]') as HTMLInputElement;
+
+    expect(input.min).toBe(date);
+    input.value = futureDate;
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    expect(page.dispatchDate()).toBe(futureDate);
+    expect(api.getScheduleMonth).toHaveBeenLastCalledWith(futureDate.slice(0, 7));
+    expect(api.getDispatchBoard).toHaveBeenLastCalledWith(futureDate, 1);
+  });
+
   it('starts with mileage details folded and supports individual and all-card toggles', () => {
     const route = page.routes()[0];
     page.routes.set([route, {...route, slotKey: 'second', routeId: 2, plateNumber: 'CAR-SECOND'}]);
@@ -172,7 +187,7 @@ describe('DispatchDashboard 發布與撤回', () => {
     expect(page.maintenanceEstimatePending(page.routes()[0])).toBe(true);
   });
 
-  it('never offers another warehouse driver even when previously assigned, and changes options when switching warehouses', () => {
+  it('offers active drivers from every warehouse so they can follow the order warehouse', () => {
     page.drivers.set([
       {id: 1, warehouseId: 2, account: 'TRANSFERRED', name: '已轉倉司機', isActive: true, workStart: '08:00', workEnd: '17:00', restDuration: 60},
       {id: 2, warehouseId: 1, account: 'LOCAL', name: '本倉司機', isActive: true, workStart: '08:00', workEnd: '17:00', restDuration: 60},
@@ -181,33 +196,29 @@ describe('DispatchDashboard 發布與撤回', () => {
       {id: 5, warehouseId: 1, account: 'INACTIVE', name: '停用', isActive: false, workStart: '08:00', workEnd: '17:00', restDuration: 60},
     ]);
     const options = page.driverOptions(page.routes()[0]);
-    expect(options.map(option => option.id)).toEqual([2]);
-    expect(page.assignedDriverOutsideWarehouse(page.routes()[0])).toBe(true);
+    expect(options.map(option => option.id)).toEqual([1, 2, 3, 4]);
     page.warehouseId.set(2);
-    expect(page.driverOptions(page.routes()[0]).map(option => option.id)).toEqual([1, 3]);
-    expect(page.assignedDriverOutsideWarehouse(page.routes()[0])).toBe(false);
+    expect(page.driverOptions(page.routes()[0]).map(option => option.id)).toEqual([1, 2, 3, 4]);
   });
 
-  it('refreshes driver affiliation when resources change in another page', () => {
+  it('keeps an active driver eligible when their home warehouse changes', () => {
     api.getDrivers.mockReturnValue(of([{id: 1, warehouseId: 2, account: 'TEST', name: '測試司機', isActive: true}]));
     vi.useFakeTimers(); pushes.next({resourcesChanged: true}); vi.advanceTimersByTime(600); fixture.detectChanges();
     expect(page.drivers()[0].warehouseId).toBe(2);
-    expect(page.driverOptions(page.routes()[0])).toEqual([]);
-    expect(page.routeScheduleProblem(page.routes()[0])).toContain('已轉至其他倉庫');
+    expect(page.driverOptions(page.routes()[0]).map(option => option.id)).toEqual([1]);
+    expect(page.routeScheduleProblem(page.routes()[0])).toBeNull();
   });
 
-  it('shows a reassign placeholder without another warehouse name in the draft driver dropdown', () => {
+  it('keeps a cross-warehouse driver selected on a draft route', () => {
     withdrawButton().click(); confirm();
     page.drivers.update(drivers => drivers.map(driver => ({...driver, warehouseId: 2}))); fixture.detectChanges();
     const select = fixture.nativeElement.querySelector('.slot-grid .board-lane select') as HTMLSelectElement;
-    expect(select.textContent).toContain('司機歸屬已變更，請重新指派');
-    expect(select.textContent).not.toContain('測試司機');
-    expect(select.options[select.selectedIndex].textContent).toContain('請重新指派');
-    // 保留未發布草稿的原指派，讓主管明確重新選人；不偷偷修改既有資料。
+    expect(select.textContent).toContain('測試司機');
+    expect(select.value).toBe('1');
     expect(page.routes()[0].driverId).toBe(1);
   });
 
-  it('disables same-warehouse drivers on day off, leave, no shift or an unpublished schedule', () => {
+  it('disables drivers on day off, leave, no shift or an unpublished schedule', () => {
     withdrawButton().click(); confirm();
     const shift = page.shiftsByDriverId().get(1)!;
     for (const shiftType of ['DAY_OFF', 'LEAVE', 'UNASSIGNED'] as const) {
@@ -227,7 +238,7 @@ describe('DispatchDashboard 發布與撤回', () => {
     withdrawButton().click(); confirm();
     const route = page.routes()[0];
     page.onDriverChange(route, {target: {value: '999'}} as unknown as Event);
-    expect(page.boardError()).toContain('不屬於目前倉庫'); expect(page.routes()[0].driverId).toBe(1);
+    expect(page.boardError()).toContain('目前無法指派'); expect(page.routes()[0].driverId).toBe(1);
     expect(api.reassignDispatch).not.toHaveBeenCalled();
     page.shiftsByDriverId.set(new Map());
     page.onDriverChange(route, {target: {value: '1'}} as unknown as Event);

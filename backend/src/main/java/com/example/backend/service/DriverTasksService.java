@@ -1,6 +1,7 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.RouteStatus;
+import com.example.backend.constants.OrderStatus;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -59,17 +60,56 @@ public class DriverTasksService {
     }
 
     public DriverTasksResponse findToday(Long driverId) {
+        DriversEntity driver = requireActiveDriver(driverId);
+        LocalDate today = LocalDate.now(TAIPEI);
+        List<RoutesEntity> routes = routesDAO.findByDateAndDriverIdAndStatusOrderByIdAsc(
+                today, driverId, RouteStatus.PUBLISHED);
+        return buildResponse(today, driver, routes);
+    }
+
+    public DriverTasksResponse findByDate(Long driverId, LocalDate date) {
+        DriversEntity driver = requireActiveDriver(driverId);
+        List<RoutesEntity> routes = routesDAO.findByDateAndDriverIdAndStatusOrderByIdAsc(
+                date, driverId, RouteStatus.PUBLISHED);
+        return buildResponse(date, driver, routes);
+    }
+
+    /**
+     * 今天之後已發布給登入司機的任務。依日期分組；同一天受 routes 的唯一限制保護，
+     * 只能有一條路線，因此當天全部訂單都會從同一個倉庫出發。
+     */
+    public List<DriverTasksResponse> findUpcoming(Long driverId) {
+        DriversEntity driver = requireActiveDriver(driverId);
+        LocalDate today = LocalDate.now(TAIPEI);
+        List<RoutesEntity> routes = routesDAO
+                .findByDateGreaterThanAndDriverIdAndStatusOrderByDateAscIdAsc(
+                        today, driverId, RouteStatus.PUBLISHED);
+
+        Map<LocalDate, List<RoutesEntity>> routesByDate = new java.util.LinkedHashMap<>();
+        for (RoutesEntity route : routes) {
+            routesByDate.computeIfAbsent(route.getDate(), ignored -> new ArrayList<>()).add(route);
+        }
+        return routesByDate.entrySet().stream()
+                .map(entry -> buildResponse(entry.getKey(), driver, entry.getValue()))
+                .toList();
+    }
+
+    private DriversEntity requireActiveDriver(Long driverId) {
         DriversEntity driver = driversDAO.findById(driverId)
                 .orElseThrow(() -> new EntityNotFoundException("找不到司機，ID：" + driverId));
         if (!Boolean.TRUE.equals(driver.getIsActive())) {
             throw new IllegalArgumentException("司機帳號目前未啟用");
         }
+        return driver;
+    }
 
-        LocalDate today = LocalDate.now(TAIPEI);
-        List<RoutesEntity> routes = routesDAO.findByDateAndDriverIdAndStatusOrderByIdAsc(
-                today, driverId, RouteStatus.PUBLISHED);
+    private DriverTasksResponse buildResponse(
+            LocalDate date,
+            DriversEntity driver,
+            List<RoutesEntity> routes
+    ) {
         if (routes.isEmpty()) {
-            return new DriverTasksResponse(today, driverId, driver.getName(), List.of());
+            return new DriverTasksResponse(date, driver.getId(), driver.getName(), List.of());
         }
 
         Set<Long> routeIds = new LinkedHashSet<>();
@@ -81,8 +121,12 @@ public class DriverTasksService {
             vehicleIds.add(route.getVehicleId());
         }
 
+        boolean historical = date.isBefore(LocalDate.now(TAIPEI));
         List<OrdersEntity> orders = new ArrayList<>(ordersDAO.findByRouteIdIn(new ArrayList<>(routeIds)).stream()
-                .filter(order -> order.getStatus().isActive())
+                .filter(order -> order.getStatus().isActive()
+                        || historical && (order.getStatus() == OrderStatus.COMPLETED
+                        || order.getStatus() == OrderStatus.NO_SIGNATURE
+                        || order.getStatus() == OrderStatus.FAILED))
                 .toList());
         orders.sort(Comparator
                 .comparing(OrdersEntity::getRouteId)
@@ -150,7 +194,7 @@ public class DriverTasksService {
             ));
         }
 
-        return new DriverTasksResponse(today, driverId, driver.getName(), routeTasks);
+        return new DriverTasksResponse(date, driver.getId(), driver.getName(), routeTasks);
     }
 
     private DriverTasksResponse.Warehouse toWarehouse(WarehousesEntity warehouse) {

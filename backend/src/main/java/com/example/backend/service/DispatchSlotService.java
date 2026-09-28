@@ -97,10 +97,6 @@ public class DispatchSlotService {
                 plan.getNotices().add("找不到司機 " + slot.getDriverId() + "，" + vehicle.getPlateNumber() + " 先不帶司機");
                 continue;
             }
-            if (!warehouseId.equals(drivers.get(slot.getDriverId()).getWarehouseId())) {
-                plan.getNotices().add(who + " 不屬於目前倉庫，" + vehicle.getPlateNumber() + " 先不帶司機");
-                continue;
-            }
             if (takenElsewhere.containsKey(slot.getDriverId())) {
                 plan.getNotices().add(who + " 當天已排在其他倉的路線，" + vehicle.getPlateNumber() + " 先不帶司機");
                 continue;
