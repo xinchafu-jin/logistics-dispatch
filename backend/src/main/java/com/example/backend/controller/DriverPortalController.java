@@ -2,6 +2,7 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
+import com.example.backend.dto.respones.DriverAssignmentResponse;
 import com.example.backend.dto.respones.DriverMessageResponse;
 import com.example.backend.dto.respones.DriverLeaveResponse;
 import com.example.backend.dto.respones.DriverLeaveBatchResponse;
@@ -65,6 +66,7 @@ public class DriverPortalController {
     private final DriverLeaveRequestService driverLeaveRequestService;
     private final PreTripInspectionService preTripInspectionService;
     private final DepartureService departureService;
+    private final DriverAssignmentsService driverAssignmentsService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -82,7 +84,8 @@ public class DriverPortalController {
             DriverMessagesService driverMessagesService,
             DriverLeaveRequestService driverLeaveRequestService,
             PreTripInspectionService preTripInspectionService,
-            DepartureService departureService
+            DepartureService departureService,
+            DriverAssignmentsService driverAssignmentsService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -100,6 +103,7 @@ public class DriverPortalController {
         this.driverLeaveRequestService = driverLeaveRequestService;
         this.preTripInspectionService = preTripInspectionService;
         this.departureService = departureService;
+        this.driverAssignmentsService = driverAssignmentsService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -159,6 +163,16 @@ public class DriverPortalController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         return driverScheduleService.findPublishedForDriver(driverId(jwt), from, to);
+    }
+
+    /** 月曆用：指定期間內已發布給登入司機的路線，那天在哪個倉庫、開哪台車。 */
+    @GetMapping("/assignments")
+    public List<DriverAssignmentResponse> findAssignments(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return driverAssignmentsService.findPublished(driverId(jwt), from, to);
     }
 
     /** 取得登入司機今天已發布的配送任務。 */
