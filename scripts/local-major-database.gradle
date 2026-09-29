@@ -1,0 +1,41 @@
+// Local, opt-in tooling. Neither application startup nor normal Gradle builds seed data.
+allprojects {
+    afterEvaluate {
+        tasks.register('compileLocalMajorDatabaseTools', JavaCompile) {
+            source = files(rootProject.file('../scripts/ReconcileMajorDatabase.java'),
+                    rootProject.file('../scripts/SeedWarehouseLoadingDemo.java'))
+            classpath = configurations.runtimeClasspath
+            destinationDirectory = layout.buildDirectory.dir('local-major-db/classes')
+            options.encoding = 'UTF-8'
+            javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+        }
+        tasks.register('localMajorV16', JavaExec) {
+            dependsOn 'compileLocalMajorDatabaseTools', 'classes'
+            classpath = files(layout.buildDirectory.dir('local-major-db/classes')) + sourceSets.main.output + configurations.runtimeClasspath
+            mainClass = 'ReconcileMajorDatabase'
+            jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+            doFirst {
+                for (String key : ['dbMode', 'dbTag', 'dbBackup']) {
+                    if (!project.hasProperty(key)) throw new GradleException("Missing -P${key}")
+                }
+                if (!(project.findProperty('dbMode') in ['v16-inspect', 'v16-align', 'schema-validate']))
+                    throw new GradleException('Only v16-inspect, v16-align or schema-validate is allowed by this task')
+                args rootProject.projectDir.absolutePath, project.findProperty('dbMode'),
+                        project.findProperty('dbTag'), project.findProperty('dbBackup')
+            }
+        }
+        tasks.register('localLoadingDemo', JavaExec) {
+            dependsOn 'compileLocalMajorDatabaseTools'
+            classpath = files(layout.buildDirectory.dir('local-major-db/classes')) + configurations.runtimeClasspath
+            mainClass = 'SeedWarehouseLoadingDemo'
+            jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+            doFirst {
+                for (String key : ['demoMode', 'demoDate', 'dbBackup']) {
+                    if (!project.hasProperty(key)) throw new GradleException("Missing -P${key}")
+                }
+                args rootProject.projectDir.absolutePath, project.findProperty('demoMode'),
+                        project.findProperty('demoDate'), project.findProperty('dbBackup')
+            }
+        }
+    }
+}

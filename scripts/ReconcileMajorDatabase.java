@@ -35,7 +35,7 @@ public class ReconcileMajorDatabase {
         if (backups.startsWith(backend.getParent())) throw new IllegalArgumentException("Backups must be outside the Git checkout");
     }
     public static void main(String[] args) throws Exception {
-        if (args.length != 4) throw new IllegalArgumentException("Usage: backend-directory prepare|diff|reset-rehearsal|rehearse|apply|verify|verify-rehearsal|cleanup timestamp backup-directory");
+        if (args.length != 4) throw new IllegalArgumentException("Usage: backend-directory prepare|diff|reset-rehearsal|rehearse|apply|verify|verify-rehearsal|cleanup|v16-inspect|v16-align|schema-validate timestamp backup-directory");
         ReconcileMajorDatabase tool = new ReconcileMajorDatabase(args);
         switch (args[1]) {
             case "prepare" -> tool.prepare();
@@ -53,6 +53,9 @@ public class ReconcileMajorDatabase {
             }
             case "verify" -> { tool.verifySchema(tool.source); tool.flyway(tool.source).validate(); }
             case "verify-rehearsal" -> { tool.verifySchema(tool.rehearsal); tool.flyway(tool.rehearsal).validate(); }
+            case "v16-inspect" -> tool.alignLegacyV16(false);
+            case "v16-align" -> tool.alignLegacyV16(true);
+            case "schema-validate" -> tool.validateEntitySchema();
             case "cleanup" -> tool.cleanup();
             default -> throw new IllegalArgumentException("Unknown mode");
         }
@@ -60,6 +63,123 @@ public class ReconcileMajorDatabase {
     Connection connect(String database) throws SQLException {
         String target = database == null ? url : url.replaceFirst("(?<=/)[^/?]+(?=\\?|$)", database);
         return DriverManager.getConnection(target, config.getProperty("DB_USER"), config.getProperty("DB_PASSWORD"));
+    }
+
+    /** Only the known local legacy V16 may be aligned; never repairs arbitrary migrations. */
+    void alignLegacyV16(boolean apply) throws Exception {
+        Flyway current = flyway(source);
+        var validation = current.validateWithResult();
+        try (Connection db = connect(source)) {
+            Column flag = columns(db).get("order_items.loading_mismatch_reported");
+            if (flag == null || !flag.type.equals("bit(1)") || flag.nullable
+                    || !Objects.equals(flag.defaultValue, "b'0'"))
+                throw new IllegalStateException("V16 column must already be BIT(1) NOT NULL DEFAULT b'0'; no history changes made");
+            if (validation.validationSuccessful) {
+                System.out.println("V16 VERIFIED: physical column and Flyway history match the branch; nothing changed.");
+                return;
+            }
+            String canonicalSql = Files.readString(backend.resolve(
+                    "src/main/resources/db/migration/V16__order_items_loading_mismatch_reported.sql"), StandardCharsets.UTF_8)
+                    .replace("\r\n", "\n");
+            String canonicalHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonicalSql.getBytes(StandardCharsets.UTF_8)));
+            if (!canonicalHash.equals("71d38013f565f61aff32ee0c1ec8cf0cfee5d44b44578f1f4b7f80f4a329a175"))
+                throw new IllegalStateException("Branch V16 is not the reviewed equivalent migration; refusing repair");
+            if (validation.invalidMigrations.isEmpty() || validation.invalidMigrations.stream().anyMatch(error ->
+                    !Objects.equals(error.version, "16") || !Set.of(
+                            org.flywaydb.core.api.CoreErrorCode.CHECKSUM_MISMATCH,
+                            org.flywaydb.core.api.CoreErrorCode.DESCRIPTION_MISMATCH).contains(error.errorDetails.errorCode)))
+                throw new IllegalStateException("Refusing repair: validation errors are not limited to the equivalent V16 rename");
+            try (Statement statement = db.createStatement(); ResultSet rows = statement.executeQuery(
+                    "SELECT version,type,script,checksum,success FROM flyway_schema_history ORDER BY installed_rank")) {
+                if (!rows.next() || !Objects.equals(rows.getString(1), "15")
+                        || !Objects.equals(rows.getString(2), "BASELINE") || !rows.getBoolean(5))
+                    throw new IllegalStateException("Expected the verified local V15 baseline");
+                if (!rows.next() || !Objects.equals(rows.getString(1), "16")
+                        || !Objects.equals(rows.getString(2), "SQL")
+                        || !Objects.equals(rows.getString(3), "V16__loading_item_mismatch.sql")
+                        || rows.getInt(4) != -1982334097 || !rows.getBoolean(5) || rows.next())
+                    throw new IllegalStateException("Expected only the known, successful legacy V16; refusing unrelated repairs");
+            }
+        }
+        System.out.println("V16 PLAN: legacy ALTER and branch's add-if-missing migration have the same verified column.");
+        System.out.println("Only Flyway V16 description/checksum metadata will be aligned; original script provenance and operational tables remain untouched.");
+        if (!apply) return;
+        // This operation changes only one history row, not schema. Idle application pools may stay online.
+        // Refuse active transactions and hold READ locks on every operational table while repairing history.
+        try (Connection db = connect(source); Statement statement = db.createStatement();
+             ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM information_schema.innodb_trx")) {
+            rows.next();
+            if (rows.getInt(1) != 0) throw new IllegalStateException("Active database transactions; retry during an idle period");
+        }
+        Files.createDirectories(backups);
+        backup("before-v16-alignment");
+        Map<String, Signature> before = new LinkedHashMap<>();
+        Map<String, List<String>> projections = new LinkedHashMap<>();
+        try (Connection db = connect(source)) {
+            Map<String, Column> schema = columns(db);
+            List<String> protectedTables = tables(db).stream().filter(table -> !table.equals("flyway_schema_history")).toList();
+            for (String table : protectedTables) {
+                List<String> names = schema.values().stream().filter(column -> column.table.equals(table))
+                        .map(column -> column.name).toList();
+                projections.put(table, names);
+            }
+            execute(db, "SET SESSION lock_wait_timeout=5");
+            execute(db, "LOCK TABLES " + String.join(",", protectedTables.stream().map(table -> quoted(table) + " READ").toList()));
+            try {
+                for (String table : protectedTables)
+                    before.put(table, signature(db, table, projections.get(table), false));
+                current.repair();
+                current.validate();
+                if (current.info().pending().length != 0)
+                    throw new IllegalStateException("Unexpected pending migrations after V16 alignment");
+                for (var entry : before.entrySet()) {
+                    if (!entry.getValue().equals(signature(db, entry.getKey(), projections.get(entry.getKey()), false)))
+                        throw new IllegalStateException("Data fingerprint changed in " + entry.getKey() + "; retain backup and investigate");
+                }
+            } finally {
+                execute(db, "UNLOCK TABLES");
+            }
+        }
+        StringBuilder receipt = new StringBuilder("Aligned verified equivalent legacy V16 to the branch migration.\n");
+        before.forEach((table, signature) -> receipt.append(table).append(" count=").append(signature.count)
+                .append(" sha256=").append(signature.sha256).append('\n'));
+        Files.writeString(backups.resolve("v16-alignment-verified.txt"), receipt, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+        System.out.println("V16 ALIGNED; all " + before.size() + " original table fingerprints unchanged. Backup: " + backups);
+    }
+
+    /** Validates the current compiled entities without starting Spring, schedulers, or schema generation. */
+    void validateEntitySchema() throws Exception {
+        flyway(source).validate();
+        var builder = new org.hibernate.boot.registry.StandardServiceRegistryBuilder()
+                .applySetting("hibernate.connection.driver_class", "com.mysql.cj.jdbc.Driver")
+                .applySetting("hibernate.connection.url", url)
+                .applySetting("hibernate.connection.username", config.getProperty("DB_USER"))
+                .applySetting("hibernate.connection.password", config.getProperty("DB_PASSWORD"))
+                .applySetting("hibernate.connection.pool_size", "1")
+                .applySetting("hibernate.hbm2ddl.auto", "validate")
+                .applySetting("hibernate.physical_naming_strategy", "org.hibernate.boot.model.naming.PhysicalNamingStrategySnakeCaseImpl");
+        var registry = builder.build();
+        try {
+            var mappings = new org.hibernate.boot.MetadataSources(registry);
+            int count = 0;
+            try (var files = Files.list(backend.resolve("src/main/java/com/example/backend/entity"))) {
+                for (Path file : files.filter(path -> path.getFileName().toString().endsWith(".java")).toList()) {
+                    String name = file.getFileName().toString().replaceFirst("\\.java$", "");
+                    Class<?> type = Class.forName("com.example.backend.entity." + name);
+                    if (type.isAnnotationPresent(jakarta.persistence.Entity.class)) {
+                        mappings.addAnnotatedClass(type);
+                        count++;
+                    }
+                }
+            }
+            if (count == 0) throw new IllegalStateException("No compiled entities found");
+            org.hibernate.tool.schema.spi.SchemaManagementToolCoordinator.process(
+                    mappings.buildMetadata(), registry, builder.getSettings(), null);
+            System.out.println("ENTITY SCHEMA VERIFIED: " + count + " current entities; no DDL or business data writes.");
+        } finally {
+            org.hibernate.boot.registry.StandardServiceRegistryBuilder.destroy(registry);
+        }
     }
     void requireOfflineSource() throws SQLException {
         try (Connection db = connect(source); PreparedStatement check = db.prepareStatement(

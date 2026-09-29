@@ -120,6 +120,13 @@ describe('MAJOR uses the complete V3 calendar leave interface', () => {
     expect(fixture.nativeElement.querySelector('.reply-notice')?.textContent).toContain('29 日准假');
   });
 
+  it('renders the leave application reason from the API requestReason field in the history', async () => {
+    page.leaveRequests.set([{...request(29), requestReason: '家庭安排'}]);
+    await render();
+    expect(fixture.nativeElement.querySelector('.schedule-history-item')?.textContent)
+      .toContain('原因：家庭安排');
+  });
+
   it('uses the V3 same-day entry and moves the calendar back to today', async () => {
     page.selectedScheduleDate.set(date(24));
     await openMode(1);

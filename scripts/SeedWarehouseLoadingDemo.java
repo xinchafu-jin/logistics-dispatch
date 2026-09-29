@@ -19,6 +19,7 @@ class SeedWarehouseLoadingDemo {
             throw new IllegalArgumentException("Usage: backend-directory inspect|seed YYYY-MM-DD backup-directory");
         Path backend = Path.of(args[0]).toAbsolutePath().normalize();
         LocalDate date = LocalDate.parse(args[2]);
+        String batchPrefix = PREFIX + date.toString().replace("-", "") + "-";
         if (!date.isBefore(LocalDate.now(ZoneId.of("Asia/Taipei"))))
             throw new IllegalArgumentException("Demo date must be in the past to avoid live or future dispatch tasks");
         Path backups = Path.of(args[3]).toAbsolutePath().normalize();
@@ -39,7 +40,7 @@ class SeedWarehouseLoadingDemo {
             List<Long> warehouses = ids(db, "SELECT id FROM warehouses ORDER BY id");
             List<Long> stores = ids(db, "SELECT id FROM stores ORDER BY id");
             if (warehouses.isEmpty() || stores.isEmpty()) throw new IllegalStateException("Existing warehouses and stores required");
-            long existing = scalar(db, "SELECT COUNT(*) FROM orders WHERE order_number LIKE ?", PREFIX + "%");
+            long existing = scalar(db, "SELECT COUNT(*) FROM orders WHERE order_number LIKE ?", batchPrefix + "%");
             System.out.println("DEMO date=" + date + " warehouses=" + warehouses.size() + " existing-marked-orders=" + existing);
             System.out.println("PLAN orders=" + warehouses.size() * 2 + " item-checks=" + warehouses.size() * 6
                     + " completed-deliveries=" + warehouses.size() + " closed-loading-cases=" + warehouses.size());
@@ -47,7 +48,11 @@ class SeedWarehouseLoadingDemo {
             System.out.println("SCREENSHOT_ORDER items=" + scalar(db,
                     "SELECT COUNT(*) FROM order_items i JOIN orders o ON i.order_id=o.id WHERE o.order_number=?", "DO-20260915-D7BEFAFF"));
             if (args[1].equals("inspect")) { db.setReadOnly(true); return; }
-            if (existing != 0) throw new IllegalStateException("Marked demo orders already exist; no duplicate or overwrite performed");
+            if (existing != 0) {
+                verify(db, warehouses.size(), batchPrefix);
+                System.out.println("SKIPPED: this complete marked demo batch already exists; no duplicate or overwrite performed.");
+                return;
+            }
             backup(config, db.getCatalog(), backups);
             db.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
             db.setAutoCommit(false);
@@ -59,26 +64,24 @@ class SeedWarehouseLoadingDemo {
                     long warehouse = warehouses.get(index), store = stores.get(index % stores.size());
                     LocalDateTime checkedAt = date.atTime(8, 0).plusMinutes(index * 10L);
                     for (boolean mismatch : List.of(false, true)) {
-                        String number = PREFIX + date.toString().replace("-", "") + "-" + warehouse + (mismatch ? "-X" : "-OK");
+                        String number = batchPrefix + warehouse + (mismatch ? "-X" : "-OK");
                         if (number.length() > 30) throw new IllegalStateException("Demo order number exceeds current schema width");
-                        int missingMilk = mismatch ? 1 + index % 3 : 0;
-                        int missingEggs = mismatch ? 2 : 0;
+                        int missingMilk = mismatch ? 1 : 0;
                         long order = add(db, inserted, "orders",
                                 "order_number,store_id,warehouse_id,delivery_date,status,box_count,source_vendor,item_description,notes,order_type,retry_count,loaded_at,created_at,updated_at",
                                 number, store, warehouse, date, mismatch ? "FAILED" : "COMPLETED", 10 + index,
-                                MARKER, "[示範] 鮮乳、雞蛋、冷凍雞肉；僅供報表展示", MARKER, "NORMAL", 0,
+                                MARKER, "[示範] 飲用水、麵包、鮮乳；僅供報表展示", MARKER, "NORMAL", 0,
                                 mismatch ? null : checkedAt, date.atTime(7, 0), checkedAt);
-                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes",
-                                order, "DEMO-MILK", "[示範] 鮮乳", 15, 15 - missingMilk, "瓶", 1, checkedAt, MARKER,
-                                mismatch ? "[示範] 清點少 " + missingMilk + " 瓶" : "[示範] 數量相符");
-                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes",
-                                order, "DEMO-EGG", "[示範] 雞蛋", 12, 12 - missingEggs, "盒", 2, checkedAt, MARKER,
-                                mismatch ? "[示範] 清點少 " + missingEggs + " 盒" : "[示範] 數量相符");
-                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes",
-                                order, "DEMO-CHICKEN", "[示範] 冷凍雞肉", 6, 6, "包", 3, checkedAt, MARKER, "[示範] 數量相符");
+                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes,loading_mismatch_reported",
+                                order, "DEMO-BOX-1", "[示範] 飲用水", 4 + index, 4 + index, "箱", 1, checkedAt, MARKER, "[示範] 數量相符", false);
+                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes,loading_mismatch_reported",
+                                order, "DEMO-BOX-2", "[示範] 麵包", 3, 3, "箱", 2, checkedAt, MARKER, "[示範] 數量相符", false);
+                        add(db, inserted, "order_items", "order_id,product_code,item_name,expected_quantity,loaded_quantity,unit,sequence,checked_at,notes,loading_notes,loading_mismatch_reported",
+                                order, "DEMO-BOX-3", "[示範] 鮮乳", 3, 3 - missingMilk, "箱", 3, checkedAt, MARKER,
+                                mismatch ? "[示範] 點交不符，少 1 箱" : "[示範] 數量相符", mismatch);
                         if (mismatch) {
                             add(db, inserted, "exception_cases", "order_id,type,status,description,created_at,handled_at,handled_by,resolution",
-                                    order, "LOADING_MISMATCH", "CLOSED", MARKER + "；鮮乳缺少 " + missingMilk + " 瓶、雞蛋缺少 2 盒",
+                                    order, "LOADING_MISMATCH", "CLOSED", MARKER + "；鮮乳缺少 1 箱",
                                     checkedAt, checkedAt.plusMinutes(30), "DEMO-LOAD-RPT", "[示範] 已查核；僅供展示，不需實際重送或派車");
                         } else {
                             add(db, inserted, "delivery_records", "order_id,arrived_at,delivered_at,handled_at,expected_box_count,delivered_box_count,shortage_box_count,damaged_box_count,replacement_required_box_count,no_signature,notes",
@@ -92,7 +95,10 @@ class SeedWarehouseLoadingDemo {
                     if (!old.equals(inventory(db, table, old.maxId())))
                         throw new IllegalStateException("Existing row fingerprint changed in " + table + "; rolling back");
                 }
-                verify(db, warehouses.size());
+                verify(db, warehouses.size(), batchPrefix);
+                if (scalar(db, "SELECT COUNT(*) FROM orders o WHERE o.order_number LIKE ? AND o.box_count<>(SELECT SUM(i.expected_quantity) FROM order_items i WHERE i.order_id=o.id)", batchPrefix + "%") != 0
+                        || scalar(db, "SELECT COUNT(*) FROM order_items i JOIN orders o ON i.order_id=o.id WHERE o.order_number LIKE ? AND i.unit='箱' AND i.loading_mismatch_reported=1 AND i.expected_quantity-i.loaded_quantity=1", batchPrefix + "%") != warehouses.size())
+                    throw new IllegalStateException("New demo box totals or mismatch flags do not match; rolling back");
                 StringBuilder receipt = new StringBuilder("Date: " + date + "\nMarker: " + MARKER + "\n");
                 before.forEach((table, rows) -> receipt.append(table).append(" original-count=").append(rows.count())
                         .append(" original-sha256=").append(rows.sha256()).append(" inserted-ids=").append(inserted.get(table)).append('\n'));
@@ -105,10 +111,11 @@ class SeedWarehouseLoadingDemo {
         }
     }
 
-    static void verify(Connection db, int warehouses) throws SQLException {
-        if (scalar(db, "SELECT COUNT(*) FROM orders WHERE order_number LIKE ?", PREFIX + "%") != warehouses * 2L
-                || scalar(db, "SELECT COUNT(*) FROM order_items i JOIN orders o ON i.order_id=o.id WHERE o.order_number LIKE ? AND i.loaded_quantity IS NOT NULL AND i.checked_at IS NOT NULL", PREFIX + "%") != warehouses * 6L
-                || scalar(db, "SELECT COUNT(*) FROM exception_cases e JOIN orders o ON e.order_id=o.id WHERE o.order_number LIKE ? AND e.type='LOADING_MISMATCH' AND e.status='CLOSED'", PREFIX + "%") != warehouses)
+    static void verify(Connection db, int warehouses, String batchPrefix) throws SQLException {
+        if (scalar(db, "SELECT COUNT(*) FROM orders WHERE order_number LIKE ?", batchPrefix + "%") != warehouses * 2L
+                || scalar(db, "SELECT COUNT(*) FROM order_items i JOIN orders o ON i.order_id=o.id WHERE o.order_number LIKE ? AND i.loaded_quantity IS NOT NULL AND i.checked_at IS NOT NULL", batchPrefix + "%") != warehouses * 6L
+                || scalar(db, "SELECT COUNT(*) FROM exception_cases e JOIN orders o ON e.order_id=o.id WHERE o.order_number LIKE ? AND e.type='LOADING_MISMATCH' AND e.status='CLOSED'", batchPrefix + "%") != warehouses
+                || scalar(db, "SELECT COUNT(*) FROM delivery_records d JOIN orders o ON d.order_id=o.id WHERE o.order_number LIKE ? AND d.no_signature=0 AND d.delivered_at IS NOT NULL", batchPrefix + "%") != warehouses)
             throw new IllegalStateException("Demo completeness check failed; rolling back");
     }
 

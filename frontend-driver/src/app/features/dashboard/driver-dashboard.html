@@ -946,8 +946,8 @@
                   @if (!request.fullDay && request.leaveStart && request.leaveEnd) {
                     <small>時段：{{ formatTime(request.leaveStart) }} - {{ formatTime(request.leaveEnd) }}</small>
                   }
-                  @if (request.reason) {
-                    <small>原因：{{ request.reason }}</small>
+                  @if (request.requestReason) {
+                    <small>原因：{{ request.requestReason }}</small>
                   }
                   @if (request.decisionReason) {
                     <p class="schedule-history-reply">主管回覆：{{ request.decisionReason }}</p>
