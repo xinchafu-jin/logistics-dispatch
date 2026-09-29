@@ -1,8 +1,10 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.request.AdminPasswordChangeDTO;
+import com.example.backend.dto.request.AdminProfileUpdateDTO;
 import com.example.backend.dto.request.AdminUsersDTO;
 import com.example.backend.dto.request.AiApiKeyDTO;
+import com.example.backend.dto.respones.AdminProfileResponse;
 import com.example.backend.dto.respones.AiApiKeyStatusResponse;
 import com.example.backend.service.AdminUsersService;
 import jakarta.validation.Valid;
@@ -32,6 +34,20 @@ public class AdminUsersController {
     public ResponseEntity<AdminUsersDTO> create(@Valid @RequestBody AdminUsersDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(adminUsersService.create(dto));
+    }
+
+    /** 自己的姓名、手機號碼（從資料庫讀，改名後不用重新登入就看得到）。 */
+    @GetMapping("/me")
+    public AdminProfileResponse getProfile(@AuthenticationPrincipal Jwt jwt) {
+        return adminUsersService.getProfile(adminId(jwt));
+    }
+
+    /** 修改自己的姓名、手機號碼；改手機要附目前的密碼。 */
+    @PutMapping("/me")
+    public AdminProfileResponse updateProfile(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody AdminProfileUpdateDTO dto) {
+        return adminUsersService.updateProfile(adminId(jwt), dto);
     }
 
     /** 已登入主管輸入原密碼後，修改自己的登入密碼。 */

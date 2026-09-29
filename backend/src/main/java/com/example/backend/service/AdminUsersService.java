@@ -4,7 +4,9 @@ import com.example.backend.dao.AdminUsersDAO;
 import com.example.backend.dto.request.AdminPasswordChangeDTO;
 import com.example.backend.dto.request.AdminPasswordResetDTO;
 import com.example.backend.dto.request.AdminPasswordResetVerificationDTO;
+import com.example.backend.dto.request.AdminProfileUpdateDTO;
 import com.example.backend.dto.request.AdminUsersDTO;
+import com.example.backend.dto.respones.AdminProfileResponse;
 import com.example.backend.dto.respones.AiApiKeyStatusResponse;
 import com.example.backend.entity.AdminUsersEntity;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
@@ -89,6 +91,42 @@ public class AdminUsersService {
 
         entity.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         adminUsersDAO.save(entity);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminProfileResponse getProfile(Long userId) {
+        return toProfile(findAdmin(userId));
+    }
+
+    /**
+     * 修改自己的姓名、手機號碼。主管身分由 JWT 的 userId 決定，不收前端指定要改誰。
+     *
+     * <p>手機號碼是忘記密碼時驗證身分用的：Token 被偷的人如果能直接換成自己的手機，
+     * 就能用忘記密碼把密碼改掉、永久拿走帳號。所以手機有變時要附目前的密碼，跟 changePassword 一樣；
+     * 只改姓名不用。</p>
+     *
+     * <p>姓名在登入 Token 裡（AuthService.issueToken），右上角名字、結案的處理人都讀 Token，
+     * 要重新登入才會換成新的；手機不在 Token 裡，存了就生效。</p>
+     */
+    public AdminProfileResponse updateProfile(Long userId, AdminProfileUpdateDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("個人資料不可空白");
+        }
+        validateRequired(dto.getName(), "姓名不可空白");
+        validateRequired(dto.getPhone(), "手機號碼不可空白");
+        String name = dto.getName().trim();
+        String phone = dto.getPhone().trim();
+
+        AdminUsersEntity entity = findAdmin(userId);
+        if (!phone.equals(entity.getPhone())) {
+            validateRequired(dto.getCurrentPassword(), "修改手機號碼需要輸入目前的密碼");
+            if (!passwordEncoder.matches(dto.getCurrentPassword(), entity.getPassword())) {
+                throw new IllegalArgumentException("目前的密碼不正確");
+            }
+        }
+        entity.setName(name);
+        entity.setPhone(phone);
+        return toProfile(adminUsersDAO.save(entity));
     }
 
     /** 查詢 Key 設定狀態。不解密，密文解不開時狀態頁仍打得開，使用者才進得去重新設定。 */
@@ -185,6 +223,10 @@ public class AdminUsersService {
         if (password.length() < 8 || password.length() > 12) {
             throw new IllegalArgumentException("密碼長度必須介於 8 到 12 字元");
         }
+    }
+
+    private AdminProfileResponse toProfile(AdminUsersEntity entity) {
+        return new AdminProfileResponse(entity.getAccount(), entity.getName(), entity.getPhone());
     }
 
     private AdminUsersDTO toDTO(AdminUsersEntity entity) {
