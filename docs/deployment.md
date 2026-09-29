@@ -497,34 +497,51 @@ MySQL 8.4 預設 `caching_sha2_password`，非加密連線下驅動要先索取�
 
 # 階段四：CI/CD
 
-分兩步，不要一次到位——一起上的話出問題分不清是佈署設定錯還是測試環境錯。
+實際上是兩個 workflow：`.github/workflows/ci.yml`（測試與建置驗證）與
+`.github/workflows/build-images.yml`（建映像、部署）。當初分兩步做，理由不變：
+一起上的話，出問題分不清是佈署設定錯還是測試環境錯。
 
-## 4-1 先做 CD
+## 4-1 CD：build-images.yml
 
-`.github/workflows/deploy.yml`，push 到 main 觸發。重點：
+push 到 main 觸發（`paths` 過濾：只改文件不會重新部署）。流程：
 
-- 用 `paths` 過濾，改後端不要觸發前端建置
-- 兩個前端的 lock file **分開快取**（`cache-dependency-path`）
-- 佈署到帶時間戳的目錄再切 symlink，出事能一秒回滾
-- 結尾一定要 `curl --retry 10 --retry-delay 3 -f .../actuator/health`，
-  後端啟動要十幾秒，沒確認就當成功會誤判
-- 需要的 GitHub Secrets：`VM_SSH_KEY`、`VM_HOST`
+```
+ci.yml（測試＋建置）→ 建映像推 ghcr.io → SSH 進 VM 拉新映像並重啟 → 健康檢查
+```
 
-後端重啟期間會停機數十秒，demo 環境可接受。
+- **CI 沒過就不建映像、不部署**：第一個 job 直接呼叫 `ci.yml`
+- 映像在 CI 建（`linux/amd64`）：VM 只有 4GB，Angular 的 AOT 編譯會 OOM
+- 部署是 `docker compose -f docker-compose.yml pull && up -d`，`-f` 不能省，
+  否則會吃到本機用的 override 而想在 VM 上建置
+- 結尾一定要 `curl --retry ... /actuator/health`：後端啟動要 20～40 秒，沒確認就當成功會誤判
+- 需要的 GitHub Secrets：`VM_SSH_KEY`、`VM_HOST`；VM 上要先用唯讀 PAT `docker login ghcr.io`，
+  PAT 到期時 pull 會失敗
+- 後端重啟期間會停機數十秒，demo 環境可接受
+- 回滾：每次都推 `:<commit sha>` 標籤，在 VM 上執行
+  `IMAGE_TAG=<舊 sha> docker compose -f docker-compose.yml up -d`。
+  注意資料庫 migration 只往前，回滾映像不會回滾 schema
 
-## 4-2 再加 CI
+## 4-2 CI：ci.yml
 
-現有測試：後端 JUnit 4 個、後台 spec 7 個、司機端 spec 3 個。
+push 到 `main` 以外的分支時跑，也是 CD 的第一關：
 
-**已知障礙**：
+- **後端**：起一顆全新空白的 MySQL 8.4 → Flyway CLI 從 V1 套到最新（順便驗證 migration 能從頭套完）
+  → 載入 `.github/ci/base-fixture.sql` → `./gradlew test`。失敗時把 HTML 測試報告留成 artifact
+- **兩個前端**（矩陣）：`ng test`（jsdom，不需要瀏覽器）→ `ng build`
+  （production build，會檢查 `angular.json` 的 budgets）
 
-- `AiApiKeyApiTest` 是完整 `@SpringBootTest` 且注入 `JdbcTemplate`，會真的讀寫資料庫；
-  GitHub runner 沒有 MySQL 會直接失敗
-- `backend/src/test/resources/` 是空的，測試會吃到 `application.properties` 的 `localhost:3306`
-- `OsrmClientTest` 需確認是否真的打 `localhost:5001`
+踩過的坑（都是在乾淨環境實測出來的）：
 
-**解法**：CI 裡起 MySQL service container + 新增 `application-test.properties` 指過去。
-或先用 `@Tag("integration")` 排除 DB 測試，之後再補。
+- **`APP_JWT_SECRET` 沒設，所有要啟動 Spring 的測試整批失敗**（`APP_JWT_SECRET 必須至少 32 bytes`）；
+  `APP_CRYPTO_PASSWORD`、`APP_CRYPTO_SALT` 也一樣。CI 用 run id 組出假值
+- **測試假設資料庫已有資料**：部分整合測試直接查最小 id 的倉庫與門市、要求司機 id 1、2 存在，
+  還要有一個停用的倉庫；空資料庫會在 setUp 就 NullPointerException。
+  所以載入一份合成的最小資料，它沒有任何可登入的帳密，也不進正式環境
+- **CI 不能只編譯**：曾經有一版 CI 只跑 `./gradlew classes` 不跑測試，
+  結果 JWT secret 這類設定問題整段時間都沒被發現
+- **時區**：runner 預設 UTC，台北凌晨時「今天」會差一天，所以固定 `TZ=Asia/Taipei`
+- **OSRM 不在 CI 裡**：需要路網的測試標了 `@DisabledIfEnvironmentVariable(named = "CI", matches = "true")`，
+  GitHub Actions 自動設 `CI=true` 所以會跳過，路網要在本機驗證
 
 ---
 
