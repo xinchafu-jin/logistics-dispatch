@@ -247,7 +247,12 @@ export interface LoadingRequest {
   items?: LoadingItemRequest[];
 }
 
-/** 相符時 orderStatus 是 LOADED；不符時是 FAILED，並帶回異常單與明日補送單 */
+export type LoadingMismatchRequest = {
+  orderId: number;
+  notes?: string;
+} & ({orderItemIds: number[]; orderItemId?: never} | {orderItemId: number; orderItemIds?: never});
+
+/** 相符時是 LOADED；不符時是 FAILED，並帶回異常與待主管確認的重建單。 */
 export interface LoadingResponse {
   orderId: number;
   orderStatus: DriverTaskOrderStatus;
@@ -266,7 +271,7 @@ export interface LoadingItemResult {
   orderItemId: number;
   itemName: string;
   expectedQuantity: number;
-  loadedQuantity: number;
+  loadedQuantity: number | null;
   unit: string;
   matched: boolean;
   checkedAt: string | null;

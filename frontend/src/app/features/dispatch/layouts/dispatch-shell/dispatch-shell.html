@@ -83,7 +83,7 @@
       <header class="notification-panel__header">
         <div>
           <p>主管待辦</p>
-          <h2>{{ notificationCount() ? notificationCount() + ' 項待處理' : '目前沒有待辦' }}</h2>
+          <h2>{{ notificationCount() ? notificationCount() + ' 項待處理' : notificationLoadFailed() ? '部分待辦未載入' : '目前沒有待辦' }}</h2>
         </div>
         <div class="notification-panel__header-actions">
           <button type="button" class="notification-refresh ui-btn-default" (click)="toggleNotifications()" title="關閉"
@@ -181,7 +181,7 @@
         }
 
         @if (!pendingEmergencyLeaves().length && !pendingTemporaryLeaveRequests().length
-          && !driverCases.waitingCases().length) {
+          && !driverCases.waitingCases().length && !notificationLoadFailed()) {
           <p class="notification-empty">目前沒有需要主管處理的申請。</p>
         }
       }

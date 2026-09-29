@@ -97,9 +97,6 @@
               <button type="button" (click)="openMetric('delivery-quality', 'within-window')"><span>收貨時段內抵達率</span><strong>{{ percent(delivery()?.receivingWindowRate ?? null) }}</strong><small>{{ number(delivery()?.windowArrivals ?? null) }} / {{ number(delivery()?.windowEligibleOrders ?? null) }} 筆</small></button>
               <button type="button" (click)="openMetric('delivery-quality', 'late-arrival')"><span>逾時抵達</span><strong>{{ number(delivery()?.lateArrivals ?? null) }}<small> 筆</small></strong></button>
             </div>
-            <div class="status-chips">
-              @for (item of orderTiles() ?? []; track item.metric) { @if (item.metric !== 'full') { <button type="button" [class.has-warning]="item.value > 0" (click)="openMetric('delivery-quality', item.metric)">{{ item.label }}<strong>{{ item.value }}</strong></button> } }
-            </div>
           </div>
           <div class="section-visual">
             <div class="chart-heading"><h4>司機交貨紀錄</h4><span>{{ scopeLabel() }}</span></div>
@@ -111,27 +108,27 @@
       <section class="detail-row ui-panel" id="exceptions" aria-labelledby="exceptions-title">
         <header class="area-header ui-panel__header">
           <div class="detail-name"><h3 id="exceptions-title">異常</h3></div>
-          <button type="button" class="row-link" (click)="openMetric('exceptions', 'open')">待處理案件明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
+          <button type="button" class="row-link" (click)="openSheet('exceptions')">異常案件明細<mat-icon aria-hidden="true">arrow_forward</mat-icon></button>
         </header>
         <div class="section-body">
           <div class="metric-overview">
-            <div class="score-item" [class.is-negative]="(caseStats()?.open ?? 0) > 0"><span class="score-label">本期目前待處理異常</span><strong>{{ number(caseStats()?.open ?? null) }}<small>件</small></strong>
-              @if (caseStats(); as cases) { <small>本期登錄 {{ number(cases.total) }} 件 · 已結案 {{ number(cases.closed) }} 件</small> }
-              @else { <small>案件資料暫時無法載入</small> }
+            <div class="score-item" [class.is-negative]="(issueTotal() ?? 0) > 0"><span class="score-label">本期累積異常</span><strong>{{ number(issueTotal()) }}<small>件</small></strong>
+              @if (issueTotal() === null) { <small>部分來源未載入，無法計算總數</small> }
             </div>
           </div>
           <div class="section-visual">
-            <div class="chart-heading"><h4>待處理異常類型</h4><span>目前狀態 · 單位：案件</span></div>
+            <div class="chart-heading"><h4>累積異常案件區分</h4><span>本期累積 · 單位：件</span></div>
             @if (issueChartHasData()) {
               <div class="issue-chart">
                 @for (item of issueTiles() ?? []; track item.metric) {
-                  <button type="button" class="issue-column" (click)="openMetric('exceptions', item.metric)" [attr.aria-label]="item.label + ' ' + item.value + ' 件，查看明細'">
-                    <span class="issue-plot"><span class="issue-fill" [style.height.%]="issueHeight(item.value)"><strong>{{ item.value }}</strong></span></span><span><mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>{{ item.label }}</span>
+                  <button type="button" class="issue-column" (click)="openMetric(item.sheet, item.metric)" [attr.aria-label]="item.label + ' ' + number(item.value) + ' ' + item.unit + '，查看明細'">
+                    <span class="issue-plot"><span class="issue-fill" [style.height.%]="issueHeight(item.value)"><strong>{{ number(item.value) }}<small>{{ item.unit }}</small></strong></span></span><span><mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>{{ item.label }}</span>
                   </button>
                 }
               </div>
-              <p class="evidence-note">其他待處理通報可點入查看原始類型與原因；倉庫點交不符亦可在倉庫區看訂單點交結果。</p>
-            } @else { <div class="chart-empty"><mat-icon aria-hidden="true">task_alt</mat-icon><span>{{ caseStats() ? '本期目前無待處理異常' : '異常案件資料未載入' }}</span></div> }
+              <p class="evidence-note">無人簽收及點交不符含已結案案件；未結訂單異常按到期未交付或逾期才交付的訂單計算。</p>
+            } @else { <div class="chart-empty"><mat-icon aria-hidden="true">task_alt</mat-icon><span>{{ issueChartEmptyLabel() }}</span></div> }
+            @if (exceptionError() || outcomeError()) { <p class="evidence-note">部分異常資料未載入，無法計算三類合計。</p> }
           </div>
         </div>
       </section>
@@ -143,9 +140,6 @@
         <div class="section-body">
           <div class="metric-overview">
             <div class="score-item"><span class="score-label">點交相符率</span><strong>{{ percent(warehouseSummary()?.matchRate ?? null) }}</strong><small>相符 {{ number(warehouseSummary()?.matchedOrders ?? null) }} / 已點交 {{ number(warehouseSummary()?.checkedOrders ?? null) }} 筆</small></div>
-            <div class="status-chips">
-              @for (item of loadingTiles() ?? []; track item.metric) { @if (item.metric !== 'matched') { <button type="button" [class.has-warning]="item.value > 0" (click)="openMetric('loading-quality', item.metric)">{{ item.label }}<strong>{{ item.value }}</strong></button> } }
-            </div>
           </div>
           <div class="section-visual">
             <div class="chart-heading"><h4>各倉點交相符率</h4><span>相符 / 已點交</span></div>
@@ -172,7 +166,7 @@
         <p>紀錄完整交付率＝司機完成交貨、實送等於應送且紀錄中無交付差異的訂單 ÷ 到期應配送訂單 × 100%。目前沒有門市驗收回覆，不代表收件人身分或逐項商品已獨立驗證。</p>
         <p>到期以預定配送日及目前門市收貨截止時間判斷；跨夜順延，缺時段以配送日結束判斷。不含待審核、取消及未到期訂單。</p>
         <p>收貨時段內抵達率＝在目前門市收貨時段內抵達 ÷ 有時段的到期應配送訂單 × 100%；不是客戶承諾準時交付率。缺抵達不算準時，缺時段不進此比例。</p>
-        <p>異常區顯示本期建立且目前仍待處理的案件；已結案不計入主數字與分類圖，但原始紀錄仍保留於歷史查詢。倉庫點交不符亦列入異常案件，倉庫區另以訂單點交結果分析，兩者口徑不同，不應相加。路線偏離目前沒有此分支的歷史報表資料來源，暫不計入；無人簽收尚非門市獨立確認。</p>
+        <p>本期累積異常＝右側無人簽收、倉庫點交不符、未結訂單異常三類件數加總，不是待處理率或不重複訂單數。前兩類依本期案件登錄日期統計，結案仍保留；第三類依本期預定配送日統計，超過門市收貨截止時間仍未交付，或逾期才完成交付，均保留。訂單完成但缺交付時間時不推定曾逾期。第三類目前由現存訂單狀態、交付時間及目前門市時段回推，尚無獨立的不可變逾期事件紀錄；若事後更改配送日期、門市時段或取消訂單，舊期數值可能重算。一般司機通報仍留在異常案件明細，暫不混進這三類。倉庫點交不符亦列入倉庫點交分析，兩區不可相加。路線偏離目前沒有此分支的歷史報表資料來源，暫不計入；無人簽收尚非門市獨立確認。</p>
         <p>點交相符率＝成功點交且無點交不符案件的訂單 ÷ 有點交結果的訂單 × 100%。倉庫指訂單的出貨倉庫，不是接單來源；目前沒有原料採購／品質檢驗紀錄，不能計算原料品質率。</p>
         <p>週別圖表僅顯示週一至週六；若有週日紀錄，仍保留於本期合計與明細。月份按自然週分組並裁切於當月，年度按月份分組。</p>
       </div>

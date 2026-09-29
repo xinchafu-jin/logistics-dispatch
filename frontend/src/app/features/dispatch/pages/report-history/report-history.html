@@ -1,5 +1,5 @@
 <main class="report-history-page ui-page">
-  <!-- 查詢條件：上排期間切換，下排日期區間、倉庫、門市、司機與預覽。頁面標題在外框表頭已經有了 -->
+  <!-- 查詢條件：上排期間切換，下排開始與結束日期、倉庫、門市、司機、車輛噸位與預覽。頁面標題在外框表頭已經有了 -->
   <section class="ui-panel" aria-label="報表查詢條件">
     <div class="ui-toolbar period-bar" aria-label="歷史報表期間">
       <div class="period-tabs ui-segmented" role="group" aria-label="期間類型">
@@ -17,21 +17,28 @@
 
     <div class="ui-toolbar query-panel">
       <div class="query-fields">
-        <!-- 起訖日期合成一個 Material 日期區間：同一個月曆點兩下選完，結束日不會選到起始日之前 -->
-        <label class="query-field date-range-field">
-          <span>查詢期間</span>
+        <label class="query-field date-field">
+          <span>開始日期</span>
           <mat-form-field class="admin-date-field" appearance="outline" subscriptSizing="dynamic">
-            <mat-date-range-input [rangePicker]="reportRangePicker" aria-label="查詢期間">
-              <input matStartDate placeholder="起始日期" [value]="fromDate()" (dateChange)="updateDate('from', $event.value)" />
-              <input matEndDate placeholder="結束日期" [value]="toDate()" (dateChange)="updateDate('to', $event.value)" />
-            </mat-date-range-input>
-            <mat-datepicker-toggle matIconSuffix [for]="reportRangePicker" />
-            <mat-date-range-picker #reportRangePicker [panelClass]="theme.dialogPanelClass()" />
+            <input matInput [matDatepicker]="fromPicker" aria-label="開始日期" placeholder="選擇開始日期"
+              [value]="fromDate()" (dateChange)="updateDate('from', $event.value)" />
+            <mat-datepicker-toggle matIconSuffix [for]="fromPicker" />
+            <mat-datepicker #fromPicker [panelClass]="theme.dialogPanelClass()" />
+          </mat-form-field>
+        </label>
+        <label class="query-field date-field">
+          <span>結束日期</span>
+          <mat-form-field class="admin-date-field" appearance="outline" subscriptSizing="dynamic">
+            <input matInput [matDatepicker]="toPicker" aria-label="結束日期" placeholder="選擇結束日期"
+              [value]="toDate()" (dateChange)="updateDate('to', $event.value)" />
+            <mat-datepicker-toggle matIconSuffix [for]="toPicker" />
+            <mat-datepicker #toPicker [panelClass]="theme.dialogPanelClass()" />
           </mat-form-field>
         </label>
         <label class="query-field"><span>出貨倉庫</span><select class="ui-input" [value]="warehouseId() ?? ''" (change)="updateFilter('warehouse', $event)"><option value="">全部倉庫</option>@for (warehouse of warehouses(); track warehouse.id) { <option [value]="warehouse.id">{{ warehouse.name }}</option> }</select></label>
         <label class="query-field"><span>配送門市</span><select class="ui-input" [value]="storeId() ?? ''" (change)="updateFilter('store', $event)"><option value="">全部門市</option>@for (store of stores(); track store.id) { <option [value]="store.id">{{ store.name }}</option> }</select></label>
         <label class="query-field"><span>司機</span><select class="ui-input" [value]="driverId() ?? ''" (change)="updateFilter('driver', $event)"><option value="">全部司機</option>@for (driver of drivers(); track driver.id) { <option [value]="driver.id">{{ driver.name }}</option> }</select></label>
+        <label class="query-field"><span>車輛噸位</span><select class="ui-input" [value]="tonnage() ?? ''" (change)="updateFilter('tonnage', $event)"><option value="">全部噸位</option>@for (option of tonnageOptions(); track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
       </div>
       <button class="preview-button ui-btn-primary" type="button" (click)="createPreview()" [disabled]="loading()">
         <mat-icon aria-hidden="true">visibility</mat-icon>{{ loading() ? '正在產生預覽' : '預覽匯出內容' }}
@@ -39,40 +46,44 @@
     </div>
   </section>
 
-  @if (errorMessage()) { <p class="ui-alert is-warn"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p> }
+  @if (errorMessage()) { <p class="ui-alert is-warn" role="alert"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p> }
+  @if (filterError()) { <p class="ui-alert is-warn" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ filterError() }}</p> }
   @if (detailError()) { <p class="ui-alert is-warn" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ detailError() }}</p> }
-  @if (loading()) {
-    <p class="ui-panel ui-empty">正在整理主管報表資料...</p>
-  } @else if (preview(); as report) {
-    <section class="ui-panel preview-shell" aria-label="主管歷史報表預覽">
-      <header class="ui-panel__header">
-        <h3>匯出預覽 <span class="ui-mono">{{ report.summary.from }} 至 {{ report.summary.to }}</span></h3>
+  <!-- 預覽區塊永遠渲染：載入中、載入失敗時分頁列仍在，內容區換成狀態訊息 -->
+  <section class="ui-panel preview-shell" aria-label="主管歷史報表預覽" [attr.aria-busy]="loading()">
+    <header class="ui-panel__header">
+      <h3>匯出預覽 <span class="ui-mono">{{ periodRangeLabel() }}</span></h3>
+      @if (preview()) {
         <button class="export-button ui-btn-primary" type="button" (click)="exportWorkbook()" [disabled]="exporting()">
           <mat-icon aria-hidden="true">download</mat-icon>{{ exporting() ? '正在匯出' : '匯出 Excel' }}
         </button>
-      </header>
-      <div class="ui-tabs-bar sheet-tabs">
-        <nav class="ui-tabs-bar__tabs" aria-label="報表預覽分頁">
-          @for (sheet of sheets; track sheet.id) {
-            <button type="button" class="ui-tab" [class.is-active]="selectedSheet() === sheet.id" (click)="selectSheet(sheet.id)"><mat-icon aria-hidden="true">{{ sheet.icon }}</mat-icon>{{ sheet.label }}</button>
-          }
-        </nav>
-      </div>
+      }
+    </header>
+    <div class="ui-tabs-bar sheet-tabs">
+      <nav class="ui-tabs-bar__tabs" aria-label="報表預覽分頁">
+        @for (sheet of sheets; track sheet.id) {
+          <button type="button" class="ui-tab" [class.is-active]="selectedSheet() === sheet.id" [attr.aria-pressed]="selectedSheet() === sheet.id" (click)="selectSheet(sheet.id)"><mat-icon aria-hidden="true">{{ sheet.icon }}</mat-icon>{{ sheet.label }}</button>
+        }
+      </nav>
+    </div>
 
+    @if (loading()) {
+      <p class="ui-empty" role="status">正在整理主管報表資料...</p>
+    } @else if (preview(); as report) {
       <section class="ui-panel__body sheet-content" [attr.aria-label]="sheetTitle()">
         @if (metricOptions().length) {
           <label class="metric-filter"><span>顯示項目</span><select class="ui-input" [value]="metric()" (change)="updateMetric($event)"><option value="">全部</option>@for (item of metricOptions(); track item.id) { <option [value]="item.id">{{ item.label }}</option> }</select></label>
         }
         @switch (selectedSheet()) {
           @case ('delivery-quality') {
-            <p class="sheet-note">按到期應配送訂單列出司機交貨紀錄；應送以訂單箱數為準，實送依交貨紀錄，無人簽收記 0 箱。缺少實送紀錄顯示「--」，不當作 0 箱或門市驗收。</p>
+            <p class="sheet-note">按到期應配送訂單列出司機交貨紀錄；「未結訂單異常」包含超過收貨截止仍未交付，及逾期才交付的訂單。應送以訂單箱數為準，實送依交貨紀錄，無人簽收記 0 箱。缺少實送紀錄顯示「--」，不當作 0 箱或門市驗收。</p>
             @if (report.outcomes) {
               <div class="ui-panel ui-table-wrap">
                 <table class="ui-table">
                   <thead><tr><th>日期 / 訂單</th><th>出貨倉庫 / 門市</th><th>交付結果</th><th>抵達判定</th><th>收貨時段</th><th>抵達時間</th><th>交貨時間</th><th>應送</th><th>實送</th></tr></thead>
                   <tbody>
                     @for (row of outcomeRows(report); track row.orderId) {
-                      <tr><td class="ui-mono">{{ row.date }}<small>{{ row.orderNumber }}</small></td><td>{{ row.warehouseName }}<small>{{ row.storeName }}</small></td><td>{{ deliveryResult(row) }}</td><td>{{ arrivalResult(row) }}</td><td class="ui-mono">{{ value(row.windowStart) }}<small>至 {{ value(row.windowEnd) }}</small></td><td class="ui-mono">{{ value(row.arrivedAt) }}</td><td class="ui-mono">{{ value(row.deliveredAt) }}</td><td class="ui-mono">{{ value(expectedDeliveryBoxes(row)) }}</td><td class="ui-mono">{{ value(actualDeliveryBoxes(row)) }}</td></tr>
+                      <tr><td class="ui-mono">{{ row.date }}<small>{{ row.orderNumber }}</small></td><td>{{ row.warehouseName }}<small>{{ row.storeName }}</small></td><td>{{ deliveryResult(row) }}@if (overdueResult(row); as overdue) { <small>{{ overdue }}</small> }</td><td>{{ arrivalResult(row) }}</td><td class="ui-mono">{{ value(row.windowStart) }}<small>至 {{ value(row.windowEnd) }}</small></td><td class="ui-mono">{{ value(row.arrivedAt) }}</td><td class="ui-mono">{{ value(row.deliveredAt) }}</td><td class="ui-mono">{{ value(expectedDeliveryBoxes(row)) }}</td><td class="ui-mono">{{ value(actualDeliveryBoxes(row)) }}</td></tr>
                     } @empty { <tr><td colspan="9" class="ui-empty">此項目沒有符合條件的到期訂單。</td></tr> }
                   </tbody>
                 </table>
@@ -110,19 +121,19 @@
               <!-- 每張訂單下面一列可展開逐項商品點交 -->
               <div class="ui-panel ui-table-wrap">
                 <table class="ui-table">
-                  <thead><tr><th>日期 / 訂單</th><th>出貨倉庫 / 門市</th><th>訂單箱數</th><th>成功點交時間</th><th>點交結果</th></tr></thead>
+                  <thead><tr><th>日期 / 訂單</th><th>出貨倉庫 / 門市</th><th>訂單箱數</th><th>點交時間</th><th>點交結果</th></tr></thead>
                   <tbody>
                     @for (row of outcomeRows(report, true); track row.orderId) {
-                      <tr><td class="ui-mono">{{ row.date }}<small>{{ row.orderNumber }}</small></td><td>{{ row.warehouseName }}<small>{{ row.storeName }}</small></td><td class="ui-mono">{{ value(row.orderedBoxCount) }}</td><td class="ui-mono">{{ value(row.loadedAt) }}</td><td>{{ loadingResult(row) }}</td></tr>
+                      <tr><td class="ui-mono">{{ row.date }}<small>{{ row.orderNumber }}</small></td><td>{{ row.warehouseName }}<small>{{ row.storeName }}</small></td><td class="ui-mono">{{ value(row.orderedBoxCount) }}</td><td class="ui-mono">{{ value(loadingRecordedAt(row, report)) }}</td><td>{{ loadingResult(row) }}</td></tr>
                       <tr class="sub-row">
                         <td colspan="5">
                           <details class="item-details"><summary>{{ row.orderNumber }} · 查看商品點交與原因</summary>
                             @if (row.loadingIssue) { <p class="sheet-note">{{ row.loadingIssue }}</p> }
                             <div class="ui-panel ui-table-wrap">
                               <table class="ui-table">
-                                <thead><tr><th>商品代碼</th><th>品項</th><th>應點數量</th><th>實點數量</th><th>單位</th><th>備註</th></tr></thead>
+                                <thead><tr><th>商品代碼</th><th>品項</th><th>應點數量</th><th>實點數量</th><th>缺少數量</th><th>單位</th><th>點交結果</th><th>點交時間</th><th>備註</th></tr></thead>
                                 <tbody>
-                                  @for (item of row.items; track $index) { <tr><td class="ui-mono">{{ value(item.productCode) }}</td><td>{{ value(item.itemName) }}</td><td class="ui-mono">{{ value(item.expectedQuantity) }}</td><td class="ui-mono">{{ value(item.loadedQuantity) }}</td><td>{{ value(item.unit) }}</td><td>{{ value(item.notes) }}</td></tr> } @empty { <tr><td colspan="6" class="ui-empty">未記錄逐項商品點交。</td></tr> }
+                                  @for (item of loadingItemsForOutcome(row, report); track $index) { <tr [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS' || item.status === 'MISMATCH_REPORTED'"><td class="ui-mono">{{ value(item.productCode) }}</td><td>{{ value(item.itemName) }}</td><td class="ui-mono">{{ value(item.expectedQuantity) }}</td><td class="ui-mono">{{ value(item.loadedQuantity) }}</td><td class="ui-mono">{{ value(item.missingQuantity) }}</td><td>{{ value(item.unit) }}</td><td>{{ loadingItemLabel(item) }}</td><td class="ui-mono">{{ value(item.checkedAt) }}</td><td>{{ value(item.notes) }}</td></tr> } @empty { <tr><td colspan="9" class="ui-empty">未記錄逐項商品點交。</td></tr> }
                                 </tbody>
                               </table>
                             </div>
@@ -153,11 +164,12 @@
             </div>
           }
           @case ('orders') {
+            @if (metric() === 'unsettled') { <p class="sheet-note">只列出本期目前待確認、已確認／已點交待出貨、配送中的訂單；不含已完成、已取消、無人簽收或配送失敗。</p> }
             <div class="ui-panel ui-table-wrap">
               <table class="ui-table">
                 <thead><tr><th>日期</th><th>訂單</th><th>順序</th><th>門市</th><th>箱數</th><th>狀態</th><th>司機</th><th>車牌</th></tr></thead>
                 <tbody>
-                  @for (order of orderRows(report); track order.orderNumber) { <tr><td class="ui-mono">{{ value(order.date) }}</td><td class="ui-mono">{{ value(order.orderNumber) }}</td><td class="ui-mono">{{ value(order.sequence) }}</td><td>{{ value(order.storeName) }}</td><td class="ui-mono">{{ value(order.boxes) }}</td><td>{{ value(order.status) }}</td><td>{{ value(order.driverName) }}</td><td class="ui-mono">{{ value(order.plateNumber) }}</td></tr> }
+                  @for (order of orderRows(report); track order.orderNumber) { <tr><td class="ui-mono">{{ value(order.date) }}</td><td class="ui-mono">{{ value(order.orderNumber) }}</td><td class="ui-mono">{{ value(order.sequence) }}</td><td>{{ value(order.storeName) }}</td><td class="ui-mono">{{ value(order.boxes) }}</td><td>{{ value(order.status) }}</td><td>{{ value(order.driverName) }}</td><td class="ui-mono">{{ value(order.plateNumber) }}</td></tr> } @empty { <tr><td colspan="8" class="ui-empty">這個期間沒有符合條件的訂單。</td></tr> }
                 </tbody>
               </table>
             </div>
@@ -207,14 +219,14 @@
           @case ('vehicles') {
             <div class="performance-summary">
               <span>實際出車 <b>{{ report.performance.fleet.startedTrips }}</b> 趟</span>
-              <span>收車完成率 <b>{{ percent(report.performance.fleet.returnRate) }}</b> · {{ report.performance.fleet.returnedTrips }}/{{ report.performance.fleet.startedTrips }} 趟</span>
+              <span>已收車 <b>{{ report.performance.fleet.returnedTrips }}</b> 趟</span>
               <span>尚未收車 <b>{{ report.performance.fleet.openTrips }}</b> 趟</span>
               <span>已記錄實際里程 <b>{{ value(report.performance.fleet.actualKm) }}</b> km</span>
             </div>
-            <p class="sheet-note">出車與收車每筆紀錄各計一趟，不以已發布路線冒充實際出車。倉庫依出車路線紀錄；舊資料無法唯一對應時不猜測倉庫。收車完成率＝已收車趟次/實際出車趟次 × 100%。</p>
+            <p class="sheet-note">出車與收車以實際紀錄計數，不以已發布路線冒充出車；每趟的實際收車時間見下表。倉庫依出車路線紀錄，舊資料無法唯一對應時不猜測倉庫。</p>
             <div class="ui-panel ui-table-wrap">
               <table class="ui-table">
-                <thead><tr><th>日期</th><th>車牌</th><th>出貨倉庫</th><th>路線ID</th><th>出車時間</th><th>收車時間</th><th>狀態</th><th>實際公里</th><th>里程來源</th></tr></thead>
+                <thead><tr><th>日期</th><th>車牌</th><th>出貨倉庫</th><th>路線ID</th><th>出車時間</th><th>實際收車時間</th><th>狀態</th><th>實際公里</th><th>里程來源</th></tr></thead>
                 <tbody>
                   @for (row of tripRows(report); track row['mileageId']) { <tr><td class="ui-mono">{{ value(row['date']) }}</td><td class="ui-mono">{{ value(row['plateNumber']) }}</td><td>{{ value(row['warehouseName']) }}</td><td class="ui-mono">{{ value(row['routeId']) }}</td><td class="ui-mono">{{ value(row['startAt']) }}</td><td class="ui-mono">{{ value(row['endAt']) }}</td><td>{{ performanceLabel(row['status']) }}</td><td class="ui-mono">{{ value(row['actualKm']) }}</td><td>{{ performanceLabel(row['distanceSource']) }}</td></tr> } @empty { <tr><td colspan="9" class="ui-empty">此項目沒有符合條件的出車紀錄。</td></tr> }
                 </tbody>
@@ -235,9 +247,9 @@
             <p class="sheet-note">人員依目前倉庫歸屬；人車比例均保留分子與分母，空白母數不補 0%。</p>
             <div class="ui-panel ui-table-wrap">
               <table class="ui-table">
-                <thead><tr><th>倉庫</th><th>打卡率</th><th>準時上班率</th><th>加班率</th><th>加班分鐘</th><th>實際出車</th><th>收車完成率</th><th>實際公里</th></tr></thead>
+                <thead><tr><th>倉庫</th><th>打卡率</th><th>準時上班率</th><th>加班率</th><th>加班分鐘</th><th>實際出車</th><th>已收車</th><th>實際公里</th></tr></thead>
                 <tbody>
-                  @for (row of report.performance.warehouses; track row.warehouseId) { <tr><td>{{ row.warehouseName }}</td><td class="ui-mono">{{ percent(row.workforce.attendanceRate) }} · {{ row.workforce.attendedShifts }}/{{ row.workforce.dueShifts }}</td><td class="ui-mono">{{ percent(row.workforce.onTimeRate) }} · {{ row.workforce.onTimeShifts }}/{{ row.workforce.attendedShifts }}</td><td class="ui-mono">{{ percent(row.workforce.overtimeRate) }} · {{ row.workforce.overtimeShifts }}/{{ row.workforce.finishedShifts }}</td><td class="ui-mono">{{ row.workforce.overtimeMinutes }}</td><td class="ui-mono">{{ row.fleet.startedTrips }} 趟</td><td class="ui-mono">{{ percent(row.fleet.returnRate) }} · {{ row.fleet.returnedTrips }}/{{ row.fleet.startedTrips }}</td><td class="ui-mono">{{ value(row.fleet.actualKm) }}</td></tr> }
+                  @for (row of report.performance.warehouses; track row.warehouseId) { <tr><td>{{ row.warehouseName }}</td><td class="ui-mono">{{ percent(row.workforce.attendanceRate) }} · {{ row.workforce.attendedShifts }}/{{ row.workforce.dueShifts }}</td><td class="ui-mono">{{ percent(row.workforce.onTimeRate) }} · {{ row.workforce.onTimeShifts }}/{{ row.workforce.attendedShifts }}</td><td class="ui-mono">{{ percent(row.workforce.overtimeRate) }} · {{ row.workforce.overtimeShifts }}/{{ row.workforce.finishedShifts }}</td><td class="ui-mono">{{ row.workforce.overtimeMinutes }}</td><td class="ui-mono">{{ row.fleet.startedTrips }} 趟</td><td class="ui-mono">{{ row.fleet.returnedTrips }} 趟</td><td class="ui-mono">{{ value(row.fleet.actualKm) }}</td></tr> }
                 </tbody>
               </table>
             </div>
@@ -264,11 +276,32 @@
             @let cases = exceptionRows(report);
             <div class="exception-summary"><span class="ui-tag">符合條件 {{ cases.length }} 件</span><span class="ui-tag is-warn">待處理 {{ exceptionStatusCount(cases, 'OPEN') }} 件</span><span class="ui-tag">已結案 {{ exceptionStatusCount(cases, 'CLOSED') }} 件</span></div>
             <div class="ui-panel ui-table-wrap">
-              <table class="ui-table">
-                <thead><tr><th>建立時間</th><th>類型</th><th>訂單</th><th>司機</th><th>路線</th><th>異常原因</th><th>處理結果</th><th>狀態</th></tr></thead>
+              <table class="ui-table exception-table">
+                <thead class="table-head"><tr><th>建立時間</th><th>類型</th><th>訂單</th><th>不符商品</th><th>司機</th><th>路線</th><th>異常原因</th><th>處理結果</th><th>狀態</th></tr></thead>
                 <tbody>
-                  @for (row of cases; track row.exceptionId) { <tr><td class="ui-mono">{{ value(row.createdAt) }}</td><td>{{ exceptionTypeLabel(row.type) }}</td><td class="ui-mono">{{ value(row.orderNumber) }}</td><td class="ui-mono">#{{ value(row.driverId) }}</td><td class="ui-mono">#{{ value(row.routeId) }}</td><td class="wrap-cell">{{ value(row.description) }}</td><td class="wrap-cell">{{ value(row.resolution) }}</td><td>{{ row.status === 'OPEN' ? '待處理' : row.status === 'CLOSED' ? '已結案' : value(row.status) }}</td></tr> }
-                  @empty { <tr><td colspan="8" class="ui-empty">這個期間沒有符合條件的案件。</td></tr> }
+                  @for (row of cases; track row.exceptionId) {
+                    <tr><td class="ui-mono">{{ value(row.createdAt) }}</td><td>{{ exceptionTypeLabel(row.type) }}</td><td class="ui-mono exception-copy">{{ value(row.orderNumber) }}</td><td class="wrap-cell loading-item-summary">{{ value(row.loadingItemSummary) }}</td><td class="ui-mono">#{{ value(row.driverId) }}</td><td class="ui-mono">#{{ value(row.routeId) }}</td><td class="wrap-cell exception-copy">{{ value(row.description) }}</td><td class="wrap-cell exception-copy">{{ value(row.resolution) }}</td><td>{{ row.status === 'OPEN' ? '待處理' : row.status === 'CLOSED' ? '已結案' : value(row.status) }}</td></tr>
+                    @if (row.type === 'LOADING_MISMATCH' && row.loadingItems?.length) {
+                      <tr class="sub-row">
+                        <td colspan="9">
+                          <details class="item-details loading-exception-details">
+                            <summary [attr.aria-label]="value(row.orderNumber) + '，查看商品點交明細'">查看商品點交明細 · {{ value(row.orderNumber) }}</summary>
+                            <div class="ui-panel ui-table-wrap">
+                              <table class="ui-table">
+                                <thead class="table-head"><tr><th>商品代碼</th><th>商品名稱</th><th>應點數量</th><th>實點數量</th><th>缺少數量</th><th>單位</th><th>點交結果</th><th>點交時間</th><th>點交備註</th></tr></thead>
+                                <tbody>
+                                  @for (item of row.loadingItems; track $index) {
+                                    <tr [class.has-item-mismatch]="item.status === 'MISSING' || item.status === 'EXCESS' || item.status === 'MISMATCH_REPORTED'"><td class="ui-mono">{{ value(item.productCode) }}</td><td>{{ item.itemName }}</td><td class="ui-mono">{{ value(item.expectedQuantity) }}</td><td class="ui-mono">{{ value(item.loadedQuantity) }}</td><td class="ui-mono item-missing-quantity">{{ value(item.missingQuantity) }}</td><td>{{ item.unit }}</td><td>{{ loadingItemLabel(item) }}</td><td class="ui-mono">{{ value(item.checkedAt) }}</td><td class="wrap-cell item-loading-note">{{ value(item.notes) }}</td></tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        </td>
+                      </tr>
+                    }
+                  }
+                  @empty { <tr><td colspan="9" class="ui-empty">這個期間沒有符合條件的案件。</td></tr> }
                 </tbody>
               </table>
             </div>
@@ -285,6 +318,11 @@
           }
         }
       </section>
-    </section>
-  } @else { <p class="ui-panel ui-empty">設定查詢條件後，按預覽匯出內容查看主管報表。</p> }
+    } @else {
+      <div class="empty-preview ui-empty" role="status">
+        <p>{{ errorMessage() ? '報表資料尚未載入，查詢分頁仍保留。請排除上方錯誤後重新載入。' : '設定查詢條件後，按預覽匯出內容查看主管報表。' }}</p>
+        @if (errorMessage()) { <button type="button" class="ui-btn-default" (click)="createPreview()"><mat-icon aria-hidden="true">refresh</mat-icon>重新載入報表</button> }
+      </div>
+    }
+  </section>
 </main>

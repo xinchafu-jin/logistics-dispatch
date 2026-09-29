@@ -28,11 +28,11 @@ function todayInTaipei(): string {
 export class ScheduleLeaveComposer {
   readonly shifts = input<DriverShiftDto[]>([]);
   readonly month = input.required<Date>();
+  readonly selectedDate = input<Date | null>(null);
   readonly scheduleReady = input(false);
   readonly requests = input<DriverLeaveRequestResponse[]>([]);
   readonly requestsLoading = input(false);
   readonly requestsAvailable = input(false);
-  readonly makeupOnly = input(false);
   readonly submitted = output<DriverLeaveRequestResponse[]>();
   readonly calendarChange = output<void>();
   readonly goToToday = output<void>();
@@ -51,7 +51,6 @@ export class ScheduleLeaveComposer {
     {value: 'temporary', label: '當日臨請', hint: '特殊事由・限今天', icon: 'today'},
     {value: 'makeup', label: '事後補請', hint: '過去・可複選', icon: 'history'},
   ] as const;
-  readonly visibleModes = computed(() => this.makeupOnly() ? this.modes.filter(mode => mode.value === 'makeup') : this.modes);
   readonly types = [
     {value: 'SICK', label: '病假'}, {value: 'ANNUAL', label: '年假'},
     {value: 'PERSONAL', label: '事假'}, {value: 'BEREAVEMENT', label: '喪假'},
@@ -64,8 +63,15 @@ export class ScheduleLeaveComposer {
     if (!!start !== !!end) return '部分時段請填完整的開始與結束時間。';
     return start && end <= start ? '結束時間必須晚於開始時間。' : '';
   });
-  readonly newReplies = computed(() => this.requests().filter(request => request.status !== 'PENDING'
-    && !request.driverReadAt && request.reviewedAt).sort((left, right) => right.reviewedAt!.localeCompare(left.reviewedAt!)));
+  readonly newReplies = computed(() => {
+    const selected = this.selectedDate();
+    const month = this.month();
+    if (!selected || selected.getFullYear() !== month.getFullYear() || selected.getMonth() !== month.getMonth()) return [];
+    const workDate = calendarDateKey(selected);
+    return this.requests().filter(request => request.workDate === workDate && request.status !== 'PENDING'
+      && !request.driverReadAt && request.reviewedAt)
+      .sort((left, right) => right.reviewedAt!.localeCompare(left.reviewedAt!));
+  });
   readonly guide = computed(() => {
     if (!this.leaveType()) return '先選假別，再點上方日曆選日期。';
     return this.activeMode() === 'planned' ? '點上方日曆複選明天以後的上班日；再次點選即可取消。'

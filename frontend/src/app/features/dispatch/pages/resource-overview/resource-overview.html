@@ -137,7 +137,7 @@
                   <strong class="driver-warehouse-name">{{ warehouse.name }}</strong>
                   <dl class="driver-details"><div><dt>倉庫代碼</dt><dd class="ui-mono">{{ warehouse.warehouseCode }}</dd></div><div><dt>地址</dt><dd>{{ warehouse.address || '尚未提供地址' }}</dd></div></dl>
                   @if (!warehouse.isActive) { <span class="driver-unassigned">倉庫已停用</span> }
-                } @else { <strong class="driver-unassigned">待設定所屬倉庫</strong><dl class="driver-details"><div><dt>倉庫代碼</dt><dd>—</dd></div><div><dt>地址</dt><dd>請編輯司機設定倉庫，設定後才可派車。</dd></div></dl> }
+                } @else { <strong class="driver-unassigned">待設定所屬倉庫</strong><dl class="driver-details"><div><dt>倉庫代碼</dt><dd>—</dd></div><div><dt>地址</dt><dd>請編輯司機設定所屬倉庫；派車不受此欄限制。</dd></div></dl> }
               </section>
               <section class="driver-detail-block">
                 <h4><mat-icon aria-hidden="true">schedule</mat-icon>工作時間</h4>

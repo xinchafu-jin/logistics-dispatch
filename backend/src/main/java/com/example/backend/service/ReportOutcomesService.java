@@ -34,7 +34,19 @@ public class ReportOutcomesService {
         return outcomes(range, warehouseId, false);
     }
     public ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId, boolean includeDetails) {
-        return outcomes(range, warehouseId, LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
+        return outcomes(range, warehouseId, (Long) null, includeDetails);
+    }
+
+    public ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId,
+            Long vehicleId, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleId == null ? null : Set.of(vehicleId),
+                LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
+    }
+
+    public ReportOutcomesResponse outcomesForVehicles(ReportService.Range range, Long warehouseId,
+            Set<Long> vehicleIds, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleIds,
+                LocalDateTime.now(ZoneId.of("Asia/Taipei")), includeDetails);
     }
 
     // Explicit as-of time makes cutoff and overnight-window behavior deterministic in tests.
@@ -42,9 +54,24 @@ public class ReportOutcomesService {
         return outcomes(range, warehouseId, now, false);
     }
     ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId, LocalDateTime now, boolean includeDetails) {
+        return outcomes(range, warehouseId, null, now, includeDetails);
+    }
+
+    ReportOutcomesResponse outcomes(ReportService.Range range, Long warehouseId,
+            Long vehicleId, LocalDateTime now, boolean includeDetails) {
+        return outcomesForVehicles(range, warehouseId, vehicleId == null ? null : Set.of(vehicleId), now, includeDetails);
+    }
+
+    ReportOutcomesResponse outcomesForVehicles(ReportService.Range range, Long warehouseId,
+            Set<Long> vehicleIds, LocalDateTime now, boolean includeDetails) {
         Map<Long, StoresEntity> byStore = stores.findAll().stream()
                 .collect(Collectors.toMap(StoresEntity::getId, Function.identity()));
-        List<OrdersEntity> orders = reads.orders(range.getFrom(), range.getTo(), warehouseId).stream()
+        List<OrdersEntity> allOrders = vehicleIds == null
+                ? reads.orders(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reads.orders(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reads.ordersForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
+        List<OrdersEntity> orders = allOrders.stream()
                 .filter(o -> o.getStatus() != OrderStatus.CANCELLED && o.getStatus() != OrderStatus.PENDING_CONFIRM)
                 .toList();
         List<Long> ids = orders.stream().map(OrdersEntity::getId).toList();
@@ -72,12 +99,19 @@ public class ReportOutcomesService {
         loadingCases.forEach(e -> loadingIssues.put(e.getOrderId(), e.getDescription() == null ? "點交不符" : e.getDescription()));
         List<Observation> observations = orders.stream()
                 .map(o -> observe(o, byStore.get(o.getStoreId()), deliveries.get(o.getId()), mismatches, now)).toList();
+        // Pending-confirmation orders are excluded from delivery KPIs, but an overdue one
+        // still belongs in the incident drill-down. Do not silently lose it from the chart.
+        List<Observation> overduePendingDetails = includeDetails ? allOrders.stream()
+                .filter(o -> o.getStatus() == OrderStatus.PENDING_CONFIRM)
+                .map(o -> observe(o, byStore.get(o.getStoreId()), null, mismatches, now))
+                .filter(Observation::due).toList() : List.of();
         List<WarehouseOutcome> byWarehouse = new ArrayList<>();
         var directory = warehouses.findAll().stream().sorted(Comparator.comparing(WarehousesEntity::getId)).toList();
         var names = directory.stream().collect(Collectors.toMap(WarehousesEntity::getId, WarehousesEntity::getName));
         for (var warehouse : directory) {
             if (warehouseId != null && !warehouseId.equals(warehouse.getId())) continue;
             var rows = observations.stream().filter(o -> warehouse.getId().equals(o.order().getWarehouseId())).toList();
+            if (vehicleIds != null && rows.isEmpty()) continue;
             byWarehouse.add(new WarehouseOutcome(warehouse.getId(), warehouse.getName(), delivery(rows), loading(rows), problems(rows)));
         }
         Set<Long> knownWarehouses = byWarehouse.stream().map(WarehouseOutcome::warehouseId).collect(Collectors.toSet());
@@ -88,17 +122,23 @@ public class ReportOutcomesService {
                 .collect(Collectors.groupingBy(o -> o.order().getDeliveryDate(), TreeMap::new, Collectors.toList()));
         List<DeliveryDay> daily = byDay.entrySet().stream().map(e ->
                 new DeliveryDay(e.getKey(), e.getValue().size(), count(e.getValue(), Observation::full))).toList();
-        var allRoutes = reads.routes(range.getFrom(), range.getTo(), warehouseId);
+        var allRoutes = vehicleIds == null
+                ? reads.routes(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reads.routes(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reads.routesForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
         var driverByRoute = new HashMap<Long, Long>();
         allRoutes.forEach(r -> { if (r.getDriverId() != null) driverByRoute.put(r.getId(), r.getDriverId()); });
+        List<Long> detailIds = includeDetails ? java.util.stream.Stream.concat(ids.stream(),
+                overduePendingDetails.stream().map(o -> o.order().getId())).toList() : List.of();
         Map<Long, List<OrderItemsEntity>> itemsByOrder = includeDetails
-                ? reads.orderItemsForOrders(ids).stream().collect(Collectors.groupingBy(i -> i.getOrder().getId())) : Map.of();
+                ? reads.orderItemsForOrders(detailIds).stream().collect(Collectors.groupingBy(i -> i.getOrder().getId())) : Map.of();
         var routes = allRoutes.stream()
                 .filter(r -> r.getStatus() == RouteStatus.PUBLISHED && !r.getDate().isAfter(now.toLocalDate())).toList();
         return new ReportOutcomesResponse(range.getFrom(), range.getTo(), now, delivery(observations),
                 safety(routes, reads.inspections(range.getFrom(), range.getTo()), now),
                 loading(observations), problems(observations), byWarehouse, daily, recovery(observations, deliveries),
-                includeDetails ? observations.stream().map(o -> detail(o, deliveries.get(o.order().getId()),
+                includeDetails ? java.util.stream.Stream.concat(observations.stream(), overduePendingDetails.stream()).map(o -> detail(o, deliveries.get(o.order().getId()),
                         byStore.get(o.order().getStoreId()), names, loadingIssues, recoveryReasons, driverByRoute,
                         itemsByOrder.getOrDefault(o.order().getId(), List.of()))).toList() : List.of());
     }
@@ -108,7 +148,8 @@ public class ReportOutcomesService {
             List<OrderItemsEntity> orderItems) {
         var order = o.order(); var w = window(order.getDeliveryDate(), store);
         var items = orderItems.stream().map(i -> new ItemCheck(i.getProductCode(), i.getItemName(),
-                i.getExpectedQuantity(), i.getLoadedQuantity(), i.getUnit(), i.getLoadingNotes())).toList();
+                i.getExpectedQuantity(), i.getLoadedQuantity(), i.getUnit(), i.getLoadingNotes(),
+                i.isLoadingMismatchReported())).toList();
         return new OrderOutcome(order.getId(), order.getOrderNumber(), order.getDeliveryDate(), order.getWarehouseId(),
                 names.getOrDefault(order.getWarehouseId(), "未歸屬倉庫"), order.getStoreId(), store == null ? "未設定門市" : store.getName(),
                 order.getAssignedDriverId() != null ? order.getAssignedDriverId() : driverByRoute.get(order.getRouteId()),

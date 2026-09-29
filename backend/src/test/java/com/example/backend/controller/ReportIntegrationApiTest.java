@@ -106,6 +106,19 @@ class ReportIntegrationApiTest {
         }
     }
 
+    @Test void everyHistoryPreviewSourceReadsTheMergedSchema() throws Exception {
+        for (String endpoint : new String[]{"summary", "attendance", "routes", "drivers", "vehicles",
+                "warehouses", "stores", "exceptions", "performance", "outcomes"}) {
+            mvc.perform(get("/api/reports/" + endpoint).param("date", DAY)
+                    .param("warehouseId", "" + warehouse).header("Authorization", admin))
+                    .andExpect(status().isOk());
+        }
+        for (String endpoint : new String[]{"orders", "stores", "drivers", "warehouses"}) {
+            mvc.perform(get("/api/" + endpoint).header("Authorization", admin))
+                    .andExpect(status().isOk());
+        }
+    }
+
     private long id(String table, String key) {
         return jdbc.queryForObject("SELECT id FROM " + table + " WHERE " + key + "=?", Long.class, MARKER);
     }

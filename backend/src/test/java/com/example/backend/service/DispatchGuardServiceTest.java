@@ -64,6 +64,16 @@ class DispatchGuardServiceTest {
     }
 
     @Test
+    void 不同所屬倉庫的司機也可發布路線() {
+        givenDriver(1L, "王小明", true);
+        drivers.get(0).setWarehouseId(2L);
+        givenShift(1L, ShiftType.WORK, null);
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setWarehouseId(1L);
+
+        assertDoesNotThrow(() -> guard.assertCanPublish(DATE));
+    }
+
+    @Test
     void 休假_請假_尚未安排都擋下_訊息有車牌與姓名() {
         givenDriver(1L, "王小明", true);
         givenDriver(2L, "李大華", true);

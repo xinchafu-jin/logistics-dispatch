@@ -37,6 +37,10 @@ public class OrderItemDTO {
     private LocalDateTime checkedAt;
     private Long checkedByDriverId;
     private String loadingNotes;
+    private boolean loadingMismatchReported;
+
+    public boolean isLoadingMismatchReported() { return loadingMismatchReported; }
+    public void setLoadingMismatchReported(boolean value) { loadingMismatchReported = value; }
 
     public Long getId() {
         return id;

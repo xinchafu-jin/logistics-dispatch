@@ -1,5 +1,5 @@
 <div class="leave-calendar-modes" aria-label="選擇請假方式">
-  @for (mode of visibleModes(); track mode.value) {
+  @for (mode of modes; track mode.value) {
     <button type="button" [class.is-active]="activeMode() === mode.value" [attr.aria-expanded]="activeMode() === mode.value"
       aria-controls="calendar-leave-form" [disabled]="submitting()" (click)="open(mode.value)">
       <mat-icon aria-hidden="true">{{ mode.icon }}</mat-icon>

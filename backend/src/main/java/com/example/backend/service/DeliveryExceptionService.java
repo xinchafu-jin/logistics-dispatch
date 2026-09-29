@@ -132,8 +132,15 @@ public class DeliveryExceptionService {
                     .orElseThrow(() -> new EntityNotFoundException(
                             "找不到後續訂單，ID：" + exceptionCase.getFollowUpOrderId()));
         }
-        if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM) {
-            followUpOrder.setDeliveryDate(nextDispatchDate(followUpOrder, now.toLocalDate()));
+        boolean dispatchToday = exceptionCase.getType() != ExceptionType.NO_SIGNATURE;
+        if (dispatchToday && followUpOrder.getRouteId() != null) {
+            throw new IllegalArgumentException("異常重建單已排車，請先確認現有指派，不能直接改日期");
+        }
+        if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM
+                || (dispatchToday && followUpOrder.getStatus() == OrderStatus.CONFIRMED)) {
+            // 除無人簽收保留隔日排程，其餘異常以主管確認的台北日期回到當天待排區。
+            followUpOrder.setDeliveryDate(dispatchToday
+                    ? now.toLocalDate() : nextDispatchDate(followUpOrder, now.toLocalDate()));
             followUpOrder.setStatus(OrderStatus.CONFIRMED);
             ordersDAO.save(followUpOrder);
         } else if (followUpOrder.getStatus() != OrderStatus.CONFIRMED) {

@@ -11,7 +11,9 @@
 .query-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .query-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
 .query-field .ui-input { width: 150px; }
-.date-range-field .admin-date-field { width: 250px; }
+// 開始、結束日期各一個欄位：Material 的 infix 預設 min-width 180px，欄位窄於這個值時要放掉
+.date-field .admin-date-field { width: 168px; }
+:host ::ng-deep .date-field .mat-mdc-form-field-infix { min-width: 0; width: auto; }
 .preview-button { margin-left: auto; }
 
 // ── 匯出預覽 ──
@@ -25,14 +27,23 @@
 .metric-filter .ui-input { max-width: 240px; }
 .sheet-note { margin: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
 
+// 載入失敗、尚未預覽時，內容區只放一段說明；失敗時多一顆重新載入
+.empty-preview { display: grid; justify-items: center; gap: 12px; }
+.empty-preview p { margin: 0; }
+
 // 預覽表格：一格一行不換行（欄多時在框裡橫向捲動），第二行灰字放訂單號、門市；說明類的長文字欄才換行
 .sheet-content .ui-table {
   td { white-space: nowrap; }
   td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.6875rem; }
   .wrap-cell { min-width: 200px; white-space: normal; }
+  // 異常案件的「不符商品」摘要一個商品一行
+  td.loading-item-summary { white-space: pre-line; overflow-wrap: anywhere; font-weight: 600; }
+  // 逐項點交：短缺、超收、司機回報不符的列用提醒色，缺少數量加粗
+  tr.has-item-mismatch > td { background: var(--warn-soft); }
+  td.item-missing-quantity { color: var(--warn); font-weight: 700; }
 }
 
-// 附屬列：路線的分段里程、訂單的逐項點交
+// 附屬列：路線的分段里程、訂單的逐項點交、異常案件的商品點交明細
 .sheet-content .ui-table .sub-row > td { padding: 6px 12px; white-space: normal; background: var(--surface-subtle); }
 
 .item-details {
@@ -70,7 +81,7 @@
 
 @media (max-width: 760px) {
   .period-stepper { margin-left: 0; }
-  .query-field, .query-field .ui-input, .date-range-field .admin-date-field { width: 100%; }
+  .query-field, .query-field .ui-input, .date-field .admin-date-field { width: 100%; }
   .query-field { display: grid; gap: 4px; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metrics-grid article:nth-child(odd) { border-left: 0; }

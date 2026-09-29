@@ -5,7 +5,8 @@ import {MatIconModule} from '@angular/material/icon';
 import {NgTemplateOutlet} from '@angular/common';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {ReportCollectionDto, ReportPerformanceDto, ReportOutcomesDto} from '../../../../core/services/dispatch-api.models';
-import {CURRENT_ISSUE_CATEGORIES, matchesReportCase} from '../../report-delivery-cases';
+import {CUMULATIVE_ISSUE_CATEGORIES, matchesReportCase} from '../../report-delivery-cases';
+import {isOverdueUnsettledOrder} from '../../report-overdue-orders';
 
 type ReportPeriod = 'year' | 'month' | 'week' | 'day';
 
@@ -18,6 +19,7 @@ interface OperationalSources {
 interface ChartBucket {from: string; to: string; label: string; dateLabel: string; count: number; other: number;}
 interface StatusTile {label: string; value: number; metric: string; icon: string; tone?: 'warning' | 'muted';}
 interface RateDial {label: string; value: number | null; numerator: number; denominator: number; sheet: string; metric: string;}
+interface IssueTile {label: string; value: number | null; metric: string; icon: string; sheet: 'exceptions' | 'delivery-quality'; unit: '件';}
 
 
 @Component({
@@ -68,12 +70,6 @@ export class OperationReport implements OnInit, OnDestroy {
     const rows = this.operationalData()?.exceptions?.['cases'];
     return Array.isArray(rows) ? rows : null;
   });
-  readonly caseStats = computed(() => {
-    const rows = this.exceptionCases();
-    if (!rows) return null;
-    return {total: rows.length, open: rows.filter(row => row['status'] === 'OPEN').length,
-      closed: rows.filter(row => row['status'] === 'CLOSED').length};
-  });
 
   readonly peopleDials = computed<RateDial[] | null>(() => {
     const p = this.capacity()?.people;
@@ -90,28 +86,21 @@ export class OperationReport implements OnInit, OnDestroy {
       {label: '缺上班卡', value: p.missingClockInShifts, metric: 'missing-clock-in', icon: 'event_busy', tone: 'warning'},
     ] : null;
   });
-  readonly orderTiles = computed<StatusTile[] | null>(() => {
-    const d = this.delivery();
-    return d ? [
-      {label: '完整交付', value: d.fullOrders, metric: 'full', icon: 'task_alt'},
-      {label: '交貨不完整', value: d.deliveredOrders - d.fullOrders - d.missingQualityOrders, metric: 'incomplete', icon: 'inventory_2', tone: 'warning'},
-      {label: '未確認交付', value: d.outstandingOrders, metric: 'outstanding', icon: 'pending_actions', tone: 'warning'},
-      {label: '箱數待核對', value: d.missingQualityOrders, metric: 'missing-quality', icon: 'fact_check', tone: 'muted'},
-    ] : null;
-  });
-  readonly issueTiles = computed<StatusTile[] | null>(() => {
+  readonly issueTiles = computed<IssueTile[] | null>(() => {
     const rows = this.exceptionCases();
-    return rows ? CURRENT_ISSUE_CATEGORIES.map(item => ({label: item.label, icon: item.icon, metric: item.id,
-      value: rows.filter(row => matchesReportCase(row, item.id)).length})) : null;
+    const outcomes = this.outcomes();
+    if (!rows && !outcomes) return null;
+    return [...CUMULATIVE_ISSUE_CATEGORIES.map(item => ({
+      label: item.label, icon: item.icon, metric: item.id, sheet: 'exceptions', unit: '件',
+      value: rows ? rows.filter(row => matchesReportCase(row, item.id)).length : null,
+    } as IssueTile)), {label: '未結訂單異常', icon: 'pending_actions', metric: 'overdue-unsettled',
+      sheet: 'delivery-quality', unit: '件',
+      value: outcomes ? outcomes.orders.filter(isOverdueUnsettledOrder).length : null}];
   });
-  readonly loadingTiles = computed<StatusTile[] | null>(() => {
-    const w = this.warehouseSummary();
-    return w ? [
-      {label: '點交相符', value: w.matchedOrders, metric: 'matched', icon: 'checklist'},
-      {label: '點交不符', value: w.mismatchedOrders, metric: 'mismatched', icon: 'rule', tone: 'warning'},
-      {label: '點交紀錄缺漏', value: w.missingLoadingOrders, metric: 'missing-loading', icon: 'fact_check', tone: 'muted'},
-      {label: '到期未排車', value: w.dueUnassignedOrders, metric: 'unassigned', icon: 'local_shipping', tone: 'warning'},
-    ] : null;
+  readonly issueTotal = computed(() => {
+    const tiles = this.issueTiles();
+    return tiles?.length === 3 && tiles.every(tile => tile.value !== null)
+      ? tiles.reduce((sum, tile) => sum + tile.value!, 0) : null;
   });
 
   readonly tripBuckets = computed<ChartBucket[] | null>(() => {
@@ -128,14 +117,18 @@ export class OperationReport implements OnInit, OnDestroy {
   readonly warehouseComparisons = computed(() => this.outcomes()?.warehouses ?? null);
   readonly tripChartHasData = computed(() => this.tripBuckets()?.some(b => b.count > 0) ?? false);
   readonly orderChartHasData = computed(() => this.orderBuckets()?.some(b => b.count + b.other > 0) ?? false);
-  readonly issueChartHasData = computed(() => this.issueTiles()?.some(tile => tile.value > 0) ?? false);
+  readonly issueChartHasData = computed(() => this.issueTiles()?.some(tile => (tile.value ?? 0) > 0) ?? false);
+  readonly issueChartEmptyLabel = computed(() => {
+    if (!this.exceptionCases() || !this.outcomes()) return '部分異常資料未載入';
+    return '本期未登錄異常案件';
+  });
 
   protected chartHeight(count: number, buckets: ChartBucket[]): number {
     const max = Math.max(1, ...buckets.map(b => b.count + b.other));
     return count / max * 100;
   }
-  protected issueHeight(value: number): number {
-    return value / Math.max(1, ...(this.issueTiles() ?? []).map(row => row.value)) * 100;
+  protected issueHeight(value: number | null): number {
+    return (value ?? 0) / Math.max(1, ...(this.issueTiles() ?? []).map(row => row.value ?? 0)) * 100;
   }
   protected openBucket(bucket: ChartBucket, sheet: string): void {
     void this.router.navigate(['/dispatch/history'], {queryParams: {from: bucket.from, to: bucket.to, sheet}});
@@ -257,7 +250,7 @@ export class OperationReport implements OnInit, OnDestroy {
         this.operationalError.set('人員打卡與出車資料暫時無法載入。');
         return of(null);
       })),
-      outcomes: this.api.getReportOutcomes(query).pipe(catchError(() => {
+      outcomes: this.api.getReportOutcomes({...query, includeDetails: true}).pipe(catchError(() => {
         this.outcomeError.set('配送成果資料暫時無法載入。');
         return of(null);
       })),

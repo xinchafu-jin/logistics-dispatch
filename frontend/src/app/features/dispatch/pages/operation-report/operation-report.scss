@@ -143,6 +143,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); 
 .issue-column:nth-child(2) .issue-fill { background: var(--danger); }
 .issue-column:nth-child(3) .issue-fill { background: var(--subtle); }
 .issue-fill strong { position: absolute; top: -20px; left: 0; width: 100%; font-family: var(--font-mono); font-size: 0.8125rem; }
+.issue-fill strong small { margin-left: 4px; color: var(--subtle); font-size: 0.625rem; font-weight: 400; }
 
 // ── 各倉點交相符率：一倉一列，格線同 .ui-table ──
 .warehouse-comparison { display: grid; max-height: 256px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }

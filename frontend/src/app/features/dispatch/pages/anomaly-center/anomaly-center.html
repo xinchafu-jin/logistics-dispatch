@@ -290,7 +290,7 @@
                 <tr><th>待補送數量</th><td class="ui-mono">{{ quantity(incident.replacementRequiredBoxCount) }}</td></tr>
                 <tr><th>送審時間</th><td class="ui-mono">{{ formatDateTime(incident.queuedAt) }}</td></tr>
                 <tr><th>異常說明</th><td class="pre-wrap">{{ incident.description || '尚無額外異常說明。' }}</td></tr>
-                <tr><th>確認後處理</th><td>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</td></tr>
+                <tr><th>確認後處理</th><td>{{ incident.type === 'NO_SIGNATURE' ? '無人簽收保留隔日排程，確認後送入待排車。' : '重建單的配送日期會更新為確認當天，送入當天的待排訂單區。' }}</td></tr>
               </tbody>
             </table>
 
@@ -326,7 +326,7 @@
             </header>
             <div class="ui-panel__body">
               <p class="confirmation-copy">
-                確認後，後續訂單會送入待排車，異常案件會結案。來源訂單：<span class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</span>。
+                {{ incident.type === 'NO_SIGNATURE' ? '確認後保留無人簽收的隔日排程。' : '確認後，重建單的配送日期會更新為今天。' }}後續訂單會送入待排車，異常案件會結案。來源訂單：<span class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</span>。
               </p>
             </div>
             <div class="ui-modal__actions">

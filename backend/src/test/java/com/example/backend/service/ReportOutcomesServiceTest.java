@@ -38,6 +38,20 @@ class ReportOutcomesServiceTest {
             Long id = call.getArgument(2);
             return orders.stream().filter(o -> id == null || id.equals(o.getWarehouseId())).toList();
         });
+        when(reads.orders(eq(range.getFrom()), eq(range.getTo()), any(), anyLong())).thenAnswer(call -> {
+            Long warehouseId = call.getArgument(2);
+            Long vehicleId = call.getArgument(3);
+            return orders.stream()
+                    .filter(o -> warehouseId == null || warehouseId.equals(o.getWarehouseId()))
+                    .filter(o -> vehicleId.equals(o.getAssignedVehicleId())).toList();
+        });
+        when(reads.ordersForVehicles(eq(range.getFrom()), eq(range.getTo()), any(), anySet())).thenAnswer(call -> {
+            Long warehouseId = call.getArgument(2);
+            Set<Long> vehicleIds = call.getArgument(3);
+            return orders.stream()
+                    .filter(o -> warehouseId == null || warehouseId.equals(o.getWarehouseId()))
+                    .filter(o -> vehicleIds.contains(o.getAssignedVehicleId())).toList();
+        });
         when(reads.deliveriesForOrders(anyList())).thenAnswer(call -> {
             List<Long> ids = call.getArgument(0); return deliveries.stream().filter(d -> ids.contains(d.getOrderId())).toList();
         });
@@ -46,6 +60,20 @@ class ReportOutcomesServiceTest {
         });
         when(reads.routes(eq(range.getFrom()), eq(range.getTo()), any())).thenAnswer(call -> {
             Long id = call.getArgument(2); return routes.stream().filter(r -> id == null || id.equals(r.getWarehouseId())).toList();
+        });
+        when(reads.routes(eq(range.getFrom()), eq(range.getTo()), any(), anyLong())).thenAnswer(call -> {
+            Long warehouseId = call.getArgument(2);
+            Long vehicleId = call.getArgument(3);
+            return routes.stream()
+                    .filter(r -> warehouseId == null || warehouseId.equals(r.getWarehouseId()))
+                    .filter(r -> vehicleId.equals(r.getVehicleId())).toList();
+        });
+        when(reads.routesForVehicles(eq(range.getFrom()), eq(range.getTo()), any(), anySet())).thenAnswer(call -> {
+            Long warehouseId = call.getArgument(2);
+            Set<Long> vehicleIds = call.getArgument(3);
+            return routes.stream()
+                    .filter(r -> warehouseId == null || warehouseId.equals(r.getWarehouseId()))
+                    .filter(r -> vehicleIds.contains(r.getVehicleId())).toList();
         });
         when(reads.inspections(range.getFrom(), range.getTo())).thenReturn(inspections);
     }
@@ -67,6 +95,51 @@ class ReportOutcomesServiceTest {
         assertEquals(1, result.loading().dueUnassignedOrders());
         assertEquals(3, result.warehouses().size()); assertNull(result.warehouses().getLast().delivery().fullDeliveryRate());
         assertEquals(4, result.daily().getFirst().dueOrders());
+    }
+
+    @Test void exposesOverduePendingConfirmationOnlyInDetailsWithoutChangingDeliveryKpis() {
+        order(1, 1, day, OrderStatus.PENDING_CONFIRM);
+        order(2, 1, day.plusDays(1), OrderStatus.PENDING_CONFIRM);
+        var result = service.outcomes(range, null, now, true);
+        assertEquals(0, result.delivery().dueOrders());
+        assertEquals(1, result.orders().size());
+        assertEquals(1L, result.orders().getFirst().orderId());
+        assertTrue(result.orders().getFirst().due());
+        assertEquals(OrderStatus.PENDING_CONFIRM.name(), result.orders().getFirst().status());
+    }
+
+    @Test void vehicleFilterAppliesToDeliveryDetailsAndWarehouseRows() {
+        var selected = order(1, 1, day, OrderStatus.COMPLETED);
+        selected.setAssignedVehicleId(30L);
+        deliver(selected, 1, 10, 0, 0, 0, 17);
+        var other = order(2, 2, day, OrderStatus.CONFIRMED);
+        other.setAssignedVehicleId(40L);
+
+        var result = service.outcomes(range, null, 30L, now, true);
+
+        assertEquals(1, result.delivery().dueOrders());
+        assertEquals(1, result.orders().size());
+        assertEquals(1L, result.orders().getFirst().orderId());
+        assertEquals(1, result.warehouses().size());
+        assertEquals(1L, result.warehouses().getFirst().warehouseId());
+        verify(reads).orders(range.getFrom(), range.getTo(), null, 30L);
+        verify(reads).routes(range.getFrom(), range.getTo(), null, 30L);
+    }
+
+    @Test void tonnageGroupCombinesDeliveryOutcomesFromMultipleVehicles() {
+        var first = order(1, 1, day, OrderStatus.COMPLETED);
+        first.setAssignedVehicleId(30L);
+        deliver(first, 1, 10, 0, 0, 0, 17);
+        var second = order(2, 1, day, OrderStatus.CONFIRMED);
+        second.setAssignedVehicleId(40L);
+        var other = order(3, 2, day, OrderStatus.CONFIRMED);
+        other.setAssignedVehicleId(50L);
+
+        var result = service.outcomesForVehicles(range, null, Set.of(30L, 40L), now, true);
+
+        assertEquals(2, result.delivery().dueOrders());
+        assertEquals(List.of(1L, 2L), result.orders().stream().map(row -> row.orderId()).toList());
+        assertEquals(1, result.warehouses().size());
     }
 
     @Test void comparesArrivalNotHandoffAndCountsMissingAndEarlyArrivalsSeparately() {
@@ -126,6 +199,21 @@ class ReportOutcomesServiceTest {
         assertEquals(2, result.checkedOrders()); assertEquals(1, result.matchedOrders());
         assertEquals(1, result.mismatchedOrders()); assertEquals(50, result.matchRate());
         assertEquals(1, result.missingLoadingOrders());
+    }
+
+    @Test void includesTheReportedLoadingProductWithoutInventingActualOrMissingQuantities() {
+        var original = order(1, 1, day, OrderStatus.FAILED);
+        loadingMismatch(original, 1);
+        var item = new OrderItemsEntity(); item.setOrder(original); item.setProductCode("MILK");
+        item.setItemName("鮮乳"); item.setExpectedQuantity(4); item.setUnit("箱");
+        item.setLoadingMismatchReported(true);
+        when(reads.orderItemsForOrders(anyList())).thenReturn(List.of(item));
+        var row = service.outcomes(range, null, now, true).orders().getFirst();
+        assertTrue(row.loadingMismatch());
+        assertTrue(row.items().getFirst().loadingMismatchReported());
+        assertEquals("鮮乳", row.items().getFirst().itemName());
+        assertEquals(4, row.items().getFirst().expectedQuantity());
+        assertNull(row.items().getFirst().loadedQuantity());
     }
 
     @Test void usesWeightedCompanyTotalsNotMeanWarehousePercentagesAndHonorsFilter() {

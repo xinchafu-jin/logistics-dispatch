@@ -12,6 +12,7 @@ import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.request.ArriveRequestDTO;
 import com.example.backend.dto.request.DeliverRequestDTO;
+import com.example.backend.dto.request.LoadingMismatchRequestDTO;
 import com.example.backend.dto.request.LoadingItemDTO;
 import com.example.backend.dto.request.LoadingRequestDTO;
 import com.example.backend.dto.request.NoSignatureRequestDTO;
@@ -74,17 +75,7 @@ public class DeliveryService {
     /** 倉庫點交：箱數相符轉為 LOADED；不符時原單 FAILED，並建立異常單與明日補送單。 */
     public LoadingResponse load(Long driverId, LoadingRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
-        // 出車前安全檢查通過才能點交。requirePassed 會鎖路線，所以要在鎖訂單之前呼叫：
-        // 撤回也是先鎖路線，兩邊都「先路線、後訂單」，才不會一邊等一邊、互相卡死
-        Long routeId = routeIdOf(request.getOrderId());
-        preTripInspectionService.requirePassed(driverId, routeId);
-        OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
-        // 上面查路線時還沒鎖訂單，這段時間訂單可能被移到別條路線，剛才通過的檢查就不算數
-        if (!routeId.equals(order.getRouteId())) {
-            throw new IllegalArgumentException("任務已變更，請重新整理今日任務");
-        }
-        // 連按兩次時，第二次進來單子已經是 LOADED 或 FAILED，會在這裡被擋下
-        requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_LOADING_STATUS_INVALID);
+        OrdersEntity order = loadingOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());
 
         int expected = order.getBoxCount();
         int loaded = request.getLoadedBoxCount();
@@ -103,8 +94,68 @@ public class DeliveryService {
             ordersDAO.save(order);
             return loadingResponse(order, null, null, itemResults);
         }
+        return recordLoadingMismatch(order, now,
+                loadingMismatchDescription(expected, loaded, request.getNotes(), itemResults), itemResults);
+    }
 
-        // 箱數不符比照無人簽收：原單今天結案，整張由明日補送單重送；主管在異常中心確認後，補送單才進待排車
+    public LoadingResponse reportLoadingMismatch(Long driverId, LoadingMismatchRequestDTO request) {
+        LocalDateTime now = LocalDateTime.now(TAIPEI);
+        OrdersEntity order = loadingOrderForUpdate(driverId, request.orderId(), now.toLocalDate());
+        List<Long> selectedIds = request.selectedItemIds();
+        if (selectedIds.stream().anyMatch(id -> id == null || id <= 0)) {
+            throw new IllegalArgumentException("回報商品編號不正確");
+        }
+        Set<Long> itemIds = new HashSet<>(selectedIds);
+        if (itemIds.size() != selectedIds.size()) {
+            throw new IllegalArgumentException("回報商品不可重複");
+        }
+        List<OrderItemsEntity> selectedItems = order.getItems().stream()
+                .filter(candidate -> itemIds.contains(candidate.getId())).toList();
+        if (selectedItems.size() != itemIds.size()) {
+            throw new IllegalArgumentException("回報商品不屬於這張訂單");
+        }
+        // 全部商品驗證後才寫入；只記錄勾選的不符商品，其餘不自動當成相符。
+        List<LoadingResponse.ItemResult> results = selectedItems.stream().map(item -> {
+            item.setLoadingMismatchReported(true);
+            item.setLoadedQuantity(null);
+            item.setCheckedAt(now);
+            item.setCheckedByDriverId(driverId);
+            item.setLoadingNotes("司機回報點交不符，實點數量未記錄");
+            return new LoadingResponse.ItemResult(item.getId(), item.getItemName(), item.getExpectedQuantity(),
+                    null, item.getUnit(), false, now, item.getLoadingNotes());
+        }).toList();
+        String details = selectedItems.stream().map(item -> "商品「%s」應點 %d%s%s".formatted(
+                item.getItemName(), item.getExpectedQuantity(), item.getUnit(),
+                trimToNull(item.getProductCode()) == null ? "" : "（商品代碼：" + item.getProductCode() + "）"))
+                .reduce((left, right) -> left + "；" + right).orElseThrow();
+        String notes = trimToNull(request.notes()) == null ? "" : "；司機備註：" + request.notes().trim();
+        String description = "倉庫點交不符：" + details + "；實點數量未記錄" + notes;
+        if (description.codePointCount(0, description.length()) > 1000) {
+            // 商品多時描述採摘要；每項商品仍有獨立旗標及原單明細，不遺失或截斷證據。
+            description = "倉庫點交不符：已回報 " + selectedItems.size()
+                    + " 項商品不符，完整商品與應點數量請見原單商品點交紀錄；實點數量未記錄" + notes;
+        }
+        return recordLoadingMismatch(order, now, description, results);
+    }
+
+    private OrdersEntity loadingOrderForUpdate(Long driverId, Long orderId, LocalDate date) {
+        // 出車前安全檢查通過才能點交。requirePassed 會鎖路線，所以要在鎖訂單之前呼叫：
+        // 撤回也是先鎖路線，兩邊都「先路線、後訂單」，才不會一邊等一邊、互相卡死
+        Long routeId = routeIdOf(orderId);
+        preTripInspectionService.requirePassed(driverId, routeId);
+        OrdersEntity order = findAuthorizedOrderForUpdate(driverId, orderId, date);
+        // 上面查路線時還沒鎖訂單，這段時間訂單可能被移到別條路線，剛才通過的檢查就不算數
+        if (!routeId.equals(order.getRouteId())) {
+            throw new IllegalArgumentException("任務已變更，請重新整理今日任務");
+        }
+        // 連按兩次時，第二次進來單子已經是 LOADED 或 FAILED，會在這裡被擋下
+        requireOrderStatus(order, OrderStatus.CONFIRMED, DELIVERY_LOADING_STATUS_INVALID);
+        return order;
+    }
+
+    private LoadingResponse recordLoadingMismatch(OrdersEntity order, LocalDateTime now,
+            String description, List<LoadingResponse.ItemResult> itemResults) {
+        // 原單保留失敗歷史，整張重建為待確認；主管確認時才決定當天的配送日期並送入待排車。
         OrdersEntity followUpOrder = createRedeliveryOrder(order, "LD", now.toLocalDate().plusDays(1));
 
         ExceptionCasesEntity exceptionCase = new ExceptionCasesEntity();
@@ -113,8 +164,7 @@ public class DeliveryService {
         // 異常中心只列已送進確認區的案件；設成現在，下一次排程或查詢就會送進去，主管當下就看得到
         exceptionCase.setReviewAvailableAt(now);
         exceptionCase.setType(ExceptionType.LOADING_MISMATCH);
-        exceptionCase.setDescription(loadingMismatchDescription(
-                expected, loaded, request.getNotes(), itemResults));
+        exceptionCase.setDescription(description);
         exceptionCase.setStatus(ExceptionStatus.OPEN);
         exceptionCase = exceptionCasesDAO.save(exceptionCase);
 
@@ -385,6 +435,7 @@ public class DeliveryService {
             int actual = requested.getLoadedQuantity() == null
                     ? item.getExpectedQuantity() : requested.getLoadedQuantity();
             item.setLoadedQuantity(actual);
+            item.setLoadingMismatchReported(false);
             item.setCheckedAt(checkedAt);
             item.setCheckedByDriverId(driverId);
             item.setLoadingNotes(trimToNull(requested.getNotes()));
@@ -408,6 +459,7 @@ public class DeliveryService {
             List<LoadingResponse.ItemResult> items
     ) {
         int checkedItemCount = (int) items.stream().filter(LoadingResponse.ItemResult::getMatched).count();
+        int totalItemCount = order.getItems().size();
         return new LoadingResponse(
                 order.getId(),
                 order.getStatus(),
@@ -417,8 +469,8 @@ public class DeliveryService {
                 followUpOrder == null ? null : followUpOrder.getOrderNumber(),
                 followUpOrder == null ? null : followUpOrder.getDeliveryDate(),
                 checkedItemCount,
-                items.size(),
-                checkedItemCount == items.size(),
+                totalItemCount,
+                order.getStatus() == OrderStatus.LOADED && checkedItemCount == totalItemCount,
                 items
         );
     }

@@ -99,8 +99,16 @@ public class ReportService {
     }
 
     public ReportResponses.Summary summary(Range range, Long warehouseId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
-        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
+        return summary(range, warehouseId, null);
+    }
+
+    public ReportResponses.Summary summary(Range range, Long warehouseId, Long vehicleId) {
+        return summaryForVehicles(range, warehouseId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Summary summaryForVehicles(Range range, Long warehouseId, Set<Long> vehicleIds) {
+        List<OrdersEntity> orders = reportOrders(range, warehouseId, vehicleIds);
+        List<RoutesEntity> routes = reportRoutes(range, warehouseId, vehicleIds);
         List<RoutesEntity> published = routes.stream()
                 .filter(route -> route.getStatus() == RouteStatus.PUBLISHED).toList();
         List<OrdersEntity> unassigned = orders.stream()
@@ -136,8 +144,29 @@ public class ReportService {
     }
 
     public ReportResponses.Attendance attendance(Range range, Long driverId) {
+        return attendance(range, driverId, null);
+    }
+
+    public ReportResponses.Attendance attendance(Range range, Long driverId, Long vehicleId) {
+        return attendanceForVehicles(range, driverId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Attendance attendanceForVehicles(Range range, Long driverId, Set<Long> vehicleIds) {
+        Set<DriverDate> vehicleDriverDays = new HashSet<>();
+        if (vehicleIds != null) {
+            reportRoutes(range, null, vehicleIds).stream()
+                    .filter(route -> route.getDriverId() != null)
+                    .map(route -> new DriverDate(route.getDriverId(), route.getDate()))
+                    .forEach(vehicleDriverDays::add);
+            reportReadDAO.mileage(range.getFrom(), range.getTo()).stream()
+                    .filter(log -> selectedVehicle(vehicleIds, log.getVehicleId()) && log.getDriverId() != null)
+                    .map(log -> new DriverDate(log.getDriverId(), log.getDate()))
+                    .forEach(vehicleDriverDays::add);
+        }
         List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo())
-                .stream().filter(shift -> driverId == null || driverId.equals(shift.getDriverId())).toList();
+                .stream().filter(shift -> driverId == null || driverId.equals(shift.getDriverId()))
+                .filter(shift -> vehicleIds == null || vehicleDriverDays.contains(
+                        new DriverDate(shift.getDriverId(), shift.getWorkDate()))).toList();
         Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId, Function.identity(),
                         (first, ignored) -> first));
@@ -229,18 +258,27 @@ public class ReportService {
     }
 
     public ReportResponses.Routes routes(Range range, Long warehouseId, Long routeId) {
-        List<RoutesEntity> allRoutes = reportReadDAO.routes(range.getFrom(), range.getTo(), null);
+        return routes(range, warehouseId, routeId, null);
+    }
+
+    public ReportResponses.Routes routes(Range range, Long warehouseId, Long routeId, Long vehicleId) {
+        return routesForVehicles(range, warehouseId, routeId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Routes routesForVehicles(Range range, Long warehouseId, Long routeId, Set<Long> vehicleIds) {
+        List<RoutesEntity> allRoutes = reportRoutes(range, null, vehicleIds);
         List<RoutesEntity> selectedRoutes = allRoutes.stream()
                 .filter(route -> warehouseId == null || warehouseId.equals(route.getWarehouseId()))
                 .filter(route -> routeId == null || routeId.equals(route.getId())).toList();
-        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
+        List<OrdersEntity> orders = reportOrders(range, warehouseId, vehicleIds);
         Map<Long, List<OrdersEntity>> ordersByRoute = orders.stream()
                 .filter(order -> order.getRouteId() != null)
                 .collect(Collectors.groupingBy(OrdersEntity::getRouteId));
         Map<DriverDate, List<RoutesEntity>> routesByDriverDay = allRoutes.stream()
                 .filter(route -> route.getDriverId() != null)
                 .collect(Collectors.groupingBy(route -> new DriverDate(route.getDriverId(), route.getDate())));
-        List<MileageLogsEntity> mileageLogs = reportReadDAO.mileage(range.getFrom(), range.getTo());
+        List<MileageLogsEntity> mileageLogs = reportReadDAO.mileage(range.getFrom(), range.getTo()).stream()
+                .filter(log -> vehicleIds == null || selectedVehicle(vehicleIds, log.getVehicleId())).toList();
         Map<DriverDate, List<MileageLogsEntity>> mileageByDriverDay = mileageLogs.stream()
                 .collect(Collectors.groupingBy(log -> new DriverDate(log.getDriverId(), log.getDate())));
         Map<Long, List<MileageLogsEntity>> mileageByRoute = mileageLogs.stream()
@@ -304,15 +342,33 @@ public class ReportService {
     }
 
     public ReportResponses.Drivers drivers(Range range, Long driverId) {
+        return drivers(range, driverId, null);
+    }
+
+    public ReportResponses.Drivers drivers(Range range, Long driverId, Long vehicleId) {
+        return driversForVehicles(range, driverId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Drivers driversForVehicles(Range range, Long driverId, Set<Long> vehicleIds) {
         List<DriversEntity> allDrivers = driversDAO.findAll();
         List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo());
         Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId,
                         Function.identity(), (first, ignored) -> first));
-        List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.getFrom(), range.getTo());
-        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), null);
+        List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.getFrom(), range.getTo()).stream()
+                .filter(log -> vehicleIds == null || selectedVehicle(vehicleIds, log.getVehicleId())).toList();
+        List<RoutesEntity> routes = reportRoutes(range, null, vehicleIds);
+        Set<DriverDate> vehicleDriverDays = routes.stream()
+                .filter(route -> route.getDriverId() != null)
+                .map(route -> new DriverDate(route.getDriverId(), route.getDate()))
+                .collect(Collectors.toSet());
+        if (vehicleIds != null) {
+            mileage.stream().filter(log -> log.getDriverId() != null)
+                    .map(log -> new DriverDate(log.getDriverId(), log.getDate()))
+                    .forEach(vehicleDriverDays::add);
+        }
         Map<Long, RoutesEntity> routeById = index(routes, RoutesEntity::getId);
-        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), null);
+        List<OrdersEntity> orders = reportOrders(range, null, vehicleIds);
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         List<ReportResponses.DriverRow> rows = new ArrayList<>();
 
@@ -321,8 +377,13 @@ public class ReportService {
                 continue;
             }
             Long id = driver.getId();
+            if (vehicleIds != null && vehicleDriverDays.stream().noneMatch(day -> id.equals(day.driverId))) {
+                continue;
+            }
             List<DriverShiftsEntity> workShifts = shifts.stream()
                     .filter(shift -> id.equals(shift.getDriverId()) && shift.getShiftType() == ShiftType.WORK)
+                    .filter(shift -> vehicleIds == null || vehicleDriverDays.contains(
+                            new DriverDate(id, shift.getWorkDate())))
                     .toList();
             List<AttendanceRecordsEntity> punches = workShifts.stream()
                     .map(shift -> attendanceByShift.get(shift.getId()))
@@ -390,6 +451,12 @@ public class ReportService {
     public ReportResponses.Vehicles vehicles(
             Range range, Long warehouseId, Long vehicleId, double lowLoadThresholdPercent
     ) {
+        return vehiclesForVehicles(range, warehouseId, vehicleSet(vehicleId), lowLoadThresholdPercent);
+    }
+
+    public ReportResponses.Vehicles vehiclesForVehicles(
+            Range range, Long warehouseId, Set<Long> vehicleIds, double lowLoadThresholdPercent
+    ) {
         if (!Double.isFinite(lowLoadThresholdPercent) || lowLoadThresholdPercent < 0
                 || lowLoadThresholdPercent > 100) {
             throw new IllegalArgumentException("低裝載率門檻必須介於 0 到 100% 之間");
@@ -405,7 +472,7 @@ public class ReportService {
             if (warehouseId != null && !warehouseId.equals(vehicle.getWarehouseId())) {
                 continue;
             }
-            if (vehicleId != null && !vehicleId.equals(vehicle.getId())) {
+            if (vehicleIds != null && !selectedVehicle(vehicleIds, vehicle.getId())) {
                 continue;
             }
             List<RoutesEntity> vehicleRoutes = routes.stream()
@@ -454,8 +521,16 @@ public class ReportService {
     }
 
     public ReportResponses.Warehouses warehouses(Range range, Long warehouseId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
-        List<RoutesEntity> routes = reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId);
+        return warehouses(range, warehouseId, null);
+    }
+
+    public ReportResponses.Warehouses warehouses(Range range, Long warehouseId, Long vehicleId) {
+        return warehousesForVehicles(range, warehouseId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Warehouses warehousesForVehicles(Range range, Long warehouseId, Set<Long> vehicleIds) {
+        List<OrdersEntity> orders = reportOrders(range, warehouseId, vehicleIds);
+        List<RoutesEntity> routes = reportRoutes(range, warehouseId, vehicleIds);
         List<ReportResponses.WarehouseRow> rows = new ArrayList<>();
         for (WarehousesEntity warehouse : warehousesDAO.findAll()) {
             if (warehouseId != null && !warehouseId.equals(warehouse.getId())) {
@@ -468,6 +543,9 @@ public class ReportService {
                     .toList();
             List<RoutesEntity> warehouseRoutes = routes.stream()
                     .filter(route -> warehouse.getId().equals(route.getWarehouseId())).toList();
+            if (vehicleIds != null && warehouseOrders.isEmpty() && warehouseRoutes.isEmpty()) {
+                continue;
+            }
             List<Double> loads = warehouseRoutes.stream()
                     .filter(route -> route.getStatus() == RouteStatus.PUBLISHED)
                     .map(RoutesEntity::getLoadRate)
@@ -502,7 +580,15 @@ public class ReportService {
     }
 
     public ReportResponses.Stores stores(Range range, Long warehouseId, Long storeId) {
-        List<OrdersEntity> orders = reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId);
+        return stores(range, warehouseId, storeId, null);
+    }
+
+    public ReportResponses.Stores stores(Range range, Long warehouseId, Long storeId, Long vehicleId) {
+        return storesForVehicles(range, warehouseId, storeId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Stores storesForVehicles(Range range, Long warehouseId, Long storeId, Set<Long> vehicleIds) {
+        List<OrdersEntity> orders = reportOrders(range, warehouseId, vehicleIds);
         Map<Long, List<OrdersEntity>> ordersByStore = orders.stream()
                 .collect(Collectors.groupingBy(OrdersEntity::getStoreId));
         Map<Long, List<DeliveryRecordsEntity>> deliveriesByOrder = deliveryByOrder(orders);
@@ -512,7 +598,7 @@ public class ReportService {
                 continue;
             }
             List<OrdersEntity> storeOrders = ordersByStore.getOrDefault(store.getId(), List.of());
-            if (warehouseId != null && storeOrders.isEmpty()) {
+            if ((warehouseId != null || vehicleIds != null) && storeOrders.isEmpty()) {
                 continue;
             }
             Map<Long, OrdersEntity> orderById = index(storeOrders, OrdersEntity::getId);
@@ -576,6 +662,20 @@ public class ReportService {
             Range range, ExceptionType type, ExceptionStatus status,
             Long warehouseId, Long storeId, Long driverId, Long routeId
     ) {
+        return exceptions(range, type, status, warehouseId, storeId, driverId, routeId, null);
+    }
+
+    public ReportResponses.Exceptions exceptions(
+            Range range, ExceptionType type, ExceptionStatus status,
+            Long warehouseId, Long storeId, Long driverId, Long routeId, Long vehicleId
+    ) {
+        return exceptionsForVehicles(range, type, status, warehouseId, storeId, driverId, routeId, vehicleSet(vehicleId));
+    }
+
+    public ReportResponses.Exceptions exceptionsForVehicles(
+            Range range, ExceptionType type, ExceptionStatus status,
+            Long warehouseId, Long storeId, Long driverId, Long routeId, Set<Long> vehicleIds
+    ) {
         List<ExceptionCasesEntity> cases = reportReadDAO.exceptions(range.getFrom(), range.getTo());
         List<Long> orderIds = cases.stream().map(ExceptionCasesEntity::getOrderId)
                 .filter(id -> id != null).distinct().toList();
@@ -597,6 +697,7 @@ public class ReportService {
             if ((warehouseId != null && (order == null || !warehouseId.equals(order.getWarehouseId())))
                     || (storeId != null && (order == null || !storeId.equals(order.getStoreId())))
                     || (driverId != null && !driverId.equals(currentDriverId))
+                    || (vehicleIds != null && !matchesVehicle(order, routesById, vehicleIds))
                     || (routeId != null && (order == null || !routeId.equals(order.getRouteId())))) {
                 continue;
             }
@@ -650,6 +751,41 @@ public class ReportService {
                 "僅統計資料庫已保存的異常；無資料的日期不會用假數字補齊",
                 repeated(rows, ReportResponses.ExceptionRow::getStoreId),
                 repeated(rows, ReportResponses.ExceptionRow::getRouteId), rows);
+    }
+
+    private List<OrdersEntity> reportOrders(Range range, Long warehouseId, Set<Long> vehicleIds) {
+        return vehicleIds == null
+                ? reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reportReadDAO.orders(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reportReadDAO.ordersForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
+    }
+
+    private List<RoutesEntity> reportRoutes(Range range, Long warehouseId, Set<Long> vehicleIds) {
+        return vehicleIds == null
+                ? reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId)
+                : vehicleIds.size() == 1
+                ? reportReadDAO.routes(range.getFrom(), range.getTo(), warehouseId, vehicleIds.iterator().next())
+                : reportReadDAO.routesForVehicles(range.getFrom(), range.getTo(), warehouseId, vehicleIds);
+    }
+
+    private static boolean matchesVehicle(OrdersEntity order, Map<Long, RoutesEntity> routesById, Set<Long> vehicleIds) {
+        if (order == null) {
+            return false;
+        }
+        if (selectedVehicle(vehicleIds, order.getAssignedVehicleId())) {
+            return true;
+        }
+        RoutesEntity route = routesById.get(order.getRouteId());
+        return route != null && selectedVehicle(vehicleIds, route.getVehicleId());
+    }
+
+    private static boolean selectedVehicle(Set<Long> vehicleIds, Long vehicleId) {
+        return vehicleId != null && vehicleIds.contains(vehicleId);
+    }
+
+    private static Set<Long> vehicleSet(Long vehicleId) {
+        return vehicleId == null ? null : Set.of(vehicleId);
     }
 
     private static class DriverDate {

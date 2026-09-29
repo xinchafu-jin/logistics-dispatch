@@ -215,11 +215,26 @@ describe('日曆下方的新請假流程', () => {
     expect(composer.error()).toContain('尚未載入');
   });
 
-  it('只有新的主管回覆會顯示簡單通知，並能標為已讀，不回復舊進度卡片', async () => {
-    fixture.componentRef.setInput('requests', [request('2026-09-24', {status: 'APPROVED', reviewedAt: '2026-09-27T12:00:00', decisionReason: '已安排代班，准假'}), request('2026-09-25')]);
+  it('只顯示所選日期的新回覆，切到其他日期或月份不殘留通知', async () => {
+    fixture.componentRef.setInput('selectedDate', date(24));
+    fixture.componentRef.setInput('requests', [
+      request('2026-09-24', {status: 'APPROVED', reviewedAt: '2026-09-27T12:00:00', decisionReason: '已安排代班，准假'}),
+      request('2026-09-25', {status: 'REJECTED', reviewedAt: '2026-09-27T13:00:00', decisionReason: '25 日資料不足'}),
+      request('2026-09-26'),
+    ]);
     await render();
     expect(fixture.nativeElement.querySelectorAll('.reply-notice')).toHaveLength(1);
     expect(fixture.nativeElement.textContent).toContain('已安排代班，准假');
+    expect(fixture.nativeElement.textContent).not.toContain('25 日資料不足');
+    fixture.componentRef.setInput('selectedDate', date(25)); await render();
+    expect(fixture.nativeElement.querySelectorAll('.reply-notice')).toHaveLength(1);
+    expect(fixture.nativeElement.textContent).toContain('25 日資料不足');
+    fixture.componentRef.setInput('selectedDate', date(26)); await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')).toBeNull();
+    fixture.componentRef.setInput('selectedDate', date(24));
+    fixture.componentRef.setInput('month', new Date(2026, 9, 1)); await render();
+    expect(fixture.nativeElement.querySelector('.reply-notice')).toBeNull();
+    fixture.componentRef.setInput('month', new Date(2026, 8, 1)); await render();
     const updates: DriverLeaveRequestResponse[][] = []; composer.submitted.subscribe(saved => updates.push(saved));
     fixture.nativeElement.querySelector('.reply-notice button').click();
     expect(api['markLeaveRequestRead']).toHaveBeenCalledWith(24);

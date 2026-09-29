@@ -1442,8 +1442,7 @@ export class DispatchDashboard implements OnInit {
     return this.drivers()
       .filter(
         (driver): driver is DriverDto & { id: number } =>
-          driver.id != null && driver.warehouseId === this.warehouseId()
-            && (driver.isActive || driver.id === route.driverId),
+          driver.id != null && (driver.isActive || driver.id === route.driverId),
       )
       .map((driver) => ({
         id: driver.id,
@@ -1546,8 +1545,8 @@ export class DispatchDashboard implements OnInit {
     return route.driverId === null ? null : this.driverScheduleNote(route.driverId);
   }
 
-  assignedDriverOutsideWarehouse(route: BoardRoute): boolean {
-    return route.driverId !== null && this.drivers().find(driver => driver.id === route.driverId)?.warehouseId !== this.warehouseId();
+  assignedDriverMissing(route: BoardRoute): boolean {
+    return route.driverId !== null && !this.drivers().some(driver => driver.id === route.driverId);
   }
 
   /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
@@ -2181,9 +2180,6 @@ export class DispatchDashboard implements OnInit {
     }
     if (!driver.isActive) {
       return '帳號已停用';
-    }
-    if (driver.warehouseId !== this.warehouseId()) {
-      return '司機已轉至其他倉庫，請重新指派';
     }
     if (this.scheduleLoadState() === 'loading') {
       return '正在同步當日班表';

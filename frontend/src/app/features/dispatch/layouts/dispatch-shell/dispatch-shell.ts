@@ -11,7 +11,7 @@ import {
   RouterLinkActive,
   RouterOutlet,
 } from '@angular/router';
-import {Observable, filter, forkJoin, map} from 'rxjs';
+import {Observable, catchError, filter, forkJoin, map, of} from 'rxjs';
 import {MatSelectModule} from '@angular/material/select';
 import {MatInputModule} from '@angular/material/input';
 import {MatFormFieldModule} from '@angular/material/form-field';
@@ -99,6 +99,7 @@ export class DispatchShell implements OnInit {
   protected readonly rejectionTarget = signal<RejectionTarget | null>(null);
   protected readonly rejectionReason = signal('');
   protected readonly notificationError = signal('');
+  protected readonly notificationLoadFailed = signal(false);
   protected readonly isLoadingNotifications = signal(false);
   protected readonly notificationAction = signal<string | null>(null);
   //司機名單
@@ -465,9 +466,17 @@ export class DispatchShell implements OnInit {
 
     this.isLoadingNotifications.set(true);
     this.notificationError.set('');
+    this.notificationLoadFailed.set(false);
+    const failedSections: string[] = [];
     forkJoin({
-      leaves: this.api.getPendingEmergencyLeaveRequests(),
-      leaveRequests: this.api.getPendingLeaveRequests(),
+      leaves: this.api.getPendingEmergencyLeaveRequests().pipe(catchError(() => {
+        failedSections.push('臨時離班');
+        return of([] as EmergencyLeaveDto[]);
+      })),
+      leaveRequests: this.api.getPendingLeaveRequests().pipe(catchError(() => {
+        failedSections.push('當日請假');
+        return of([] as DriverLeaveRequestDto[]);
+      })),
     }).subscribe({
       next: ({leaves, leaveRequests}) => {
         this.pendingEmergencyLeaves.set(leaves);
@@ -481,10 +490,15 @@ export class DispatchShell implements OnInit {
         );
         const selectedId = this.selectedEmergencyLeave()?.id;
         this.selectedEmergencyLeave.set(leaves.find((leave) => leave.id === selectedId) ?? null);
+        if (failedSections.length) {
+          this.notificationError.set(`${failedSections.join('、')}待辦未載入，其他待辦仍可使用；請稍後重新開啟再試。`);
+          this.notificationLoadFailed.set(true);
+        }
         this.isLoadingNotifications.set(false);
       },
       error: () => {
         this.notificationError.set('暫時無法取得主管待辦，請重新整理後再試。');
+        this.notificationLoadFailed.set(true);
         this.isLoadingNotifications.set(false);
       },
     });

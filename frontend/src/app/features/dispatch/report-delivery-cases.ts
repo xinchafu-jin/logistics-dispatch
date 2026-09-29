@@ -4,7 +4,13 @@ export const CURRENT_ISSUE_CATEGORIES = [
   {id: 'loading-mismatch', label: '倉庫點交不符', icon: 'rule'},
   {id: 'other-open', label: '其他待處理通報', icon: 'assignment_late'},
 ] as const;
-export const REPORT_CASE_METRICS = [{id: 'open', label: '待處理'}, ...CURRENT_ISSUE_CATEGORIES] as const;
+/** Period totals include resolved cases; resolving a case does not erase its occurrence. */
+export const CUMULATIVE_ISSUE_CATEGORIES = [
+  {id: 'all-no-signature', label: '無人簽收', icon: 'person_off'},
+  {id: 'all-loading-mismatch', label: '倉庫點交不符', icon: 'rule'},
+] as const;
+export const REPORT_CASE_METRICS = [{id: 'open', label: '待處理'}, ...CURRENT_ISSUE_CATEGORIES,
+  ...CUMULATIVE_ISSUE_CATEGORIES.map(item => ({...item, label: item.label + '（累積）'}))] as const;
 
 export function matchesReportCase(row: unknown, metric = ''): boolean {
   if (typeof row !== 'object' || row === null) return false;
@@ -14,6 +20,8 @@ export function matchesReportCase(row: unknown, metric = ''): boolean {
     case 'no-signature': return status === 'OPEN' && type === 'NO_SIGNATURE';
     case 'loading-mismatch': return status === 'OPEN' && type === 'LOADING_MISMATCH';
     case 'other-open': return status === 'OPEN' && type !== 'NO_SIGNATURE' && type !== 'LOADING_MISMATCH';
+    case 'all-no-signature': return type === 'NO_SIGNATURE';
+    case 'all-loading-mismatch': return type === 'LOADING_MISMATCH';
     default: return true;
   }
 }

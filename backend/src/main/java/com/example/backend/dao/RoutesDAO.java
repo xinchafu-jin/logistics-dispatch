@@ -33,7 +33,7 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
     /**
      * 當天已指派司機的全部路線，不分倉庫。
      *
-     * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線，
+     * 司機所屬倉庫不限制派車，但一位司機一天只開一條路線，
      * 所以「誰還能指派」必須看整天而不是只看當前倉。
      */
     List<RoutesEntity> findByDateAndDriverIdIsNotNull(LocalDate date);

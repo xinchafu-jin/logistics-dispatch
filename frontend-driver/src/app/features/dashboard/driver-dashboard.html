@@ -205,7 +205,7 @@
                 type="button"
                 [class]="isNavigating() ? 'danger-action' : 'primary-action'"
                 (click)="isNavigating() ? stopNavigation() : startNavigation()"
-                [disabled]="!canNavigate(currentTask.stop)"
+                [disabled]="!isNavigating() && !canStartNavigation()"
               >
                 <mat-icon aria-hidden="true">{{ isNavigating() ? 'stop_circle' : 'near_me' }}</mat-icon>
                 {{ isNavigating() ? '結束導航' : '開始導航' }}
@@ -252,6 +252,9 @@
                 </button>
               }
             </div>
+            @if (!isNavigating() && pendingLoadingCount() > 0) {
+              <p class="sheet-copy">還有 {{ pendingLoadingCount() }} 筆訂單未完成倉庫點交，全部點交後才能導航。</p>
+            }
 
             @if (isDeliveryActionOpen(currentTask.stop)) {
               <section class="delivery-action-panel" aria-label="交貨處理">
@@ -555,6 +558,9 @@
                   </div>
                   <span>{{ route.vehicle.plateNumber }}</span>
                 </header>
+                @if (pendingLoadingCount() > 0) {
+                  <p class="task-route-meta">還有 {{ pendingLoadingCount() }} 筆訂單未點交；全部點交後開放導航。</p>
+                }
                 <!-- 出車前安全檢查：通過才開放這條路線的點交；記出車里程時後端也會再擋一次 -->
                 <app-pre-trip-check
                   [route]="route"
@@ -592,11 +598,11 @@
                               [title]="
                                 canNavigate(stop)
                                   ? '在地圖顯示並開始導航'
-                                  : '此站點尚未設定座標'
+                                  : navigationUnavailableReason(stop)
                               "
                             >
                               <mat-icon aria-hidden="true">near_me</mat-icon>
-                              <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
+                              <span>{{ canNavigate(stop) ? '導航' : navigationUnavailableLabel(stop) }}</span>
                             </button>
                             @if (canLoad(stop)) {
                               <button
@@ -632,112 +638,110 @@
                             }
                           </div>
                           @if (isLoadingActionOpen(stop)) {
-                            <section class="delivery-action-panel" aria-label="倉庫點交">
-                              <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
-                              @if (stop.items.length > 0) {
-                                <section class="loading-item-list" aria-label="商品逐項點交">
-                                  <header><strong>商品明細</strong><span>每項都要勾選與實點</span></header>
-                                  @for (item of stop.items; track item.id) {
-                                    <article>
-                                      <label class="loading-item-check">
-                                        <input
-                                          type="checkbox"
-                                          [checked]="loadingItemForm(item.id).checked"
-                                          [disabled]="isTaskSubmitting()"
-                                          (change)="updateLoadingItemChecked(item.id, $event)"
-                                        />
-                                        <span>
-                                          <strong>{{ item.itemName }}</strong>
-                                          <small>
-                                            @if (item.productCode) { {{ item.productCode }} · }
-                                            應到 {{ item.expectedQuantity }} {{ item.unit }}
-                                          </small>
-                                        </span>
-                                      </label>
-                                      <label>
-                                        <span>實點數量</span>
-                                        <input
-                                          type="number"
-                                          inputmode="numeric"
-                                          min="0"
-                                          step="1"
-                                          [max]="item.expectedQuantity"
-                                          [value]="loadingItemForm(item.id).loadedQuantity"
-                                          [disabled]="isTaskSubmitting()"
-                                          (input)="updateLoadingItemQuantity(item.id, $event)"
-                                        />
-                                      </label>
-                                      <label class="loading-item-note">
-                                        <span>商品備註</span>
-                                        <input
-                                          type="text"
-                                          maxlength="255"
-                                          placeholder="選填"
-                                          [value]="loadingItemForm(item.id).notes"
-                                          [disabled]="isTaskSubmitting()"
-                                          (input)="updateLoadingItemNotes(item.id, $event)"
-                                        />
-                                      </label>
-                                    </article>
-                                  }
-                                </section>
-                              }
+                            <section class="delivery-action-panel loading-action-panel" aria-label="倉庫點交">
+                              <div class="loading-panel-heading">
+                                <strong>倉庫點交</strong>
+                                <span>應點 <b>{{ stop.expectedBoxCount }}</b> 箱</span>
+                              </div>
+                              <p>{{ stop.items.length > 0 ? '全部相符：全勾後按「確認點交」。有不符：只勾不符商品，按「點交不符」。' : '核對訂單品項摘要與應點箱數後，勾選確認。' }}</p>
+                            @if (stop.items.length > 0) {
+                              <section class="loading-item-list" aria-label="商品逐項點交">
+                                <header class="loading-item-heading">
+                                  <div>
+                                    <strong>商品明細</strong>
+                                    <small>勾選要確認或回報不符的商品</small>
+                                  </div>
+                                  <span class="loading-progress" aria-live="polite">{{ checkedLoadingItemCount(stop) }}/{{ stop.items.length }} 已選取</span>
+                                </header>
+                                @for (item of stop.items; track item.id) {
+                                  <article class="loading-item-row"
+                                    [class.is-checked]="loadingItemForm(item.id).checked"
+                                    [class.is-mismatch]="reportingLoadingItemIds().includes(item.id)">
+                                    <label class="loading-item-check">
+                                      <input
+                                        type="checkbox"
+                                        [checked]="loadingItemForm(item.id).checked"
+                                        [disabled]="isTaskSubmitting()"
+                                        (change)="updateLoadingItemChecked(item.id, $event)"
+                                      />
+                                      <span class="loading-item-name">
+                                        <strong>{{ item.itemName }}</strong>
+                                      </span>
+                                      <b class="loading-item-expected">{{ item.expectedQuantity }} <small>{{ item.unit }}</small></b>
+                                    </label>
+                                  </article>
+                                }
+                              </section>
+                              <p class="loading-mismatch-hint">勾選至少一項不符商品即可直接送出異常，原單停止配送並重建待確認訂單。</p>
+                            } @else {
+                              <section class="loading-item-list" aria-label="訂單品項摘要核對">
+                                <header class="loading-item-heading">
+                                  <div><strong>訂單品項摘要</strong><small>舊單未提供逐項商品明細</small></div>
+                                  <span class="loading-progress" [class.is-complete]="loadingSummaryChecked()" aria-live="polite">{{ loadingSummaryChecked() ? '1/1 已核對' : '0/1 已核對' }}</span>
+                                </header>
+                                <article class="loading-item-row" [class.is-checked]="loadingSummaryChecked()">
+                                  <label class="loading-item-check">
+                                    <input
+                                      type="checkbox"
+                                      [checked]="loadingSummaryChecked()"
+                                      [disabled]="isTaskSubmitting()"
+                                      (change)="updateLoadingSummaryChecked($event)"
+                                    />
+                                    <span class="loading-item-name">
+                                      <strong>{{ stop.itemDescription?.trim() || '未記錄商品名稱' }}</strong>
+                                      <small>勾選表示已核對訂單摘要與箱數</small>
+                                    </span>
+                                    <b class="loading-item-expected">{{ stop.expectedBoxCount }} <small>箱</small></b>
+                                  </label>
+                                </article>
+                              </section>
+                            }
+                            <details class="loading-order-note">
+                              <summary>補充備註（選填）</summary>
                               <label>
-                                <span>實點箱數</span>
-                                <input
-                                  type="number"
-                                  inputmode="numeric"
-                                  min="0"
-                                  step="1"
-                                  [max]="stop.expectedBoxCount"
-                                  [value]="loadingBoxCount()"
-                                  [disabled]="isTaskSubmitting()"
-                                  (input)="updateLoadingBoxCount($event)"
-                                />
-                              </label>
-                              <label>
-                                <span>備註（選填）</span>
+                                <span>整單交接說明</span>
                                 <textarea
                                   rows="2"
                                   maxlength="500"
-                                  placeholder="例如少了哪一箱、外箱破損"
+                                  placeholder="需要補充交接說明時再填寫"
                                   [value]="loadingNotes()"
                                   [disabled]="isTaskSubmitting()"
                                   (input)="updateLoadingNotes($event)"
                                 ></textarea>
                               </label>
-                              @if (loadingMismatchPending()) {
-                                <p class="task-feedback is-error">
-                                  實點內容與訂單不符。
-                                  送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
-                                </p>
+                            </details>
+                            <div class="delivery-action-buttons" [class.has-mismatch-action]="stop.items.length > 0">
+                              <button
+                                type="button"
+                                class="delivery-complete-button"
+                                (click)="submitLoading(stop)"
+                                [disabled]="isTaskSubmitting() || !loadingChecklistComplete(stop)"
+                              >
+                                <mat-icon aria-hidden="true">fact_check</mat-icon>
+                                {{ isTaskSubmitting() ? '處理中...' : '確認點交' }}
+                              </button>
+                              <button
+                                type="button"
+                                class="delivery-cancel-button"
+                                (click)="closeLoadingAction()"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                取消
+                              </button>
+                              @if (stop.items.length > 0) {
+                                <button
+                                  type="button"
+                                  class="loading-mismatch-button"
+                                  (click)="handleLoadingMismatch(stop)"
+                                  [disabled]="isTaskSubmitting() || checkedLoadingItemCount(stop) === 0"
+                                >
+                                  <mat-icon aria-hidden="true">report_problem</mat-icon>
+                                  {{ reportingLoadingItemIds().length > 0 ? '送出中…' : '點交不符' }}
+                                </button>
                               }
-                              <div class="delivery-action-buttons">
-                                <button
-                                  type="button"
-                                  class="delivery-complete-button"
-                                  (click)="submitLoading(stop)"
-                                  [disabled]="isTaskSubmitting()"
-                                >
-                                  <mat-icon aria-hidden="true">fact_check</mat-icon>
-                                  {{
-                                    isTaskSubmitting()
-                                      ? '處理中...'
-                                      : loadingMismatchPending()
-                                        ? '確定送出'
-                                        : '確認點交'
-                                  }}
-                                </button>
-                                <button
-                                  type="button"
-                                  class="delivery-cancel-button"
-                                  (click)="closeLoadingAction()"
-                                >
-                                  取消
-                                </button>
-                              </div>
-                            </section>
-                          }
+                            </div>
+                          </section>
+                        }
                           @if (isDeliveryActionOpen(stop)) {
                             <section class="delivery-action-panel" aria-label="交貨處理">
                               <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
@@ -841,14 +845,14 @@
           <h1>本月班表</h1>
         </div>
         <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
-             每天依班別上色（scheduleDateClass），點某一天看下方明細 -->
+             日期下方顯示班別圖示／文字，點某一天看下方明細 -->
         <section class="schedule-calendar-card" aria-label="班表月曆">
           <mat-calendar
-            #scheduleCalendar
             appScheduleCellLabels
+            #scheduleCalendar
             class="driver-schedule-calendar"
             [startAt]="scheduleMonth()"
-            [selected]="calendarLeaveComposer()?.activeMode() ? null : selectedScheduleDate()"
+            [selected]="calendarLeaveComposer.activeMode() ? null : selectedScheduleDate()"
             [dateClass]="scheduleDateClass"
             [dateFilter]="scheduleDateFilter"
             (selectedChange)="selectScheduleDate($event)"
@@ -857,7 +861,20 @@
             <span class="shift-type is-work">上班</span>
             <span class="shift-type is-day_off">休假</span>
             <span class="shift-type is-leave">請假</span>
+            @if (pendingScheduleDates().size) { <span class="shift-type is-pending">申請中</span> }
           </div>
+          @if (pendingScheduleDates().size) {
+            <p class="schedule-pending-hint" role="status">
+              <mat-icon aria-hidden="true">hourglass_top</mat-icon>
+              {{ pendingScheduleDates().size }} 天請假申請中，等待主管審核；暫不可重複申請。
+            </p>
+          }
+          <app-schedule-leave-composer #calendarLeaveComposer
+            [month]="scheduleMonth()" [selectedDate]="selectedScheduleDate()" [shifts]="publishedShifts()"
+            [scheduleReady]="scheduleViewState() === 'ready'"
+            [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
+            (calendarChange)="refreshScheduleCalendar()" (goToToday)="showScheduleToday()"
+            (submitted)="applyCalendarLeaves($event)" />
         </section>
 
         @if (scheduleViewState() === 'loading') {
@@ -892,91 +909,72 @@
             }
           </div>
         }
-        <section class="mileage-panel general-leave-panel" aria-labelledby="general-leave-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">請假與特殊事由</p>
-              <h2 id="general-leave-title">申請與處理結果</h2>
-            </div>
-            <mat-icon aria-hidden="true">event_busy</mat-icon>
+      } @else {
+        <div class="panel-heading">
+          <p class="eyebrow">司機</p>
+          <h1>司機資訊</h1>
+        </div>
+        <section class="profile-photo-card" aria-label="司機大頭照">
+          <div class="profile-photo-preview">
+            @if (profilePhotoUrl(); as photoUrl) {
+              <img
+                [src]="photoUrl"
+                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                (error)="handleProfilePhotoLoadError()"
+              />
+            } @else {
+              <span aria-hidden="true">{{ profileInitial() }}</span>
+            }
           </div>
-
-          <div class="leave-mode-tabs" role="tablist" aria-label="選擇申請類型">
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'temporary'" [attr.aria-selected]="leaveApplicationTab() === 'temporary'" (click)="setLeaveApplicationTab('temporary')">當日特殊事由</button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'planned'" [attr.aria-selected]="leaveApplicationTab() === 'planned'" (click)="setLeaveApplicationTab('planned')">預排請假</button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'makeup'" [attr.aria-selected]="leaveApplicationTab() === 'makeup'" (click)="setLeaveApplicationTab('makeup')">事後補請</button>
-          </div>
-
-          @if (unreadLeaveCount() > 0) {
-            <p class="leave-unread-summary" aria-live="polite">有 {{ unreadLeaveCount() }} 筆未讀審核結果</p>
-          }
-          @if (leaveMessage()) { <p class="task-feedback is-success">{{ leaveMessage() }}</p> }
-          @if (leaveError()) { <p class="task-feedback is-error">{{ leaveError() }}</p> }
-
-          @if (leaveApplicationTab() === 'temporary') {
-            <p>只處理今天 {{ leaveForm().workDate }} 的特殊事由。需要補足遲到超過 30 分鐘的時段時，請填寫起訖時間。</p>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="leaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateLeaveFormField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <div class="leave-time-fields">
-                <label><span>開始時間（整天可留白）</span><input type="time" [value]="leaveForm().leaveStart" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveStart', $event)" /></label>
-                <label><span>結束時間</span><input type="time" [value]="leaveForm().leaveEnd" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveEnd', $event)" /></label>
-              </div>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請簡述今天的特殊事由" [value]="leaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action" (click)="submitLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出當日特殊事由' }}</button>
-            </div>
-          } @else if (leaveApplicationTab() === 'planned') {
-            <p>複選明天以後的已發布上班日。待審或已核准的日期會鎖定，主管核准後才會顯示在班表。</p>
-            @if (isPlannedLeaveLoading()) { <p class="schedule-state">正在取得可預排日期...</p> }
-            <div class="planned-date-options" aria-label="可預排請假日期">
-              @for (shift of plannedLeaveShifts(); track shift.id) {
-                <button type="button" [class.is-selected]="isPlannedDateSelected(shift.workDate)" [class.is-blocked]="isPlannedDateBlocked(shift.workDate)" [disabled]="isLeaveSubmitting() || isPlannedDateBlocked(shift.workDate)" (click)="togglePlannedLeaveDate(shift.workDate)">
-                  <strong>{{ formatShiftDate(shift.workDate) }}</strong><span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
-                  @if (isPlannedDateBlocked(shift.workDate)) { <small>已送審或已核准</small> }
-                </button>
-              } @empty { @if (!isPlannedLeaveLoading()) { <p>最近 60 天沒有可預排的已發布上班日。</p> } }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="plannedLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updatePlannedLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>預排原因</span><textarea rows="3" maxlength="500" placeholder="例如回診、家庭安排" [value]="plannedLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updatePlannedLeaveField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action" (click)="submitPlannedLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出預排請假' }}</button>
-            </div>
-          } @else {
-            <app-schedule-leave-composer #calendarLeaveComposer [makeupOnly]="true"
-              [month]="scheduleMonth()" [shifts]="publishedShifts()" [scheduleReady]="scheduleViewState() === 'ready'"
-              [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
-              (calendarChange)="refreshScheduleCalendar()" (submitted)="onCalendarLeaveSubmitted($event)" />
-          }
-
-          <div class="driver-leave-history" aria-label="請假與特殊事由處理結果">
-            <label class="leave-history-filter"><span>查看日期</span><select [value]="leaveHistoryDate()" (change)="selectLeaveHistoryDate($event)"><option value="">全部日期</option>@for (date of leaveHistoryDates(); track date) { <option [value]="date">{{ formatShiftDate(date) }}</option> }</select></label>
-            @if (isLeaveListLoading()) { <p class="schedule-state">正在更新處理結果...</p> }
-            @for (request of filteredLeaveRequests(); track request.id) {
-              <article [class.is-unread]="!request.driverReadAt">
-                <header><strong>{{ formatShiftDate(request.workDate) }} · {{ leaveModeLabel(request) }}</strong><span [class]="'leave-status is-' + request.status.toLowerCase()">{{ leaveStatusLabel(request.status) }}</span></header>
-                <small>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }} · 申請於 {{ formatDateTime(request.requestedAt) }}</small>
-                <p><b>你的申請原因：</b>{{ request.requestReason }}</p>
-                <p class="decision-reason"><b>主管處理理由：</b>{{ request.decisionReason || '等待主管審核。' }}</p>
-                @if (request.evidencePhotoUrl) { <a class="leave-evidence-link" [href]="request.evidencePhotoUrl" target="_blank" rel="noopener">查看佐證照片</a> }
-                <div class="leave-request-actions">
-                  @if (!request.driverReadAt) { <button type="button" class="outline-action" (click)="markLeaveRequestRead(request)">標記已讀</button> }
-                  <button type="button" class="outline-action" (click)="toggleLeaveHistory(request)">{{ expandedLeaveId() === request.id ? '收合歷程' : '查看歷程' }}</button>
-                </div>
-                @if (expandedLeaveId() === request.id) {
-                  <div class="leave-request-events" aria-label="請假異動歷程">
-                    @if (isLeaveHistoryLoading()) { <small>正在讀取歷程...</small> } @else if (leaveHistoryErrors()[request.id]; as historyError) { <small class="is-error">{{ historyError }}</small> } @else {
-                      @for (event of leaveHistories()[request.id] ?? []; track event.id) { <p><strong>{{ leaveHistoryLabel(event.eventType) }}</strong> · {{ formatDateTime(event.occurredAt) }} @if (event.reason) { <span>· {{ event.reason }}</span> }</p> } @empty { <small>目前沒有歷程資料。</small> }
-                    }
-                  </div>
-                }
-              </article>
-            } @empty { @if (!isLeaveListLoading()) { <small>目前沒有請假或特殊事由申請。</small> } }
+          <div class="profile-photo-copy">
+            <strong>{{ profile()?.name ?? user()?.name }}</strong>
+            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
+            <label
+              class="profile-photo-action"
+              [class.is-disabled]="isProfilePhotoUploading()"
+            >
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                [disabled]="isProfilePhotoUploading()"
+                (change)="selectProfilePhoto($event)"
+              />
+              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
+            </label>
           </div>
         </section>
-
+        @if (profilePhotoMessage()) {
+          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+        }
+        @if (profileError()) {
+          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+        }
+        <dl class="profile-list">
+          <div>
+            <dt>姓名</dt>
+            <dd>{{ profile()?.name ?? user()?.name }}</dd>
+          </div>
+          <div>
+            <dt>帳號</dt>
+            <dd>{{ profile()?.account ?? user()?.account }}</dd>
+          </div>
+          <div>
+            <dt>司機編號</dt>
+            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
+          </div>
+          <div>
+            <dt>電話</dt>
+            <dd>{{ profile()?.phone || '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>所屬倉庫</dt>
+            <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
+          </div>
+          <div>
+            <dt>登入狀態</dt>
+            <dd>已安全登入</dd>
+          </div>
+        </dl>
         <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
           <div class="mileage-heading">
             <div>
@@ -1050,72 +1048,6 @@
             }
           </div>
         </section>
-      } @else {
-        <div class="panel-heading">
-          <p class="eyebrow">司機</p>
-          <h1>司機資訊</h1>
-        </div>
-        <section class="profile-photo-card" aria-label="司機大頭照">
-          <div class="profile-photo-preview">
-            @if (profilePhotoUrl(); as photoUrl) {
-              <img
-                [src]="photoUrl"
-                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
-                (error)="handleProfilePhotoLoadError()"
-              />
-            } @else {
-              <span aria-hidden="true">{{ profileInitial() }}</span>
-            }
-          </div>
-          <div class="profile-photo-copy">
-            <strong>{{ profile()?.name ?? user()?.name }}</strong>
-            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
-            <label
-              class="profile-photo-action"
-              [class.is-disabled]="isProfilePhotoUploading()"
-            >
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                [disabled]="isProfilePhotoUploading()"
-                (change)="selectProfilePhoto($event)"
-              />
-              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
-            </label>
-          </div>
-        </section>
-        @if (profilePhotoMessage()) {
-          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
-        }
-        @if (profileError()) {
-          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
-        }
-        <dl class="profile-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ profile()?.name ?? user()?.name }}</dd>
-          </div>
-          <div>
-            <dt>帳號</dt>
-            <dd>{{ profile()?.account ?? user()?.account }}</dd>
-          </div>
-          <div>
-            <dt>司機編號</dt>
-            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
-          </div>
-          <div>
-            <dt>電話</dt>
-            <dd>{{ profile()?.phone || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>所屬倉庫</dt>
-            <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>登入狀態</dt>
-            <dd>已安全登入</dd>
-          </div>
-        </dl>
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>

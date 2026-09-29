@@ -26,6 +26,7 @@ import {
   EmergencyLeaveRequest,
   EmergencyLeaveResponse,
   LoadingRequest,
+  LoadingMismatchRequest,
   LoadingResponse,
   MileageLogResponse,
   MileageRequest,
@@ -164,6 +165,10 @@ export class DriverOperationsService {
 
   loading(request: LoadingRequest): Observable<LoadingResponse> {
     return this.http.post<LoadingResponse>('/api/driver/loading', request);
+  }
+
+  reportLoadingMismatch(request: LoadingMismatchRequest): Observable<LoadingResponse> {
+    return this.http.post<LoadingResponse>('/api/driver/loading/mismatch', request);
   }
 
   arrive(request: ArriveRequest): Observable<DeliveryRecordResponse> {
