@@ -4,12 +4,12 @@
 
 // ── 查詢條件 ──
 .period-bar { border-bottom: 1px solid var(--border); }
-.custom-period { color: var(--muted); font-size: 0.75rem; }
+.custom-period { color: var(--muted); font-size: 0.875rem; }
 .period-stepper { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.period-stepper strong { font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
+.period-stepper strong { font-family: var(--font-mono); font-size: 0.9375rem; font-weight: 600; white-space: nowrap; }
 
 .query-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
-.query-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.query-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.875rem; }
 .query-field .ui-input { width: 150px; }
 // 開始、結束日期各一個欄位：Material 的 infix 預設 min-width 180px，欄位窄於這個值時要放掉
 .date-field .admin-date-field { width: 168px; }
@@ -19,13 +19,13 @@
 // ── 匯出預覽 ──
 .preview-shell h3 {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
-  .ui-mono { color: var(--muted); font-size: 0.8125rem; font-weight: 400; }
+  .ui-mono { color: var(--muted); font-size: 0.9375rem; font-weight: 400; }
 }
 
 .sheet-tabs .ui-tab mat-icon { width: 16px; height: 16px; font-size: 16px; }
-.metric-filter { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.metric-filter { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.875rem; }
 .metric-filter .ui-input { max-width: 240px; }
-.sheet-note { margin: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+.sheet-note { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
 
 // 載入失敗、尚未預覽時，內容區只放一段說明；失敗時多一顆重新載入
 .empty-preview { display: grid; justify-items: center; gap: 12px; }
@@ -34,7 +34,7 @@
 // 預覽表格：一格一行不換行（欄多時在框裡橫向捲動），第二行灰字放訂單號、門市；說明類的長文字欄才換行
 .sheet-content .ui-table {
   td { white-space: nowrap; }
-  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.6875rem; }
+  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
   .wrap-cell { min-width: 200px; white-space: normal; }
   // 異常案件的「不符商品」摘要一個商品一行
   td.loading-item-summary { white-space: pre-line; overflow-wrap: anywhere; font-weight: 600; }
@@ -47,13 +47,13 @@
 .sheet-content .ui-table .sub-row > td { padding: 6px 12px; white-space: normal; background: var(--surface-subtle); }
 
 .item-details {
-  summary { color: var(--accent); font-size: 0.75rem; cursor: pointer; }
+  summary { color: var(--accent); font-size: 0.875rem; cursor: pointer; }
   &[open] summary { margin-bottom: 8px; }
   .sheet-note { margin-bottom: 8px; }
 }
 
 .route-legs {
-  display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.75rem;
+  display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.875rem;
   strong { color: var(--text); }
   small { color: var(--subtle); }
 }
@@ -63,15 +63,15 @@
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 4px;
   article { min-width: 0; padding: 12px 14px; border-left: 1px solid var(--border); }
   article:first-child { border-left: 0; }
-  span, small { display: block; color: var(--muted); font-size: 0.75rem; }
+  span, small { display: block; color: var(--muted); font-size: 0.875rem; }
   strong { display: block; margin: 4px 0; font-family: var(--font-mono); font-size: 1.5rem; font-weight: 600; }
 }
 
 // 出勤、出車的摘要數字
-.performance-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.8125rem; }
-.performance-summary b { color: var(--accent); font-family: var(--font-mono); font-size: 1rem; }
+.performance-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.9375rem; }
+.performance-summary b { color: var(--accent); font-family: var(--font-mono); font-size: 1.0625rem; }
 
-.planning-details summary { padding: 6px 0; color: var(--muted); font-size: 0.8125rem; cursor: pointer; }
+.planning-details summary { padding: 6px 0; color: var(--muted); font-size: 0.9375rem; cursor: pointer; }
 .planning-details[open] summary { margin-bottom: 8px; }
 .exception-summary { display: flex; flex-wrap: wrap; gap: 6px; }
 

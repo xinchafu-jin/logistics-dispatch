@@ -15,7 +15,7 @@
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 
   .ui-input {
     width: 150px;
@@ -25,7 +25,7 @@
 .list-count {
   margin-left: auto;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 // ── 左側清單 ──
@@ -39,7 +39,7 @@
   }
 
   td:first-child {
-    font-size: 0.75rem;
+    font-size: 0.875rem;
   }
 }
 
@@ -72,14 +72,14 @@
 
 .detail-id {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 400;
 }
 
 .action-message {
   margin: 0;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .detail-actions {
@@ -107,13 +107,13 @@
 
   header > span {
     color: var(--field-label);
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     font-weight: 500;
   }
 
   small {
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: 0.875rem;
   }
 
   header .ui-btn-default {
@@ -144,7 +144,7 @@
   background: var(--surface);
   border: 1px dashed var(--border);
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 // ── 匯入 Excel ──
@@ -152,7 +152,7 @@
 .import-summary,
 .confirm-copy {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
 }
 
 .import-hint {
@@ -161,7 +161,7 @@
 
 .import-summary strong {
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: 1.0625rem;
 }
 
 .import-ok {

@@ -7,7 +7,7 @@
 // ── 分頁列右側：即時連線狀態、上次讀取時間 ──
 .updated-at {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 // ── 篩選列右側的摘要數字（取代原本的大張統計卡）──
@@ -17,12 +17,12 @@
   gap: 4px 16px;
   margin: 0 0 0 auto;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 
   strong {
     color: var(--text);
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
+    font-size: 0.9375rem;
   }
 
   .is-urgent strong {
@@ -77,7 +77,7 @@
 
 .detail-id {
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 400;
 }
 
@@ -111,7 +111,7 @@
 // ── 確認到期異常、結案視窗 ──
 .confirmation-copy {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.6;
 }
 
