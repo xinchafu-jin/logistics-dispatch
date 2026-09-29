@@ -89,7 +89,7 @@ public class DispatchController {
 
     /**
      * 看板日期列：每一天全部倉庫合起來的狀態與數量，另外附上 from 之前還沒結案的日子。
-     * from 不帶就是今天；to 不帶就顯示到最後一天有單的日期（至少到後天、最多 31 天）。
+     * from 不帶就是今天；to 不帶就顯示到最後一天有單的日期（至少到七天後、最多 31 天）。
      */
     @GetMapping("/days")
     public ResponseEntity<List<DispatchDayResponse>> days(

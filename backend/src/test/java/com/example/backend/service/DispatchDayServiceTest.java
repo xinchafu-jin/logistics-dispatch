@@ -240,13 +240,14 @@ class DispatchDayServiceTest {
     }
 
     @Test
-    void 沒給範圍_至少顯示到後天() {
+    void 沒給範圍_至少顯示到七天後() {
         when(ordersDAO.findLatestDeliveryDate(eq(TODAY), any())).thenReturn(null);
 
         List<DispatchDayResponse> days = service.getDays(null, null, TODAY);
 
-        assertEquals(3, days.size());
-        assertEquals(TODAY.plusDays(2), days.get(2).getDate());
+        assertEquals(8, days.size());
+        assertEquals(TODAY, days.get(0).getDate());
+        assertEquals(TODAY.plusDays(7), days.get(7).getDate());
     }
 
     @Test

@@ -518,7 +518,7 @@ export class DispatchApiService {
    */
   /**
    * 看板日期列：每一天全部倉庫的狀態與數量，另外附上之前還沒結案的日子。
-   * 不給 to 時後端會顯示到最後一天有單的日期（至少到後天）。
+   * 不給 to 時後端會顯示到最後一天有單的日期（至少到七天後）。
    */
   getDispatchDays(from?: string, to?: string): Observable<DispatchDayDto[]> {
     let params = new HttpParams();

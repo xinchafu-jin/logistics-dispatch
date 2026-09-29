@@ -845,7 +845,7 @@
           <h1>本月班表</h1>
         </div>
         <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
-             日期下方顯示班別圖示／文字，點某一天看下方明細 -->
+             日期下方顯示班別圖示／文字，點某一天看正下方明細，接著直接選擇三合一請假模式 -->
         <section class="schedule-calendar-card" aria-label="班表月曆">
           <mat-calendar
             appScheduleCellLabels
@@ -869,24 +869,16 @@
               {{ pendingScheduleDates().size }} 天請假申請中，等待主管審核；暫不可重複申請。
             </p>
           }
-          <app-schedule-leave-composer #calendarLeaveComposer
-            [month]="scheduleMonth()" [selectedDate]="selectedScheduleDate()" [shifts]="publishedShifts()"
-            [scheduleReady]="scheduleViewState() === 'ready'"
-            [requests]="leaveRequests()" [requestsLoading]="isLeaveListLoading()" [requestsAvailable]="leaveListAvailable()"
-            (calendarChange)="refreshScheduleCalendar()" (goToToday)="showScheduleToday()"
-            (submitted)="applyCalendarLeaves($event)" />
-        </section>
 
-        @if (scheduleViewState() === 'loading') {
-          <p class="schedule-state">正在取得已發布班表...</p>
-        } @else if (scheduleViewState() === 'error') {
-          <p class="schedule-state is-error">{{ scheduleError() }}</p>
-        } @else if (scheduleViewState() === 'empty') {
-          <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
-        } @else {
-          <!-- 點選那天的班次明細；沿用原本清單的一列樣式 -->
-          <div class="shift-list">
-            @if (selectedShift(); as shift) {
+          <!-- 點選日期的班次明細直接緊接在月曆下方，方便先確認當日班別再決定是否請假 -->
+          <div class="schedule-selected-shift">
+            @if (scheduleViewState() === 'loading') {
+              <p class="schedule-state">正在取得已發布班表...</p>
+            } @else if (scheduleViewState() === 'error') {
+              <p class="schedule-state is-error">{{ scheduleError() }}</p>
+            } @else if (scheduleViewState() === 'empty') {
+              <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
+            } @else if (selectedShift(); as shift) {
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
                 <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{
@@ -908,127 +900,170 @@
               <p class="schedule-state">這一天沒有已發布的班次。</p>
             }
           </div>
+
+          <app-schedule-leave-composer
+            #calendarLeaveComposer
+            [month]="scheduleMonth()"
+            [selectedDate]="selectedScheduleDate()"
+            [shifts]="publishedShifts()"
+            [scheduleReady]="scheduleViewState() === 'ready'"
+            [requests]="leaveRequests()"
+            [requestsLoading]="isLeaveListLoading()"
+            [requestsAvailable]="leaveListAvailable()"
+            (calendarChange)="refreshScheduleCalendar()"
+            (goToToday)="showScheduleToday()"
+            (submitted)="applyCalendarLeaves($event)"
+          />
+        </section>
+
+        @if (leaveRequests().length > 0) {
+          <details class="schedule-history-card" [open]="unreadLeaveCount() > 0">
+            <summary>
+              <div class="schedule-history-card__title">
+                <strong>請假審核結果與歷程（{{ leaveRequests().length }} 筆）</strong>
+                @if (unreadLeaveCount() > 0) {
+                  <span class="leave-tab-count">{{ unreadLeaveCount() }} 筆未讀</span>
+                }
+              </div>
+              <span class="completed-stops-group__toggle">展開 / 收合 ▾</span>
+            </summary>
+            <div class="schedule-history-list">
+              @for (request of leaveRequests(); track request.id) {
+                <article
+                  class="schedule-history-item"
+                  [class.is-unread]="request.status !== 'PENDING' && request.reviewedAt && !request.driverReadAt"
+                >
+                  <div class="schedule-history-item__head">
+                    <strong>
+                      {{ formatShiftDate(request.workDate) }} · {{ leaveModeLabel(request) }}（{{
+                        leaveTypeLabel(request.leaveType)
+                      }}）
+                    </strong>
+                    <span class="schedule-history-status" [class]="'is-' + request.status.toLowerCase()">
+                      {{ leaveStatusLabel(request.status) }}
+                    </span>
+                  </div>
+                  @if (!request.fullDay && request.leaveStart && request.leaveEnd) {
+                    <small>時段：{{ formatTime(request.leaveStart) }} - {{ formatTime(request.leaveEnd) }}</small>
+                  }
+                  @if (request.reason) {
+                    <small>原因：{{ request.reason }}</small>
+                  }
+                  @if (request.decisionReason) {
+                    <p class="schedule-history-reply">主管回覆：{{ request.decisionReason }}</p>
+                  }
+                  @if (request.status !== 'PENDING' && request.reviewedAt && !request.driverReadAt) {
+                    <button
+                      type="button"
+                      class="outline-action schedule-history-read-btn"
+                      (click)="markLeaveRequestRead(request)"
+                    >
+                      標示已讀
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          </details>
         }
       } @else {
         <div class="panel-heading">
           <p class="eyebrow">司機</p>
-          <h1>司機資訊</h1>
+          <h1>司機與出勤資訊</h1>
         </div>
-        <section class="profile-photo-card" aria-label="司機大頭照">
-          <div class="profile-photo-preview">
-            @if (profilePhotoUrl(); as photoUrl) {
-              <img
-                [src]="photoUrl"
-                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
-                (error)="handleProfilePhotoLoadError()"
-              />
-            } @else {
-              <span aria-hidden="true">{{ profileInitial() }}</span>
-            }
+
+        <section class="profile-card" aria-label="司機個人名片">
+          <div class="profile-photo-card">
+            <div class="profile-photo-preview">
+              @if (profilePhotoUrl(); as photoUrl) {
+                <img
+                  [src]="photoUrl"
+                  [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                  (error)="handleProfilePhotoLoadError()"
+                />
+              } @else {
+                <span aria-hidden="true">{{ profileInitial() }}</span>
+              }
+            </div>
+            <div class="profile-photo-copy">
+              <div class="profile-photo-title">
+                <strong>{{ profile()?.name ?? user()?.name }}</strong>
+                <span class="profile-status-pill">已安全登入</span>
+              </div>
+              <small>#{{ profile()?.id ?? user()?.id }} · 帳號 {{ profile()?.account ?? user()?.account }}</small>
+              <label
+                class="profile-photo-action"
+                [class.is-disabled]="isProfilePhotoUploading()"
+              >
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  [disabled]="isProfilePhotoUploading()"
+                  (change)="selectProfilePhoto($event)"
+                />
+                {{ isProfilePhotoUploading() ? '上傳中...' : '更換大頭照' }}
+              </label>
+            </div>
           </div>
-          <div class="profile-photo-copy">
-            <strong>{{ profile()?.name ?? user()?.name }}</strong>
-            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
-            <label
-              class="profile-photo-action"
-              [class.is-disabled]="isProfilePhotoUploading()"
-            >
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                [disabled]="isProfilePhotoUploading()"
-                (change)="selectProfilePhoto($event)"
-              />
-              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
-            </label>
+
+          @if (profilePhotoMessage()) {
+            <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+          }
+          @if (profileError()) {
+            <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+          }
+
+          <dl class="profile-list">
+            <div>
+              <dt>所屬倉庫</dt>
+              <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
+            </div>
+            <div>
+              <dt>聯絡電話</dt>
+              <dd>{{ profile()?.phone || '未設定' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <!-- 今日出勤與定位 4 格明細（由導航抽屜移入司機頁收納） -->
+        <section class="profile-attendance-card" aria-label="今日出勤與定位統計">
+          <div class="profile-attendance-card__header">
+            <strong>今日出勤與定位狀態</strong>
+            <span class="profile-status-pill">{{ statusLabel() }}</span>
+          </div>
+          <div class="profile-stats-grid">
+            <div class="profile-stat-box">
+              <span>上班打卡</span>
+              <strong>{{ attendance() ? formatTime(attendance()!.clockInAt) : '--:--' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>下班打卡</span>
+              <strong>{{ attendance() ? formatTime(attendance()!.clockOutAt) : '--:--' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>出勤判定</span>
+              <strong>{{ attendance() ? attendancePunctualityLabel(attendance()!) : '尚未打卡' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>GPS 定位</span>
+              <strong>{{ attendance()?.gpsAllowed ? '回報中' : '已停止' }}</strong>
+              @if (gpsTracking.lastUploadedAt(); as lastUploaded) {
+                <small>最後 {{ formatTime(lastUploaded.toISOString()) }}</small>
+              }
+            </div>
           </div>
         </section>
-        @if (profilePhotoMessage()) {
-          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
-        }
-        @if (profileError()) {
-          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
-        }
-        <dl class="profile-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ profile()?.name ?? user()?.name }}</dd>
-          </div>
-          <div>
-            <dt>帳號</dt>
-            <dd>{{ profile()?.account ?? user()?.account }}</dd>
-          </div>
-          <div>
-            <dt>司機編號</dt>
-            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
-          </div>
-          <div>
-            <dt>電話</dt>
-            <dd>{{ profile()?.phone || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>所屬倉庫</dt>
-            <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>登入狀態</dt>
-            <dd>已安全登入</dd>
-          </div>
-        </dl>
-        <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">出勤異動</p>
-              <h2 id="emergency-leave-title">臨時請假</h2>
+
+        <!-- 途中換手申請表單已集中在「任務頁 · 今日勤務階段卡」，司機頁預設收合成單行紀錄列 -->
+        <details class="schedule-history-card emergency-leave-panel">
+          <summary>
+            <div class="schedule-history-card__title">
+              <strong>途中換手 · 臨時請假紀錄（{{ emergencyLeaves().length }} 筆）</strong>
             </div>
-            <mat-icon aria-hidden="true">warning_amber</mat-icon>
-          </div>
-          <p>上班途中無法繼續配送時，可送出申請，由主管指定接手司機。</p>
-
-          @if (emergencyLeaveMessage()) {
-            <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
-          }
-          @if (emergencyLeaveError()) {
-            <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
-          }
-
-          @if (isEmergencyLeaveFormOpen()) {
-            <label class="delivery-action-panel emergency-leave-reason">
-              <span>請假原因</span>
-              <textarea
-                rows="3"
-                maxlength="500"
-                placeholder="請簡述需要臨時請假的原因"
-                [value]="emergencyLeaveReason()"
-                [disabled]="isEmergencyLeaveSubmitting()"
-                (input)="updateEmergencyLeaveReason($event)"
-              ></textarea>
-            </label>
-            <div class="attendance-actions emergency-leave-actions">
-              <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
-                取消
-              </button>
-              <button
-                type="button"
-                class="danger-action"
-                (click)="submitEmergencyLeave()"
-                [disabled]="isEmergencyLeaveSubmitting()"
-              >
-                {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
-              </button>
-            </div>
-          } @else {
-            <button
-              type="button"
-              class="outline-action"
-              (click)="openEmergencyLeaveForm()"
-              [disabled]="!canRequestEmergencyLeave()"
-            >
-              申請臨時請假
-            </button>
-          }
-
+            <span class="completed-stops-group__toggle">展開 / 收合 ▾</span>
+          </summary>
           <div class="emergency-leave-history" aria-label="臨時請假紀錄">
+            <small>上班途中無法繼續配送時，可於任務頁送出申請，由主管指定接手司機。</small>
             @for (leave of emergencyLeaves(); track leave.id) {
               <article>
                 <div>
@@ -1047,7 +1082,8 @@
               }
             }
           </div>
-        </section>
+        </details>
+
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>
@@ -1068,20 +1104,20 @@
     </button>
     <button
       type="button"
-      [class.is-active]="activeTab() === 'profile'"
-      (click)="setActiveTab('profile')"
-    >
-      <mat-icon aria-hidden="true">person</mat-icon>
-      <span>司機</span>
-    </button>
-    <button
-      type="button"
       [class.is-active]="activeTab() === 'schedule'"
       (click)="setActiveTab('schedule')"
       [attr.aria-label]="unreadLeaveCount() ? '班表，有 ' + unreadLeaveCount() + ' 筆未讀請假結果' : '班表'"
     >
       <mat-icon aria-hidden="true">calendar_month</mat-icon>
       <span>班表 @if (unreadLeaveCount() > 0) { <b class="leave-tab-count">{{ unreadLeaveCount() }}</b> }</span>
+    </button>
+    <button
+      type="button"
+      [class.is-active]="activeTab() === 'profile'"
+      (click)="setActiveTab('profile')"
+    >
+      <mat-icon aria-hidden="true">person</mat-icon>
+      <span>司機</span>
     </button>
   </nav>
 </main>

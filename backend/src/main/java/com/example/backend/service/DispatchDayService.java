@@ -32,9 +32,9 @@ public class DispatchDayService {
     static final int MAX_RANGE_DAYS = 31;
 
     /**
-     * 沒指定 to 時至少顯示到 from 後幾天，保證「今天、明天、後天」看得到
+     * 沒指定 to 時至少顯示到 from 後幾天：今天加往後七天，沒有訂單的日子也看得到，才能提前一週預排
      */
-    static final int MIN_DEFAULT_DAYS_AHEAD = 2;
+    static final int MIN_DEFAULT_DAYS_AHEAD = 7;
 
     /**
      * 往前找未結案日子的天數；更久以前還沒結案是資料問題，交給報表
@@ -117,7 +117,7 @@ public class DispatchDayService {
     }
 
     /**
-     * 沒指定 to：顯示到最後一天有單的日期，至少到後天，最多 MAX_RANGE_DAYS 天
+     * 沒指定 to：顯示到最後一天有單的日期，至少到 MIN_DEFAULT_DAYS_AHEAD 天後（七天後），最多 MAX_RANGE_DAYS 天
      */
     private LocalDate defaultEnd(LocalDate start) {
         LocalDate end = start.plusDays(MIN_DEFAULT_DAYS_AHEAD);

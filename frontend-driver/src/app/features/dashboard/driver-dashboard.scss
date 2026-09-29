@@ -61,8 +61,8 @@
   align-items: center;
   justify-content: space-between;
   padding: max(8px, env(safe-area-inset-top)) 14px 8px;
-  border-bottom: 1px solid rgb(125 210 187 / 25%);
-  background: #0b1d1c;
+  border-bottom: 1px solid #c8dad3;
+  background: #f9fdfb;
 }
 
 .topbar-actions {
@@ -96,10 +96,10 @@
 }
 
 .brand {
-  --accent: #7de1c5;
-  --brand-muted: #c7d7d1;
-  --brand-node: #a5b8b0;
-  --brand-text: #f1f8f4;
+  --accent: #0e7663;
+  --brand-muted: #526f66;
+  --brand-node: #78928a;
+  --brand-text: #1f382f;
 
   display: flex;
   align-items: center;
@@ -107,7 +107,7 @@
 }
 
 .brand strong {
-  color: #f1f8f4;
+  color: #173129;
   font-size: 14px;
 }
 
@@ -119,10 +119,10 @@
   height: 38px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgb(182 218 207 / 38%);
+  border: 1px solid #c8dad3;
   border-radius: 7px;
-  color: #dff4ec;
-  background: rgb(8 25 25 / 88%);
+  color: #174c40;
+  background: #f9fdfb;
   cursor: pointer;
 }
 
@@ -186,14 +186,14 @@ p {
 h1 {
   max-width: 246px;
   margin-bottom: 0;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 29px;
   line-height: 1.22;
 }
 
 h2 {
   margin-bottom: 0;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 21px;
 }
 
@@ -253,9 +253,9 @@ h2 {
   max-height: min(56dvh, 420px);
   grid-template-rows: 64px minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgb(125 210 187 / 35%);
+  border: 1px solid #c8dad3;
   border-radius: 14px;
-  background: rgb(11 29 29 / 94%);
+  background: #f9fdfb;
   box-shadow: 0 10px 28px rgb(8 35 31 / 16%);
   transform: translateY(var(--attendance-sheet-drag, 0px));
   transition: transform 220ms ease;
@@ -361,9 +361,9 @@ h2 {
   gap: 10px;
   padding: 8px 12px;
   border: 0;
-  border-bottom: 1px solid rgb(125 210 187 / 20%);
-  color: #dff4ec;
-  background: rgb(8 25 25 / 50%);
+  border-bottom: 1px solid #c8dad3;
+  color: #174c40;
+  background: #edf5f1;
   cursor: grab;
   font: inherit;
   text-align: left;
@@ -384,7 +384,7 @@ h2 {
   width: 20px;
   height: 4px;
   border-radius: 999px;
-  background: #72c9b3;
+  background: #0e7663;
 }
 
 .attendance-drawer-summary {
@@ -395,7 +395,7 @@ h2 {
 
 .attendance-drawer-summary small {
   overflow: hidden;
-  color: #8eb7ab;
+  color: #5a8b7f;
   font-size: 10px;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -404,7 +404,7 @@ h2 {
 
 .attendance-drawer-summary strong {
   overflow: hidden;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 15px;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -419,7 +419,7 @@ h2 {
 
 .destination-copy {
   margin: 11px 0 0;
-  color: #b0c1bb;
+  color: #617b72;
   font-size: 12px;
   line-height: 1.4;
 }
@@ -431,13 +431,13 @@ h2 {
 
 .navigation-route-detail {
   margin: 8px 0 0;
-  color: #a7d8ca;
+  color: #477065;
   font-size: 12px;
   line-height: 1.4;
 }
 
 .navigation-route-detail.is-error {
-  color: #efb8b3;
+  color: #984a4a;
 }
 
 .attendance-actions {
@@ -451,18 +451,18 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #a2b8b0;
+  color: #617b72;
   font-size: 12px;
   font-weight: 700;
 }
 
 .gps-status.is-active {
-  color: #77d7be;
+  color: #0e7663;
 }
 
 .sheet-copy {
   margin: 13px 0 0;
-  color: #b0c1bb;
+  color: #617b72;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -494,9 +494,9 @@ h2 {
 
 .outline-action {
   margin-top: 14px;
-  border-color: #3f6259;
-  color: #d9eee7;
-  background: transparent;
+  border-color: #91b8ad;
+  color: #205b4d;
+  background: #ffffff;
 }
 
 .attendance-actions .outline-action,
@@ -630,9 +630,9 @@ h2 {
 
 .task-route-card {
   overflow: hidden;
-  border: 1px solid #2e4a45;
+  border: 1px solid #c8dad3;
   border-radius: 12px;
-  background: #142322;
+  background: #f9fdfb;
 }
 
 .task-route-card app-pre-trip-check {
@@ -651,12 +651,13 @@ h2 {
 .task-route-heading p,
 .task-route-meta {
   margin: 0;
-  color: #8ea69e;
+  color: #617b72;
   font-size: 12px;
 }
 
 .task-route-heading h2 {
   margin-top: 4px;
+  color: #1d392f;
   font-size: 17px;
 }
 
@@ -666,8 +667,8 @@ h2 {
   flex: 0 0 auto;
   padding: 5px 7px;
   border-radius: 4px;
-  color: #b9d5cc;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
   font-size: 12px;
   font-weight: 800;
 }
@@ -681,7 +682,7 @@ h2 {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
 }
 
 .completed-stops-group {
@@ -727,11 +728,11 @@ h2 {
 }
 
 .task-stop + .task-stop {
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
 }
 
 .task-stop.is-selected {
-  background: rgb(33 97 82 / 48%);
+  background: #dff4eb;
 }
 
 .stop-sequence {
@@ -741,7 +742,7 @@ h2 {
   place-items: center;
   border: 1px solid #5d9586;
   border-radius: 50%;
-  color: #94dcc8;
+  color: #226c5a;
   font-size: 12px;
   font-weight: 800;
 }
@@ -760,14 +761,14 @@ h2 {
 }
 
 .task-stop-copy strong {
-  color: #edf6f1;
+  color: #1d392f;
   font-size: 13px;
 }
 
 .task-stop-copy small,
 .task-stop-copy span {
   margin-top: 3px;
-  color: #8ea69e;
+  color: #617b72;
   font-size: 11px;
 }
 
@@ -779,7 +780,7 @@ h2 {
   place-items: center;
   border: 1px solid #416b61;
   border-radius: 6px;
-  color: #9de0ce;
+  color: #226c5a;
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -811,13 +812,13 @@ h2 {
 // 點交與抵達都是該站當下的主要動作，用同一種強調樣式
 .task-loading-button,
 .task-arrive-button {
-  border-color: #4b8f80;
-  color: #d6f4e8;
-  background: #1a5b4f;
+  border-color: #70aa9c;
+  color: #174c40;
+  background: #cceee2;
 }
 
 .task-delivery-button {
-  color: #a9e4d2;
+  color: #226c5a;
   background: #163b35;
 }
 
@@ -827,49 +828,49 @@ h2 {
   margin-top: 6px;
   padding: 3px 5px;
   border-radius: 4px;
-  color: #b9d5cc;
-  background: #183938;
+  color: #46655b;
+  background: #e7f1ed;
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
 }
 
 .task-status.is-in_delivery {
-  color: #f3d799;
-  background: #4b3920;
+  color: #795e22;
+  background: #f6edcf;
 }
 
 .task-status.is-completed {
-  color: #9de0ce;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
 }
 
 .task-status.is-failed,
 .task-status.is-cancelled {
-  color: #f3bcaf;
-  background: #4a2a2d;
+  color: #8a4a4a;
+  background: #f8e6e3;
 }
 
 .task-feedback {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid #3b6258;
+  border: 1px solid #c6ddd5;
   border-radius: 6px;
-  color: #bdd8cf;
-  background: #142d29;
+  color: #45665b;
+  background: #eff9f4;
   font-size: 12px;
   line-height: 1.45;
 }
 
 .task-feedback.is-success {
-  border-color: #3a806e;
-  color: #a7ead6;
+  border-color: #9ecfc0;
+  color: #0e7663;
 }
 
 .task-feedback.is-error {
-  border-color: #814f50;
-  color: #f4b9b4;
-  background: #352123;
+  border-color: #e0b1ad;
+  color: #8a4a4a;
+  background: #fbedeb;
 }
 
 .delivery-action-panel {
@@ -877,9 +878,9 @@ h2 {
   gap: 10px;
   margin-top: 2px;
   padding: 12px;
-  border: 1px solid #38685d;
+  border: 1px solid #c4ddd4;
   border-radius: 6px;
-  background: #102b27;
+  background: #edf8f3;
 }
 
 .task-stop .delivery-action-panel {
@@ -889,7 +890,7 @@ h2 {
 .delivery-action-panel p,
 .delivery-action-panel small {
   margin: 0;
-  color: #9eb8af;
+  color: #617b72;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -904,7 +905,7 @@ h2 {
 .delivery-action-panel label > span,
 .delivery-action-panel > span,
 .mileage-form-row label > span {
-  color: #b9d5cc;
+  color: #42635a;
   font-size: 11px;
   font-weight: 800;
 }
@@ -915,11 +916,11 @@ h2 {
   width: 100%;
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid #3d655b;
+  border: 1px solid #c7dbd3;
   border-radius: 5px;
   outline: none;
-  color: #edf6f1;
-  background: #0b1d1c;
+  color: #1b392f;
+  background: #ffffff;
   font: inherit;
   font-size: 12px;
 }
@@ -929,15 +930,16 @@ h2 {
 }
 
 .loading-action-panel {
-  --loading-ink: #e4f5ee;
-  --loading-muted: #a9c9be;
-  --loading-surface: #122f28;
-  --loading-border: #396457;
-  --loading-checked: #1b453a;
-  --loading-pill: #214c40;
+  --loading-ink: #164639;
+  --loading-muted: #55766a;
+  --loading-surface: #fff;
+  --loading-border: #d1e4dc;
+  --loading-checked: #e5f5ed;
+  --loading-pill: #e8f5ef;
   padding: 16px;
   gap: 14px;
   border-radius: 14px;
+  background: #f5fbf8;
 }
 
 .loading-panel-heading,
@@ -1024,10 +1026,10 @@ h2 {
   justify-content: center;
   gap: 4px;
   padding: 0 8px;
-  border: 1px solid #c19381;
+  border: 1px solid #e7c7b8;
   border-radius: 8px;
-  color: #f8d5c5;
-  background: #46312a;
+  color: #954529;
+  background: #fff5ef;
   cursor: pointer;
   font: inherit;
   font-size: 11px;
@@ -1061,7 +1063,7 @@ h2 {
 }
 
 .delivery-photo-input small {
-  color: #9eb8af;
+  color: #617b72;
   font-size: 11px;
 }
 
@@ -1090,65 +1092,33 @@ h2 {
 
 .delivery-exception-button,
 .mileage-end-button {
-  border-color: #976565;
-  color: #f2c1bb;
-  background: #3e282a;
+  border-color: #d6a4a0;
+  color: #854a49;
+  background: #f9e7e4;
 }
 
 .delivery-cancel-button {
-  border-color: #42645b;
-  color: #b9d5cc;
+  border-color: #bfd5cc;
+  color: #42635a;
   background: transparent;
 }
 
 .delivery-complete-button mat-icon,
 .delivery-exception-button mat-icon,
-.mileage-end-button mat-icon,
-.mileage-heading mat-icon {
+.mileage-end-button mat-icon {
   width: 16px;
   height: 16px;
-}
-
-.mileage-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  padding: 15px;
-  border: 1px solid #2e4a45;
-  border-radius: 8px;
-  background: #142322;
-}
-
-.mileage-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mileage-heading h2 {
-  font-size: 18px;
-}
-
-.mileage-heading mat-icon {
-  color: #82dfc7;
-}
-
-.mileage-panel > p {
-  margin: -4px 0 0;
-  color: #9eb8af;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .emergency-leave-history {
   display: grid;
   gap: 8px;
+  padding: 0 14px 14px;
 }
 
 .emergency-leave-history article {
   padding-top: 8px;
-  border-top: 1px solid #30443d;
+  border-top: 1px solid #deebe5;
 }
 
 .emergency-leave-history strong,
@@ -1159,13 +1129,13 @@ h2 {
 }
 
 .emergency-leave-history strong {
-  color: #d9eee7;
+  color: #173129;
   font-size: 12px;
 }
 
 .emergency-leave-history small,
 .emergency-leave-history span {
-  color: #a9bdb5;
+  color: #617b72;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -1181,13 +1151,11 @@ h2 {
   min-width: 58px;
 }
 
-
 .empty-state,
-.profile-list,
 .shift-list {
-  border: 1px solid #2e4a45;
+  border: 1px solid #c8dad3;
   border-radius: 8px;
-  background: #142322;
+  background: #f9fdfb;
 }
 
 .empty-state {
@@ -1196,7 +1164,7 @@ h2 {
   padding: 28px;
   place-content: center;
   justify-items: center;
-  color: #83d6c0;
+  color: #0e7663;
   text-align: center;
 }
 
@@ -1208,26 +1176,32 @@ h2 {
 .empty-state p {
   max-width: 260px;
   margin-bottom: 0;
-  color: #a7bcb5;
+  color: #617b72;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.profile-card,
+.profile-attendance-card {
+  margin-bottom: 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 12px;
+  background: #f9fdfb;
+  overflow: hidden;
 }
 
 .profile-photo-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
   padding: 14px;
-  border: 1px solid #2e4a45;
-  border-radius: 8px;
-  background: #142322;
+  background: #ffffff;
 }
 
 .profile-photo-preview {
-  width: 72px;
-  height: 72px;
-  flex: 0 0 72px;
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -1235,7 +1209,7 @@ h2 {
   border-radius: 50%;
   color: #0f2522;
   background: #65d6c2;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
 }
 
@@ -1247,31 +1221,52 @@ h2 {
 
 .profile-photo-copy {
   min-width: 0;
+  flex: 1;
   display: grid;
   justify-items: start;
-  gap: 7px;
+  gap: 4px;
+}
+
+.profile-photo-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .profile-photo-copy strong {
-  color: #edf7f3;
-  font-size: 18px;
+  color: #1d392f;
+  font-size: 17px;
 }
 
 .profile-photo-copy small {
-  color: #8ea69e;
-  line-height: 1.5;
+  color: #5d736b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.profile-status-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #0e7663;
+  background: #e5f2ec;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .profile-photo-action {
   display: inline-flex;
-  min-height: 38px;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
-  padding: 0 14px;
-  border: 1px solid #65d6c2;
+  margin-top: 2px;
+  padding: 0 12px;
+  border: 1px solid #74aa9b;
   border-radius: 7px;
-  color: #65d6c2;
+  color: #176c5b;
+  background: #f7fcfa;
   cursor: pointer;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1289,16 +1284,18 @@ h2 {
 }
 
 .profile-photo-feedback {
-  margin: 0 0 14px;
-  font-size: 13px;
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid #deebe5;
+  font-size: 12px;
 }
 
 .profile-photo-feedback.is-success {
-  color: #65d6c2;
+  color: #0e7663;
 }
 
 .profile-photo-feedback.is-error {
-  color: #ff8d8d;
+  color: #a14c2e;
 }
 
 .profile-list {
@@ -1306,26 +1303,17 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   margin: 0;
-  overflow: hidden;
+  border-top: 1px solid #deebe5;
+  background: #deebe5;
 }
 
 .profile-list div {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 13px;
-  background: #142322;
-}
-
-.profile-list div + div {
-  border-top: 0;
-}
-
-.profile-list div:last-child {
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  padding: 11px 14px;
+  background: #f9fdfb;
 }
 
 .profile-list dd {
@@ -1333,15 +1321,172 @@ h2 {
 }
 
 dt {
-  color: #8ea69e;
-  font-size: 13px;
+  color: #617b72;
+  font-size: 12px;
 }
 
 dd {
   margin: 0;
-  color: #edf6f1;
-  font-size: 14px;
+  color: #173129;
+  font-size: 13px;
   font-weight: 800;
+}
+
+.profile-attendance-card {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.profile-attendance-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.profile-attendance-card__header strong {
+  color: #173129;
+  font-size: 14px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-stat-box {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #e5f2ec;
+  text-align: center;
+}
+
+.profile-stat-box span {
+  color: #5a8b7f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.profile-stat-box strong {
+  color: #174c40;
+  font-size: 14px;
+}
+
+.profile-stat-box small {
+  color: #5a8b7f;
+  font-size: 10px;
+}
+
+.schedule-selected-shift {
+  margin: 10px 4px 2px;
+  border-top: 1px solid #deebe5;
+}
+
+.schedule-history-card {
+  margin-bottom: 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 10px;
+  background: #f9fdfb;
+  overflow: hidden;
+}
+
+.schedule-history-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  color: #173129;
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+}
+
+.schedule-history-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.schedule-history-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-history-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  border-top: 1px solid #deebe5;
+}
+
+.schedule-history-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.schedule-history-item.is-unread {
+  border-color: #bd934a;
+  background: #fffdf7;
+}
+
+.schedule-history-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.schedule-history-item__head strong {
+  color: #173129;
+}
+
+.schedule-history-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.schedule-history-status.is-pending {
+  color: #73510c;
+  background: #fff1c8;
+}
+
+.schedule-history-status.is-approved {
+  color: #0e7663;
+  background: #e5f2ec;
+}
+
+.schedule-history-status.is-rejected {
+  color: #8a4540;
+  background: #f8e6e3;
+}
+
+.schedule-history-item small {
+  color: #617b72;
+}
+
+.schedule-history-reply {
+  margin: 2px 0 0;
+  color: #174c40;
+  font-weight: 700;
+}
+
+.schedule-history-read-btn {
+  min-height: 30px;
+  margin-top: 4px;
+  justify-self: start;
+  font-size: 11px;
 }
 
 .shift-list {
@@ -1351,36 +1496,40 @@ dd {
 .shift-row {
   display: grid;
   grid-template-columns: 0.85fr auto minmax(0, 1.25fr);
-  align-items: start;
+  align-items: center;
   gap: 8px;
-  padding: 15px 16px;
-  color: #a9bdb6;
+  padding: 12px 10px 4px;
+  color: #617b72;
   font-size: 13px;
 }
 
 .shift-row + .shift-row {
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
 }
 
 .shift-row strong {
-  color: #edf6f1;
+  color: #1d392f;
 }
 
 .shift-type.is-work {
-  color: #9de0ce;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
 }
 
-.shift-type.is-day_off,
+.shift-type.is-day_off {
+  color: #516860;
+  background: #e7ece9;
+}
+
 .shift-type.is-leave {
-  color: #d0d9d5;
-  background: #31403c;
+  color: #9a5a17;
+  background: #fbeedd;
 }
 
 .shift-details {
   display: grid;
   gap: 3px;
-  color: #a9bdb6;
+  color: #617b72;
 }
 
 .shift-details small {
@@ -1391,10 +1540,10 @@ dd {
 
 .sign-out {
   width: 100%;
-  margin-top: 18px;
-  border-color: #405e57;
-  color: #d6e5df;
-  background: transparent;
+  margin-top: 6px;
+  border-color: #d7aaa5;
+  color: #8a4540;
+  background: #fff7f5;
 }
 
 .bottom-navigation {
@@ -1407,10 +1556,10 @@ dd {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 7px;
-  border: 1px solid rgb(120 185 167 / 34%);
+  border: 1px solid #c8dad3;
   border-radius: 8px;
-  background: #091819;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 30%);
+  background: #f9fdfb;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 18%);
 }
 
 .bottom-navigation button {
@@ -1423,7 +1572,7 @@ dd {
   place-items: center;
   border: 0;
   border-radius: 6px;
-  color: #93aaa2;
+  color: #70877f;
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -1446,8 +1595,8 @@ dd {
 }
 
 .bottom-navigation button.is-active {
-  color: #e8f8f2;
-  background: #155247;
+  color: #173129;
+  background: #cceee2;
 }
 
 .leave-tab-count {
@@ -1465,277 +1614,7 @@ dd {
 }
 
 .bottom-navigation button.is-active mat-icon {
-  color: #82e0c8;
-}
-
-.driver-app .app-topbar,
-.driver-app .map-content,
-.driver-app .content-panel {
-  color: #173129;
-}
-
-.driver-app .brand {
-  --accent: #0e7663;
-  --brand-muted: #526f66;
-  --brand-node: #78928a;
-  --brand-text: #1f382f;
-}
-
-.driver-app .app-topbar {
-  border-color: #c8dad3;
-  background: #f9fdfb;
-}
-
-.driver-app .brand strong,
-.driver-app h1,
-.driver-app h2,
-.driver-app dd,
-.driver-app .bottom-navigation button.is-active {
-  color: #173129;
-}
-
-.driver-app .icon-button,
-.driver-app .locate-control,
-.driver-app .chat-control,
-.driver-app .attendance-sheet,
-.driver-app .empty-state,
-.driver-app .profile-list,
-.driver-app .shift-list,
-.driver-app .task-route-card,
-.driver-app .mileage-panel,
-.driver-app .bottom-navigation {
-  border-color: #c8dad3;
-  background: #f9fdfb;
-}
-
-.driver-app .icon-button,
-.driver-app .locate-control,
-.driver-app .chat-control {
-  color: #174c40;
-}
-
-
-.driver-app .attendance-drawer-handle {
-  border-color: #c8dad3;
-  color: #174c40;
-  background: #edf5f1;
-}
-
-.driver-app .attendance-drawer-grip {
-  background: #0e7663;
-}
-
-.driver-app .attendance-drawer-summary small {
-  color: #5a8b7f;
-}
-
-.driver-app .attendance-drawer-summary strong {
-  color: #173129;
-}
-
-.driver-app .gps-status,
-.driver-app .sheet-copy,
-.driver-app .destination-copy,
-.driver-app .empty-state p,
-.driver-app dt,
-.driver-app .shift-row,
-.driver-app .task-route-heading p,
-.driver-app .task-route-meta,
-.driver-app .task-stop-copy small,
-.driver-app .task-stop-copy span,
-.driver-app .shift-details,
-.driver-app .delivery-action-panel p,
-.driver-app .delivery-action-panel small,
-.driver-app .mileage-panel > p,
-.driver-app .emergency-leave-history small,
-.driver-app .emergency-leave-history span {
-  color: #617b72;
-}
-
-.driver-app .bottom-navigation button.is-active mat-icon {
   color: #087663;
-}
-
-.driver-app .shift-row strong {
-  color: #1d392f;
-}
-
-.driver-app .task-route-heading h2,
-.driver-app .task-stop-copy strong {
-  color: #1d392f;
-}
-
-.driver-app .profile-list div + div,
-.driver-app .shift-row + .shift-row,
-.driver-app .task-stop-list,
-.driver-app .task-stop + .task-stop {
-  border-color: #deebe5;
-}
-
-.driver-app .profile-photo-card {
-  border-color: #deebe5;
-  background: #ffffff;
-}
-
-.driver-app .profile-list {
-  background: #deebe5;
-}
-
-.driver-app .profile-list div {
-  background: #ffffff;
-}
-
-.driver-app .profile-photo-copy strong {
-  color: #1d392f;
-}
-
-.driver-app .profile-photo-copy small {
-  color: #5d736b;
-}
-
-.driver-app .profile-photo-action {
-  border-color: #74aa9b;
-  color: #176c5b;
-  background: #f7fcfa;
-}
-
-.driver-app .outline-action {
-  border-color: #91b8ad;
-  color: #205b4d;
-  background: #ffffff;
-}
-
-.driver-app .sign-out {
-  border-color: #d7aaa5;
-  color: #8a4540;
-  background: #fff7f5;
-}
-
-.driver-app .bottom-navigation button {
-  color: #70877f;
-}
-
-.driver-app .bottom-navigation button.is-active {
-  background: #cceee2;
-}
-
-.driver-app .task-stop.is-selected {
-  background: #dff4eb;
-}
-
-.driver-app .task-route-heading > span,
-.driver-app .shift-type.is-work {
-  color: #246a59;
-  background: #e5f2ec;
-}
-
-.driver-app .shift-type.is-day_off {
-  color: #516860;
-  background: #e7ece9;
-}
-
-// 請假跟休假分開：月曆格子、圖例、明細標籤都用同一組橘色，一眼分得出是臨時請假
-.driver-app .shift-type.is-leave {
-  color: #9a5a17;
-  background: #fbeedd;
-}
-
-.driver-app .stop-sequence,
-.driver-app .task-navigation-button,
-.driver-app .task-delivery-button {
-  color: #226c5a;
-}
-
-.driver-app .task-loading-button,
-.driver-app .task-arrive-button {
-  border-color: #70aa9c;
-  color: #174c40;
-  background: #cceee2;
-}
-
-.driver-app .task-status {
-  color: #46655b;
-  background: #e7f1ed;
-}
-
-.driver-app .task-status.is-in_delivery {
-  color: #795e22;
-  background: #f6edcf;
-}
-
-.driver-app .task-status.is-failed,
-.driver-app .task-status.is-cancelled {
-  color: #8a4a4a;
-  background: #f8e6e3;
-}
-
-.driver-app .delivery-action-panel {
-  border-color: #c4ddd4;
-  background: #edf8f3;
-}
-
-.driver-app .delivery-action-panel label > span,
-.driver-app .mileage-form-row label > span {
-  color: #42635a;
-}
-
-.driver-app .delivery-photo-input small {
-  color: #617b72;
-}
-
-.driver-app .delivery-action-panel input,
-.driver-app .delivery-action-panel textarea,
-.driver-app .mileage-form-row input {
-  border-color: #c7dbd3;
-  color: #1b392f;
-  background: #ffffff;
-}
-
-.driver-app .loading-action-panel {
-  --loading-ink: #164639;
-  --loading-muted: #55766a;
-  --loading-surface: #fff;
-  --loading-border: #d1e4dc;
-  --loading-checked: #e5f5ed;
-  --loading-pill: #e8f5ef;
-  background: #f5fbf8;
-}
-.driver-app .loading-mismatch-button { color: #954529; background: #fff5ef; border-color: #e7c7b8; }
-
-.driver-app .delivery-cancel-button {
-  border-color: #bfd5cc;
-  color: #42635a;
-}
-
-.driver-app .delivery-exception-button,
-.driver-app .mileage-end-button {
-  border-color: #d6a4a0;
-  color: #854a49;
-  background: #f9e7e4;
-}
-
-.driver-app .navigation-route-detail {
-  color: #477065;
-}
-
-.driver-app .navigation-route-detail.is-error {
-  color: #984a4a;
-}
-
-.driver-app .emergency-leave-history article {
-  border-color: #e1e8df;
-}
-
-.driver-app .task-feedback {
-  border-color: #c6ddd5;
-  color: #45665b;
-  background: #eff9f4;
-}
-
-.driver-app .task-feedback.is-error {
-  border-color: #e0b1ad;
-  color: #8a4a4a;
-  background: #fbedeb;
 }
 
 @media (max-width: 380px) {

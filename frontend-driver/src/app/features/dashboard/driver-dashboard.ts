@@ -38,11 +38,6 @@ import {
   DeliveryRecordResponse,
   DriverCaseCategory,
   DriverCaseDto,
-  DriverLeaveHistoryResponse,
-  DriverLeaveBatchResponse,
-  DriverMakeupLeaveRequest,
-  DriverPlannedLeaveBatchRequest,
-  DriverLeaveRequest,
   DriverLeaveRequestResponse,
   EmergencyLeaveResponse,
   DriverProfileDto,
@@ -103,28 +98,6 @@ export function navigationReadyForOrder(tasks: NavigationTaskSet | null, orderId
   const stop = tasks.routes.flatMap((route) => route.stops)
     .find((taskStop) => taskStop.orderId === orderId);
   return stop?.orderStatus === 'LOADED' || stop?.orderStatus === 'IN_DELIVERY';
-}
-
-interface DriverLeaveForm {
-  workDate: string;
-  leaveType: DriverLeaveRequest['leaveType'];
-  leaveStart: string;
-  leaveEnd: string;
-  reason: string;
-}
-
-type LeaveApplicationTab = 'temporary' | 'planned' | 'makeup';
-
-interface DriverPlannedLeaveForm {
-  leaveType: DriverLeaveRequest['leaveType'];
-  workDates: string[];
-  reason: string;
-}
-
-interface DriverMakeupLeaveForm {
-  workDate: string;
-  leaveType: DriverLeaveRequest['leaveType'];
-  reason: string;
 }
 
 interface LoadingItemForm {
@@ -618,57 +591,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isEmergencyLeaveSubmitting = signal(false);
   protected readonly isEmergencyLeaveHistoryLoading = signal(false);
   protected readonly leaveRequests = signal<DriverLeaveRequestResponse[]>([]);
-  protected readonly leaveForm = signal<DriverLeaveForm>({
-    workDate: this.toIsoDate(new Date()),
-    leaveType: 'SPECIAL',
-    leaveStart: '',
-    leaveEnd: '',
-    reason: '',
-  });
-  protected readonly leaveApplicationTab = signal<LeaveApplicationTab>('temporary');
-  protected readonly plannedLeaveForm = signal<DriverPlannedLeaveForm>({
-    leaveType: 'ANNUAL',
-    workDates: [],
-    reason: '',
-  });
-  protected readonly plannedLeaveShifts = signal<DriverShiftDto[]>([]);
-  protected readonly isPlannedLeaveLoading = signal(false);
-  protected readonly makeupLeaveForm = signal<DriverMakeupLeaveForm>({
-    workDate: '',
-    leaveType: 'SICK',
-    reason: '',
-  });
-  protected readonly selectedMakeupEvidenceFile = signal<File | null>(null);
-  protected readonly leaveHistoryDate = signal('');
   protected readonly leaveError = signal<string | null>(null);
-  protected readonly leaveMessage = signal<string | null>(null);
-  protected readonly isLeaveSubmitting = signal(false);
   protected readonly isLeaveListLoading = signal(false);
   protected readonly leaveListAvailable = signal(false);
-  protected readonly isLeaveHistoryLoading = signal(false);
-  protected readonly expandedLeaveId = signal<number | null>(null);
-  protected readonly leaveHistories = signal<Record<number, DriverLeaveHistoryResponse[]>>({});
-  protected readonly leaveHistoryErrors = signal<Record<number, string>>({});
   protected readonly unreadLeaveCount = computed(
     () => this.leaveRequests().filter((request) => request.status !== 'PENDING'
       && request.reviewedAt && !request.driverReadAt).length,
-  );
-  protected readonly leaveHistoryDates = computed(() =>
-    [...new Set(this.leaveRequests().map((request) => request.workDate))].sort((left, right) => right.localeCompare(left)),
-  );
-  protected readonly filteredLeaveRequests = computed(() => {
-    const workDate = this.leaveHistoryDate();
-    return workDate
-      ? this.leaveRequests().filter((request) => request.workDate === workDate)
-      : this.leaveRequests();
-  });
-  /** 事後補請只能把系統記下的當日未到紀錄補上原因，不能自行挑任意過去日期。 */
-  protected readonly makeupLeaveCandidates = computed(() =>
-    this.leaveRequests()
-      .filter((request) =>
-        request.requestMode === 'SYSTEM_NO_SHOW' && request.status === 'PENDING' && request.fullDay,
-      )
-      .sort((left, right) => right.workDate.localeCompare(left.workDate)),
   );
   protected readonly profile = signal<DriverProfileDto | null>(null);
   protected readonly profileError = signal<string | null>(null);
@@ -2100,207 +2028,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return status === 'PENDING' ? '待主管核准' : status === 'APPROVED' ? '已核准' : '已拒絕';
   }
 
-  protected updateLeaveFormField<K extends keyof DriverLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.leaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected setLeaveApplicationTab(tab: LeaveApplicationTab): void {
-    this.leaveApplicationTab.set(tab);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    if (tab === 'planned') {
-      this.loadPlannedLeaveShifts();
-    }
-  }
-
-  protected updatePlannedLeaveField<K extends keyof DriverPlannedLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.plannedLeaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected isPlannedDateSelected(workDate: string): boolean {
-    return this.plannedLeaveForm().workDates.includes(workDate);
-  }
-
-  protected isPlannedDateBlocked(workDate: string): boolean {
-    return this.leaveRequests().some((request) =>
-      request.workDate === workDate && request.fullDay && request.status !== 'REJECTED',
-    );
-  }
-
-  protected togglePlannedLeaveDate(workDate: string): void {
-    if (this.isLeaveSubmitting() || this.isPlannedDateBlocked(workDate)) {
-      return;
-    }
-    this.plannedLeaveForm.update((form) => ({
-      ...form,
-      workDates: form.workDates.includes(workDate)
-        ? form.workDates.filter((date) => date !== workDate)
-        : [...form.workDates, workDate].sort(),
-    }));
-    this.leaveError.set(null);
-  }
-
-  protected updateMakeupLeaveField<K extends keyof DriverMakeupLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.makeupLeaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected selectMakeupLeaveDate(workDate: string): void {
-    this.makeupLeaveForm.update((form) => ({...form, workDate}));
-    this.leaveError.set(null);
-  }
-
-  protected selectMakeupEvidence(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
-    if (file && file.size > 5 * 1024 * 1024) {
-      this.leaveError.set('佐證照片不能超過 5 MB。');
-      return;
-    }
-    this.selectedMakeupEvidenceFile.set(file);
-  }
-
-  protected selectLeaveHistoryDate(event: Event): void {
-    this.leaveHistoryDate.set((event.target as HTMLSelectElement).value);
-  }
-
-  protected submitLeaveRequest(): void {
-    const form = this.leaveForm();
-    const reason = form.reason.trim();
-    if (!reason) {
-      this.leaveError.set('請填寫當日特殊事由。');
-      return;
-    }
-    if (Boolean(form.leaveStart) !== Boolean(form.leaveEnd)) {
-      this.leaveError.set('部分時段請假要同時填寫開始與結束時間；都不填代表整天。');
-      return;
-    }
-    if (form.leaveStart && form.leaveEnd <= form.leaveStart) {
-      this.leaveError.set('請假結束時間必須晚於開始時間。');
-      return;
-    }
-
-    const request: DriverLeaveRequest = {
-      workDate: this.toIsoDate(new Date()),
-      leaveType: form.leaveType,
-      leaveStart: form.leaveStart || null,
-      leaveEnd: form.leaveEnd || null,
-      reason,
-    };
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    this.operations.submitLeaveRequest(request).subscribe({
-      next: (saved) => {
-        this.leaveRequests.update((items) =>
-          [saved, ...items.filter((item) => item.id !== saved.id)].sort(
-            (left, right) => right.requestedAt.localeCompare(left.requestedAt),
-          ),
-        );
-        this.leaveForm.set({
-          workDate: this.toIsoDate(new Date()),
-          leaveType: 'SPECIAL',
-          leaveStart: '',
-          leaveEnd: '',
-          reason: '',
-        });
-        this.leaveMessage.set('當日特殊事由已送出，主管審核後會在這裡顯示結果。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '請假申請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
-  protected submitPlannedLeaveRequest(): void {
-    const form = this.plannedLeaveForm();
-    const reason = form.reason.trim();
-    const workDates = form.workDates.filter((date) => !this.isPlannedDateBlocked(date));
-    if (workDates.length === 0 || !reason) {
-      this.leaveError.set('請至少選擇一個可申請的未來上班日，並填寫原因。');
-      return;
-    }
-
-    const request: DriverPlannedLeaveBatchRequest = {
-      groups: [{leaveType: form.leaveType, workDates, reason}],
-    };
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    this.operations.submitPlannedLeaveBatches(request).subscribe({
-      next: (batches) => {
-        const saved = batches.flatMap((batch: DriverLeaveBatchResponse) => batch.items);
-        this.leaveRequests.update((items) =>
-          [...saved, ...items.filter((item) => !saved.some((request) => request.id === item.id))]
-            .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
-        );
-        this.plannedLeaveForm.set({leaveType: form.leaveType, workDates: [], reason: ''});
-        this.leaveMessage.set('預排請假已送出，審核中日期不能重複選取。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '預排請假申請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
-  protected submitMakeupLeaveRequest(): void {
-    const form = this.makeupLeaveForm();
-    const reason = form.reason.trim();
-    if (!form.workDate || !reason) {
-      this.leaveError.set('請從可補請班次選擇日期，並填寫原因。');
-      return;
-    }
-
-    const request: DriverMakeupLeaveRequest = {
-      workDate: form.workDate,
-      leaveType: form.leaveType,
-      reason,
-    };
-    const evidence = this.selectedMakeupEvidenceFile();
-    const operation = evidence
-      ? this.operations.uploadLeaveEvidencePhoto(evidence).pipe(
-          switchMap((upload) => this.operations.submitMakeupLeave({...request, evidencePhotoUrl: upload.url})),
-        )
-      : this.operations.submitMakeupLeave(request);
-
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    operation.subscribe({
-      next: (saved) => {
-        this.leaveRequests.update((items) =>
-          [saved, ...items.filter((item) => item.id !== saved.id)]
-            .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
-        );
-        this.makeupLeaveForm.set({workDate: '', leaveType: 'SICK', reason: ''});
-        this.selectedMakeupEvidenceFile.set(null);
-        this.leaveMessage.set('事後補請已送出，主管審核結果會顯示在下方。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '事後補請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
   protected leaveTypeLabel(type: DriverLeaveRequestResponse['leaveType']): string {
     return {
       SICK: '病假',
@@ -2327,33 +2054,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return status === 'PENDING' ? '待審核' : status === 'APPROVED' ? '已核准' : '未核准';
   }
 
-  protected toggleLeaveHistory(request: DriverLeaveRequestResponse): void {
-    if (this.expandedLeaveId() === request.id) {
-      this.expandedLeaveId.set(null);
-      return;
-    }
-
-    this.expandedLeaveId.set(request.id);
-    if (!this.leaveHistories()[request.id]) {
-      this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
-      this.isLeaveHistoryLoading.set(true);
-      this.operations.getLeaveRequestHistory(request.id).subscribe({
-        next: (events) => {
-          this.leaveHistories.update((histories) => ({...histories, [request.id]: events}));
-          this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
-          this.isLeaveHistoryLoading.set(false);
-        },
-        error: (error: unknown) => {
-          this.leaveHistoryErrors.update((errors) => ({
-            ...errors,
-            [request.id]: this.getErrorMessage(error, '無法取得請假歷程。'),
-          }));
-          this.isLeaveHistoryLoading.set(false);
-        },
-      });
-    }
-  }
-
   protected markLeaveRequestRead(request: DriverLeaveRequestResponse): void {
     if (request.driverReadAt) {
       return;
@@ -2368,16 +2068,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.leaveError.set(this.getErrorMessage(error, '無法將結果標記為已讀。'));
       },
     });
-  }
-
-  protected leaveHistoryLabel(eventType: string): string {
-    return {
-      SUBMITTED: '送出申請',
-      APPROVED: '主管核准',
-      REJECTED: '主管退回',
-      TYPE_CHANGED: '修正假別',
-      PLANNED: '主管預排',
-    }[eventType] ?? eventType;
   }
 
   protected attendancePunctualityLabel(attendance: AttendanceRecordDto): string {
@@ -2732,31 +2422,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.leaveListAvailable.set(false);
         this.leaveError.set(this.getErrorMessage(error, '無法取得一般請假結果。'));
         this.isLeaveListLoading.set(false);
-      },
-    });
-  }
-
-  private loadPlannedLeaveShifts(): void {
-    if (this.isPlannedLeaveLoading()) {
-      return;
-    }
-    const from = new Date();
-    from.setDate(from.getDate() + 1);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 59);
-    this.isPlannedLeaveLoading.set(true);
-    this.operations.getPublishedShifts(this.toIsoDate(from), this.toIsoDate(to)).subscribe({
-      next: (shifts) => {
-        this.plannedLeaveShifts.set(
-          shifts.filter((shift) => shift.shiftType === 'WORK')
-            .sort((left, right) => left.workDate.localeCompare(right.workDate)),
-        );
-        this.isPlannedLeaveLoading.set(false);
-      },
-      error: (error: unknown) => {
-        this.plannedLeaveShifts.set([]);
-        this.leaveError.set(this.getErrorMessage(error, '無法取得可預排請假的班表。'));
-        this.isPlannedLeaveLoading.set(false);
       },
     });
   }
