@@ -9,6 +9,7 @@ import java.time.LocalDate;
 public class DispatchBoardPushResponse {
 
     private LocalDate date;
+    private boolean resourcesChanged;
 
     public DispatchBoardPushResponse() {
     }
@@ -17,11 +18,24 @@ public class DispatchBoardPushResponse {
         this.date = date;
     }
 
+    public DispatchBoardPushResponse(LocalDate date, boolean resourcesChanged) {
+        this.date = date;
+        this.resourcesChanged = resourcesChanged;
+    }
+
     public LocalDate getDate() {
         return date;
     }
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public boolean isResourcesChanged() {
+        return resourcesChanged;
+    }
+
+    public void setResourcesChanged(boolean resourcesChanged) {
+        this.resourcesChanged = resourcesChanged;
     }
 }

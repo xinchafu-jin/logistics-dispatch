@@ -2,6 +2,7 @@ package com.example.backend.controller;
 
 import com.example.backend.dto.request.*;
 import com.example.backend.dto.respones.DeliveryRecordResponse;
+import com.example.backend.dto.respones.DriverAssignmentResponse;
 import com.example.backend.dto.respones.DriverMessageResponse;
 import com.example.backend.dto.respones.DriverLeaveResponse;
 import com.example.backend.dto.respones.DriverLeaveBatchResponse;
@@ -10,15 +11,22 @@ import com.example.backend.dto.respones.DriverTasksResponse;
 import com.example.backend.dto.respones.GPSRouteResponse;
 import com.example.backend.dto.respones.MileageLogResponse;
 import com.example.backend.dto.respones.EmergencyLeaveResponse;
-import com.example.backend.dto.respones.ExceptionCaseResponse;
+import com.example.backend.dto.respones.DriverCaseResponse;
 import com.example.backend.dto.respones.LoadingResponse;
 import com.example.backend.dto.respones.PhotoUploadResponse;
+import com.example.backend.dto.respones.PreTripInspectionResponse;
 import com.example.backend.service.*;
 import jakarta.validation.Valid;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,7 +35,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.YearMonth;
 import java.util.List;
 
@@ -45,7 +56,7 @@ public class DriverPortalController {
     private final DriverTasksService driverTasksService;
     private final GpsPingsService gpsPingsService;
     private final MileageLogsService mileageLogsService;
-    private final DriverExceptionService driverExceptionService;
+    private final DriverCaseService driverCaseService;
     private final GPSRouteService gpsRouteService;
     private final DriversService driversService;
     private final EmergencyLeaveService emergencyLeaveService;
@@ -53,6 +64,9 @@ public class DriverPortalController {
     private final LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService;
     private final DriverMessagesService driverMessagesService;
     private final DriverLeaveRequestService driverLeaveRequestService;
+    private final PreTripInspectionService preTripInspectionService;
+    private final DepartureService departureService;
+    private final DriverAssignmentsService driverAssignmentsService;
 
     public DriverPortalController(
             AttendanceService attendanceService,
@@ -61,14 +75,17 @@ public class DriverPortalController {
             DriverTasksService driverTasksService,
             GpsPingsService gpsPingsService,
             MileageLogsService mileageLogsService,
-            DriverExceptionService driverExceptionService,
+            DriverCaseService driverCaseService,
             GPSRouteService gpsRouteService,
             DriversService driversService,
             EmergencyLeaveService emergencyLeaveService,
             DeliveryPhotoStorageService deliveryPhotoStorageService,
             LeaveEvidencePhotoStorageService leaveEvidencePhotoStorageService,
             DriverMessagesService driverMessagesService,
-            DriverLeaveRequestService driverLeaveRequestService
+            DriverLeaveRequestService driverLeaveRequestService,
+            PreTripInspectionService preTripInspectionService,
+            DepartureService departureService,
+            DriverAssignmentsService driverAssignmentsService
     ) {
         this.attendanceService = attendanceService;
         this.deliveryService = deliveryService;
@@ -76,7 +93,7 @@ public class DriverPortalController {
         this.driverTasksService = driverTasksService;
         this.gpsPingsService = gpsPingsService;
         this.mileageLogsService = mileageLogsService;
-        this.driverExceptionService = driverExceptionService;
+        this.driverCaseService = driverCaseService;
         this.gpsRouteService = gpsRouteService;
         this.driversService = driversService;
         this.emergencyLeaveService = emergencyLeaveService;
@@ -84,6 +101,9 @@ public class DriverPortalController {
         this.leaveEvidencePhotoStorageService = leaveEvidencePhotoStorageService;
         this.driverMessagesService = driverMessagesService;
         this.driverLeaveRequestService = driverLeaveRequestService;
+        this.preTripInspectionService = preTripInspectionService;
+        this.departureService = departureService;
+        this.driverAssignmentsService = driverAssignmentsService;
     }
 
     /** 取得目前登入司機的基本資料與大頭照網址。 */
@@ -145,6 +165,16 @@ public class DriverPortalController {
         return driverScheduleService.findPublishedForDriver(driverId(jwt), from, to);
     }
 
+    /** 月曆用：指定期間內已發布給登入司機的路線，那天在哪個倉庫、開哪台車。 */
+    @GetMapping("/assignments")
+    public List<DriverAssignmentResponse> findAssignments(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return driverAssignmentsService.findPublished(driverId(jwt), from, to);
+    }
+
     /** 取得登入司機今天已發布的配送任務。 */
     @GetMapping("/tasks/today")
     public DriverTasksResponse findTodayTasks(@AuthenticationPrincipal Jwt jwt) {
@@ -172,6 +202,14 @@ public class DriverPortalController {
         return deliveryService.load(driverId(jwt), request);
     }
 
+    /** 商品點交不符直接送進既有倉庫異常流程，原單停止配送並重建待確認訂單。 */
+    @PostMapping("/loading/mismatch")
+    public LoadingResponse loadingMismatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody LoadingMismatchRequestDTO request) {
+        return deliveryService.reportLoadingMismatch(driverId(jwt), request);
+    }
+
     /** 在司機班表中送出一般請假；時間不填代表整天，兩個時間都有則代表部分時段。 */
     @PostMapping("/leave-requests")
     public DriverLeaveResponse requestLeave(
@@ -190,13 +228,29 @@ public class DriverPortalController {
         return driverLeaveRequestService.submitPlannedBatches(driverId(jwt), request);
     }
 
-    /** 針對過去整天未打卡的上班日，補送假別、原因及選填佐證照片。 */
+    /** 過去上班日可補整天或部分時段；已打卡時須填起訖時間。 */
     @PostMapping("/leave-requests/makeup")
     public DriverLeaveResponse requestMakeupLeave(
             @AuthenticationPrincipal Jwt jwt,
             @Valid @RequestBody DriverMakeupLeaveRequestDTO request
     ) {
         return driverLeaveRequestService.submitMakeupLeave(driverId(jwt), request);
+    }
+
+    @PostMapping("/leave-requests/makeup-batch")
+    public List<DriverLeaveResponse> requestMakeupBatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverMakeupLeaveBatchRequestDTO request) {
+        return driverLeaveRequestService.submitMakeupBatch(driverId(jwt), request);
+    }
+
+    @GetMapping("/leave-requests/makeup-candidates")
+    public List<LocalDate> findMakeupCandidates(@AuthenticationPrincipal Jwt jwt,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime leaveStart,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime leaveEnd) {
+        return driverLeaveRequestService.findMakeupCandidates(driverId(jwt), from, to, leaveStart, leaveEnd);
     }
 
     /** 先上傳補請假佐證照片，再把回傳網址放入 makeup 請求；照片不是必填。 */
@@ -260,7 +314,7 @@ public class DriverPortalController {
         return deliveryService.noSignature(driverId(jwt), request);
     }
 
-    /** 上傳交貨或無人簽收照片；回傳網址再放入 deliver/no-signature 請求。 */
+    /** 上傳交貨、無人簽收或例外回報的照片；回傳網址再放入 deliver／no-signature／建立案件的請求。 */
     @PostMapping(value = "/delivery-photo", consumes = "multipart/form-data")
     public PhotoUploadResponse uploadDeliveryPhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -270,15 +324,56 @@ public class DriverPortalController {
         return new PhotoUploadResponse(deliveryPhotoStorageService.store(file));
     }
 
-    /** 司機回報配送途中發生的異常。 */
-    @PostMapping("/exception")
-    public ExceptionCaseResponse reportException(
+    /** 查這條路線目前這組人車的出車前安全檢查：檢查過沒、通過沒、哪幾項異常。 */
+    @GetMapping("/pre-trip")
+    public PreTripInspectionResponse findPreTripInspection(
             @AuthenticationPrincipal Jwt jwt,
-            @Valid @RequestBody DriverExceptionRequestDTO request) {
-        return driverExceptionService.report(driverId(jwt), request);
+            @RequestParam Long routeId
+    ) {
+        return preTripInspectionService.findLatest(driverId(jwt), routeId);
     }
 
-    /** 記錄今日出車時的里程表讀數。 */
+    /**
+     * 送出出車前安全檢查；通過時同一個交易記下出車時的行車紀錄器里程（見 DepartureService）。
+     * request 是 JSON；酒測器照片必填，行車紀錄器照片通過時必填，故障照片選填。
+     * 照片都標 required = false：缺照片時由 service 回「請拍酒測器讀數照片」這類訊息，
+     * 不然 Spring 丟的 MissingServletRequestPartException 會被 GlobalExceptionHandler 當成 500。
+     */
+    @PostMapping(value = "/pre-trip", consumes = "multipart/form-data")
+    public PreTripInspectionResponse submitPreTripInspection(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestPart("request") PreTripInspectionRequestDTO request,
+            @RequestPart(value = "alcoholPhoto", required = false) MultipartFile alcoholPhoto,
+            @RequestPart(value = "dashcamPhoto", required = false) MultipartFile dashcamPhoto,
+            @RequestPart(value = "faultPhoto", required = false) MultipartFile faultPhoto
+    ) {
+        return departureService.submitPreTripInspection(driverId(jwt), request, alcoholPhoto, dashcamPhoto, faultPhoto);
+    }
+
+    /**
+     * 讀自己送過的檢查照片，kind 是 alcohol 或 fault。
+     * 酒測結果是個人資料：不放公開路徑、不給快取，只有本人查得到。
+     */
+    @GetMapping("/pre-trip/{inspectionId}/photos/{kind}")
+    public ResponseEntity<Resource> findPreTripPhoto(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long inspectionId,
+            @PathVariable String kind
+    ) {
+        Path photo = preTripInspectionService.photo(driverId(jwt), inspectionId, kind);
+        if (!Files.isRegularFile(photo)) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok()
+                .contentType(imageType(photo))
+                .cacheControl(CacheControl.noStore())
+                .body(new FileSystemResource(photo));
+    }
+
+    /**
+     * 記錄今日出車時的行車紀錄器里程；出車前安全檢查要先通過。
+     * 司機端現在改由安全檢查一起記（DepartureService），這支保留給還沒改版的呼叫端。
+     */
     @PostMapping("/mileage/start")
     public MileageLogResponse startMileage(
             @AuthenticationPrincipal Jwt jwt,
@@ -286,7 +381,7 @@ public class DriverPortalController {
         return mileageLogsService.start(driverId(jwt), request);
     }
 
-    /** 記錄今日收工時的里程表讀數。 */
+    /** 記錄今日收車時的行車紀錄器里程。 */
     @PostMapping("/mileage/end")
     public MileageLogResponse endMileage(
             @AuthenticationPrincipal Jwt jwt,
@@ -294,7 +389,7 @@ public class DriverPortalController {
         return mileageLogsService.end(driverId(jwt), request);
     }
 
-    /** 補傳出車時的里程表照片；保留原本的 JSON 登記 API。 */
+    /** 補傳出車時的行車紀錄器照片；保留原本的 JSON 登記 API。 */
     @PostMapping(value = "/mileage/start/photo", consumes = "multipart/form-data")
     public MileageLogResponse uploadStartMileagePhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -303,7 +398,7 @@ public class DriverPortalController {
         return mileageLogsService.attachStartPhoto(driverId(jwt), file);
     }
 
-    /** 補傳收車時的里程表照片；保留原本的 JSON 登記 API。 */
+    /** 補傳收車時的行車紀錄器照片；保留原本的 JSON 登記 API。 */
     @PostMapping(value = "/mileage/end/photo", consumes = "multipart/form-data")
     public MileageLogResponse uploadEndMileagePhoto(
             @AuthenticationPrincipal Jwt jwt,
@@ -340,6 +435,61 @@ public class DriverPortalController {
     @PostMapping("/messages/read")
     public int markMessagesRead(@AuthenticationPrincipal Jwt jwt) {
         return driverMessagesService.markReadByDriver(driverId(jwt));
+    }
+
+    // ── 例外回報案件（支援中心）：案件是不是本人的，一律用 JWT 的司機 ID 判斷 ──
+
+    /** 自己的案件：進行中的全部，已結案的最近 20 件。 */
+    @GetMapping("/cases")
+    public List<DriverCaseResponse> findCases(@AuthenticationPrincipal Jwt jwt) {
+        return driverCaseService.findForDriver(driverId(jwt));
+    }
+
+    /** 建立案件；路線、建立時間由後端決定，建立後推 CASE_OPENED 給後台。 */
+    @PostMapping("/cases")
+    public DriverCaseResponse createCase(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody DriverCaseRequestDTO request
+    ) {
+        return driverCaseService.create(driverId(jwt), request);
+    }
+
+    /** 案件對話；afterId 的用法跟一般對話一樣。 */
+    @GetMapping("/cases/{caseId}/messages")
+    public List<DriverMessageResponse> findCaseMessages(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId,
+            @RequestParam(required = false) Long afterId
+    ) {
+        return driverCaseService.findMessagesForDriver(driverId(jwt), caseId, afterId);
+    }
+
+    /** 在案件裡留言；結案後不能再留。 */
+    @PostMapping("/cases/{caseId}/messages")
+    public DriverMessageResponse sendCaseMessage(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long caseId,
+            @Valid @RequestBody DriverMessageRequestDTO request
+    ) {
+        return driverCaseService.sendFromDriver(driverId(jwt), caseId, request.getContent());
+    }
+
+    /** 把這件案件裡調度中心的回覆標成已讀。 */
+    @PostMapping("/cases/{caseId}/messages/read")
+    public int markCaseMessagesRead(@AuthenticationPrincipal Jwt jwt, @PathVariable Long caseId) {
+        return driverCaseService.markReadByDriver(driverId(jwt), caseId);
+    }
+
+    /** 檔名的副檔名是存檔時依檔案內容決定的（PreTripPhotoStorageService），照著回傳對應的類型 */
+    private MediaType imageType(Path photo) {
+        String fileName = photo.getFileName().toString();
+        if (fileName.endsWith(".png")) {
+            return MediaType.IMAGE_PNG;
+        }
+        if (fileName.endsWith(".webp")) {
+            return MediaType.parseMediaType("image/webp");
+        }
+        return MediaType.IMAGE_JPEG;
     }
 
     /** 從登入 Token 取得資料庫中的司機 ID。 */

@@ -1,0 +1,23 @@
+// One-time local V2 -> MAJOR V15 reconciliation. All SQL/data backups stay outside Git.
+allprojects {
+    afterEvaluate {
+        tasks.register('compileMajorDatabaseTool', JavaCompile) {
+            source = files(rootProject.file('../scripts/ReconcileMajorDatabase.java'))
+            classpath = configurations.runtimeClasspath
+            destinationDirectory = layout.buildDirectory.dir('major-db-repair/classes')
+            options.encoding = 'UTF-8'
+            javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(21) }
+        }
+        tasks.register('majorDatabaseTool', JavaExec) {
+            dependsOn 'compileMajorDatabaseTool'
+            classpath = files(layout.buildDirectory.dir('major-db-repair/classes')) + configurations.runtimeClasspath
+            mainClass = 'ReconcileMajorDatabase'
+            for (String key : ['dbMode', 'dbTag', 'dbBackup']) {
+                if (!project.hasProperty(key)) throw new GradleException("Missing -P${key}")
+            }
+            args rootProject.projectDir.absolutePath, project.findProperty('dbMode'), project.findProperty('dbTag'), project.findProperty('dbBackup')
+            jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+            jvmArgs '-Dmajor.keepLegacyRouteDuplicates=' + (project.findProperty('keepLegacyRouteDuplicates') == 'true')
+        }
+    }
+}

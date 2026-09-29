@@ -1,0 +1,241 @@
+<section
+  class="pre-trip"
+  [class.is-passed-compact]="result()?.completed && result()?.passed && !showForm() && !detailsExpanded()"
+  aria-label="出車前安全檢查"
+>
+  @if (!result()?.completed || !result()?.passed || showForm()) {
+    <header>
+      <div>
+        <p>出車前必做</p>
+        <h3>安全檢查</h3>
+      </div>
+      <span class="plate">{{ route().vehicle.plateNumber }}</span>
+    </header>
+  }
+
+  @if (loading()) {
+    <p class="notice" role="status">正在確認檢查紀錄…</p>
+  }
+  @if (error()) {
+    <p class="notice is-error" role="alert">
+      {{ error() }}
+      @if (!result()) {
+        <button type="button" (click)="reload()">重新確認</button>
+      }
+    </p>
+  }
+
+  <!-- 送過了而且不在重新檢查中：顯示結果 -->
+  @if (result(); as current) {
+    @if (current.completed && !showForm()) {
+      @if (current.passed) {
+        <div class="pre-trip-passed-bar" role="status">
+          <div class="pre-trip-passed-bar__info">
+            <span class="pre-trip-passed-badge">✓ 車檢通過</span>
+            <span>
+              @if (current.departed) {
+                出車里程（行車紀錄器）：{{ current.startOdometer }} km
+              } @else {
+                酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L
+              }
+            </span>
+          </div>
+          <button type="button" class="pre-trip-passed-toggle" (click)="toggleDetails()">
+            {{ detailsExpanded() ? '收起明細 ▴' : '照片/明細 ▾' }}
+          </button>
+        </div>
+        @if (detailsExpanded()) {
+          <div class="notice" role="status">
+            <strong>{{ current.message }}</strong>
+            <p>酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L · {{ formatTime(current.submittedAt) }}</p>
+            @if (current.departed) {
+              <p>出車里程（行車紀錄器）：{{ current.startOdometer }} km</p>
+            }
+          </div>
+          <div class="result-actions">
+            <button type="button" (click)="viewPhoto('alcohol')">查看酒測照片</button>
+            @if (current.hasFaultPhoto) {
+              <button type="button" (click)="viewPhoto('fault')">查看故障照片</button>
+            }
+          </div>
+          @if (previews().alcohol || previews().fault) {
+            <div class="saved-photos">
+              @if (previews().alcohol; as url) {
+                <img [src]="url" alt="酒測器讀數照片" />
+              }
+              @if (previews().fault; as url) {
+                <img [src]="url" alt="故障照片" />
+              }
+            </div>
+          }
+        }
+      } @else {
+        <div class="notice is-error" role="status">
+          <strong>{{ current.message }}</strong>
+          <p>酒測 {{ current.alcoholMgL | number: '1.2-2' }} mg/L · {{ formatTime(current.submittedAt) }}</p>
+          @if (current.departed) {
+            <p>出車里程（行車紀錄器）：{{ current.startOdometer }} km</p>
+          }
+          @if (current.abnormalItems.length > 0) {
+            <p>異常：{{ current.abnormalItems.join('、') }}</p>
+          }
+          @if (current.note) {
+            <p>說明：{{ current.note }}</p>
+          }
+        </div>
+        <div class="result-actions">
+          <button type="button" (click)="viewPhoto('alcohol')">查看酒測照片</button>
+          @if (current.hasFaultPhoto) {
+            <button type="button" (click)="viewPhoto('fault')">查看故障照片</button>
+          }
+          <button type="button" class="primary" (click)="startRetry()">重新檢查</button>
+        </div>
+        @if (previews().alcohol || previews().fault) {
+          <div class="saved-photos">
+            @if (previews().alcohol; as url) {
+              <img [src]="url" alt="酒測器讀數照片" />
+            }
+            @if (previews().fault; as url) {
+              <img [src]="url" alt="故障照片" />
+            }
+          </div>
+        }
+      }
+    }
+  }
+
+  @if (showForm()) {
+    <form (submit)="submit($event)">
+      <fieldset [disabled]="saving()">
+        <legend>1　酒測</legend>
+        <label class="field">
+          <span>呼氣酒精濃度（mg/L）</span>
+          <input
+            type="number"
+            inputmode="decimal"
+            min="0"
+            max="9.99"
+            step="0.01"
+            placeholder="照酒測器上的數字填，例如 0.00"
+            [value]="alcohol()"
+            (input)="updateAlcohol($event)"
+          />
+        </label>
+        <small>公司規定 0.00 才能出車。</small>
+        <label class="field">
+          <span>酒測器讀數照片（必拍）</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+            aria-label="酒測器讀數照片"
+            (change)="selectPhoto('alcohol', $event)"
+          />
+        </label>
+        @if (previews().alcohol; as url) {
+          <img [src]="url" alt="酒測器讀數照片預覽" />
+        }
+      </fieldset>
+
+      <fieldset [disabled]="saving()">
+        <legend>2　車輛檢查</legend>
+        @for (group of groups; track group.title) {
+          <div class="check-group">
+            <p class="group-title">
+              {{ group.title }}
+              @if (group.hint) {
+                <small>{{ group.hint }}</small>
+              }
+            </p>
+            @for (item of group.items; track item.key) {
+              <div class="check-item" role="group" [attr.aria-label]="item.label">
+                <span>{{ item.label }}</span>
+                <div class="choices">
+                  <button
+                    type="button"
+                    class="choice"
+                    [class.is-selected]="answers()[item.key] === true"
+                    [attr.aria-pressed]="answers()[item.key] === true"
+                    (click)="answer(item.key, true)"
+                  >正常</button>
+                  <button
+                    type="button"
+                    class="choice is-abnormal"
+                    [class.is-selected]="answers()[item.key] === false"
+                    [attr.aria-pressed]="answers()[item.key] === false"
+                    (click)="answer(item.key, false)"
+                  >異常</button>
+                </div>
+              </div>
+            }
+            <!-- 行車紀錄器這組：一張照片同時證明有開機、也拍到出車時的里程；通過時就用這個數字記出車里程 -->
+            @if (group.readsMileage && needsMileage()) {
+              <label class="field">
+                <span>出車時行車紀錄器里程（km）</span>
+                <input
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  step="1"
+                  placeholder="照行車紀錄器上的數字填，例如 18400"
+                  [value]="odometer()"
+                  (input)="updateOdometer($event)"
+                />
+              </label>
+              <label class="field">
+                <span>行車紀錄器畫面照片（要看得到里程）</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  capture="environment"
+                  aria-label="行車紀錄器照片"
+                  (change)="selectPhoto('dashcam', $event)"
+                />
+              </label>
+              @if (previews().dashcam; as url) {
+                <img [src]="url" alt="行車紀錄器照片預覽" />
+              }
+            }
+          </div>
+        }
+      </fieldset>
+
+      @if (hasAbnormal()) {
+        <fieldset [disabled]="saving()">
+          <legend>3　異常說明</legend>
+          <label class="field">
+            <span>哪裡有問題（必填）</span>
+            <textarea
+              rows="3"
+              maxlength="500"
+              placeholder="例如：左後煞車燈不亮"
+              [value]="note()"
+              (input)="updateNote($event)"
+            ></textarea>
+          </label>
+          <label class="field">
+            <span>故障照片（選填）</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              capture="environment"
+              aria-label="故障照片"
+              (change)="selectPhoto('fault', $event)"
+            />
+          </label>
+          @if (previews().fault; as url) {
+            <img [src]="url" alt="故障照片預覽" />
+          }
+        </fieldset>
+      }
+
+      <p class="hint">通過時會同時記下出車里程。有異常也照實送出，檢查紀錄會留給主管看；沒通過就不能出車，請聯絡主管。</p>
+      <button class="submit" type="submit" [disabled]="!canSubmit()">
+        {{ saving() ? '送出中…' : '送出檢查' }}
+      </button>
+      @if (unansweredCount() > 0) {
+        <small class="remaining">還有 {{ unansweredCount() }} 項沒選</small>
+      }
+    </form>
+  }
+</section>

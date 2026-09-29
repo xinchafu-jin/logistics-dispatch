@@ -31,6 +31,8 @@ public class DispatchWorkflowService {
     private final RoutePlanMetricsService routePlanMetricsService;
     private final DispatchSlotService dispatchSlotService;
     private final DispatchDayService dispatchDayService;
+    private final PreTripInspectionService preTripInspectionService;
+    private final DispatchVehicleMaintenanceGuard maintenanceGuard;
 
     public DispatchWorkflowService(
             DispatchService dispatchService,
@@ -39,7 +41,9 @@ public class DispatchWorkflowService {
             DispatchDraftService dispatchDraftService,
             RoutePlanMetricsService routePlanMetricsService,
             DispatchSlotService dispatchSlotService,
-            DispatchDayService dispatchDayService
+            DispatchDayService dispatchDayService,
+            PreTripInspectionService preTripInspectionService,
+            DispatchVehicleMaintenanceGuard maintenanceGuard
     ) {
         this.dispatchService = dispatchService;
         this.dispatchBoardService = dispatchBoardService;
@@ -48,6 +52,8 @@ public class DispatchWorkflowService {
         this.routePlanMetricsService = routePlanMetricsService;
         this.dispatchSlotService = dispatchSlotService;
         this.dispatchDayService = dispatchDayService;
+        this.preTripInspectionService = preTripInspectionService;
+        this.maintenanceGuard = maintenanceGuard;
     }
 
     @Transactional(readOnly = true)
@@ -107,12 +113,8 @@ public class DispatchWorkflowService {
     }
 
     /**
-     * 格子裡已經有的訂單固定在那格的車上。
-     *
-     * <p>只固定到這次有出車的車：格子的車不能出（維修中、調倉），plan 已經略過那格並寫進 notices，
-     * 那格的單就不固定，交給 OR-Tools 分給其他車，不然整次自動排車都會被一台出不了的車擋住。</p>
+     * 至少一格選了司機或車；前端沒填的格子也會送來，要逐格看
      */
-    /** 至少一格選了司機或車；前端沒填的格子也會送來，要逐格看 */
     private boolean hasFilledSlot(List<OptimizeSlotsDTO.Slot> slots) {
         if (slots == null) {
             return false;
@@ -125,6 +127,12 @@ public class DispatchWorkflowService {
         return false;
     }
 
+    /**
+     * 格子裡已經有的訂單固定在那格的車上。
+     *
+     * <p>只固定到這次有出車的車：格子的車不能出（維修中、調倉），plan 已經略過那格並寫進 notices，
+     * 那格的單就不固定，交給 OR-Tools 分給其他車，不然整次自動排車都會被一台出不了的車擋住。</p>
+     */
     private Map<Long, Long> pinnedVehicleByOrder(List<OptimizeSlotsDTO.Slot> slots, List<Long> dispatchedVehicleIds) {
         Map<Long, Long> pinned = new HashMap<>();
         for (OptimizeSlotsDTO.Slot slot : slots) {
@@ -152,16 +160,20 @@ public class DispatchWorkflowService {
 
     /**
      * 只檢查不發布：AI 一次確認好幾天時，先每天都檢查過，全部通過才開始發布，
-     * 不必等到第三天被擋才發現、前兩天的 OSRM 也白算了。
+     * 不必等到第三天被擋才發現、前兩天也白發布了。
+     * 保養預檢要知道每條草稿路線要跑多遠，這一步會叫 OSRM 算距離（不拿道路形狀）。
      */
     public void assertCanPublish(LocalDate date) {
         dispatchGuardService.assertCanPublish(date);
+        maintenanceGuard.assertCanPublish(date);
     }
 
     @Transactional
     public List<DispatchResponse> publish(LocalDate date) {
         dispatchGuardService.assertCanPublish(date);
         routePlanMetricsService.calculateAndStore(date);
+        // calculateAndStore 剛把每條路線的總里程存好，直接拿來判斷跑完會不會超過保養里程；超過就整筆退回
+        maintenanceGuard.assertCanPublishWithFreshMetrics(date);
         dispatchService.publish(date);
         return dispatchBoardService.getBoards(date);
     }
@@ -169,7 +181,11 @@ public class DispatchWorkflowService {
     @Transactional
     public List<DispatchResponse> withdraw(LocalDate date) {
         dispatchGuardService.assertCanWithdraw(date);
+        // 鎖住當天已發布的路線：有人已記出車里程就擋下，其餘的安全檢查作廢，重新發布後要重做
+        preTripInspectionService.prepareWithdraw(date);
         dispatchService.withdraw(date);
+        // 路線變回草稿後可能被重排，預定形狀要一起刪；重新發布時 calculateAndStore 會重算
+        routePlanMetricsService.deletePlannedPaths(date);
         return dispatchBoardService.getBoards(date);
     }
 }

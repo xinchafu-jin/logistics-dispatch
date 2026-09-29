@@ -1,7 +1,9 @@
 package com.example.backend.controller;
 
 import com.example.backend.dto.request.GpsPingDTO;
+import com.example.backend.dto.respones.RouteDeviationResponse;
 import com.example.backend.service.GpsPingsService;
+import com.example.backend.service.RouteDeviationService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +21,11 @@ import java.util.List;
 public class FleetController {
 
     private final GpsPingsService gpsPingsService;
+    private final RouteDeviationService routeDeviationService;
 
-    public FleetController(GpsPingsService gpsPingsService) {
+    public FleetController(GpsPingsService gpsPingsService, RouteDeviationService routeDeviationService) {
         this.gpsPingsService = gpsPingsService;
+        this.routeDeviationService = routeDeviationService;
     }
 
     /** 取得目前工作中且 GPS 未過期的全部司機位置。 */
@@ -50,6 +54,15 @@ public class FleetController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to
     ) {
         return gpsPingsService.findHistory(driverId, from, to);
+    }
+
+    /**
+     * 進行中的偏離預定路線（還沒結束的），先開始的在前。
+     * 後台打開看板、WebSocket 重新連上時抓一次，之後靠 /topic/admin/route-deviations 推播更新。
+     */
+    @GetMapping("/route-deviations")
+    public List<RouteDeviationResponse> findActiveRouteDeviations() {
+        return routeDeviationService.findActive();
     }
 
     /** 手動清除超過保存天數的 GPS 資料，並回傳刪除筆數。 */

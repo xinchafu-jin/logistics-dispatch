@@ -1,1022 +1,161 @@
-:host {
-  display: block;
+// 人車資源：上方種類分頁＋篩選列，下方左清單、右資源狀態。車輛、店家、倉庫用 .ui-table；
+// 司機的 DOM 是卡片（測試綁著），用 grid 畫成同樣的實線格線。面板、表單、彈窗都用 styles.scss 的 .ui-*
+:host { display: block; }
+
+.resource-workspace { grid-template-columns: minmax(0, 1fr) 300px; }
+
+// ── 篩選列：所屬倉庫下拉（Material 的 mat-select，沒有外框，這裡補成跟 .ui-input 一樣的 32px 方框）──
+.driver-warehouse-filter,
+.driver-warehouse-select {
+  --mat-select-enabled-trigger-text-color: var(--text);
+  --mat-select-enabled-arrow-color: var(--muted);
+  --mat-select-focused-arrow-color: var(--accent);
+  --mat-select-placeholder-text-color: var(--subtle);
+  --mat-select-trigger-text-font: inherit;
+  --mat-select-trigger-text-size: 0.8125rem;
+  --mat-select-trigger-text-tracking: normal;
+  display: flex; align-items: center; height: 32px; padding: 0 10px;
+  background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
+  &:focus-visible { border-color: var(--accent); outline: 2px solid var(--accent-soft); }
 }
 
-.resource-page {
-  width: min(100%, 1440px);
-  margin: 0 auto;
+.driver-warehouse-filter { width: 220px; max-width: 100%; }
+.search-field { width: min(260px, 100%); margin-left: auto; }
+
+// ── 司機：欄名一列＋一位司機一列，三欄對齊，格線同 .ui-table ──
+.driver-list-heading,
+.driver-resource-card { display: grid; grid-template-columns: minmax(210px, 1.2fr) minmax(190px, 1fr) minmax(160px, 0.8fr); }
+
+.driver-list-heading > span,
+.driver-detail-block { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.driver-list-heading > span:last-child,
+.driver-detail-block:last-child { border-right: 0; }
+
+.driver-list-heading > span {
+  padding: 9px 12px; color: var(--field-label); background: var(--surface); font-size: 0.8125rem; font-weight: 600;
+  small { margin-left: 4px; color: var(--muted); font-family: var(--font-mono); font-weight: 400; }
 }
 
-.page-intro {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 24px;
+.driver-detail-block { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 10px 12px; font-size: 0.8125rem; }
+.driver-resource-card:hover .driver-detail-block { background: var(--row-hover); }
+
+// 每格的標題：窄螢幕疊成卡片時才顯示；寬螢幕上面已經有欄名，只留給螢幕閱讀器
+.driver-detail-block h4 {
+  display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 500;
+  mat-icon { width: 16px; height: 16px; font-size: 16px; }
 }
 
-.page-eyebrow,
-.section-eyebrow {
-  margin: 0 0 7px;
-  color: var(--accent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
+@media (min-width: 761px) {
+  .driver-detail-block h4 { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 
-.page-intro h2,
-.list-header h3,
-.assignment-header h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
+.driver-identity { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.driver-identity strong,
+.driver-warehouse-name { font-weight: 600; }
+.driver-details { display: grid; gap: 2px; margin: 0; }
+.driver-details div { display: flex; gap: 8px; }
+.driver-details dt { flex: 0 0 5.5em; color: var(--muted); }
+.driver-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.driver-card-actions { margin-top: 2px; }
+.driver-unassigned { color: var(--warn); font-weight: 600; }
+.driver-work-time { font-size: 0.875rem; font-weight: 600; }
 
-.page-intro h2 {
-  font-size: 2rem;
-}
+// ── 車輛、店家、倉庫表格 ──
+.resource-table td { vertical-align: top; }
+.resource-table small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+.resource-table strong { font-weight: 600; }
+.col-actions { width: 1%; }
+.row-actions { display: flex; gap: 6px; }
+.row-action--danger.ui-btn-default:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); }
 
-.page-intro > div > p:not(.page-eyebrow) {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 0.9375rem;
-  line-height: 1.65;
-}
+// 狀態點：可派、營業、啟用是綠；保養中、暫停營業是提醒色；維修中紅；退役、停用維持灰
+.status-待派車::before, .status-營業中::before, .status-啟用::before { background: var(--ok); }
+.status-保養中::before, .status-暫停營業::before { background: var(--warn); }
+.status-維修中::before { background: var(--danger); }
 
-.page-actions {
-  display: grid;
-  justify-items: end;
-  gap: 14px;
-}
+// 保養狀況：快到了黃、會超過或送修中紅、資料不齊灰
+.maintenance-note.is-warning { color: var(--warn); }
+.maintenance-note.is-blocked { color: var(--danger); }
+.maintenance-note.is-unknown { color: var(--subtle); }
 
-.action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: end;
-  gap: 8px;
-}
-
-.secondary-action,
-.primary-action,
-.plain-button,
-.danger-action,
-.icon-button,
-.row-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  gap: 7px;
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  transition:
-    color 160ms ease,
-    background-color 160ms ease,
-    border-color 160ms ease;
-}
-
-.secondary-action {
-  padding: 0 12px;
-  color: var(--text);
-  background: rgb(99 209 198 / 10%);
-  border: 1px solid rgb(99 209 198 / 28%);
-}
-
-.secondary-action:hover,
-.secondary-action:focus-visible {
-  background: rgb(99 209 198 / 18%);
-  border-color: rgb(99 209 198 / 52%);
-  outline: none;
-}
-
-.secondary-action mat-icon,
-.primary-action mat-icon,
-.danger-action mat-icon,
-.icon-button mat-icon,
-.row-action mat-icon {
-  display: inline-flex;
-  flex: 0 0 16px;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 1;
-  stroke-width: 1.8;
-}
-
-.updated-at {
-  margin: 0 0 4px;
-  color: var(--subtle);
-  font-size: 0.8125rem;
-}
-
-.resource-summary {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 34px;
-}
-
-.summary-card {
-  position: relative;
-  min-height: 138px;
-  padding: 20px;
-  overflow: hidden;
-  background: rgb(16 21 24 / 58%);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 18px 36px rgb(0 0 0 / 18%);
-  backdrop-filter: blur(18px) saturate(120%);
-}
-
-.summary-card::before {
-  position: absolute;
-  top: 0;
-  right: 18px;
-  left: 18px;
-  height: 1px;
-  background: rgb(255 255 255 / 11%);
-  content: '';
-}
-
-.summary-card p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.summary-card strong {
-  display: block;
-  margin-top: 22px;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 2.125rem;
-  font-weight: 600;
-  line-height: 1;
-}
-
-.summary-card span {
-  display: block;
-  margin-top: 11px;
-  color: var(--subtle);
-  font-size: 0.75rem;
-}
-
-.summary-card.tone-accent {
-  border-color: rgb(99 209 198 / 27%);
-}
-
-.summary-card.tone-accent strong {
-  color: var(--accent);
-}
-
-.summary-card.tone-warning {
-  border-color: rgb(228 167 77 / 28%);
-}
-
-.summary-card.tone-warning strong {
-  color: #f0b65d;
-}
-
-.resource-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
-  align-items: start;
-  gap: 20px;
-  margin-top: 44px;
-}
-
-.resource-list-panel,
-.assignment-panel {
-  min-width: 0;
-  background: rgb(18 21 22 / 82%);
-  border: 1px solid var(--metal-edge);
-  border-radius: 8px;
-  box-shadow:
-    inset 0 1px 0 var(--glass-highlight),
-    0 20px 42px rgb(0 0 0 / 22%);
-  backdrop-filter: blur(20px) saturate(110%);
-}
-
-.resource-list-panel {
-  overflow: hidden;
-}
-
-.list-header,
-.assignment-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 22px 17px;
-}
-
-.list-header h3,
-.assignment-header h3 {
-  font-size: 1.25rem;
-}
-
-.view-switch,
-.filter-control {
-  display: inline-flex;
-  max-width: 100%;
-  overflow-x: auto;
-  background: rgb(0 0 0 / 20%);
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 6px;
-}
-
-.view-switch button,
-.filter-control button {
-  min-width: 60px;
-  min-height: 36px;
-  padding: 0 12px;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    color 160ms ease,
-    background-color 160ms ease;
-}
-
-.view-switch button:hover,
-.view-switch button:focus-visible,
-.filter-control button:hover,
-.filter-control button:focus-visible {
-  color: var(--text);
-  outline: none;
-}
-
-.view-switch button.is-active,
-.filter-control button.is-active {
-  color: var(--text);
-  background: rgb(99 209 198 / 13%);
-  box-shadow: inset 0 0 0 1px rgb(99 209 198 / 24%);
-}
-
-.resource-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 22px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.search-field {
-  display: flex;
-  flex: 0 1 220px;
-  align-items: center;
-  min-width: 176px;
-  min-height: 38px;
-  gap: 8px;
-  padding: 0 11px;
-  color: var(--subtle);
-  background: rgb(3 6 7 / 52%);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-}
-
-.search-field:focus-within {
-  border-color: rgb(99 209 198 / 46%);
-  box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
-}
-
-.search-field mat-icon {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  font-size: 16px;
-  line-height: 16px;
-  stroke-width: 1.7;
-}
-
-.search-field input {
-  width: 100%;
-  min-width: 0;
-  color: var(--text);
-  background: transparent;
-  border: 0;
-  font-size: 0.75rem;
-  outline: 0;
-}
-
-.search-field input::placeholder {
-  color: var(--subtle);
-}
-
-.resource-table {
-  display: grid;
-}
-
-.table-head,
-.resource-row {
-  display: grid;
-  grid-template-columns:
-    minmax(150px, 1.2fr) minmax(74px, 0.68fr) minmax(120px, 0.95fr) minmax(120px, 0.95fr)
-    76px;
-  gap: 16px;
-  align-items: center;
-}
-
-.table-head {
-  padding: 12px 22px;
-  color: var(--subtle);
-  background: rgb(255 255 255 / 2%);
-  border-bottom: 1px solid rgb(255 255 255 / 6%);
-  font-size: 0.6875rem;
-  font-weight: 600;
-}
-
-.resource-row {
-  min-height: 86px;
-  padding: 14px 22px;
-  border-bottom: 1px solid rgb(255 255 255 / 7%);
-  transition: background-color 160ms ease;
-}
-
-.resource-row:hover {
-  background: rgb(255 255 255 / 3%);
-}
-
-.row-action {
-  width: 34px;
-  min-height: 34px;
-  padding: 0;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid transparent;
-}
-
-.row-action--danger:hover,
-.row-action--danger:focus-visible {
-  color: #f2a079;
-  background: rgb(217 141 87 / 10%);
-  border-color: rgb(217 141 87 / 35%);
-  outline: none;
-}
-
-.row-actions,
-.row-action-placeholder {
-  display: block;
-  width: 76px;
-}
-
-.row-actions {
-  display: flex;
-  justify-content: end;
-  gap: 8px;
-}
-
-.driver-status-cell {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.status-toggle {
-  position: relative;
-  display: inline-flex;
-  flex: 0 0 auto;
-  cursor: pointer;
-}
-
-.status-toggle input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
+// 店家營業狀態的開關：清單上直接切換
+.status-cell { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.status-toggle { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
+.status-toggle input { position: absolute; inset: 0; margin: 0; cursor: inherit; opacity: 0; }
 
 .status-toggle__track {
-  position: relative;
-  width: 28px;
-  height: 16px;
-  background: rgb(136 144 155 / 38%);
-  border: 1px solid rgb(136 144 155 / 56%);
-  border-radius: 999px;
-  transition: background-color 160ms ease, border-color 160ms ease;
+  position: relative; width: 30px; height: 16px;
+  background: var(--surface-active); border: 1px solid var(--border); border-radius: 8px;
+  &::after { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; background: var(--muted); border-radius: 50%; content: ''; transition: transform 120ms ease; }
 }
 
-.status-toggle__track::after {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 10px;
-  height: 10px;
-  background: #cbd0d5;
-  border-radius: 50%;
-  content: '';
-  transition: transform 160ms ease, background-color 160ms ease;
-}
+.status-toggle input:checked + .status-toggle__track { background: var(--accent-soft); border-color: var(--accent); }
+.status-toggle input:checked + .status-toggle__track::after { background: var(--accent); transform: translateX(14px); }
+.status-toggle input:focus-visible + .status-toggle__track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.status-toggle input:disabled + .status-toggle__track { cursor: wait; opacity: 0.5; }
 
-.status-toggle input:checked + .status-toggle__track {
-  background: rgb(99 209 198 / 35%);
-  border-color: rgb(99 209 198 / 70%);
-}
+// ── 右側資源狀態 ──
+.updated-at { color: var(--muted); font-size: 0.75rem; }
+.assignment-note { margin: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
 
-.status-toggle input:checked + .status-toggle__track::after {
-  background: var(--accent);
-  transform: translateX(12px);
-}
-
-.status-toggle input:focus-visible + .status-toggle__track {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.status-toggle input:disabled + .status-toggle__track {
-  cursor: wait;
-  opacity: 0.5;
-}
-
-.resource-person {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 11px;
-}
-
-.initial-badge,
-.vehicle-badge {
-  display: grid;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  color: var(--accent);
-  background: rgb(99 209 198 / 9%);
-  border: 1px solid rgb(99 209 198 / 20%);
-  border-radius: 50%;
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.vehicle-badge {
-  border-radius: 6px;
-}
-
-.vehicle-badge mat-icon {
-  width: 18px;
-  height: 18px;
-  font-size: 18px;
-  line-height: 18px;
-  stroke-width: 1.65;
-}
-
-.resource-person > div,
-.table-value {
-  display: grid;
-  min-width: 0;
-  gap: 5px;
-}
-
-.resource-person strong,
-.table-value strong {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.resource-person span,
-.table-value span {
-  overflow: hidden;
-  color: var(--subtle);
-  font-size: 0.6875rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  white-space: nowrap;
-}
-
-.status-badge::before {
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 8px rgb(99 209 198 / 65%);
-  content: '';
-}
-
-.status-工時提醒::before,
-.status-保養排程::before {
-  background: #e4a74d;
-  box-shadow: 0 0 8px rgb(228 167 77 / 62%);
-}
-
-.status-停職::before {
-  background: #89909b;
-  box-shadow: none;
-}
-
-.status-暫停營業::before,
-.status-停用::before {
-  background: #89909b;
-  box-shadow: none;
-}
-
-.status-休息中::before {
-  background: #89909b;
-  box-shadow: none;
-}
-
-.assignment-panel {
-  position: sticky;
-  top: 112px;
-  padding: 0 22px 22px;
-}
-
-.assignment-header {
-  padding: 20px 0 17px;
-  border-bottom: 1px solid var(--border);
-}
-
-.assignment-header > span {
-  color: var(--subtle);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.6875rem;
-}
-
-.assignment-list {
-  display: grid;
-}
-
-.assignment-item {
-  display: grid;
-  gap: 11px;
-  padding: 18px 0;
-  border-bottom: 1px solid rgb(255 255 255 / 7%);
-}
-
-.assignment-route,
-.assignment-pair {
-  display: grid;
-  gap: 5px;
-}
-
-.assignment-route strong {
-  color: var(--text);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.assignment-route span,
-.assignment-pair span {
-  color: var(--muted);
-  font-size: 0.6875rem;
-}
-
-.assignment-pair {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.assignment-pair span {
-  padding: 7px 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: rgb(255 255 255 / 3%);
-  border: 1px solid rgb(255 255 255 / 5%);
-  border-radius: 4px;
-}
-
-.assignment-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  margin: 0;
-  color: var(--accent);
-  font-size: 0.6875rem;
-}
-
-.assignment-status::before {
-  width: 5px;
-  height: 5px;
-  background: var(--accent);
-  border-radius: 50%;
-  box-shadow: 0 0 8px rgb(99 209 198 / 65%);
-  content: '';
-}
-
-.assignment-item.tone-warning .assignment-status {
-  color: #e8bb69;
-}
-
-.assignment-item.tone-warning .assignment-status::before {
-  background: #e4a74d;
-  box-shadow: 0 0 8px rgb(228 167 77 / 62%);
-}
-
-.resource-alert {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: 10px;
-  margin-top: 20px;
-  padding: 13px 0 0;
-  border-top: 1px solid rgb(255 255 255 / 7%);
-}
-
-.resource-alert mat-icon {
-  width: 17px;
-  height: 17px;
-  font-size: 17px;
-  line-height: 17px;
-  color: #e4a74d;
-  stroke-width: 1.7;
-}
-
-.resource-alert div {
-  display: grid;
-  gap: 5px;
-}
-
-.resource-alert strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-.resource-alert span {
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.55;
-}
-
-.empty-state {
-  margin: 0;
-  padding: 42px 22px;
-  color: var(--subtle);
-  text-align: center;
-  font-size: 0.8125rem;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  overflow: auto;
-  padding: 24px;
-  place-items: center;
-  background: rgb(0 0 0 / 68%);
-  backdrop-filter: blur(8px);
-}
-
-.resource-modal,
-.confirm-modal {
-  width: min(100%, 720px);
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-  padding: 24px;
-  background: #151a1b;
-  border: 1px solid var(--metal-edge);
-  border-radius: 8px;
-  box-shadow: 0 28px 80px rgb(0 0 0 / 48%);
-}
-
-.confirm-modal {
-  width: min(100%, 420px);
-}
-
-.modal-header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-header h3,
-.confirm-modal h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 600;
-}
-
-.icon-button {
-  width: 34px;
-  padding: 0;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-}
-
-.icon-button:hover,
-.icon-button:focus-visible {
-  color: var(--text);
-  border-color: var(--accent);
-  outline: none;
-}
-
+// ── 新增／編輯彈窗 ──
 .resource-form {
-  padding-top: 20px;
+  display: grid; gap: 12px; padding: 14px;
+  > .ui-modal__actions { margin: 4px -14px -14px; }
+  .ui-check { align-self: end; min-height: 32px; }
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+.maintenance-help {
+  margin: 0; padding: 8px 10px; color: var(--muted); font-size: 0.75rem; line-height: 1.7;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
 }
 
-.form-field,
-.check-field {
-  display: grid;
-  align-content: start;
-  gap: 7px;
-  min-width: 0;
+.correction-toggle { justify-self: start; }
+
+.mileage-correction {
+  display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 4px;
+  h4 { margin: 0; font-size: 0.8125rem; }
 }
 
-.form-field--wide {
-  grid-column: 1 / -1;
+.correction-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+// 目前的保養狀況：快到了黃框、會超過紅框
+.maintenance-status {
+  display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px;
+  &.is-warning { background: var(--warn-soft); border-color: var(--warn); }
+  &.is-blocked { background: var(--danger-soft); border-color: var(--danger); }
+  dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+  dt { color: var(--muted); font-size: 0.75rem; }
+  dd { margin: 0; font-family: var(--font-mono); font-weight: 600; }
 }
 
-.form-field > span,
-.check-field span {
-  color: var(--muted);
-  font-size: 0.75rem;
-  font-weight: 600;
+.maintenance-counts,
+.maintenance-reasons { margin: 0; color: var(--muted); font-size: 0.75rem; }
+
+// 保養、維修、里程更正紀錄：一筆一列
+.maintenance-history {
+  display: grid; gap: 6px;
+  h4 { margin: 0; font-size: 0.8125rem; }
+  > p { margin: 0; color: var(--muted); font-size: 0.75rem; }
+  article { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem; }
+  article strong { font-size: 0.8125rem; }
+  article span { color: var(--muted); }
+  article .ui-btn-default { justify-self: start; margin-top: 4px; }
 }
 
-.form-field input,
-.form-field select,
-.form-field textarea {
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 10px;
-  color: var(--text);
-  background: rgb(3 6 7 / 65%);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 0.8125rem;
+.confirm-copy { margin: 0; font-size: 0.8125rem; }
+
+@media (max-width: 980px) {
+  .resource-workspace { grid-template-columns: minmax(0, 1fr); }
 }
 
-.form-field textarea {
-  min-height: 76px;
-  resize: vertical;
-}
-
-.form-field input:focus,
-.form-field select:focus,
-.form-field textarea:focus {
-  border-color: rgb(99 209 198 / 56%);
-  outline: none;
-  box-shadow: 0 0 0 3px rgb(99 209 198 / 8%);
-}
-
-.check-field {
-  display: flex;
-  align-items: center;
-  align-self: end;
-  min-height: 38px;
-  gap: 9px;
-}
-
-.check-field input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
-.form-error {
-  margin: 16px 0 0;
-  color: #f0a27b;
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: end;
-  gap: 9px;
-  margin-top: 22px;
-}
-
-.primary-action,
-.danger-action,
-.plain-button {
-  padding: 0 14px;
-}
-
-.primary-action {
-  color: #061110;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-}
-
-.primary-action:hover,
-.primary-action:focus-visible {
-  background: #8de1d8;
-  border-color: #8de1d8;
-  outline: none;
-}
-
-.danger-action {
-  color: #ffe9df;
-  background: rgb(166 75 43 / 80%);
-  border: 1px solid rgb(240 162 123 / 42%);
-}
-
-.danger-action:hover,
-.danger-action:focus-visible {
-  background: rgb(190 82 47 / 92%);
-  outline: none;
-}
-
-.plain-button {
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-}
-
-.plain-button:hover,
-.plain-button:focus-visible {
-  color: var(--text);
-  border-color: var(--muted);
-  outline: none;
-}
-
-.primary-action:disabled,
-.danger-action:disabled {
-  cursor: wait;
-  opacity: 0.6;
-}
-
-.confirm-modal > p:not(.section-eyebrow) {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-@media (max-width: 1100px) {
-  .resource-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .resource-workspace {
-    grid-template-columns: 1fr;
-  }
-
-  .assignment-panel {
-    position: static;
-  }
-}
-
+// 窄螢幕：司機改成一人一張卡，三格上下疊
 @media (max-width: 760px) {
-  .table-head {
-    display: none;
-  }
-
-  .resource-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px;
-  }
-
-  .resource-row .table-value {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .row-actions,
-  .row-action,
-  .row-action-placeholder {
-    grid-column: 2;
-    grid-row: 1;
-  }
-}
-
-@media (max-width: 640px) {
-  .page-intro {
-    display: block;
-  }
-
-  .page-actions {
-    justify-items: start;
-    margin-top: 16px;
-  }
-
-  .action-buttons {
-    justify-content: start;
-  }
-
-  .page-intro h2 {
-    font-size: 1.625rem;
-  }
-
-  .updated-at {
-    margin-top: 16px;
-  }
-
-  .resource-summary {
-    gap: 10px;
-    margin-top: 26px;
-  }
-
-  .summary-card {
-    min-height: 126px;
-    padding: 16px;
-  }
-
-  .summary-card strong {
-    margin-top: 18px;
-    font-size: 1.875rem;
-  }
-
-  .resource-workspace {
-    gap: 16px;
-    margin-top: 30px;
-  }
-
-  .list-header,
-  .assignment-header,
-  .resource-tools {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .resource-tools {
-    display: grid;
-    padding-bottom: 16px;
-  }
-
-  .search-field {
-    min-width: 0;
-  }
-
-  .resource-row {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .assignment-panel {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-
-  .modal-backdrop {
-    padding: 12px;
-  }
-
-  .resource-modal,
-  .confirm-modal {
-    max-height: calc(100vh - 24px);
-    padding: 18px;
-  }
-
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-field--wide {
-    grid-column: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .view-switch button,
-  .filter-control button,
-  .resource-row {
-    transition: none;
-  }
+  .driver-list-heading,
+  .driver-resource-card { grid-template-columns: minmax(0, 1fr); }
+  .driver-list-heading > span:not(:first-child) { display: none; }
+  .driver-resource-card { border-bottom: 1px solid var(--border); }
+  .driver-detail-block { border-right: 0; border-bottom: 0; }
+  .search-field { width: 100%; margin-left: 0; }
+  .maintenance-status dl { grid-template-columns: minmax(0, 1fr); }
 }

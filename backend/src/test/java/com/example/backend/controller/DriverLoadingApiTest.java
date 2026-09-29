@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,7 +48,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 所以另建一位測試司機、一台測試車和一條今天已發布的路線，測完連同訂單、補送單、異常單全部刪掉。
  * token 用專案的 JwtEncoder 簽（做法同 DriverMessagesApiTest）。</p>
  *
- * <p>前提：本機 DB 已套用 V5，至少有一個倉庫與一間門市。</p>
+ * <p>點交前要先通過出車前安全檢查（PreTripInspectionService.requirePassed），這裡直接插一筆通過的檢查，
+ * 檢查本身的規則由 PreTripInspectionApiTest、PreTripInspectionServiceTest 負責。</p>
+ *
+ * <p>前提：本機 DB 已套用 V10，至少有一個倉庫與一間門市。</p>
  */
 @SpringBootTest(properties = {
         "app.crypto.password=test-only-password-test-only-password",
@@ -102,6 +106,7 @@ class DriverLoadingApiTest {
         routeId = jdbcTemplate.queryForObject(
                 "SELECT id FROM routes WHERE vehicle_id = ? AND date = ?", Long.class, vehicleId, today);
 
+        insertPassedInspection(today);
         firstOrderId = insertOrder(MARKER + "-1", 1, storeId, warehouseId, today);
         secondOrderId = insertOrder(MARKER + "-2", 2, storeId, warehouseId, today);
     }
@@ -116,6 +121,9 @@ class DriverLoadingApiTest {
             jdbcTemplate.update("DELETE FROM orders WHERE parent_order_id = ?", orderId);
         }
         jdbcTemplate.update("DELETE FROM orders WHERE order_number LIKE ?", MARKER + "-%");
+        // pre_trip_inspections 沒有外鍵（稽核紀錄），刪路線不會連帶刪，要自己刪
+        jdbcTemplate.update("DELETE FROM pre_trip_inspections WHERE route_id IN (SELECT id FROM routes WHERE vehicle_id IN "
+                + "(SELECT id FROM vehicles WHERE plate_number = ?))", MARKER);
         jdbcTemplate.update("DELETE FROM routes WHERE vehicle_id IN (SELECT id FROM vehicles WHERE plate_number = ?)", MARKER);
         jdbcTemplate.update("DELETE FROM vehicles WHERE plate_number = ?", MARKER);
         jdbcTemplate.update("DELETE FROM drivers WHERE account = ?", MARKER);
@@ -195,12 +203,133 @@ class DriverLoadingApiTest {
     }
 
     @Test
+    void 商品點交不符_送異常後主管確認_重建單出現在今天看板() throws Exception {
+        jdbcTemplate.update("INSERT INTO order_items (order_id, product_code, item_name, expected_quantity, unit, sequence) "
+                + "VALUES (?, 'LOADTEST-MILK', '測試鮮乳', 4, '箱', 1), (?, 'LOADTEST-BREAD', '測試麵包', 8, '箱', 2)",
+                firstOrderId, firstOrderId);
+        long itemId = jdbcTemplate.queryForObject("SELECT id FROM order_items WHERE order_id = ? AND sequence = 1",
+                Long.class, firstOrderId);
+        String body = mockMvc.perform(post("/api/driver/loading/mismatch")
+                        .header("Authorization", bearer(driverId, AuthService.ROLE_DRIVER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\": " + firstOrderId + ", \"orderItemId\": " + itemId + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderStatus").value("FAILED"))
+                .andExpect(jsonPath("$.items[0].itemName").value("測試鮮乳"))
+                .andExpect(jsonPath("$.items[0].loadedQuantity").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        int incidentId = JsonPath.read(body, "$.exceptionCaseId");
+        int rebuiltId = JsonPath.read(body, "$.followUpOrderId");
+        assertEquals(Boolean.TRUE, jdbcTemplate.queryForObject(
+                "SELECT loading_mismatch_reported FROM order_items WHERE id = ?", Boolean.class, itemId));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_items WHERE order_id = ? AND sequence = 2 AND checked_at IS NOT NULL",
+                Integer.class, firstOrderId));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_items WHERE order_id = ? AND loading_mismatch_reported = 1",
+                Integer.class, rebuiltId));
+
+        mockMvc.perform(post("/api/driver/loading/mismatch")
+                        .header("Authorization", bearer(driverId, AuthService.ROLE_DRIVER))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"orderId\": " + firstOrderId + ", \"orderItemId\": " + itemId + "}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM exception_cases WHERE order_id = ?",
+                Integer.class, firstOrderId));
+
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        mockMvc.perform(patch("/api/exceptions/" + incidentId + "/confirm")
+                        .header("Authorization", bearer(ADMIN_ID, AuthService.ROLE_ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.followUpDeliveryDate").value(today.toString()))
+                .andExpect(jsonPath("$.followUpOrderStatus").value("CONFIRMED"))
+                .andExpect(jsonPath("$.status").value("CLOSED"));
+        long warehouseId = jdbcTemplate.queryForObject("SELECT warehouse_id FROM orders WHERE id = ?", Long.class, rebuiltId);
+        mockMvc.perform(get("/api/dispatch/board").param("date", today.toString()).param("warehouseId", Long.toString(warehouseId))
+                        .header("Authorization", bearer(ADMIN_ID, AuthService.ROLE_ADMIN)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unassignedOrders[*].orderId").value(hasItem(rebuiltId)));
+        assertEquals("FAILED", jdbcTemplate.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, firstOrderId));
+        assertEquals("PUBLISHED", jdbcTemplate.queryForObject("SELECT status FROM routes WHERE id = ?", String.class, routeId));
+    }
+
+    @Test
     void 主管的token不能點交() throws Exception {
         mockMvc.perform(post("/api/driver/loading")
                         .header("Authorization", bearer(ADMIN_ID, AuthService.ROLE_ADMIN))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"orderId\": " + firstOrderId + ", \"loadedBoxCount\": 12}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void 多項勾選不符_同一張異常與重建單() throws Exception {
+        long milkId = insertTestItem(firstOrderId, "測試鮮乳", 4, 1);
+        long breadId = insertTestItem(firstOrderId, "測試麵包", 3, 2);
+        long waterId = insertTestItem(firstOrderId, "測試飲用水", 5, 3);
+        String request = "{\"orderId\": " + firstOrderId + ", \"orderItemIds\": [" + milkId + ", " + breadId + "]}";
+        mockMvc.perform(post("/api/driver/loading/mismatch")
+                        .header("Authorization", bearer(driverId, AuthService.ROLE_DRIVER))
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderStatus").value("FAILED"))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.totalItemCount").value(3))
+                .andExpect(jsonPath("$.items[*].itemName").value(hasItem("測試鮮乳")))
+                .andExpect(jsonPath("$.items[*].itemName").value(hasItem("測試麵包")));
+        assertEquals(2, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_items WHERE order_id = ? AND loading_mismatch_reported = 1 AND loaded_quantity IS NULL",
+                Integer.class, firstOrderId));
+        assertEquals(0, jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM order_items WHERE id = ? AND checked_at IS NOT NULL", Integer.class, waterId));
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM exception_cases WHERE order_id = ? AND type = 'LOADING_MISMATCH'",
+                Integer.class, firstOrderId));
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM orders WHERE parent_order_id = ?",
+                Integer.class, firstOrderId));
+        assertEquals("CONFIRMED", jdbcTemplate.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, secondOrderId));
+        mockMvc.perform(post("/api/driver/loading/mismatch")
+                        .header("Authorization", bearer(driverId, AuthService.ROLE_DRIVER))
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isBadRequest());
+        assertEquals(1, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM exception_cases WHERE order_id = ?",
+                Integer.class, firstOrderId));
+    }
+
+    @Test
+    void 未勾選或商品不合法_回400且不改訂單() throws Exception {
+        long milkId = insertTestItem(firstOrderId, "測試鮮乳", 12, 1);
+        long otherOrderItemId = insertTestItem(secondOrderId, "其他訂單的商品", 12, 1);
+        for (String fields : List.of("", ", \"orderItemIds\": []", ", \"orderItemIds\": [null]",
+                ", \"orderItemIds\": [-1]", ", \"orderItemIds\": [" + milkId + ", " + milkId + "]",
+                ", \"orderItemIds\": [" + milkId + ", " + otherOrderItemId + "]",
+                ", \"orderItemId\": " + milkId + ", \"orderItemIds\": [" + milkId + "]")) {
+            mockMvc.perform(post("/api/driver/loading/mismatch")
+                            .header("Authorization", bearer(driverId, AuthService.ROLE_DRIVER))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"orderId\": " + firstOrderId + fields + "}"))
+                    .andExpect(status().isBadRequest());
+        }
+        assertEquals("CONFIRMED", jdbcTemplate.queryForObject("SELECT status FROM orders WHERE id = ?", String.class, firstOrderId));
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM exception_cases WHERE order_id = ?", Integer.class, firstOrderId));
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM orders WHERE parent_order_id = ?", Integer.class, firstOrderId));
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM order_items WHERE order_id = ? AND checked_at IS NOT NULL",
+                Integer.class, firstOrderId));
+    }
+
+    private long insertTestItem(long orderId, String name, int quantity, int sequence) {
+        jdbcTemplate.update("INSERT INTO order_items (order_id, product_code, item_name, expected_quantity, unit, sequence) "
+                + "VALUES (?, ?, ?, ?, '箱', ?)", orderId, MARKER + "-ITEM-" + sequence, name, quantity, sequence);
+        return jdbcTemplate.queryForObject("SELECT id FROM order_items WHERE order_id = ? AND sequence = ?", Long.class, orderId, sequence);
+    }
+
+    /** 這條路線、這組人車、版本 1 的一筆通過檢查：酒測 0.00、15 項全部正常 */
+    private void insertPassedInspection(LocalDate today) {
+        jdbcTemplate.update("INSERT INTO pre_trip_inspections (route_id, driver_id, vehicle_id, route_version, work_date, "
+                        + "alcohol_mg_l, dashcam, engine_oil, brake_fluid, power_steering_fluid, transmission_oil, fuel, "
+                        + "coolant, battery_water, washer_fluid, tire_pressure, tire_tread, headlights, turn_signals, "
+                        + "brake_lights, dashboard_lights, alcohol_photo, passed, submitted_at) "
+                        + "VALUES (?, ?, ?, 1, ?, 0.00, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 'test.jpg', 1, NOW(6))",
+                routeId, driverId, vehicleId, today);
     }
 
     private long insertOrder(String orderNumber, int sequence, long storeId, long warehouseId, LocalDate today) {

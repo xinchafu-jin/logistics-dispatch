@@ -1,56 +1,89 @@
+// 歷史報表：查詢條件（期間、篩選兩列工具列）→ 匯出預覽（報表分頁＋各報表的 .ui-table）。
+// 面板、分頁、表格都用 styles.scss 的 .ui-*；這裡只放查詢列的版面、預覽裡的摘要數字與附屬列
 :host { display: block; }
-.report-history-page { width: min(100%, 1440px); margin: 0 auto; }
-.page-intro, .query-panel, .preview-header, .sheet-tabs, .table-row, .exception-summary { display: flex; align-items: center; }
-.page-intro { justify-content: space-between; gap: 24px; }
-.page-eyebrow, .section-eyebrow { margin: 0 0 7px; color: var(--accent); font-size: .6875rem; font-weight: 700; letter-spacing: .09em; }
-.page-intro h2, .preview-header h3 { margin: 0; color: var(--text); font-family: var(--font-display); font-weight: 600; }
-.page-intro > div > p:not(.page-eyebrow), .preview-header > p { margin: 8px 0 0; color: var(--muted); font-size: .8125rem; }
-.export-button, .preview-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; border: 1px solid var(--accent); border-radius: 6px; padding: 0 15px; color: var(--button-text); background: var(--accent); font: inherit; cursor: pointer; }
-.export-button:disabled, .preview-button:disabled { opacity: .65; cursor: wait; }
-.export-button mat-icon, .preview-button mat-icon { width: 18px; height: 18px; font-size: 18px; }
-.query-panel { justify-content: space-between; gap: 18px; margin-top: 22px; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.query-fields { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 10px; flex: 1; }
-.query-fields label { display: grid; gap: 5px; min-width: 0; color: var(--subtle); font-size: .6875rem; }
-.query-fields select { min-width: 0; min-height: 38px; border: 1px solid var(--border); border-radius: 5px; padding: 0 9px; color: var(--text); background: var(--panel); font: inherit; }
-.date-range-field { grid-column: span 2; }
-.feedback { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; color: #e4a74d; }
-.feedback mat-icon { width: 18px; height: 18px; font-size: 18px; }
-.loading-state, .empty-preview { margin-top: 20px; border: 1px dashed var(--border); border-radius: 8px; padding: 44px 20px; color: var(--muted); text-align: center; }
-.preview-shell { margin-top: 20px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.preview-header { justify-content: space-between; gap: 20px; padding: 17px 20px; border-bottom: 1px solid var(--border); }
-.sheet-tabs { gap: 2px; overflow-x: auto; padding: 10px 12px; border-bottom: 1px solid var(--border); background: rgb(99 209 198 / 3%); }
-.sheet-tabs button { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px; min-height: 34px; border: 0; border-radius: 5px; padding: 0 10px; color: var(--muted); background: transparent; font: inherit; font-size: .75rem; cursor: pointer; }
-.sheet-tabs button:hover, .sheet-tabs button.is-active { color: var(--text); background: var(--panel); box-shadow: inset 0 -2px var(--accent); }
-.sheet-tabs mat-icon { width: 16px; height: 16px; font-size: 16px; }
-.sheet-content { padding: 20px; }
-.metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 18px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; }
-.metrics-grid article { min-width: 0; padding: 14px 16px; border-left: 1px solid var(--border); }
-.metrics-grid article:first-child { border-left: 0; }
-.metrics-grid span, .metrics-grid small { display: block; color: var(--subtle); font-size: .6875rem; }
-.metrics-grid strong { display: block; margin: 5px 0; color: var(--text); font-family: var(--font-display); font-size: 1.55rem; }
-.preview-table { min-width: 0; overflow-x: auto; border: 1px solid var(--border); border-radius: 7px; }
-.table-row { min-width: max-content; min-height: 45px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: .75rem; }
-.table-row:last-of-type { border-bottom: 0; }
-.table-row > span { padding: 9px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.table-head { min-height: 36px; color: var(--subtle); background: rgb(99 209 198 / 6%); font-size: .6875rem; font-weight: 700; }
-.wide-table .table-row { display: grid; grid-template-columns: 130px repeat(4, minmax(100px, 1fr)); }
-.order-table .table-row { display: grid; grid-template-columns: 120px 170px 70px 180px repeat(4, 100px); }
-.route-table .table-row { display: grid; grid-template-columns: 110px 80px 130px 110px repeat(5, 100px); }
-.route-legs { display: grid; grid-template-columns: auto repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 14px; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--muted); background: rgb(99 209 198 / 4%); font-size: .75rem; }
-.route-legs strong { color: var(--text); }
-.route-legs small { color: var(--subtle); }
-.attendance-table .table-row { display: grid; grid-template-columns: 110px 130px 90px repeat(5, 150px); }
-.vehicle-table .table-row, .warehouse-table .table-row, .store-table .table-row { display: grid; grid-template-columns: 160px repeat(8, 110px); }
-.exception-table .table-row { display: grid; grid-template-columns: 155px 120px 160px 90px 80px 220px 220px 110px; }
-.exception-summary { gap: 22px; margin-bottom: 14px; color: var(--muted); font-size: .8125rem; }
-.exception-summary span { padding-left: 10px; border-left: 2px solid var(--accent); }
-.driver-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.driver-summary article { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 11px; color: var(--muted); font-size: .6875rem; }
-.driver-summary strong { grid-column: 1 / -1; color: var(--text); font-size: .8125rem; }
-.notes-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.notes-list article { display: grid; gap: 7px; min-height: 100px; border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
-.notes-list strong { color: var(--text); }
-.notes-list span { color: var(--muted); font-size: .8125rem; line-height: 1.65; }
-.empty-state { margin: 0; padding: 30px; color: var(--muted); text-align: center; }
-@media (max-width: 1040px) { .query-panel { display: grid; } .query-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); } .preview-button { justify-self: end; } }
-@media (max-width: 760px) { .page-intro { display: grid; } .export-button { width: 100%; } .query-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .query-fields label:last-child { grid-column: 1 / -1; } .preview-button { justify-self: stretch; } .preview-header { display: grid; } .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics-grid article:nth-child(odd) { border-left: 0; } .metrics-grid article:nth-child(n + 3) { border-top: 1px solid var(--border); } .sheet-content { padding: 14px; } .notes-list { grid-template-columns: 1fr; } }
+
+// ── 查詢條件 ──
+.period-bar { border-bottom: 1px solid var(--border); }
+.custom-period { color: var(--muted); font-size: 0.75rem; }
+.period-stepper { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.period-stepper strong { font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
+
+.query-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.query-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.query-field .ui-input { width: 150px; }
+// 開始、結束日期各一個欄位：Material 的 infix 預設 min-width 180px，欄位窄於這個值時要放掉
+.date-field .admin-date-field { width: 168px; }
+:host ::ng-deep .date-field .mat-mdc-form-field-infix { min-width: 0; width: auto; }
+.preview-button { margin-left: auto; }
+
+// ── 匯出預覽 ──
+.preview-shell h3 {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+  .ui-mono { color: var(--muted); font-size: 0.8125rem; font-weight: 400; }
+}
+
+.sheet-tabs .ui-tab mat-icon { width: 16px; height: 16px; font-size: 16px; }
+.metric-filter { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.metric-filter .ui-input { max-width: 240px; }
+.sheet-note { margin: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+
+// 載入失敗、尚未預覽時，內容區只放一段說明；失敗時多一顆重新載入
+.empty-preview { display: grid; justify-items: center; gap: 12px; }
+.empty-preview p { margin: 0; }
+
+// 預覽表格：一格一行不換行（欄多時在框裡橫向捲動），第二行灰字放訂單號、門市；說明類的長文字欄才換行
+.sheet-content .ui-table {
+  td { white-space: nowrap; }
+  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.6875rem; }
+  .wrap-cell { min-width: 200px; white-space: normal; }
+  // 異常案件的「不符商品」摘要一個商品一行
+  td.loading-item-summary { white-space: pre-line; overflow-wrap: anywhere; font-weight: 600; }
+  // 逐項點交：短缺、超收、司機回報不符的列用提醒色，缺少數量加粗
+  tr.has-item-mismatch > td { background: var(--warn-soft); }
+  td.item-missing-quantity { color: var(--warn); font-weight: 700; }
+}
+
+// 附屬列：路線的分段里程、訂單的逐項點交、異常案件的商品點交明細
+.sheet-content .ui-table .sub-row > td { padding: 6px 12px; white-space: normal; background: var(--surface-subtle); }
+
+.item-details {
+  summary { color: var(--accent); font-size: 0.75rem; cursor: pointer; }
+  &[open] summary { margin-bottom: 8px; }
+  .sheet-note { margin-bottom: 8px; }
+}
+
+.route-legs {
+  display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: 0.75rem;
+  strong { color: var(--text); }
+  small { color: var(--subtle); }
+}
+
+// 總覽四格：格線同 .ui-desc
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 4px;
+  article { min-width: 0; padding: 12px 14px; border-left: 1px solid var(--border); }
+  article:first-child { border-left: 0; }
+  span, small { display: block; color: var(--muted); font-size: 0.75rem; }
+  strong { display: block; margin: 4px 0; font-family: var(--font-mono); font-size: 1.5rem; font-weight: 600; }
+}
+
+// 出勤、出車的摘要數字
+.performance-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 0.8125rem; }
+.performance-summary b { color: var(--accent); font-family: var(--font-mono); font-size: 1rem; }
+
+.planning-details summary { padding: 6px 0; color: var(--muted); font-size: 0.8125rem; cursor: pointer; }
+.planning-details[open] summary { margin-bottom: 8px; }
+.exception-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@media (max-width: 1040px) {
+  .preview-button { margin-left: 0; }
+}
+
+@media (max-width: 760px) {
+  .period-stepper { margin-left: 0; }
+  .query-field, .query-field .ui-input, .date-field .admin-date-field { width: 100%; }
+  .query-field { display: grid; gap: 4px; }
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics-grid article:nth-child(odd) { border-left: 0; }
+  .metrics-grid article:nth-child(n + 3) { border-top: 1px solid var(--border); }
+}

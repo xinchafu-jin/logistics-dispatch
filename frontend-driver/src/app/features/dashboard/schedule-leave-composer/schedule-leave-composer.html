@@ -1,0 +1,77 @@
+<div class="leave-calendar-modes" aria-label="選擇請假方式">
+  @for (mode of modes; track mode.value) {
+    <button type="button" [class.is-active]="activeMode() === mode.value" [attr.aria-expanded]="activeMode() === mode.value"
+      aria-controls="calendar-leave-form" [disabled]="submitting()" (click)="open(mode.value)">
+      <mat-icon aria-hidden="true">{{ mode.icon }}</mat-icon>
+      <strong>{{ mode.label }}</strong><small>{{ mode.hint }}</small>
+    </button>
+  }
+</div>
+@for (reply of newReplies(); track reply.id) {
+  <div class="reply-notice" role="status">
+    <strong>{{ reply.workDate }} · {{ reply.status === 'APPROVED' ? '主管已同意' : '主管已拒絕' }}</strong>
+    <p>{{ reply.decisionReason }}</p>
+    <button type="button" (click)="readReply(reply)">知道了</button>
+  </div>
+}
+@if (message()) { <p class="feedback is-success" role="status">{{ message() }}</p> }
+@if (error()) { <p class="feedback is-error" role="alert">{{ error() }}</p> }
+@if (activeMode()) {
+  <form id="calendar-leave-form" class="calendar-leave-form" (submit)="$event.preventDefault(); submit()">
+    <fieldset [disabled]="submitting()">
+      <legend>1. 選擇假別</legend>
+      <div class="leave-types">
+        @for (type of types; track type.value) {
+          <label [class.is-selected]="leaveType() === type.value"><input type="radio" name="calendar-leave-type"
+            [value]="type.value" [checked]="leaveType() === type.value" (change)="chooseType(type.value)" />{{ type.label }}</label>
+        }
+      </div>
+    </fieldset>
+    @if (activeMode() === 'makeup') {
+      <section class="partial-leave" aria-label="補請時段">
+        <strong>補請時段</strong>
+        <p>兩欄留白代表整天；有打卡的上班日須填起訖時間。複選日期共用同一時段，時間須在各日班次內。</p>
+        <div><label>開始時間<input type="time" [disabled]="submitting()" [value]="leaveStart()" (input)="leaveStart.set($any($event.target).value)" /></label>
+          <label>結束時間<input type="time" [disabled]="submitting()" [value]="leaveEnd()" (input)="leaveEnd.set($any($event.target).value)" /></label></div>
+        @if (timeError()) { <p class="is-error" role="alert">{{ timeError() }}</p> }
+      </section>
+    }
+    <section class="date-selection" aria-label="已選請假日期">
+      <strong>2. {{ activeMode() === 'temporary' ? '今天臨請' : '在上方日曆選日期' }}</strong>
+      <p>{{ guide() }}</p>
+      @if (requestsLoading()) { <p>正在確認既有申請...</p> }
+      @if (selectionBlocked()) { <p class="is-error">此日期已有申請，不能重複送出，請等待主管回覆。</p> }
+      @if (!requestsAvailable() && !requestsLoading()) { <p class="is-error">請假紀錄未載入，請重新整理後再申請。</p> }
+      <div class="selected-dates">
+        @for (date of selectedDates(); track date) {
+          @if (activeMode() === 'temporary') { <span>{{ date }} · 今天</span> } @else {
+            <button type="button" [disabled]="submitting()" [attr.aria-label]="'取消選取 ' + date" (click)="removeDate(date)">
+              {{ date }}<mat-icon aria-hidden="true">close</mat-icon>
+            </button>
+          }
+        }
+      </div>
+      @if (activeMode() !== 'temporary') { <small>{{ selectedDates().length }} 天已選 · 可換月繼續選 · 最多 62 天</small> }
+      <small>休假、未發布班表、申請中及已核准重疊的日期不能選取。上班日有打卡也能補請部分時段。</small>
+    </section>
+    @if (activeMode() === 'temporary') {
+      <details class="partial-leave"><summary>部分時段請假（已打上班卡請填時間）</summary>
+        <div><label>開始時間<input type="time" [disabled]="submitting()" [value]="leaveStart()" (input)="leaveStart.set($any($event.target).value)" /></label>
+          <label>結束時間<input type="time" [disabled]="submitting()" [value]="leaveEnd()" (input)="leaveEnd.set($any($event.target).value)" /></label></div>
+      </details>
+    }
+    <label class="reason"><strong>3. 請假原因（必填）</strong>
+      <textarea rows="3" maxlength="500" required placeholder="請說明原因，讓主管了解並回覆申請。" [disabled]="submitting()"
+        [value]="reason()" (input)="reason.set($any($event.target).value)"></textarea>
+      <small>{{ reason().length }} / 500</small>
+    </label>
+    @if (activeMode() === 'makeup') {
+      <label class="evidence">佐證照片（選填）<input type="file" accept="image/jpeg,image/png,image/webp" [disabled]="submitting()" (change)="setEvidence($event)" /></label>
+      @if (evidence(); as file) { <small>{{ file.name }}</small> }
+    }
+    <footer><button type="button" class="cancel" [disabled]="submitting()" (click)="cancel()">取消</button>
+      <button type="submit" class="submit" [disabled]="submitting() || selectionBlocked() || !!timeError() || !leaveType() || !selectedDates().length || !reason().trim() || requestsLoading() || !requestsAvailable()">
+        <mat-icon aria-hidden="true">send</mat-icon>{{ submitting() ? '送出中…' : '遞交申請' }}
+      </button></footer>
+  </form>
+}

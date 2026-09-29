@@ -1,322 +1,301 @@
-<main class="order-review-page">
-  <section class="page-intro" aria-label="訂單審核">
-    <div>
-      <p class="page-eyebrow">訂單管理</p>
-      <p>檢核高雄配送需求，確認後送入待排車佇列。</p>
+<main class="order-review-page ui-page">
+  <!-- 上排：狀態分頁（旁邊是點下去會看到的筆數）＋建單動作；下排：搜尋與配送日期 -->
+  <section class="ui-panel" aria-label="訂單篩選">
+    <div class="ui-tabs-bar">
+      <div class="ui-tabs-bar__tabs" role="tablist" aria-label="訂單狀態篩選">
+        @for (filter of filters; track filter.key) {
+          <button
+            type="button"
+            role="tab"
+            class="ui-tab"
+            [class.is-active]="activeFilter() === filter.key"
+            [attr.aria-selected]="activeFilter() === filter.key"
+            (click)="setFilter(filter.key)"
+          >
+            {{ filter.label }}
+            <span class="ui-tab__count">{{ filterCounts().get(filter.key) ?? 0 }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="ui-tabs-bar__actions">
+        <button
+          type="button"
+          class="ui-btn-default template-order-button"
+          title="下載可直接填寫並匯入的訂單 Excel 範本"
+          (click)="downloadImportTemplate()"
+        >
+          <mat-icon aria-hidden="true">download</mat-icon>
+          下載範本
+        </button>
+        <input
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          hidden
+          #importInput
+          (change)="onImportFileSelected($event)"
+        />
+        <button type="button" class="ui-btn-default import-order-button" (click)="importInput.click()">
+          <mat-icon aria-hidden="true">upload_file</mat-icon>
+          匯入 Excel
+        </button>
+        <button type="button" class="ui-btn-primary create-order-button" (click)="openCreateOrder()">
+          <mat-icon aria-hidden="true">add</mat-icon>
+          新增訂單
+        </button>
+      </div>
     </div>
 
-    <div class="intro-actions">
-      <button type="button" class="button-primary create-order-button" (click)="openCreateOrder()">
-        <mat-icon aria-hidden="true">add</mat-icon>
-        新增訂單
-      </button>
-      <button
-        type="button"
-        class="button-secondary template-order-button"
-        title="下載可直接填寫並匯入的訂單 Excel 範本"
-        (click)="downloadImportTemplate()"
-      >
-        <mat-icon aria-hidden="true">download</mat-icon>
-        下載 Excel 範本
-      </button>
-      <input
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        hidden
-        #importInput
-        (change)="onImportFileSelected($event)"
-      />
-      <button
-        type="button"
-        class="button-secondary import-order-button"
-        (click)="importInput.click()"
-      >
-        <mat-icon aria-hidden="true">upload_file</mat-icon>
-        匯入 Excel
-      </button>
-      <div class="review-summary" aria-label="今日審核狀態">
-        <span>今日待審核</span>
-        <strong>{{ reviewCount() }}</strong>
+    <div class="ui-toolbar">
+      <label class="ui-search review-search">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <span class="sr-only">搜尋訂單</span>
+        <input
+          type="search"
+          placeholder="搜尋訂單或店家"
+          [value]="searchTerm()"
+          (input)="updateSearch($event)"
+        />
+      </label>
+
+      <div class="date-filter" role="group" aria-label="配送日期篩選">
+        <span>配送日期</span>
+        <input type="date" class="ui-input" aria-label="開始日期"
+          [value]="deliveryDateFrom()" [max]="deliveryDateTo() || '9999-12-31'"
+          [attr.aria-invalid]="dateRangeError() ? 'true' : null"
+          [attr.aria-describedby]="dateRangeError() ? 'order-date-error' : null"
+          (input)="updateDeliveryDate('from', $event)" />
+        <span aria-hidden="true">～</span>
+        <input type="date" class="ui-input" aria-label="結束日期"
+          [value]="deliveryDateTo()" [min]="deliveryDateFrom() || '0001-01-01'"
+          [attr.aria-invalid]="dateRangeError() ? 'true' : null"
+          [attr.aria-describedby]="dateRangeError() ? 'order-date-error' : null"
+          (input)="updateDeliveryDate('to', $event)" />
+        <button type="button" class="ui-btn-default" (click)="showTodayOrders()">今天</button>
+        <button type="button" class="ui-btn-default" (click)="clearDeliveryDates()"
+          [disabled]="!deliveryDateFrom() && !deliveryDateTo()">清除日期</button>
       </div>
+
+      <span class="list-count">{{ filteredOrders().length }} 筆</span>
     </div>
   </section>
 
-  <section class="review-workspace" aria-label="訂單審核工作區">
-    <section class="order-list-panel" aria-labelledby="order-list-title">
-      <header class="list-header">
-        <div>
-          <p class="section-eyebrow">待審核清單</p>
-          <h3 id="order-list-title">配送需求</h3>
-        </div>
+  @if (dateRangeError()) {
+    <p id="order-date-error" class="ui-alert is-danger" role="alert">{{ dateRangeError() }}</p>
+  }
+  @if (loading()) {
+    <p class="ui-alert">正在載入訂單與門市資料...</p>
+  } @else if (errorMessage()) {
+    <p class="ui-alert is-danger">{{ errorMessage() }}</p>
+  }
 
-        <span class="list-count">{{ filteredOrders().length }} 筆顯示中</span>
-      </header>
-
-      <div class="review-tools">
-        <div class="filter-control" role="group" aria-label="訂單狀態篩選">
-          @for (filter of filters; track filter.key) {
-            <button
-              type="button"
-              [class.is-active]="activeFilter() === filter.key"
-              [attr.aria-pressed]="activeFilter() === filter.key"
-              (click)="setFilter(filter.key)"
-            >
-              {{ filter.label }}
-            </button>
-          }
-        </div>
-
-        <label class="search-field">
-          <mat-icon aria-hidden="true">search</mat-icon>
-          <span class="sr-only">搜尋訂單</span>
-          <input
-            type="search"
-            placeholder="搜尋訂單或店家"
-            [value]="searchTerm()"
-            (input)="updateSearch($event)"
-          />
-        </label>
-      </div>
-
-      @if (loading()) {
-        <p class="development-note">
-          <mat-icon aria-hidden="true">fact_check</mat-icon>
-          正在載入訂單與門市資料...
-        </p>
-      } @else if (errorMessage()) {
-        <p class="development-note">
-          <mat-icon aria-hidden="true">fact_check</mat-icon>
-          {{ errorMessage() }}
-        </p>
-      }
-
-      <div class="order-list">
-        @for (order of filteredOrders(); track order.id) {
-          <button
-            type="button"
-            class="order-row"
-            [class.is-selected]="selectedOrderId() === order.id"
-            (click)="selectOrder(order.id)"
-          >
-            <span class="order-row-main">
-              <span class="order-id">{{ order.id }}</span>
-              <strong>{{ order.store }}</strong>
-              <span>{{ order.area }} · {{ order.deliveryWindow }}</span>
-            </span>
-
-            <span class="order-row-meta">
-              <span>{{ order.cargo }}</span>
-              <span class="status-badge" [class]="'status-' + order.status">
-                {{ order.status }}
-              </span>
-            </span>
-          </button>
-        } @empty {
-          <div class="empty-state">沒有符合目前篩選條件的配送需求。</div>
-        }
+  <section class="ui-split" aria-label="訂單審核工作區">
+    <section class="ui-panel" aria-label="配送需求清單">
+      <div class="ui-table-wrap">
+        <table class="ui-table order-table">
+          <thead>
+            <tr>
+              <th>訂單編號</th>
+              <th>門市</th>
+              <th>地區・收貨時段</th>
+              <th>配送日期</th>
+              <th>貨物</th>
+              <th>狀態</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- 整列可點，也可以用 Tab 移到列上按 Enter；選中的列跟右邊明細同一筆 -->
+            @for (order of filteredOrders(); track order.id) {
+              <tr
+                class="is-clickable"
+                tabindex="0"
+                [class.is-selected]="selectedOrder()?.id === order.id"
+                [attr.aria-current]="selectedOrder()?.id === order.id ? 'true' : null"
+                (click)="selectOrder(order.id)"
+                (keydown.enter)="selectOrder(order.id)"
+              >
+                <td class="ui-mono">{{ order.id }}</td>
+                <td><strong>{{ order.store }}</strong></td>
+                <td>{{ order.area }} · <span class="ui-mono">{{ order.deliveryWindow }}</span></td>
+                <td class="ui-mono">{{ order.raw.deliveryDate || '未提供' }}</td>
+                <td>{{ order.cargo }}</td>
+                <td><span class="ui-status-dot" [class]="'status-' + order.status">{{ order.status }}</span></td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6" class="ui-empty">
+                  {{ dateRangeError() ? '請先修正配送日期區間。' : '沒有符合目前篩選條件的配送需求。' }}
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
     </section>
 
-    <aside class="order-detail-panel" aria-label="配送需求詳情">
+    <aside class="ui-panel ui-split__detail order-detail-panel" aria-label="配送需求詳情">
       @if (selectedOrder(); as order) {
-        <header class="detail-header">
-          <div>
-            <p class="section-eyebrow">配送詳情</p>
-            <h3>{{ order.store }}</h3>
-            <span class="order-id">{{ order.id }}</span>
-          </div>
-
-          <span class="status-badge" [class]="'status-' + order.status">
-            {{ order.status }}
-          </span>
+        <header class="ui-panel__header">
+          <h3>{{ order.store }} <span class="detail-id ui-mono">{{ order.id }}</span></h3>
+          <span class="ui-status-dot" [class]="'status-' + order.status">{{ order.status }}</span>
         </header>
 
-        <dl class="detail-grid">
-          <div>
-            <dt>配送時段</dt>
-            <dd>{{ order.deliveryWindow }}</dd>
-          </div>
-          <div>
-            <dt>配送服務</dt>
-            <dd>{{ order.service }}</dd>
-          </div>
-          <div>
-            <dt>貨物資訊</dt>
-            <dd>{{ order.cargo }}</dd>
-          </div>
-          <div>
-            <dt>建立時間</dt>
-            <dd>今日 {{ order.createdAt }}</dd>
-          </div>
-        </dl>
+        <div class="ui-panel__body">
+          <table class="ui-desc">
+            <tbody>
+              <tr><th>配送日期</th><td class="ui-mono">{{ order.raw.deliveryDate || '未提供' }}</td></tr>
+              <tr><th>配送時段</th><td class="ui-mono">{{ order.deliveryWindow }}</td></tr>
+              <tr><th>配送服務</th><td>{{ order.service }}</td></tr>
+              <tr><th>貨物資訊</th><td>{{ order.cargo }}</td></tr>
+              <tr><th>建立時間</th><td class="ui-mono">{{ order.createdAt }}</td></tr>
+              <tr><th>配送地址</th><td>{{ order.area }}<br />{{ order.address }}</td></tr>
+              <tr><th>收貨資訊</th><td>{{ order.contact }}</td></tr>
+              <tr><th>備註</th><td>{{ order.note || '目前沒有額外卸貨或收貨備註。' }}</td></tr>
+            </tbody>
+          </table>
 
-        <section class="detail-block">
-          <p class="detail-label"><mat-icon aria-hidden="true">map</mat-icon>配送地址</p>
-          <strong>{{ order.area }}</strong>
-          <span>{{ order.address }}</span>
-        </section>
+          <p class="action-message">{{ actionMessage() }}</p>
 
-        <section class="detail-block">
-          <p class="detail-label"><mat-icon aria-hidden="true">local_shipping</mat-icon>收貨資訊</p>
-          <strong>{{ order.contact }}</strong>
-          @if (order.note) {
-            <span>{{ order.note }}</span>
-          } @else {
-            <span>目前沒有額外卸貨或收貨備註。</span>
-          }
-        </section>
-
-        <p class="action-message">{{ actionMessage() }}</p>
-
-        <div class="review-actions">
-          <button
-            type="button"
-            class="button-primary"
-            [disabled]="!canReview(order)"
-            (click)="approveSelected()"
-          >
-            核准並待排車
-          </button>
+          <div class="detail-actions">
+            <button type="button" class="ui-btn-default" title="編輯訂單" (click)="openEditOrder(order)">
+              <mat-icon aria-hidden="true">edit</mat-icon>
+              編輯
+            </button>
+            <button type="button" class="ui-btn-default is-danger" title="刪除訂單" (click)="requestDeleteOrder(order)">
+              <mat-icon aria-hidden="true">delete</mat-icon>
+              刪除
+            </button>
+            <button
+              type="button"
+              class="ui-btn-primary"
+              [disabled]="!canReview(order)"
+              (click)="approveSelected()"
+            >
+              核准並待排車
+            </button>
+          </div>
         </div>
-
-        <div class="manage-actions">
-          <button type="button" class="icon-action" title="編輯訂單" (click)="openEditOrder(order)">
-            <mat-icon aria-hidden="true">edit</mat-icon>
-            編輯
-          </button>
-          <button
-            type="button"
-            class="icon-action icon-action--danger"
-            title="刪除訂單"
-            (click)="requestDeleteOrder(order)"
-          >
-            <mat-icon aria-hidden="true">delete</mat-icon>
-            刪除
-          </button>
-        </div>
+      } @else {
+        <p class="ui-empty">選取左邊一筆訂單，這裡會顯示明細。</p>
       }
     </aside>
   </section>
 
   @if (activeForm(); as formMode) {
-    <div class="modal-backdrop" (click)="closeForm()">
-      <section class="order-modal" role="dialog" aria-modal="true" aria-labelledby="order-form-title" (click)="$event.stopPropagation()">
-        <header class="modal-header">
-          <div>
-            <p class="section-eyebrow">訂單資料</p>
-            <h3 id="order-form-title">{{ formMode === 'edit' ? '編輯訂單' : '新增訂單' }}</h3>
-          </div>
-          <button type="button" class="modal-close" title="關閉" aria-label="關閉" (click)="closeForm()">
+    <div class="ui-modal-backdrop" (click)="closeForm()">
+      <section class="ui-panel ui-modal ui-modal--wide" role="dialog" aria-modal="true" aria-labelledby="order-form-title" (click)="$event.stopPropagation()">
+        <header class="ui-panel__header">
+          <h3 id="order-form-title">{{ formMode === 'edit' ? '編輯訂單' : '新增訂單' }}</h3>
+          <button type="button" class="ui-btn-default ui-btn-icon" title="關閉" aria-label="關閉" (click)="closeForm()">
             <mat-icon aria-hidden="true">close</mat-icon>
           </button>
         </header>
 
         <form class="order-form" (submit)="$event.preventDefault(); submitOrder()">
-          <label>
-            <span>{{ formMode === 'create' ? '訂單編號（系統自動產生）' : '訂單編號' }}</span>
-            <input type="text" readonly [value]="orderForm().orderNumber" />
-          </label>
-          <label>
-            <span>店家</span>
-            <select [value]="orderForm().storeId" (change)="updateOrderNumber('storeId', $event)">
-              @for (store of stores(); track store.id ?? store.storeCode) {
-                <option [value]="store.id">{{ store.storeCode }} · {{ store.name }}</option>
-              }
-            </select>
-          </label>
-          <label>
-            <span>出貨倉庫</span>
-            <select
-              [value]="orderForm().warehouseId"
-              (change)="updateOrderNumber('warehouseId', $event)"
-            >
-              @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
-                <option [value]="warehouse.id">
-                  {{ warehouse.warehouseCode }} · {{ warehouse.name }}
-                </option>
-              }
-            </select>
-          </label>
-          <label>
-            <span>配送日期</span>
-            <input type="date" required [value]="orderForm().deliveryDate" (input)="updateOrderText('deliveryDate', $event)" />
-          </label>
-          <label>
-            <span>箱數</span>
-            <input type="number" min="1" required [value]="orderForm().boxCount" (input)="updateOrderNumber('boxCount', $event)" />
-          </label>
-          <label>
-            <span>來源商家</span>
-            <input type="text" [value]="orderForm().sourceVendor" (input)="updateOrderText('sourceVendor', $event)" />
-          </label>
-          <label>
-            <span>訂單狀態</span>
-            <!-- 只列可手動指定的狀態；排車後的 IN_DELIVERY／COMPLETED／FAILED 由系統與司機端產生，不開放手選 -->
-            <select [value]="orderForm().status" (change)="updateOrderStatusFromForm($event)">
-              <option value="PENDING_CONFIRM">待總部確認</option>
-              <option value="CONFIRMED">待排車</option>
-              <option value="CANCELLED">已取消</option>
-            </select>
-          </label>
-          <label class="order-form__wide">
-            <span>貨物說明</span>
-            <input type="text" [value]="orderForm().itemDescription" (input)="updateOrderText('itemDescription', $event)" />
-          </label>
-          <section class="order-items-editor order-form__wide" aria-labelledby="order-items-title">
-            <header>
-              <div>
-                <span>商品明細</span>
-                <small id="order-items-title">有商品明細的訂單，司機出車前須逐項點交。</small>
-              </div>
-              <button type="button" class="icon-action" title="新增商品" aria-label="新增商品" (click)="addOrderItem()">
-                <mat-icon aria-hidden="true">add</mat-icon>
-                新增商品
-              </button>
-            </header>
-            <div class="order-item-list">
-              @for (item of orderForm().items ?? []; track item.id ?? $index; let index = $index) {
-                <article>
-                  <label>
-                    <span>商品名稱</span>
-                    <input type="text" maxlength="100" [value]="item.itemName" (input)="updateOrderItemText(index, 'itemName', $event)" />
-                  </label>
-                  <label>
-                    <span>商品代碼</span>
-                    <input type="text" maxlength="50" [value]="item.productCode" (input)="updateOrderItemText(index, 'productCode', $event)" />
-                  </label>
-                  <label>
-                    <span>數量</span>
-                    <input type="number" min="1" step="1" [value]="item.expectedQuantity" (input)="updateOrderItemQuantity(index, $event)" />
-                  </label>
-                  <label>
-                    <span>單位</span>
-                    <input type="text" maxlength="20" [value]="item.unit" (input)="updateOrderItemText(index, 'unit', $event)" />
-                  </label>
-                  <label class="order-item-note">
-                    <span>商品備註</span>
-                    <input type="text" maxlength="255" [value]="item.notes" (input)="updateOrderItemText(index, 'notes', $event)" />
-                  </label>
-                  <button type="button" class="item-remove-button" title="移除此商品" aria-label="移除此商品" (click)="removeOrderItem(index)">
-                    <mat-icon aria-hidden="true">close</mat-icon>
-                  </button>
-                </article>
-              } @empty {
-                <p>沒有商品明細的舊訂單可照原本的箱數方式點交；新增商品後，司機端會要求逐項核對。</p>
-              }
-            </div>
-          </section>
-          <label class="order-form__wide">
-            <span>備註</span>
-            <textarea rows="3" [value]="orderForm().notes" (input)="updateOrderText('notes', $event)"></textarea>
-          </label>
+          <div class="ui-panel__body ui-form">
+            <label class="ui-field">
+              <span>{{ formMode === 'create' ? '訂單編號（系統自動產生）' : '訂單編號' }}</span>
+              <input type="text" class="ui-mono" readonly [value]="orderForm().orderNumber" />
+            </label>
+            <label class="ui-field">
+              <span>店家</span>
+              <select [value]="orderForm().storeId" (change)="updateOrderNumber('storeId', $event)">
+                @for (store of stores(); track store.id ?? store.storeCode) {
+                  <option [value]="store.id">{{ store.storeCode }} · {{ store.name }}</option>
+                }
+              </select>
+            </label>
+            <label class="ui-field">
+              <span>出貨倉庫</span>
+              <select
+                [value]="orderForm().warehouseId"
+                (change)="updateOrderNumber('warehouseId', $event)"
+              >
+                @for (warehouse of warehouses(); track warehouse.id ?? warehouse.warehouseCode) {
+                  <option [value]="warehouse.id">
+                    {{ warehouse.warehouseCode }} · {{ warehouse.name }}
+                  </option>
+                }
+              </select>
+            </label>
+            <label class="ui-field">
+              <span>配送日期</span>
+              <input type="date" required [value]="orderForm().deliveryDate" (input)="updateOrderText('deliveryDate', $event)" />
+            </label>
+            <label class="ui-field">
+              <span>箱數</span>
+              <input type="number" min="1" required [value]="orderForm().boxCount" (input)="updateOrderNumber('boxCount', $event)" />
+            </label>
+            <label class="ui-field">
+              <span>來源商家</span>
+              <input type="text" [value]="orderForm().sourceVendor" (input)="updateOrderText('sourceVendor', $event)" />
+            </label>
+            <label class="ui-field">
+              <span>訂單狀態</span>
+              <!-- 只列可手動指定的狀態；排車後的 IN_DELIVERY／COMPLETED／FAILED 由系統與司機端產生，不開放手選 -->
+              <select [value]="orderForm().status" (change)="updateOrderStatusFromForm($event)">
+                <option value="PENDING_CONFIRM">待總部確認</option>
+                <option value="CONFIRMED">待排車</option>
+                <option value="CANCELLED">已取消</option>
+              </select>
+            </label>
+            <label class="ui-field">
+              <span>貨物說明</span>
+              <input type="text" [value]="orderForm().itemDescription" (input)="updateOrderText('itemDescription', $event)" />
+            </label>
 
-          @if (formError()) {
-            <p class="form-error">{{ formError() }}</p>
-          }
+            <!-- 商品明細：可編輯的表格，一列一項；有明細的訂單司機出車前要逐項點交 -->
+            <section class="order-items-editor ui-form__wide" aria-labelledby="order-items-title">
+              <header>
+                <span id="order-items-title">商品明細</span>
+                <small>有商品明細的訂單，司機出車前須逐項點交。</small>
+                <button type="button" class="ui-btn-default" title="新增商品" aria-label="新增商品" (click)="addOrderItem()">
+                  <mat-icon aria-hidden="true">add</mat-icon>
+                  新增商品
+                </button>
+              </header>
+              @if ((orderForm().items ?? []).length > 0) {
+                <div class="ui-panel ui-table-wrap">
+                  <table class="ui-table order-item-table">
+                    <thead>
+                      <tr><th>商品名稱</th><th>商品代碼</th><th>數量</th><th>單位</th><th>商品備註</th><th><span class="sr-only">移除</span></th></tr>
+                    </thead>
+                    <tbody>
+                      @for (item of orderForm().items ?? []; track item.id ?? $index; let index = $index) {
+                        <tr>
+                          <td><input type="text" class="ui-input" maxlength="100" aria-label="商品名稱" [value]="item.itemName" (input)="updateOrderItemText(index, 'itemName', $event)" /></td>
+                          <td><input type="text" class="ui-input ui-mono" maxlength="50" aria-label="商品代碼" [value]="item.productCode" (input)="updateOrderItemText(index, 'productCode', $event)" /></td>
+                          <td><input type="number" class="ui-input ui-mono" min="1" step="1" aria-label="數量" [value]="item.expectedQuantity" (input)="updateOrderItemQuantity(index, $event)" /></td>
+                          <td><input type="text" class="ui-input" maxlength="20" aria-label="單位" [value]="item.unit" (input)="updateOrderItemText(index, 'unit', $event)" /></td>
+                          <td><input type="text" class="ui-input" maxlength="255" aria-label="商品備註" [value]="item.notes" (input)="updateOrderItemText(index, 'notes', $event)" /></td>
+                          <td>
+                            <button type="button" class="ui-btn-default ui-btn-icon" title="移除此商品" aria-label="移除此商品" (click)="removeOrderItem(index)">
+                              <mat-icon aria-hidden="true">close</mat-icon>
+                            </button>
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              } @else {
+                <p class="items-empty">沒有商品明細的舊訂單可照原本的箱數方式點交；新增商品後，司機端會要求逐項核對。</p>
+              }
+            </section>
 
-          <div class="modal-actions">
-            <button type="button" class="button-secondary" (click)="closeForm()">取消</button>
-            <button type="submit" class="button-primary" [disabled]="isSaving()">
+            <label class="ui-field ui-form__wide">
+              <span>備註</span>
+              <textarea rows="3" [value]="orderForm().notes" (input)="updateOrderText('notes', $event)"></textarea>
+            </label>
+
+            @if (formError()) {
+              <p class="ui-alert is-danger ui-form__wide">{{ formError() }}</p>
+            }
+          </div>
+
+          <div class="ui-modal__actions">
+            <button type="button" class="ui-btn-default" (click)="closeForm()">取消</button>
+            <button type="submit" class="ui-btn-primary" [disabled]="isSaving()">
               {{ isSaving() ? '儲存中...' : formMode === 'edit' ? '儲存修改' : '建立訂單' }}
             </button>
           </div>
@@ -327,22 +306,19 @@
 
   @if (importState(); as state) {
     @if (state.stage !== 'idle') {
-      <div class="modal-backdrop" (click)="closeImport()">
+      <div class="ui-modal-backdrop" (click)="closeImport()">
         <section
-          class="order-modal import-modal"
+          class="ui-panel ui-modal ui-modal--wide import-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="import-title"
           (click)="$event.stopPropagation()"
         >
-          <header class="modal-header">
-            <div>
-              <p class="section-eyebrow">訂單匯入</p>
-              <h3 id="import-title">匯入 Excel</h3>
-            </div>
+          <header class="ui-panel__header">
+            <h3 id="import-title">匯入 Excel</h3>
             <button
               type="button"
-              class="modal-close"
+              class="ui-btn-default ui-btn-icon"
               title="關閉"
               aria-label="關閉"
               (click)="closeImport()"
@@ -353,66 +329,72 @@
 
           @switch (state.stage) {
             @case ('parsing') {
-              <p class="import-hint">正在解析 {{ state.fileName }}⋯</p>
+              <div class="ui-panel__body">
+                <p class="import-hint">正在解析 {{ state.fileName }}⋯</p>
+              </div>
             }
 
             @case ('failed') {
-              <p class="form-error">{{ state.message }}</p>
-              <div class="modal-actions">
-                <button type="button" class="button-secondary" (click)="downloadImportTemplate()">
+              <div class="ui-panel__body">
+                <p class="ui-alert is-danger">{{ state.message }}</p>
+              </div>
+              <div class="ui-modal__actions">
+                <button type="button" class="ui-btn-default" (click)="downloadImportTemplate()">
                   下載範本
                 </button>
-                <button type="button" class="button-primary" (click)="closeImport()">關閉</button>
+                <button type="button" class="ui-btn-primary" (click)="closeImport()">關閉</button>
               </div>
             }
 
             @case ('preview') {
-              <p class="import-hint">
-                {{ state.fileName }}（工作表：{{ state.result.sheetName }}）
-              </p>
-              <p class="import-summary">
-                <strong class="import-ok">{{ state.result.validRows.length }}</strong> 筆可匯入
-                @if (state.result.errorRows.length > 0) {
-                  ／<strong class="import-bad">{{ state.result.errorRows.length }}</strong>
-                  筆有誤，不會送出
-                }
-              </p>
+              <div class="ui-panel__body">
+                <p class="import-hint">
+                  {{ state.fileName }}（工作表：{{ state.result.sheetName }}）
+                </p>
+                <p class="import-summary">
+                  <strong class="import-ok">{{ state.result.validRows.length }}</strong> 筆可匯入
+                  @if (state.result.errorRows.length > 0) {
+                    ／<strong class="import-bad">{{ state.result.errorRows.length }}</strong>
+                    筆有誤，不會送出
+                  }
+                </p>
 
-              <div class="import-table-wrap">
-                <table class="import-table">
-                  <thead>
-                    <tr>
-                      <th>列</th>
-                      <th>訂單編號</th>
-                      <th>門市</th>
-                      <th>箱數</th>
-                      <th>配送日期</th>
-                      <th>檢查結果</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (row of state.result.rows; track row.row) {
-                      <tr [class.import-row-error]="row.errors.length > 0">
-                        <td>{{ row.row }}</td>
-                        <td>{{ row.data.orderNumber || '—' }}</td>
-                        <td>{{ storeLabel(row.data.storeId) }}</td>
-                        <td>{{ row.data.boxCount }}</td>
-                        <td>{{ row.data.deliveryDate || '—' }}</td>
-                        <td>{{ row.errors.length > 0 ? row.errors.join('；') : 'OK' }}</td>
+                <div class="ui-panel import-table-wrap">
+                  <table class="ui-table import-table">
+                    <thead>
+                      <tr>
+                        <th>列</th>
+                        <th>訂單編號</th>
+                        <th>門市</th>
+                        <th>箱數</th>
+                        <th>配送日期</th>
+                        <th>檢查結果</th>
                       </tr>
-                    }
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      @for (row of state.result.rows; track row.row) {
+                        <tr [class.import-row-error]="row.errors.length > 0">
+                          <td class="ui-mono">{{ row.row }}</td>
+                          <td class="ui-mono">{{ row.data.orderNumber || '—' }}</td>
+                          <td>{{ storeLabel(row.data.storeId) }}</td>
+                          <td class="ui-mono">{{ row.data.boxCount }}</td>
+                          <td class="ui-mono">{{ row.data.deliveryDate || '—' }}</td>
+                          <td>{{ row.errors.length > 0 ? row.errors.join('；') : 'OK' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div class="modal-actions">
-                <button type="button" class="button-secondary" (click)="downloadImportTemplate()">
+              <div class="ui-modal__actions">
+                <button type="button" class="ui-btn-default" (click)="downloadImportTemplate()">
                   下載範本
                 </button>
-                <button type="button" class="button-secondary" (click)="closeImport()">取消</button>
+                <button type="button" class="ui-btn-default" (click)="closeImport()">取消</button>
                 <button
                   type="button"
-                  class="button-primary"
+                  class="ui-btn-primary"
                   [disabled]="state.result.validRows.length === 0"
                   (click)="confirmImport()"
                 >
@@ -422,49 +404,53 @@
             }
 
             @case ('saving') {
-              <p class="import-hint">
-                正在以批次建立 {{ state.result.validRows.length }} 筆訂單...
-              </p>
-              <progress
-                class="import-progress"
-                [value]="1"
-                [max]="state.result.validRows.length"
-              ></progress>
+              <div class="ui-panel__body">
+                <p class="import-hint">
+                  正在以批次建立 {{ state.result.validRows.length }} 筆訂單...
+                </p>
+                <progress
+                  class="import-progress"
+                  [value]="1"
+                  [max]="state.result.validRows.length"
+                ></progress>
+              </div>
             }
 
             @case ('done') {
-              <p class="import-summary">
-                成功 <strong class="import-ok">{{ state.succeeded }}</strong> 筆
+              <div class="ui-panel__body">
+                <p class="import-summary">
+                  成功 <strong class="import-ok">{{ state.succeeded }}</strong> 筆
+                  @if (state.failures.length > 0) {
+                    ／失敗 <strong class="import-bad">{{ state.failures.length }}</strong> 筆
+                  }
+                </p>
+
                 @if (state.failures.length > 0) {
-                  ／失敗 <strong class="import-bad">{{ state.failures.length }}</strong> 筆
-                }
-              </p>
-
-              @if (state.failures.length > 0) {
-                <div class="import-table-wrap">
-                  <table class="import-table">
-                    <thead>
-                      <tr>
-                        <th>列</th>
-                        <th>訂單編號</th>
-                        <th>處理結果</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      @for (failure of state.failures; track failure.row) {
-                        <tr class="import-row-error">
-                          <td>{{ failure.row }}</td>
-                          <td>{{ failure.orderNumber }}</td>
-                          <td>{{ failure.message }}</td>
+                  <div class="ui-panel import-table-wrap">
+                    <table class="ui-table import-table">
+                      <thead>
+                        <tr>
+                          <th>列</th>
+                          <th>訂單編號</th>
+                          <th>處理結果</th>
                         </tr>
-                      }
-                    </tbody>
-                  </table>
-                </div>
-              }
+                      </thead>
+                      <tbody>
+                        @for (failure of state.failures; track failure.row) {
+                          <tr class="import-row-error">
+                            <td class="ui-mono">{{ failure.row }}</td>
+                            <td class="ui-mono">{{ failure.orderNumber }}</td>
+                            <td>{{ failure.message }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                }
+              </div>
 
-              <div class="modal-actions">
-                <button type="button" class="button-primary" (click)="closeImport()">完成</button>
+              <div class="ui-modal__actions">
+                <button type="button" class="ui-btn-primary" (click)="closeImport()">完成</button>
               </div>
             }
           }
@@ -474,14 +460,17 @@
   }
 
   @if (deleteTarget(); as order) {
-    <div class="modal-backdrop" (click)="cancelDelete()">
-      <section class="confirm-modal" role="alertdialog" aria-modal="true" (click)="$event.stopPropagation()">
-        <p class="section-eyebrow">確認操作</p>
-        <h3>確定刪除訂單？</h3>
-        <p>即將刪除「{{ order.id }}」，此操作無法復原。</p>
-        <div class="modal-actions">
-          <button type="button" class="button-secondary" (click)="cancelDelete()">取消</button>
-          <button type="button" class="danger-button" [disabled]="isDeleting()" (click)="confirmDelete()">
+    <div class="ui-modal-backdrop" (click)="cancelDelete()">
+      <section class="ui-panel ui-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-order-title" (click)="$event.stopPropagation()">
+        <header class="ui-panel__header">
+          <h3 id="delete-order-title">確定刪除訂單？</h3>
+        </header>
+        <div class="ui-panel__body">
+          <p class="confirm-copy">即將刪除「<span class="ui-mono">{{ order.id }}</span>」，此操作無法復原。</p>
+        </div>
+        <div class="ui-modal__actions">
+          <button type="button" class="ui-btn-default" (click)="cancelDelete()">取消</button>
+          <button type="button" class="ui-btn-danger" [disabled]="isDeleting()" (click)="confirmDelete()">
             {{ isDeleting() ? '刪除中...' : '確定刪除' }}
           </button>
         </div>

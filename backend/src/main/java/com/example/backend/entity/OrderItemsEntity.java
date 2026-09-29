@@ -56,6 +56,17 @@ public class OrderItemsEntity {
     @Column(length = 255)
     private String loadingNotes;
 
+    @Column(nullable = false)
+    private boolean loadingMismatchReported;
+
+    public boolean isLoadingMismatchReported() {
+        return loadingMismatchReported;
+    }
+
+    public void setLoadingMismatchReported(boolean loadingMismatchReported) {
+        this.loadingMismatchReported = loadingMismatchReported;
+    }
+
     public Long getId() {
         return id;
     }

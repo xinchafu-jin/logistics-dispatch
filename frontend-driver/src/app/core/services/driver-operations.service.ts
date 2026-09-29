@@ -6,10 +6,12 @@ import {
   AttendanceRecordDto,
   DeliverRequest,
   DeliveryRecordResponse,
-  DriverExceptionRequest,
+  DriverCaseDto,
+  DriverCaseRequest,
   DriverLeaveHistoryResponse,
   DriverLeaveBatchResponse,
   DriverMakeupLeaveRequest,
+  DriverMakeupLeaveBatchRequest,
   DriverPlannedLeaveBatchRequest,
   DriverLeaveRequest,
   DriverLeaveRequestResponse,
@@ -18,17 +20,21 @@ import {
   DriverProfileDto,
   DriverTasksResponse,
   DriverShiftDto,
+  DriverAssignmentDto,
   GpsPingRequest,
   GpsRouteRequest,
   GpsRouteResponse,
   EmergencyLeaveRequest,
   EmergencyLeaveResponse,
   LoadingRequest,
+  LoadingMismatchRequest,
   LoadingResponse,
   MileageLogResponse,
   MileageRequest,
   NoSignatureRequest,
   PhotoUploadResponse,
+  PreTripInspectionRequest,
+  PreTripInspectionResult,
 } from './driver-operations.models';
 
 @Injectable({providedIn: 'root'})
@@ -70,8 +76,51 @@ export class DriverOperationsService {
     return this.http.get<DriverShiftDto[]>('/api/driver/shifts', {params});
   }
 
+  /** 期間內已發布給自己的路線：那天在哪個倉庫、開哪台車（草稿不會回） */
+  getAssignments(from: string, to: string): Observable<DriverAssignmentDto[]> {
+    const params = new HttpParams().set('from', from).set('to', to);
+    return this.http.get<DriverAssignmentDto[]>('/api/driver/assignments', {params});
+  }
+
   getTodayTasks(): Observable<DriverTasksResponse> {
     return this.http.get<DriverTasksResponse>('/api/driver/tasks/today');
+  }
+
+  // ── 出車前安全檢查 ─────────────────────────────────────
+  // 通過之後才能記出車里程和點交；能不能出車由後端判定
+
+  getPreTripInspection(routeId: number): Observable<PreTripInspectionResult> {
+    const params = new HttpParams().set('routeId', routeId);
+    return this.http.get<PreTripInspectionResult>('/api/driver/pre-trip', {params});
+  }
+
+  /**
+   * 檢查內容放 request（JSON），照片放檔案欄位：酒測器照片必填；行車紀錄器照片通過時必填
+   * （同一張證明行車紀錄器有開、也拍到出車里程）；故障照片選填。
+   * 通過的話後端同一個交易就記下出車里程，不用再另外呼叫 startMileage。
+   * request 要包成 application/json 的 Blob，後端的 @RequestPart 才會用 JSON 解析
+   */
+  submitPreTripInspection(
+    request: PreTripInspectionRequest,
+    alcoholPhoto: File,
+    dashcamPhoto: File | null,
+    faultPhoto: File | null,
+  ): Observable<PreTripInspectionResult> {
+    const formData = new FormData();
+    formData.append('request', new Blob([JSON.stringify(request)], {type: 'application/json'}));
+    formData.append('alcoholPhoto', alcoholPhoto);
+    if (dashcamPhoto) {
+      formData.append('dashcamPhoto', dashcamPhoto);
+    }
+    if (faultPhoto) {
+      formData.append('faultPhoto', faultPhoto);
+    }
+    return this.http.post<PreTripInspectionResult>('/api/driver/pre-trip', formData);
+  }
+
+  /** 照片要帶登入 token 才讀得到，不能直接放在 <img src>，所以拿成 Blob 再轉網址 */
+  getPreTripPhoto(inspectionId: number, kind: 'alcohol' | 'fault'): Observable<Blob> {
+    return this.http.get(`/api/driver/pre-trip/${inspectionId}/photos/${kind}`, {responseType: 'blob'});
   }
 
   submitEmergencyLeave(request: EmergencyLeaveRequest): Observable<EmergencyLeaveResponse> {
@@ -90,6 +139,10 @@ export class DriverOperationsService {
 
   submitMakeupLeave(request: DriverMakeupLeaveRequest): Observable<DriverLeaveRequestResponse> {
     return this.http.post<DriverLeaveRequestResponse>('/api/driver/leave-requests/makeup', request);
+  }
+
+  submitMakeupLeaveBatch(request: DriverMakeupLeaveBatchRequest): Observable<DriverLeaveRequestResponse[]> {
+    return this.http.post<DriverLeaveRequestResponse[]>('/api/driver/leave-requests/makeup-batch', request);
   }
 
   uploadLeaveEvidencePhoto(file: File): Observable<PhotoUploadResponse> {
@@ -121,6 +174,10 @@ export class DriverOperationsService {
     return this.http.post<LoadingResponse>('/api/driver/loading', request);
   }
 
+  reportLoadingMismatch(request: LoadingMismatchRequest): Observable<LoadingResponse> {
+    return this.http.post<LoadingResponse>('/api/driver/loading/mismatch', request);
+  }
+
   arrive(request: ArriveRequest): Observable<DeliveryRecordResponse> {
     return this.http.post<DeliveryRecordResponse>('/api/driver/arrive', request);
   }
@@ -137,10 +194,6 @@ export class DriverOperationsService {
     const formData = new FormData();
     formData.append('file', file);
     return this.http.post<PhotoUploadResponse>('/api/driver/delivery-photo', formData);
-  }
-
-  reportException(request: DriverExceptionRequest): Observable<DeliveryRecordResponse> {
-    return this.http.post<DeliveryRecordResponse>('/api/driver/exception', request);
   }
 
   startMileage(request: MileageRequest): Observable<MileageLogResponse> {
@@ -187,5 +240,38 @@ export class DriverOperationsService {
    */
   markMessagesRead(): Observable<number> {
     return this.http.post<number>('/api/driver/messages/read', {});
+  }
+
+  // ── 例外回報案件（後端 DriverPortalController 的 /api/driver/cases）──
+  // 跟聊天一樣不帶 driverId：後端從 token 取，並檢查案件是不是這位司機的，別人的案件一律回「找不到案件」
+
+  /** 自己的案件，含每件的未讀數；支援中心打開、WebSocket 連上時各抓一次 */
+  getCases(): Observable<DriverCaseDto[]> {
+    return this.http.get<DriverCaseDto[]>('/api/driver/cases');
+  }
+
+  /** 建立案件，回傳存好的案件（含 id），前端直接切到這件案件的對話 */
+  createCase(request: DriverCaseRequest): Observable<DriverCaseDto> {
+    return this.http.post<DriverCaseDto>('/api/driver/cases', request);
+  }
+
+  /** 案件對話，一律由舊到新；afterId 的用法跟 getMessages 一樣 */
+  getCaseMessages(caseId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`/api/driver/cases/${caseId}/messages`, {params});
+  }
+
+  /** 在案件裡留言；已結案的案件後端要擋，不能只靠前端把輸入框關掉 */
+  sendCaseMessage(caseId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`/api/driver/cases/${caseId}/messages`, request);
+  }
+
+  /** 把這件案件裡調度中心的回覆標成已讀；只標這一串，不能動到一般對話或其他案件 */
+  markCaseMessagesRead(caseId: number): Observable<number> {
+    return this.http.post<number>(`/api/driver/cases/${caseId}/messages/read`, {});
   }
 }

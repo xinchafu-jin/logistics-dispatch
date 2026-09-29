@@ -1,0 +1,51 @@
+:host { display: block; margin: 14px 6px 0; color: #1d392f; }
+.leave-calendar-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+button, input, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid #087c6b; outline-offset: 3px; }
+.leave-calendar-modes button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 12px 4px; border: 1px solid #c8dad3; border-radius: 10px; color: #516860; background: #fff; }
+.leave-calendar-modes button.is-active { color: #087c6b; border-color: #087c6b; background: #e5f2ec; }
+.leave-calendar-modes mat-icon { width: 21px; height: 21px; font-size: 21px; }
+.leave-calendar-modes strong { font-size: 15px; }
+.leave-calendar-modes small { font-size: 11px; }
+.calendar-leave-form { display: grid; gap: 18px; margin-top: 12px; padding: 16px 12px; border: 1px solid #c8dad3; border-radius: 12px; background: #fff; }
+fieldset { min-width: 0; padding: 0; margin: 0; border: 0; }
+legend, .reason > strong, .date-selection > strong { font-size: 15px; font-weight: 700; }
+legend { margin-bottom: 10px; }
+.leave-types { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.leave-types label { display: flex; align-items: center; justify-content: center; gap: 4px; padding: 10px 2px; font-size: 14px; border: 1px solid #d9e4df; border-radius: 8px; cursor: pointer; }
+.leave-types label.is-selected { color: #087c6b; border-color: #087c6b; background: #eef8f3; }
+.leave-types input { accent-color: #087c6b; margin: 0; width: 14px; height: 14px; }
+.date-selection p { margin: 8px 0; font-size: 14px; line-height: 1.6; }
+.date-selection small { display: block; margin-top: 8px; color: #516860; font-size: 12px; line-height: 1.6; }
+.selected-dates { display: flex; flex-wrap: wrap; gap: 6px; }
+.selected-dates :is(button, span) { display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 6px 8px; border: 1px solid #c8dad3; border-radius: 8px; background: #e5f2ec; color: #246a59; font-size: 13px; }
+.selected-dates mat-icon { width: 16px; height: 16px; font-size: 16px; }
+.reason { display: grid; gap: 8px; }
+textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #c8dad3; border-radius: 8px; color: inherit; resize: vertical; font-size: 16px; line-height: 1.6; }
+.reason small { color: #67796f; text-align: right; font-size: 12px; }
+.partial-leave { font-size: 13px; }
+.partial-leave > strong { font-size: 15px; }
+.partial-leave > p { color: #516860; font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.partial-leave summary { cursor: pointer; }
+.partial-leave > div { display: flex; gap: 10px; margin-top: 12px; }
+.partial-leave label { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.partial-leave input { min-width: 0; padding: 8px; border: 1px solid #c8dad3; border-radius: 6px; }
+.evidence { display: grid; gap: 8px; font-size: 14px; }
+.evidence input { max-width: 100%; font-size: 12px; }
+footer { display: flex; justify-content: flex-end; gap: 10px; }
+footer button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 10px 16px; border: 1px solid #c8dad3; border-radius: 8px; font-weight: 700; }
+.cancel { color: #516860; background: #fff; }
+.submit { color: #fff; background: #087c6b; border-color: #087c6b; }
+footer mat-icon { width: 18px; height: 18px; font-size: 18px; }
+.feedback { padding: 10px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
+.is-success { color: #246a59; background: #e5f2ec; }
+.is-error { color: #a14c2e; background: #fff3ed; }
+.reply-notice { margin-top: 12px; padding: 12px; border: 1px solid #c8dad3; border-radius: 8px; background: #eef8f3; font-size: 14px; }
+.reply-notice p { margin: 8px 0; line-height: 1.6; }
+.reply-notice button { border: 0; padding: 6px 0; color: #087c6b; background: transparent; font-weight: 700; }
+@media (max-width: 360px) {
+  .leave-calendar-modes small { font-size: 10px; }
+  .leave-types { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

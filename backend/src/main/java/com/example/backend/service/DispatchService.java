@@ -276,7 +276,7 @@ public class DispatchService {
                         + " 目前狀態為 " + vehicle.getStatus() + "，無法排入路線");
             }
         }
-        // ── 司機驗證：不重複、在職 ──
+        // ── 司機驗證：不重複、在職；所屬倉庫只是人事資料，不限制接單倉庫 ──
         List<Long> driverIds = new ArrayList<>();
         for (ReassignDTO.RouteAssignment ra : dto.getRoutes()) {
             // 未指派是合法的：草稿階段可以先排車後派人，發布前才要求一定要有
@@ -303,7 +303,7 @@ public class DispatchService {
                         "司機 " + driver.getName() + " 目前非在職狀態，無法指派");
             }
         }
-        // 司機不綁倉庫，但一天只開一條路線，所以要查整天而不是只查這個倉。
+        // 同一天仍須避免跨倉舊路線重複占用司機。
         // 本倉的草稿等一下就會被 clearExistingDraftRoutes 清掉，不算佔用。
         for (RoutesEntity other : routesDAO.findByDateAndDriverIdIsNotNull(date)) {
             if (warehouseId.equals(other.getWarehouseId())) {
@@ -580,7 +580,7 @@ public class DispatchService {
     /**
      * 當天已被「其他倉庫」排走的司機。
      * <p>
-     * 司機不綁倉庫（見 docs/data-model.md），但一位司機一天只開一條路線，
+     * 司機所屬倉庫不限制派車，但一位司機一天只開一條路線，
      * 而看板是按倉切的 —— 只看當前倉的話，會把別倉用掉的司機也列成可選。
      */
     private List<DispatchResponse.DriverTakenResponse> driversTakenElsewhere(

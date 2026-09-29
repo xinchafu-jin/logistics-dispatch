@@ -6,6 +6,8 @@ import {
   AdminStickyNoteRequestDto,
   AdminUserCreateRequest,
   AdminUserDto,
+  AdminProfileDto,
+  AdminProfileUpdateRequest,
   AiApiKeyRequest,
   AiApiKeyStatusDto,
   AiChatReply,
@@ -13,7 +15,8 @@ import {
   AiPendingActionDto,
   DispatchDayDto,
   DispatchResultDto,
-  DriverAccountApplicationDto,
+  DriverCaseDto,
+  DriverCaseOrdersDto,
   DriverDto,
   DriverLeaveHistoryDto,
   DriverLeaveBatchDto,
@@ -26,6 +29,7 @@ import {
   DriverShiftUpdateRequest,
   DriverStatusPayload,
   ExceptionCaseDto,
+  ExceptionStatus,
   EmergencyLeaveDto,
   EmergencyLeaveReplacementCandidateDto,
   FuelPriceDto,
@@ -33,10 +37,14 @@ import {
   LeaveRequest,
   LeaveType,
   OrderDto,
+  PlannedPathDto,
   ReassignRequest,
   ReportCollectionDto,
   ReportQuery,
   ReportSummaryDto,
+  ReportPerformanceDto,
+  ReportOutcomesDto,
+  RouteDeviationDto,
   RouteMetricsDto,
   ScheduleMonthDto,
   StoreDto,
@@ -44,6 +52,10 @@ import {
   TemplateDto,
   TemplateRequest,
   VehicleDto,
+  VehicleMaintenanceRecord,
+  VehicleMaintenanceSettings,
+  VehicleMileageCorrection,
+  VehicleMileageCorrectionRequest,
   WarehouseDto,
   OptimizeSlotsRequest,
   PlannedPartialLeaveRequestDto,
@@ -182,6 +194,13 @@ export class DispatchApiService {
     return this.http.get<RouteMetricsDto>(`${API_ROOT}/dispatch/routes/${routeId}/metrics`);
   }
 
+  /** 這一天、這個倉庫已發布路線的道路形狀；沒存形狀的路線不在回傳裡，畫的時候退回直線 */
+  getPlannedPaths(date: string, warehouseId: number): Observable<PlannedPathDto[]> {
+    const params = new HttpParams().set('date', date).set('warehouseId', warehouseId);
+
+    return this.http.get<PlannedPathDto[]>(`${API_ROOT}/dispatch/planned-paths`, {params});
+  }
+
   getLatestFuelPrice(): Observable<FuelPriceDto> {
     return this.http.get<FuelPriceDto>(`${API_ROOT}/fuel-prices/latest`);
   }
@@ -203,6 +222,14 @@ export class DispatchApiService {
 
   getReportAttendance(query: ReportQuery): Observable<ReportCollectionDto> {
     return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/attendance`, {params: this.reportParams(query)});
+  }
+
+  getReportPerformance(query: ReportQuery): Observable<ReportPerformanceDto> {
+    return this.http.get<ReportPerformanceDto>(`${API_ROOT}/reports/performance`, {params: this.reportParams(query)});
+  }
+
+  getReportOutcomes(query: ReportQuery): Observable<ReportOutcomesDto> {
+    return this.http.get<ReportOutcomesDto>(`${API_ROOT}/reports/outcomes`, {params: this.reportParams(query)});
   }
 
   getReportRoutes(query: ReportQuery): Observable<ReportCollectionDto> {
@@ -261,6 +288,14 @@ export class DispatchApiService {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
   }
 
+  getAdminProfile(): Observable<AdminProfileDto> {
+    return this.http.get<AdminProfileDto>(`${API_ROOT}/admin-users/me`);
+  }
+
+  updateAdminProfile(request: AdminProfileUpdateRequest): Observable<AdminProfileDto> {
+    return this.http.put<AdminProfileDto>(`${API_ROOT}/admin-users/me`, request);
+  }
+
   getAiApiKeyStatus(): Observable<AiApiKeyStatusDto> {
     return this.http.get<AiApiKeyStatusDto>(`${API_ROOT}/admin-users/me/ai-api-key`);
   }
@@ -271,31 +306,6 @@ export class DispatchApiService {
 
   removeAiApiKey(): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/admin-users/me/ai-api-key`);
-  }
-
-  getPendingDriverAccountApplicationCount(): Observable<{ count: number }> {
-    return this.http.get<{ count: number }>(`${API_ROOT}/driver-account-applications/pending/count`);
-  }
-
-  getPendingDriverAccountApplications(): Observable<DriverAccountApplicationDto[]> {
-    return this.http.get<DriverAccountApplicationDto[]>(`${API_ROOT}/driver-account-applications/pending`);
-  }
-
-  approveDriverAccountApplication(applicationId: number): Observable<DriverAccountApplicationDto> {
-    return this.http.patch<DriverAccountApplicationDto>(
-      `${API_ROOT}/driver-account-applications/${applicationId}/approve`,
-      null,
-    );
-  }
-
-  rejectDriverAccountApplication(
-    applicationId: number,
-    reason: string,
-  ): Observable<DriverAccountApplicationDto> {
-    return this.http.patch<DriverAccountApplicationDto>(
-      `${API_ROOT}/driver-account-applications/${applicationId}/reject`,
-      { reason },
-    );
   }
 
   getPendingEmergencyLeaveRequests(): Observable<EmergencyLeaveDto[]> {
@@ -357,6 +367,38 @@ export class DispatchApiService {
 
   deleteVehicle(id: number): Observable<void> {
     return this.http.delete<void>(`${API_ROOT}/vehicles/${id}`);
+  }
+
+  /** 主管更正里程與保養基準（打錯時用），回傳更正後的車輛 */
+  correctVehicleMileage(vehicleId: number, request: VehicleMileageCorrectionRequest): Observable<VehicleDto> {
+    return this.http.post<VehicleDto>(`${API_ROOT}/vehicles/${vehicleId}/mileage-corrections`, request);
+  }
+
+  /** 這台車的里程更正紀錄，新的在前 */
+  getVehicleMileageCorrections(vehicleId: number): Observable<VehicleMileageCorrection[]> {
+    return this.http.get<VehicleMileageCorrection[]>(`${API_ROOT}/vehicles/${vehicleId}/mileage-corrections`);
+  }
+
+  // ── 車輛保養與退役 ────────────────────────────────────
+  // 送小保、送大保、送維修、改回可用，以及每台車的保養間隔，都是修改車輛時一起送（updateVehicle）；
+  // 這裡只有全車共用的設定、歷史與取消
+
+  getMaintenanceSettings(): Observable<VehicleMaintenanceSettings> {
+    return this.http.get<VehicleMaintenanceSettings>(`${API_ROOT}/vehicle-maintenance/settings`);
+  }
+
+  saveMaintenanceSettings(settings: VehicleMaintenanceSettings): Observable<VehicleMaintenanceSettings> {
+    return this.http.put<VehicleMaintenanceSettings>(`${API_ROOT}/vehicle-maintenance/settings`, settings);
+  }
+
+  /** 這台車的送修歷史，新的在前 */
+  getMaintenanceHistory(vehicleId: number): Observable<VehicleMaintenanceRecord[]> {
+    return this.http.get<VehicleMaintenanceRecord[]>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/history`);
+  }
+
+  /** 取消進行中的送修：不計次數、不更新基準，車輛改回可用 */
+  cancelMaintenance(vehicleId: number): Observable<void> {
+    return this.http.post<void>(`${API_ROOT}/vehicle-maintenance/${vehicleId}/cancel`, null);
   }
 
   getStores(): Observable<StoreDto[]> {
@@ -487,7 +529,7 @@ export class DispatchApiService {
    */
   /**
    * 看板日期列：每一天全部倉庫的狀態與數量，另外附上之前還沒結案的日子。
-   * 不給 to 時後端會顯示到最後一天有單的日期（至少到後天）。
+   * 不給 to 時後端會顯示到最後一天有單的日期（至少到七天後）。
    */
   getDispatchDays(from?: string, to?: string): Observable<DispatchDayDto[]> {
     let params = new HttpParams();
@@ -517,6 +559,19 @@ export class DispatchApiService {
     const params = new HttpParams().set('date', date);
 
     return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/publish`, null, {params});
+  }
+
+  /**
+   * 撤回當天全部倉庫的發布：PUBLISHED 路線翻回草稿，司機端的任務跟著消失。
+   *
+   * 跟發布一樣是整天一次、不帶 warehouseId。當天只要有任何一張單已點交或更後面的狀態，
+   * 後端整批擋下（DispatchGuardService.assertCanWithdraw），錯誤訊息會列出單號。
+   * 回傳格式跟發布相同：每個有路線的倉庫各一包看板。
+   */
+  withdrawDispatch(date: string): Observable<DispatchResultDto[]> {
+    const params = new HttpParams().set('date', date);
+
+    return this.http.post<DispatchResultDto[]>(`${API_ROOT}/dispatch/withdraw`, null, {params});
   }
 
   // ── 常配編組 ──────────────────────────────────────────
@@ -562,6 +617,11 @@ export class DispatchApiService {
    */
   getLiveFleet(): Observable<GpsPingDto[]> {
     return this.http.get<GpsPingDto[]>(`${API_ROOT}/fleet/live`);
+  }
+
+  /** 進行中的偏離預定路線；打開看板、WebSocket 重新連上時抓，之間靠推播更新 */
+  getActiveRouteDeviations(): Observable<RouteDeviationDto[]> {
+    return this.http.get<RouteDeviationDto[]>(`${API_ROOT}/fleet/route-deviations`);
   }
 
   getFleetDriverLatest(driverId: number): Observable<GpsPingDto> {
@@ -644,6 +704,53 @@ export class DispatchApiService {
   /** 紅點：每位司機有幾則未讀。只列有未讀的司機，用 driverId 對到司機名單 */
   getDriverMessageSummary(): Observable<DriverMessageSummaryDto[]> {
     return this.http.get<DriverMessageSummaryDto[]>(`${API_ROOT}/drivers/messages/summary`);
+  }
+
+  // ── 司機例外回報案件：異常中心管案件，聊天室管對話 ──────────────────
+
+  /** 不帶 status 是進行中的全部（還沒接收的排前面）；CLOSED 是最近結案的 50 件 */
+  getDriverCases(status?: ExceptionStatus): Observable<DriverCaseDto[]> {
+    let params = new HttpParams();
+    if (status !== undefined) {
+      params = params.set('status', status);
+    }
+    return this.http.get<DriverCaseDto[]>(`${API_ROOT}/exceptions/driver-cases`, {params});
+  }
+
+  /** 接收案件；別人已經接收時後端回 400「這件案件已由某某接收」 */
+  acceptDriverCase(caseId: number): Observable<DriverCaseDto> {
+    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/accept`, null);
+  }
+
+  /** 結案視窗要列的：案件路線上還沒結束的單 */
+  getDriverCaseUnfinishedOrders(caseId: number): Observable<DriverCaseOrdersDto> {
+    return this.http.get<DriverCaseOrdersDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/unfinished-orders`);
+  }
+
+  /** 填處理結果結案；還沒接收也能結（例如司機重複送出）。redeliverOrderIds 是要改期補送的單 */
+  closeDriverCase(caseId: number, resolution: string, redeliverOrderIds: number[] = []): Observable<DriverCaseDto> {
+    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/close`,
+      {resolution, redeliverOrderIds});
+  }
+
+  /** 案件對話；afterId 的用法跟一般對話一樣 */
+  getDriverCaseMessages(caseId: number, afterId?: number): Observable<DriverMessageDto[]> {
+    let params = new HttpParams();
+    if (afterId !== undefined) {
+      params = params.set('afterId', afterId);
+    }
+    return this.http.get<DriverMessageDto[]>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages`, {params});
+  }
+
+  /** 在案件裡回覆司機；要先接收，不然後端回 400 */
+  sendDriverCaseMessage(caseId: number, content: string): Observable<DriverMessageDto> {
+    const request: DriverMessageRequest = {content};
+    return this.http.post<DriverMessageDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages`, request);
+  }
+
+  /** 把這件案件裡司機發的訊息標成已讀，回傳標了幾筆；已讀是所有管理員共用的 */
+  markDriverCaseMessagesRead(caseId: number): Observable<number> {
+    return this.http.post<number>(`${API_ROOT}/exceptions/driver-cases/${caseId}/messages/read`, {});
   }
 
   // ── 主管備忘錄 ────────────────────────────────────────

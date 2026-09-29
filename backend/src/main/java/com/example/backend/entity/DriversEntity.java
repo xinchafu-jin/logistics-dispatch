@@ -12,6 +12,13 @@ public class DriversEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /** 所屬倉庫；舊資料可為 null，主管確認後設定，不從歷史路線推測。 */
+    @Column(name = "warehouse_id")
+    private Long warehouseId;
+
+    public Long getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Long warehouseId) { this.warehouseId = warehouseId; }
+
     /** 員工編號或手機號碼，登入帳號 */
     @Column(nullable = false, unique = true, length = 60)
     private String account;

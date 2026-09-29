@@ -3,9 +3,11 @@ package com.example.backend.service;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.GpsPingsDAO;
 import com.example.backend.dto.request.GpsPingDTO;
+import com.example.backend.dto.respones.GpsPingSavedEvent;
 import com.example.backend.entity.GpsPingsEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ public class GpsPingsService {
     private final GpsPingsDAO gpsPingsDAO;
     private final DriversDAO driversDAO;
     private final AttendanceService attendanceService;
+    // 存好 GPS 後發事件，偏離判斷在 commit 之後才跑（RouteDeviationGpsListener）
+    private final ApplicationEventPublisher eventPublisher;
     private final long freshnessMinutes;
     private final long retentionYears;
 
@@ -30,6 +34,7 @@ public class GpsPingsService {
             GpsPingsDAO gpsPingsDAO,
             DriversDAO driversDAO,
             AttendanceService attendanceService,
+            ApplicationEventPublisher eventPublisher,
             @Value("${app.gps.freshness-minutes:10}") long freshnessMinutes,
             @Value("${app.gps.retention-years:5}") long retentionYears
     ) {
@@ -42,6 +47,7 @@ public class GpsPingsService {
         this.gpsPingsDAO = gpsPingsDAO;
         this.driversDAO = driversDAO;
         this.attendanceService = attendanceService;
+        this.eventPublisher = eventPublisher;
         this.freshnessMinutes = freshnessMinutes;
         this.retentionYears = retentionYears;
     }
@@ -64,7 +70,11 @@ public class GpsPingsService {
         entity.setLat(dto.getLat());
         entity.setLng(dto.getLng());
         entity.setTimestamp(LocalDateTime.now(TAIPEI));
-        return toDTO(gpsPingsDAO.save(entity));
+        GpsPingsEntity saved = gpsPingsDAO.save(entity);
+        // 偏離判斷等這個交易 commit 後才跑，出錯也不會讓這次上傳失敗（見 RouteDeviationGpsListener）
+        eventPublisher.publishEvent(new GpsPingSavedEvent(
+                driverId, saved.getLat(), saved.getLng(), saved.getTimestamp()));
+        return toDTO(saved);
     }
 
     @Transactional(readOnly = true)

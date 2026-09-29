@@ -4,7 +4,8 @@ import jakarta.validation.constraints.PositiveOrZero;
 
 public class MileageRequestDTO {
 
-    @PositiveOrZero(message = "里程表讀數不能小於 0")
+    /** 行車紀錄器上顯示的累計里程（km）；實際公里＝收車讀數－出車讀數 */
+    @PositiveOrZero(message = "行車紀錄器里程不能小於 0")
     private Integer odometer;
 
     public Integer getOdometer() {

@@ -1,5 +1,6 @@
 package com.example.backend.service;
 
+import com.example.backend.dto.respones.DriverCasePushEvent;
 import com.example.backend.dto.respones.DriverMessagePushResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,26 @@ public class DriverMessagesPushService {
             // 推播失敗不能讓 API 回錯誤：資料已經存好了，回錯誤前端會重送，變成兩則一樣的訊息。
             // 漏掉的推播，前端重連或下次打開對話時會用 afterId 補抓回來。
             log.warn("聊天室推播失敗，driverId={}, type={}", push.getDriverId(), push.getType(), e);
+        }
+    }
+
+    /**
+     * 案件建立、接收、結案。頻道跟訊息一樣，但兩邊內容不同：後台那份有誰回報、誰接收，
+     * 司機那份沒有（理由見 DriverCasePushEvent）。一樣等 commit 才推、失敗只記 log。
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void pushCase(DriverCasePushEvent event) {
+        DriverMessagePushResponse adminPush = event.getAdminPush();
+        DriverMessagePushResponse driverPush = event.getDriverPush();
+        try {
+            messagingTemplate.convertAndSend(ADMIN_TOPIC, adminPush);
+            // 舊版 API 建的回報沒有記司機，只推後台
+            if (driverPush != null) {
+                messagingTemplate.convertAndSendToUser("DRIVER:" + driverPush.getDriverId(), DRIVER_QUEUE, driverPush);
+            }
+        } catch (RuntimeException e) {
+            // 漏掉的推播，前端重連時會重抓案件清單補回來
+            log.warn("案件推播失敗，exceptionCaseId={}, type={}", adminPush.getExceptionCaseId(), adminPush.getType(), e);
         }
     }
 }

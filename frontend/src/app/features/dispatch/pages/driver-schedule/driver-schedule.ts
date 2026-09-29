@@ -1,11 +1,13 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal, ViewEncapsulation } from '@angular/core';
+import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 import {MatDateFormats, provideNativeDateAdapter} from '@angular/material/core';
-import {MatDatepicker, MatDatepickerModule} from '@angular/material/datepicker';
+import {MatCalendarHeader, MatCalendarView, MatDatepicker, MatDatepickerModule} from '@angular/material/datepicker';
 import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatInputModule} from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import {
   DriverDto,
   DriverLeaveHistoryDto,
@@ -33,6 +35,83 @@ const MONTH_ONLY_FORMATS: MatDateFormats = {
     monthYearA11yLabel: {year: 'numeric', month: 'long'},
   },
 };
+
+/**
+ * 專供月份選擇器使用的月曆標頭：
+ * 1. 攔截 MatYearView 點選月份後自動切換到 'month'（日期格）的預設行為
+ * 2. 左上角年份按鈕只在「月份（year）」與「年份（multi-year）」之間切換，不進入選日視圖
+ */
+@Component({
+  selector: 'app-month-picker-header',
+  imports: [MatButtonModule],
+  template: `
+    <div class="mat-calendar-header">
+      <div class="mat-calendar-controls">
+        <button
+          matButton
+          type="button"
+          class="mat-calendar-period-button"
+          (click)="currentPeriodClicked()"
+          [attr.aria-label]="periodButtonLabel"
+        >
+          <span aria-hidden="true">{{ periodButtonText }}</span>
+          <svg
+            class="mat-calendar-arrow"
+            [class.mat-calendar-invert]="calendar.currentView !== 'year'"
+            viewBox="0 0 10 5"
+            focusable="false"
+            aria-hidden="true"
+          >
+            <polygon points="0,0 5,5 10,0" />
+          </svg>
+        </button>
+
+        <div class="mat-calendar-spacer"></div>
+
+        <button
+          matIconButton
+          type="button"
+          class="mat-calendar-previous-button"
+          [disabled]="!previousEnabled()"
+          (click)="previousClicked()"
+          [attr.aria-label]="prevButtonLabel"
+        >
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+          </svg>
+        </button>
+
+        <button
+          matIconButton
+          type="button"
+          class="mat-calendar-next-button"
+          [disabled]="!nextEnabled()"
+          (click)="nextClicked()"
+          [attr.aria-label]="nextButtonLabel"
+        >
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  `,
+  encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MonthPickerHeader extends MatCalendarHeader<Date> {
+  constructor() {
+    super();
+    this.calendar._goToDateInView = (date: Date, view: MatCalendarView) => {
+      this.calendar.activeDate = date;
+      this.calendar.currentView = view === 'month' ? 'year' : view;
+    };
+  }
+
+  override currentPeriodClicked(): void {
+    this.calendar.currentView = this.calendar.currentView === 'year' ? 'multi-year' : 'year';
+  }
+}
 
 interface MonthDay {
   iso: string;
@@ -102,6 +181,9 @@ interface BatchDriverOption {
 })
 export class DriverSchedule implements OnInit {
   private readonly api = inject(DispatchApiService);
+  // 月份選擇器的面板開在 body 底下，吃不到後台深淺色：mat-datepicker 的 panelClass 要帶 theme.dialogPanelClass()
+  protected readonly theme = inject(AdminThemeService);
+  protected readonly monthPickerHeader = MonthPickerHeader;
 
   readonly selectedMonth = signal(this.currentMonthValue());
   // 日期選擇器吃 Date；API 與月曆計算仍用 YYYY-MM 字串，只在這裡轉換（取該月 1 號）
@@ -240,20 +322,12 @@ export class DriverSchedule implements OnInit {
     this.loadPendingLeaveBatches();
   }
 
-  protected moveMonth(offset: number): void {
-    const [year, month] = this.selectedMonth().split('-').map(Number);
-    const target = new Date(year, month - 1 + offset, 1);
-    this.selectedMonth.set(
-      `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`,
-    );
-    this.monthlyLeaveSummaries.set({});
-    this.resetSelection();
-    this.loadMonth();
-  }
-
   /** 在月曆上點了月份：直接關掉，不讓它往下進到選日期 */
   protected selectMonth(date: Date, picker: MatDatepicker<Date>): void {
     picker.close();
+    if (picker.opened) {
+      setTimeout(() => picker.close(), 210);
+    }
     const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
     if (month === this.selectedMonth()) {
       return;
@@ -857,6 +931,10 @@ export class DriverSchedule implements OnInit {
       DAY_OFF: '休假',
       LEAVE: '請假',
     }[shiftType];
+  }
+
+  protected shiftIcon(shiftType: ShiftType): string {
+    return {WORK: 'work_outline', DAY_OFF: 'free_breakfast', LEAVE: 'event_busy', UNASSIGNED: 'event_note'}[shiftType];
   }
 
   protected scheduleStatusLabel(): string {

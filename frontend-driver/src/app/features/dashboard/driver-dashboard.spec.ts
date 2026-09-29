@@ -1,10 +1,52 @@
+import {DriverMessageDto} from '../../core/services/driver-operations.models';
 import {
+  CASE_CATEGORIES,
+  CASE_DESCRIPTION_MAX_LENGTH,
+  caseCategoryOption,
+  caseDisplayStatus,
+  composeCaseDescription,
   findNearest,
   formatManeuverDistance,
   isStepPassed,
   maneuverIcon,
   measureStepProgress,
+  mergeMessagesById,
+  navigationReadyForOrder,
+  pendingLoadingOrderCount,
+  validateCaseDraft,
 } from './driver-dashboard';
+
+describe('倉庫點交後才能導航', () => {
+  it('同一司機還有任何待點交訂單時，其他已點交訂單也不能導航', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'LOADED' as const},
+      {orderId: 2, orderStatus: 'CONFIRMED' as const},
+    ]}]};
+    expect(pendingLoadingOrderCount(tasks)).toBe(1);
+    expect(navigationReadyForOrder(tasks, 1)).toBe(false);
+  });
+
+  it('所有待配送訂單完成點交後，已點交的訂單可以導航', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'LOADED' as const},
+      {orderId: 2, orderStatus: 'IN_DELIVERY' as const},
+    ]}]};
+    expect(pendingLoadingOrderCount(tasks)).toBe(0);
+    expect(navigationReadyForOrder(tasks, 1)).toBe(true);
+    expect(navigationReadyForOrder(tasks, 2)).toBe(true);
+  });
+
+  it('失敗或不存在的訂單不能導航；失敗訂單不阻擋其他已點交訂單', () => {
+    const tasks = {routes: [{stops: [
+      {orderId: 1, orderStatus: 'FAILED' as const},
+      {orderId: 2, orderStatus: 'LOADED' as const},
+    ]}]};
+    expect(navigationReadyForOrder(tasks, 1)).toBe(false);
+    expect(navigationReadyForOrder(tasks, 2)).toBe(true);
+    expect(navigationReadyForOrder(tasks, 3)).toBe(false);
+    expect(navigationReadyForOrder(null, 2)).toBe(false);
+  });
+});
 
 describe('findNearest', () => {
   // 台南往北的三個點，間隔約 3 公里
@@ -130,5 +172,84 @@ describe('maneuverIcon', () => {
     expect(maneuverIcon({type: 'arrive', modifier: 'left'})).toBe('flag');
     expect(maneuverIcon({type: 'new name', modifier: 'straight'})).toBe('straight');
     expect(maneuverIcon({type: 'notification', modifier: null})).toBe('straight');
+  });
+});
+
+describe('caseDisplayStatus', () => {
+  it('資料庫只有 OPEN／CLOSED：OPEN 還沒被接收是等待回覆，接收了是處理中', () => {
+    expect(caseDisplayStatus({status: 'OPEN', acceptedAt: null})).toBe('waiting');
+    expect(caseDisplayStatus({status: 'OPEN', acceptedAt: '2026-09-27T10:44:00'})).toBe('handling');
+  });
+
+  it('結案就是結案，不管有沒有人接收過', () => {
+    expect(caseDisplayStatus({status: 'CLOSED', acceptedAt: null})).toBe('closed');
+    expect(caseDisplayStatus({status: 'CLOSED', acceptedAt: '2026-09-27T10:44:00'})).toBe('closed');
+  });
+});
+
+describe('caseCategoryOption', () => {
+  it('每個分類代碼只出現一次，而且「其他」一定在', () => {
+    const codes = CASE_CATEGORIES.map((option) => option.code);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes).toContain('OTHER');
+  });
+
+  it('後端多了前端不認識的分類時退回「其他」，畫面不會壞', () => {
+    expect(caseCategoryOption('VEHICLE').label).toBe('車輛問題');
+    expect(caseCategoryOption('UNKNOWN' as never).code).toBe('OTHER');
+  });
+});
+
+describe('composeCaseDescription', () => {
+  const vehicle = caseCategoryOption('VEHICLE');
+
+  it('快選照分類裡的順序排，不照點的順序，再接補充說明', () => {
+    expect(composeCaseDescription(vehicle, ['儀表警示燈亮', '爆胎'], ' 停在台 1 線路肩 ')).toBe(
+      '爆胎、儀表警示燈亮：停在台 1 線路肩',
+    );
+  });
+
+  it('只有快選或只有說明時不多加冒號', () => {
+    expect(composeCaseDescription(vehicle, ['爆胎'], '  ')).toBe('爆胎');
+    expect(composeCaseDescription(caseCategoryOption('OTHER'), [], '冷氣壞了')).toBe('冷氣壞了');
+  });
+
+  it('不屬於這個分類的快選不會被組進去（切換分類後殘留的選項）', () => {
+    expect(composeCaseDescription(vehicle, ['嚴重塞車'], '')).toBe('');
+  });
+});
+
+describe('validateCaseDraft', () => {
+  it('說明空白、太長、沒選能不能繼續都要擋', () => {
+    expect(validateCaseDraft('', true)).not.toBeNull();
+    expect(validateCaseDraft('爆'.repeat(CASE_DESCRIPTION_MAX_LENGTH + 1), true)).not.toBeNull();
+    expect(validateCaseDraft('爆胎', null)).not.toBeNull();
+  });
+
+  it('剛好 1000 字、選了不能繼續都可以送', () => {
+    expect(validateCaseDraft('爆'.repeat(CASE_DESCRIPTION_MAX_LENGTH), true)).toBeNull();
+    expect(validateCaseDraft('爆胎', false)).toBeNull();
+  });
+});
+
+describe('mergeMessagesById', () => {
+  const message = (id: number, content: string): DriverMessageDto => ({
+    id,
+    driverId: 1,
+    senderType: 'ADMIN',
+    content,
+    createdAt: '2026-09-27T10:00:00',
+    exceptionCaseId: 7,
+  });
+
+  it('推播和 API 回應是同一則時只留一則，用新來的那份（例如補上 readAt）', () => {
+    const merged = mergeMessagesById([message(1, '收到')], [{...message(1, '收到'), readAt: '2026-09-27T10:01:00'}]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].readAt).toBe('2026-09-27T10:01:00');
+  });
+
+  it('不管到達順序，一律依 id 由舊到新', () => {
+    const merged = mergeMessagesById([message(3, '三')], [message(1, '一'), message(2, '二')]);
+    expect(merged.map((item) => item.id)).toEqual([1, 2, 3]);
   });
 });

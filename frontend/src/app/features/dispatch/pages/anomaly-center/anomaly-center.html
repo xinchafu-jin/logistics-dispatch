@@ -1,67 +1,78 @@
-<main class="anomaly-center-page">
-  <section class="page-intro" aria-label="異常中心">
-    <div>
-      <p class="page-eyebrow">異常管理</p>
-      <h2>配送異常待確認</h2>
-      <p>異常發生當天只留存紀錄；隔日 06:00 後才會列入主管待確認清單。</p>
+<main class="anomaly-center-page ui-page">
+  <!-- 上排：兩種異常的分頁，旁邊是還要處理的筆數；下排：狀態篩選與摘要數字 -->
+  <section class="ui-panel" aria-label="異常篩選">
+    <div class="ui-tabs-bar">
+      <!-- 兩種異常的時機和處理方式不同，不混在同一組篩選裡：司機回報是即時的，到期配送異常要等隔日 06:00 -->
+      <div class="ui-tabs-bar__tabs" role="tablist" aria-label="切換異常類型">
+        <button
+          type="button"
+          role="tab"
+          class="ui-tab"
+          [class.is-active]="view() === 'driver'"
+          [attr.aria-selected]="view() === 'driver'"
+          (click)="setView('driver')"
+        >
+          司機回報
+          <span class="ui-tab__count" [attr.aria-label]="caseSummary().waiting + ' 件等待接收'">{{ caseSummary().waiting }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="ui-tab"
+          [class.is-active]="view() === 'delivery'"
+          [attr.aria-selected]="view() === 'delivery'"
+          (click)="setView('delivery')"
+        >
+          到期配送異常
+          <span class="ui-tab__count" [attr.aria-label]="summary().total + ' 筆待確認'">{{ summary().total }}</span>
+        </button>
+      </div>
+
+      <div class="ui-tabs-bar__actions">
+        @if (view() === 'driver') {
+          <span class="updated-at ui-status-dot" [class.is-ok]="isSocketConnected()" [class.is-danger]="!isSocketConnected()">
+            {{ isSocketConnected() ? '即時更新中' : '連線中斷，資料可能不是最新' }}
+          </span>
+        } @else {
+          <span class="updated-at">上次讀取：<span class="ui-mono">{{ formatRefreshTime(lastLoadedAt()) }}</span></span>
+        }
+        <button
+          type="button"
+          class="ui-btn-default ui-btn-icon"
+          title="重新整理"
+          aria-label="重新整理"
+          (click)="refresh()"
+          [disabled]="isRefreshing()"
+        >
+          <mat-icon aria-hidden="true">refresh</mat-icon>
+        </button>
+      </div>
     </div>
-    <div class="intro-actions">
-      <p class="updated-at">上次讀取：{{ formatRefreshTime(lastLoadedAt()) }}</p>
-      <button
-        type="button"
-        class="icon-button"
-        title="重新整理提醒"
-        aria-label="重新整理提醒"
-        (click)="refresh()"
-        [disabled]="loading() || confirming()"
-      >
-        <mat-icon aria-hidden="true">refresh</mat-icon>
-      </button>
-    </div>
-  </section>
 
-  @if (errorMessage()) {
-    <p class="feedback is-error"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
-  }
-  @if (actionMessage()) {
-    <p class="feedback is-success"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
-  }
-
-  <section class="anomaly-summary" aria-label="到期異常摘要">
-    <article class="summary-card tone-critical">
-      <p>待主管確認</p>
-      <strong>{{ summary().total }}<span>筆</span></strong>
-      <span>已到隔日確認時間</span>
-    </article>
-    <article class="summary-card tone-warning">
-      <p>無人簽收</p>
-      <strong>{{ summary().noSignature }}<span>筆</span></strong>
-      <span>等待主管重新確認配送</span>
-    </article>
-    <article class="summary-card tone-critical">
-      <p>貨況異常</p>
-      <strong>{{ summary().goodsIssue }}<span>筆</span></strong>
-      <span>短少或毀損待確認</span>
-    </article>
-    <article class="summary-card tone-accent">
-      <p>待補送數量</p>
-      <strong>{{ summary().replacementBoxes }}<span>箱</span></strong>
-      <span>依異常紀錄加總</span>
-    </article>
-  </section>
-
-  <section class="anomaly-workspace" aria-label="到期異常提醒">
-    <section class="incident-list-panel" aria-labelledby="incident-list-title">
-      <header class="list-header">
-        <div>
-          <p class="section-eyebrow">待確認清單</p>
-          <h3 id="incident-list-title">到期配送異常</h3>
+    <div class="ui-toolbar">
+      @if (view() === 'driver') {
+        <div class="ui-segmented" role="group" aria-label="案件狀態篩選">
+          <button
+            type="button"
+            [class.is-active]="caseFilter() === 'OPEN'"
+            [attr.aria-pressed]="caseFilter() === 'OPEN'"
+            (click)="setCaseFilter('OPEN')"
+          >進行中 <span class="ui-mono">{{ caseSummary().waiting + caseSummary().handling }}</span></button>
+          <button
+            type="button"
+            [class.is-active]="caseFilter() === 'CLOSED'"
+            [attr.aria-pressed]="caseFilter() === 'CLOSED'"
+            (click)="setCaseFilter('CLOSED')"
+          >最近結案</button>
         </div>
-        <span>{{ filteredIncidents().length }} 筆顯示中</span>
-      </header>
-
-      <div class="list-tools">
-        <div class="filter-control" role="group" aria-label="異常類型篩選">
+        <p class="summary-stats" aria-label="司機回報摘要">
+          <span>等待接收 <strong>{{ caseSummary().waiting }}</strong></span>
+          <span>處理中 <strong>{{ caseSummary().handling }}</strong></span>
+          <span [class.is-urgent]="caseSummary().stuck > 0">無法繼續配送 <strong>{{ caseSummary().stuck }}</strong></span>
+          <span>司機未讀 <strong>{{ caseSummary().unread }}</strong> 則</span>
+        </p>
+      } @else {
+        <div class="ui-segmented" role="group" aria-label="異常類型篩選">
           @for (filter of filters; track filter.key) {
             <button
               type="button"
@@ -71,135 +82,258 @@
               [disabled]="loading() || confirming()"
             >
               {{ filter.label }}
+              <span class="ui-mono">{{ filter.key === 'ALL' ? summary().total : filter.key === 'NO_SIGNATURE' ? summary().noSignature : summary().goodsIssue }}</span>
             </button>
           }
         </div>
-      </div>
-
-      @if (loading()) {
-        <p class="empty-state">正在讀取到期異常提醒...</p>
-      } @else if (errorMessage()) {
-        <p class="empty-state">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
-      } @else if (filteredIncidents().length === 0) {
-        <p class="empty-state">
-          目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
+        <p class="summary-stats" aria-label="到期異常摘要">
+          <span>待補送 <strong>{{ summary().replacementBoxes }}</strong> 箱</span>
         </p>
-      } @else {
-        <div class="incident-list">
-          @for (incident of filteredIncidents(); track incident.id) {
-            <button
-              type="button"
-              class="incident-row"
-              [class.is-selected]="selectedIncident()?.id === incident.id"
-              (click)="selectIncident(incident.id)"
-            >
-              <span class="severity-mark" [class]="'severity-' + severityClass(incident.type)"></span>
-              <span class="incident-main">
-                <span class="incident-line">
-                  <strong>{{ exceptionTypeLabel(incident.type) }}</strong>
-                  <span class="severity-label" [class]="'severity-' + severityClass(incident.type)">
-                    待確認
-                  </span>
-                </span>
-                <span>來源訂單：{{ incident.sourceOrderNumber ?? '--' }}</span>
-                <span>後續訂單：{{ incident.followUpOrderNumber ?? '--' }}</span>
-              </span>
-              <span class="incident-meta">
-                <small>異常 #{{ incident.id }}</small>
-                <small>送審 {{ formatDateTime(incident.queuedAt) }}</small>
-              </span>
-            </button>
-          }
-        </div>
       }
-    </section>
-
-    <aside class="incident-detail-panel" aria-labelledby="incident-detail-title">
-      @if (selectedIncident(); as incident) {
-        <header class="detail-header">
-          <div>
-            <p class="section-eyebrow">案件詳情</p>
-            <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }}</h3>
-            <span>異常 #{{ incident.id }}</span>
-          </div>
-          <span class="detail-status" [class]="'severity-' + severityClass(incident.type)">待確認</span>
-        </header>
-
-        <dl class="incident-facts">
-          <div>
-            <dt>來源訂單</dt>
-            <dd>{{ incident.sourceOrderNumber ?? '--' }}</dd>
-          </div>
-          <div>
-            <dt>後續訂單</dt>
-            <dd>{{ incident.followUpOrderNumber ?? '--' }}</dd>
-          </div>
-          <div>
-            <dt>應到數量</dt>
-            <dd>{{ quantity(incident.expectedBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>實到數量</dt>
-            <dd>{{ quantity(incident.deliveredBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>待補送數量</dt>
-            <dd>{{ quantity(incident.replacementRequiredBoxCount) }}</dd>
-          </div>
-          <div>
-            <dt>送審時間</dt>
-            <dd>{{ formatDateTime(incident.queuedAt) }}</dd>
-          </div>
-        </dl>
-
-        <section class="detail-block">
-          <p>異常說明</p>
-          <span>{{ incident.description || '尚無額外異常說明。' }}</span>
-        </section>
-
-        <section class="detail-block recommendation-block">
-          <p>確認後處理</p>
-          <span>後續訂單會轉為待排車；若今日路線已發布，會安排到下一個可配送日。</span>
-        </section>
-
-        <p class="action-message">確認前請核對來源訂單與待補送數量。</p>
-        <div class="detail-actions">
-          <button type="button" class="button-secondary" (click)="refresh()" [disabled]="confirming()">
-            重新整理
-          </button>
-          <button type="button" class="button-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
-            確認並待排車
-          </button>
-        </div>
-      } @else {
-        <p class="empty-state">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
-      }
-    </aside>
+    </div>
   </section>
+
+  @if (view() === 'driver') {
+    @if (caseError()) {
+      <p class="ui-alert is-danger"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ caseError() }}</p>
+    }
+    @if (caseNotice()) {
+      <p class="ui-alert is-ok"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ caseNotice() }}</p>
+    }
+
+    <section class="ui-split" aria-label="司機回報">
+      <section class="ui-panel" aria-label="司機回報清單">
+        @if (caseListState() === 'error') {
+          <p class="ui-empty">司機回報暫時無法讀取，請使用右上角重新整理。</p>
+        } @else if (visibleCases().length === 0) {
+          <p class="ui-empty">
+            @if (caseListState() === 'loading') {
+              正在讀取司機回報...
+            } @else if (caseFilter() === 'OPEN') {
+              目前沒有進行中的司機回報。司機在支援中心送出後，這裡和上方鈴鐺會馬上出現。
+            } @else {
+              最近沒有結案的司機回報。
+            }
+          </p>
+        } @else {
+          <div class="ui-table-wrap">
+            <table class="ui-table incident-table">
+              <thead>
+                <tr><th>案件</th><th>類別・司機</th><th>說明</th><th>車輛・門市</th><th>狀態</th><th>回報時間</th></tr>
+              </thead>
+              <tbody>
+                @for (item of visibleCases(); track item.id) {
+                  <tr
+                    class="is-clickable"
+                    tabindex="0"
+                    [class.is-selected]="selectedCase()?.id === item.id"
+                    [attr.aria-current]="selectedCase()?.id === item.id ? 'true' : null"
+                    (click)="selectCase(item.id)"
+                    (keydown.enter)="selectCase(item.id)"
+                  >
+                    <td class="ui-mono">#{{ item.id }}</td>
+                    <td><strong>{{ caseCategoryLabel(item) }}</strong> · <span>{{ item.driverName ?? '舊版回報' }}</span></td>
+                    <td class="incident-desc" [title]="item.description">
+                      @if (item.canContinue === false) {
+                        <span class="is-urgent">無法繼續配送 · </span>
+                      }{{ item.description }}
+                    </td>
+                    <td>
+                      <span class="ui-mono">{{ item.vehiclePlateNumber ?? '沒有排車' }}</span>
+                      @if (item.storeName) {
+                        · <span>{{ item.storeName }}</span>
+                      }
+                    </td>
+                    <td>
+                      <span class="ui-tag" [class]="'severity-' + caseSeverity(item)">{{ caseStatusLabel(item) }}</span>
+                      @if (item.unreadCount > 0) {
+                        <span class="ui-tag is-accent unread-count">{{ item.unreadCount }} 則未讀</span>
+                      }
+                    </td>
+                    <td class="ui-mono">{{ formatDateTime(item.createdAt) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+
+      <aside class="ui-panel ui-split__detail incident-detail-panel" aria-labelledby="case-detail-title">
+        @if (selectedCase(); as item) {
+          <header class="ui-panel__header">
+            <h3 id="case-detail-title">{{ caseCategoryLabel(item) }} <span class="detail-id ui-mono">案件 #{{ item.id }}</span></h3>
+            <span class="ui-tag" [class]="'severity-' + caseSeverity(item)">{{ caseStatusLabel(item) }}</span>
+          </header>
+
+          <div class="ui-panel__body">
+            <!-- 動作放在詳情最上面：聊天室固定在畫面右下角，開著時會蓋住詳情欄的下半部 -->
+            @if (item.status === 'OPEN') {
+              <div class="detail-actions">
+                @if (item.acceptedAt === null) {
+                  <button type="button" class="ui-btn-default" (click)="openCloseCaseDialog()" [disabled]="caseAction() !== null">
+                    直接結案
+                  </button>
+                  <button type="button" class="ui-btn-primary" (click)="acceptSelectedCase()" [disabled]="caseAction() !== null">
+                    {{ caseAction() === 'accept' ? '接收中...' : '接收並開啟對話' }}
+                  </button>
+                } @else {
+                  <button type="button" class="ui-btn-default" (click)="openSelectedCaseChat()">
+                    開啟對話{{ item.unreadCount > 0 ? '（' + item.unreadCount + ' 則未讀）' : '' }}
+                  </button>
+                  <button type="button" class="ui-btn-primary" (click)="openCloseCaseDialog()" [disabled]="caseAction() !== null">
+                    填寫結果並結案
+                  </button>
+                }
+              </div>
+            }
+
+            <table class="ui-desc">
+              <tbody>
+                <tr><th>回報司機</th><td>{{ item.driverName ?? '--' }}</td></tr>
+                <tr><th>車輛</th><td class="ui-mono">{{ item.vehiclePlateNumber ?? '沒有排車' }}</td></tr>
+                <tr><th>訂單</th><td class="ui-mono">{{ item.orderNumber ?? '整台車的狀況' }}</td></tr>
+                <tr><th>門市</th><td>{{ item.storeName ?? '--' }}</td></tr>
+                <tr><th>能否繼續配送</th><td [class.is-urgent]="item.canContinue === false">{{ canContinueLabel(item) }}</td></tr>
+                <tr><th>回報時間</th><td class="ui-mono">{{ formatDateTime(item.createdAt) }}</td></tr>
+                <tr>
+                  <th>接收</th>
+                  <td>{{ item.acceptedAt ? (item.acceptedAdminName ?? '--') + ' · ' + formatDateTime(item.acceptedAt) : '還沒有人接收' }}</td>
+                </tr>
+                @if (item.status === 'CLOSED') {
+                  <tr><th>結案</th><td>{{ item.handledBy ?? '--' }} · {{ formatDateTime(item.handledAt) }}</td></tr>
+                }
+                <tr><th>司機說明</th><td class="pre-wrap">{{ item.description }}</td></tr>
+                @if (item.photoUrl) {
+                  <tr>
+                    <th>照片</th>
+                    <td>
+                      <a class="case-photo" [href]="item.photoUrl" target="_blank" rel="noopener" title="開啟原圖">
+                        <img [src]="item.photoUrl" alt="司機附的照片" loading="lazy" />
+                      </a>
+                    </td>
+                  </tr>
+                }
+                @if (item.status === 'CLOSED') {
+                  <tr><th>處理結果</th><td class="pre-wrap">{{ item.resolution }}</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p class="ui-empty">選取一件司機回報，可以接收、開啟對話或結案。</p>
+        }
+      </aside>
+    </section>
+  } @else {
+    @if (errorMessage()) {
+      <p class="ui-alert is-danger"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p>
+    }
+    @if (actionMessage()) {
+      <p class="ui-alert is-ok"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
+    }
+
+    <section class="ui-split" aria-label="到期異常提醒">
+      <section class="ui-panel" aria-label="到期配送異常清單">
+        @if (loading()) {
+          <p class="ui-empty">正在讀取到期異常提醒...</p>
+        } @else if (errorMessage()) {
+          <p class="ui-empty">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
+        } @else if (filteredIncidents().length === 0) {
+          <p class="ui-empty">
+            目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
+          </p>
+        } @else {
+          <div class="ui-table-wrap">
+            <table class="ui-table incident-table">
+              <thead>
+                <tr><th>異常</th><th>類型</th><th>來源訂單</th><th>後續訂單</th><th>送審時間</th><th>狀態</th></tr>
+              </thead>
+              <tbody>
+                @for (incident of filteredIncidents(); track incident.id) {
+                  <tr
+                    class="is-clickable"
+                    tabindex="0"
+                    [class.is-selected]="selectedIncident()?.id === incident.id"
+                    [attr.aria-current]="selectedIncident()?.id === incident.id ? 'true' : null"
+                    (click)="selectIncident(incident.id)"
+                    (keydown.enter)="selectIncident(incident.id)"
+                  >
+                    <td class="ui-mono">#{{ incident.id }}</td>
+                    <td><strong>{{ exceptionTypeLabel(incident.type) }}</strong></td>
+                    <td class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</td>
+                    <td class="ui-mono">{{ incident.followUpOrderNumber ?? '--' }}</td>
+                    <td class="ui-mono">{{ formatDateTime(incident.queuedAt) }}</td>
+                    <td><span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">待確認</span></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </section>
+
+      <aside class="ui-panel ui-split__detail incident-detail-panel" aria-labelledby="incident-detail-title">
+        @if (selectedIncident(); as incident) {
+          <header class="ui-panel__header">
+            <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }} <span class="detail-id ui-mono">異常 #{{ incident.id }}</span></h3>
+            <span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">待確認</span>
+          </header>
+
+          <div class="ui-panel__body">
+            <table class="ui-desc">
+              <tbody>
+                <tr><th>來源訂單</th><td class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</td></tr>
+                <tr><th>後續訂單</th><td class="ui-mono">{{ incident.followUpOrderNumber ?? '--' }}</td></tr>
+                <tr><th>應到數量</th><td class="ui-mono">{{ quantity(incident.expectedBoxCount) }}</td></tr>
+                <tr><th>實到數量</th><td class="ui-mono">{{ quantity(incident.deliveredBoxCount) }}</td></tr>
+                <tr><th>待補送數量</th><td class="ui-mono">{{ quantity(incident.replacementRequiredBoxCount) }}</td></tr>
+                <tr><th>送審時間</th><td class="ui-mono">{{ formatDateTime(incident.queuedAt) }}</td></tr>
+                <tr><th>異常說明</th><td class="pre-wrap">{{ incident.description || '尚無額外異常說明。' }}</td></tr>
+                <tr><th>確認後處理</th><td>{{ incident.type === 'NO_SIGNATURE' ? '無人簽收保留隔日排程，確認後送入待排車。' : '重建單的配送日期會更新為確認當天，送入當天的待排訂單區。' }}</td></tr>
+              </tbody>
+            </table>
+
+            <div class="detail-actions">
+              <button type="button" class="ui-btn-default" (click)="refresh()" [disabled]="confirming()">
+                重新整理
+              </button>
+              <button type="button" class="ui-btn-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
+                確認並待排車
+              </button>
+            </div>
+          </div>
+        } @else {
+          <p class="ui-empty">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
+        }
+      </aside>
+    </section>
+  }
 
   @if (confirmDialogOpen()) {
     @if (selectedIncident(); as incident) {
-      <div class="modal-backdrop" (click)="closeConfirmDialog()">
+      <div class="ui-modal-backdrop" (click)="closeConfirmDialog()">
         <section
-          class="exception-modal"
+          class="ui-panel ui-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-exception-title"
           (click)="$event.stopPropagation()"
         >
-          <form class="exception-form" (submit)="$event.preventDefault(); confirmSelected()">
-            <div>
-              <p class="section-eyebrow">確認配送異常</p>
-              <h3 id="confirm-exception-title">{{ exceptionTypeLabel(incident.type) }}</h3>
+          <form (submit)="$event.preventDefault(); confirmSelected()">
+            <header class="ui-panel__header">
+              <h3 id="confirm-exception-title">確認配送異常：{{ exceptionTypeLabel(incident.type) }}</h3>
+            </header>
+            <div class="ui-panel__body">
+              <p class="confirmation-copy">
+                {{ incident.type === 'NO_SIGNATURE' ? '確認後保留無人簽收的隔日排程。' : '確認後，重建單的配送日期會更新為今天。' }}後續訂單會送入待排車，異常案件會結案。來源訂單：<span class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</span>。
+              </p>
             </div>
-            <p class="confirmation-copy">
-              確認後，後續訂單會送入待排車，異常案件會結案。來源訂單：{{ incident.sourceOrderNumber ?? '--' }}。
-            </p>
-            <div class="detail-actions">
-              <button type="button" class="button-secondary" (click)="closeConfirmDialog()" [disabled]="confirming()">
+            <div class="ui-modal__actions">
+              <button type="button" class="ui-btn-default" (click)="closeConfirmDialog()" [disabled]="confirming()">
                 取消
               </button>
-              <button type="submit" class="button-primary" [disabled]="confirming()">
+              <button type="submit" class="ui-btn-primary" [disabled]="confirming()">
                 {{ confirming() ? '確認中...' : '確認送入待排車' }}
               </button>
             </div>
@@ -209,3 +343,90 @@
     }
   }
 </main>
+
+<!-- 結案視窗：用 MatDialog 開（理由見 anomaly-center.ts 的 closeCaseDialogTemplate），寫法同 dispatch-shell 的確認執行視窗 -->
+<ng-template #closeCaseDialog>
+  @if (closingCase(); as item) {
+    <h2 mat-dialog-title>結案：{{ caseCategoryLabel(item) }} · {{ item.driverName ?? '舊版回報' }}</h2>
+    <mat-dialog-content class="close-case-dialog">
+      <p>
+        結案後，司機端的輸入框會換成下面的處理結果，雙方都不能再留言。
+        @if (item.acceptedAt === null) {
+          這件還沒有人接收，適合用在重複回報，或已經用電話處理完的情況。
+        }
+      </p>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>處理結果（司機看得到）</mat-label>
+        <textarea
+          matInput
+          rows="4"
+          maxlength="1000"
+          placeholder="例如：已派人支援，剩下的站改由明天補送"
+          [value]="closeResolution()"
+          (input)="updateCloseResolution($event)"
+        ></textarea>
+      </mat-form-field>
+      <section class="close-case-orders" aria-label="路線上還沒結束的單">
+        @switch (closeOrdersState()) {
+          @case ('loading') {
+            <p class="close-case-orders-hint">讀取路線上的訂單...</p>
+          }
+          @case ('error') {
+            <p class="ui-alert is-danger" role="alert">讀不到路線上的訂單，請關閉視窗後再試一次。</p>
+          }
+          @case ('ready') {
+            @if (closeOrders(); as orders) {
+              @if (orders.orders.length === 0) {
+                <p class="close-case-orders-hint">路線上沒有還沒結束的單，不用處理訂單。</p>
+              } @else {
+                <p class="close-case-orders-hint">
+                  勾選的單會改成配送失敗，並開一張補送單排到下一個還沒發布的日子。
+                  @if (orders.mustResolveAll) {
+                    路線日期（{{ orders.routeDate }}）已過，要全部改期補送才能結案。
+                  } @else {
+                    沒勾的單留在路線上，由司機繼續送。
+                  }
+                </p>
+                <ul>
+                  @for (order of orders.orders; track order.id) {
+                    <li>
+                      <label>
+                        <input
+                          type="checkbox"
+                          [checked]="redeliverOrderIds().has(order.id)"
+                          [disabled]="caseAction() === 'close'"
+                          (change)="toggleRedeliverOrder(order.id, $event)"
+                        />
+                        <span class="order-number">{{ order.orderNumber }}</span>
+                        <span>{{ order.storeName ?? '未知門市' }}</span>
+                        <span class="order-status">{{ closeOrderStatusLabel(order) }}</span>
+                      </label>
+                    </li>
+                  }
+                </ul>
+                @if (unresolvedOrderCount() > 0) {
+                  <p class="ui-alert is-danger" role="alert">還有 {{ unresolvedOrderCount() }} 張單沒勾，路線日期已過不能留單。</p>
+                }
+              }
+            }
+          }
+        }
+      </section>
+      @if (closeError()) {
+        <p class="ui-alert is-danger" role="alert">{{ closeError() }}</p>
+      }
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button type="button" class="ui-btn-default" mat-dialog-close [disabled]="caseAction() === 'close'">取消</button>
+      <button
+        type="button"
+        class="ui-btn-primary"
+        (click)="submitCloseCase()"
+        [disabled]="caseAction() === 'close' || !closeResolution().trim()
+          || closeOrdersState() !== 'ready' || unresolvedOrderCount() > 0"
+      >
+        {{ caseAction() === 'close' ? '結案中...' : '確認結案' }}
+      </button>
+    </mat-dialog-actions>
+  }
+</ng-template>

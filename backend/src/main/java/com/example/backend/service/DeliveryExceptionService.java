@@ -87,6 +87,15 @@ public class DeliveryExceptionService {
         if (exceptionCase.getType() == ExceptionType.NO_SIGNATURE) {
             throw new IllegalArgumentException("無人簽收請使用確認補送或恢復原單流程");
         }
+        if (exceptionCase.getType() == ExceptionType.DRIVER_REPORT) {
+            // 要走 DriverCaseService.close：那邊才會推 CASE_CLOSED，司機端才知道結案了
+            throw new IllegalArgumentException("司機回報請在異常中心的司機回報清單結案");
+        }
+        if (exceptionCase.getFollowUpOrderId() != null) {
+            // 有補送單的要走 confirm：在這裡結案的話補送單會一直停在待確認，
+            // 而 confirm 只收 OPEN 的案件，之後就沒有路把補送單送進待排車
+            throw new IllegalArgumentException("這筆異常有補送單，請使用確認送入待排車");
+        }
         if (exceptionCase.getStatus() != ExceptionStatus.OPEN) {
             throw new IllegalArgumentException("此配送異常已經結案");
         }
@@ -123,8 +132,15 @@ public class DeliveryExceptionService {
                     .orElseThrow(() -> new EntityNotFoundException(
                             "找不到後續訂單，ID：" + exceptionCase.getFollowUpOrderId()));
         }
-        if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM) {
-            followUpOrder.setDeliveryDate(nextDispatchDate(followUpOrder, now.toLocalDate()));
+        boolean dispatchToday = exceptionCase.getType() != ExceptionType.NO_SIGNATURE;
+        if (dispatchToday && followUpOrder.getRouteId() != null) {
+            throw new IllegalArgumentException("異常重建單已排車，請先確認現有指派，不能直接改日期");
+        }
+        if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM
+                || (dispatchToday && followUpOrder.getStatus() == OrderStatus.CONFIRMED)) {
+            // 除無人簽收保留隔日排程，其餘異常以主管確認的台北日期回到當天待排區。
+            followUpOrder.setDeliveryDate(dispatchToday
+                    ? now.toLocalDate() : nextDispatchDate(followUpOrder, now.toLocalDate()));
             followUpOrder.setStatus(OrderStatus.CONFIRMED);
             ordersDAO.save(followUpOrder);
         } else if (followUpOrder.getStatus() != OrderStatus.CONFIRMED) {
@@ -198,7 +214,12 @@ public class DeliveryExceptionService {
         exceptionCasesDAO.saveAll(dueCases);
     }
 
-    private LocalDate nextDispatchDate(OrdersEntity order, LocalDate today) {
+    /**
+     * 補送單的配送日期：從今天（原單日期還沒到就用原單日期）開始，跳過這個倉庫已經發布路線的日子。
+     * 已發布的日子司機已經拿到任務，塞新單進去不會出現在任何人的路線上。
+     * 司機回報結案改期補送（DriverCaseService）也用這個規則。
+     */
+    LocalDate nextDispatchDate(OrdersEntity order, LocalDate today) {
         LocalDate candidate = order.getDeliveryDate().isBefore(today)
                 ? today
                 : order.getDeliveryDate();

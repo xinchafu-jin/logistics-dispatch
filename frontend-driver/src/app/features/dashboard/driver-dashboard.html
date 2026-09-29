@@ -52,7 +52,7 @@
 
   @if (activeTab() === 'map') {
     <section class="map-content" aria-label="配送地圖">
-      <!-- 轉彎提示列：只在導航中、而且後端有回轉彎資料時顯示；右邊讓出位置給聊天、定位按鈕 -->
+      <!-- 轉彎提示列：獨佔最上方一整行（100% 滿寬），右側支援中心與定位鈕自動退到下一行 -->
       @if (isNavigating() && currentManeuver(); as step) {
         <section class="turn-banner" [class.is-arrived]="hasArrived()" aria-label="轉彎提示">
           <mat-icon class="turn-banner__icon" aria-hidden="true">{{ maneuverIconFor(step) }}</mat-icon>
@@ -74,20 +74,24 @@
           </button>
         </section>
       }
-      <div class="map-quick-actions">
+      <div
+        class="map-quick-actions"
+        [class.has-turn-banner]="isNavigating() && !!currentManeuver()"
+      >
+        <!-- 支援中心：回報問題、案件對話、一般對話都從這裡進；紅點是一般對話加上所有案件的未讀 -->
         <button
           type="button"
           matIconButton
           class="chat-control"
-          (click)="openDriverChat()"
-          title="聊天室"
-          aria-label="聊天室"
-          [matBadge]="unreadChatCount() > 99 ? '99+' : unreadChatCount()"
-          [matBadgeHidden]="unreadChatCount() === 0"
-          [matBadgeDescription]="unreadChatCount() + ' 則未讀訊息'"
+          (click)="openSupportCenter()"
+          title="支援中心"
+          aria-label="支援中心"
+          [matBadge]="supportUnreadCount() > 99 ? '99+' : supportUnreadCount()"
+          [matBadgeHidden]="supportUnreadCount() === 0"
+          [matBadgeDescription]="supportUnreadCount() + ' 則未讀訊息'"
           matBadgeSize="small"
         >
-          <mat-icon aria-hidden="true">forum</mat-icon>
+          <mat-icon aria-hidden="true">support_agent</mat-icon>
         </button>
         <button
           type="button"
@@ -107,7 +111,7 @@
         [class.is-dragging]="isAttendanceSheetDragging()"
         [class.is-navigation-active]="isNavigating()"
         [style.--attendance-sheet-drag.px]="attendanceSheetDragOffset()"
-        aria-labelledby="attendance-title"
+        aria-label="當前站點導航抽屜"
       >
         <button
           type="button"
@@ -122,8 +126,18 @@
         >
           <span class="attendance-drawer-grip" aria-hidden="true"></span>
           <span class="attendance-drawer-summary">
-            <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
-            <strong>{{ statusLabel() }}</strong>
+            @if (attendanceViewState() === 'not-clocked-in') {
+              <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
+              <strong>尚未完成今日上班打卡</strong>
+            } @else if (selectedTask(); as currentTask) {
+              <small>
+                下一站 · {{ navigationRouteDetail() || (attendance()?.gpsAllowed ? 'GPS 回報中' : statusLabel()) }}
+              </small>
+              <strong>第 {{ currentTask.stop.sequence }} 站 · {{ currentTask.stop.storeName }}</strong>
+            } @else {
+              <small>出勤狀態 · {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}</small>
+              <strong>{{ destinationName() }}</strong>
+            }
           </span>
           @if (isAttendanceSheetExpanded()) {
             <mat-icon aria-hidden="true">keyboard_arrow_down</mat-icon>
@@ -131,217 +145,384 @@
             <mat-icon aria-hidden="true">keyboard_arrow_up</mat-icon>
           }
         </button>
+
         <div id="attendance-drawer-content" class="attendance-drawer-content">
-        <div class="sheet-heading">
-          <div>
-            <p class="eyebrow">出勤狀態</p>
-            <h2 id="attendance-title">{{ statusLabel() }}</h2>
-          </div>
-          @if (attendance()?.gpsAllowed) {
-            <span class="gps-status is-active"
-            ><mat-icon aria-hidden="true">location_on</mat-icon> GPS 回報中</span
-            >
-          } @else {
-            <span class="gps-status">GPS 已停止</span>
-          }
-        </div>
-
-        <div class="route-summary" aria-label="配送路線狀態">
-          <div class="route-stop">
-            <span class="route-marker is-current" aria-hidden="true">A</span>
-            <span>
-              <strong>目前位置</strong>
-              <small>{{ mapLocationStatus() }}</small>
-            </span>
-          </div>
-          <span class="route-connector" aria-hidden="true"></span>
-          <div class="route-stop" [class.is-pending]="!selectedTask()">
-            <span class="route-marker" aria-hidden="true">B</span>
-            <span>
-              <strong>下一送達點</strong>
-              <small>{{ destinationName() }}</small>
-            </span>
-          </div>
-        </div>
-
-        @if (hasNavigationDestination()) {
-          @if (navigationRouteState() === 'loading') {
-            <p class="navigation-route-detail">正在規劃道路路線...</p>
-          } @else if (navigationRouteState() === 'ready' && navigationRouteDetail(); as detail) {
-            <p class="navigation-route-detail">{{ detail }}</p>
-          } @else if (navigationRouteState() === 'error') {
-            <p class="navigation-route-detail is-error">道路路線暫時無法取得。</p>
-          }
-        } @else {
-          <p class="destination-copy">{{ destinationDetail() }}</p>
-        }
-
-        <button
-          type="button"
-          [class]="isNavigating() ? 'danger-action' : 'primary-action'"
-          (click)="isNavigating() ? stopNavigation() : startNavigation()"
-          [disabled]="!selectedTask()"
-        >
-          {{ isNavigating() ? '結束導航' : '開始導航' }}
-        </button>
-
-        @if (attendanceViewState() === 'loading') {
-          <p class="sheet-copy">正在取得今日出勤狀態...</p>
-        } @else if (attendanceViewState() === 'error') {
-          <p class="sheet-copy">今日出勤資料暫時無法取得。</p>
-          <button type="button" class="outline-action" (click)="refreshAttendance()">
-            重新取得狀態
-          </button>
-        } @else if (attendanceViewState() === 'not-clocked-in') {
-          <p class="sheet-copy">尚未完成今日上班打卡。</p>
-          <button
-            type="button"
-            class="primary-action"
-            (click)="clockIn()"
-            [disabled]="isSubmitting()"
-          >
-            <mat-icon aria-hidden="true">play_arrow</mat-icon>
-            {{ isSubmitting() ? '處理中...' : '上班打卡' }}
-          </button>
-          } @else if (attendance(); as todayAttendance) {
-          <div class="attendance-meta">
-            <span>
-              <small>上班</small>
-              <strong>{{ formatTime(todayAttendance.clockInAt) }}</strong>
-            </span>
-            <span>
-              <small>下班</small>
-              <strong>{{ formatTime(todayAttendance.clockOutAt) }}</strong>
-            </span>
-            <span class="attendance-meta-status">
-              <small>定位</small>
-              <strong>{{ gpsTracking.lastUploadedAt() ? '已回報' : '等待定位' }}</strong>
-            </span>
-            @if (todayAttendance.punctualityStatus) {
-              <span class="attendance-meta-status">
-                <small>出勤判定</small>
-                <strong>{{ attendancePunctualityLabel(todayAttendance) }}</strong>
-              </span>
-            }
-          </div>
-
-          @if (todayAttendance.status === 'WORKING' || todayAttendance.status === 'OVERTIME') {
-            <div class="attendance-actions">
-              <button
-                type="button"
-                class="outline-action"
-                (click)="startBreak()"
-                [disabled]="isSubmitting() || todayAttendance.breakUsed"
-              >
-                <mat-icon aria-hidden="true">coffee</mat-icon>
-                {{ todayAttendance.breakUsed ? '今日休息已使用' : '休息' }}
-              </button>
-              <button
-                type="button"
-                class="danger-action"
-                (click)="clockOut()"
-                [disabled]="isSubmitting()"
-              >
-                <mat-icon aria-hidden="true">stop_circle</mat-icon>
-                下班
-              </button>
-            </div>
-          } @else if (todayAttendance.status === 'ON_BREAK') {
-            <div class="break-status">
-              <span>休息倒數</span>
-              <strong>{{ formatBreakCountdown() }}</strong>
-            </div>
-          } @else {
-            <p class="sheet-copy">今日已完成下班打卡，定位上傳已停止。</p>
-          }
-        }
-
-        <section class="mileage-panel mileage-panel--drawer" aria-labelledby="mileage-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">車輛</p>
-              <h2 id="mileage-title">今日里程</h2>
-            </div>
-            <mat-icon aria-hidden="true">speed</mat-icon>
-          </div>
-          <p>上班後記錄出車里程，下班前記錄收車里程。</p>
-          <div class="mileage-form-row">
-            <label>
-              <span>出車表讀數（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18400"
-                [value]="startMileageReading()"
-                (input)="updateStartMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
+          @if (attendanceViewState() === 'loading') {
+            <p class="sheet-copy">正在取得今日出勤狀態...</p>
+          } @else if (attendanceViewState() === 'error') {
+            <p class="sheet-copy">今日出勤資料暫時無法取得。</p>
+            <button type="button" class="outline-action" (click)="refreshAttendance()">
+              重新取得狀態
+            </button>
+          } @else if (attendanceViewState() === 'not-clocked-in') {
+            <p class="sheet-copy">尚未完成今日上班打卡，打卡後即可開始路線導航與點交作業。</p>
             <button
               type="button"
-              class="mileage-start-button"
-              (click)="submitStartMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
+              class="primary-action"
+              (click)="clockIn()"
+              [disabled]="isSubmitting()"
             >
               <mat-icon aria-hidden="true">play_arrow</mat-icon>
-              出車
+              {{ isSubmitting() ? '處理中...' : '立即上班打卡' }}
             </button>
-          </div>
-          <div class="mileage-form-row">
-            <label>
-              <span>收車表讀數（km）</span>
-              <input
-                type="number"
-                inputmode="numeric"
-                min="0"
-                step="1"
-                placeholder="例如 18438"
-                [value]="endMileageReading()"
-                (input)="updateEndMileage($event)"
-                [disabled]="!canRecordMileage() || isMileageSubmitting()"
-              />
-            </label>
-            <button
-              type="button"
-              class="mileage-end-button"
-              (click)="submitEndMileage()"
-              [disabled]="!canRecordMileage() || isMileageSubmitting()"
-            >
-              <mat-icon aria-hidden="true">stop_circle</mat-icon>
-              收車
-            </button>
-          </div>
-          <button
-            type="button"
-            class="outline-action mileage-recalculate-button"
-            (click)="recalculateMileage()"
-            [disabled]="isMileageSubmitting()"
-          >
-            <mat-icon aria-hidden="true">sync</mat-icon>
-            依 GPS 重新結算
-          </button>
-          @if (!canRecordMileage()) {
-            <small class="mileage-note">上班或加班期間才能登記；休息與下班狀態不會送出里程。</small>
+          } @else if (selectedTask(); as currentTask) {
+            <div class="map-stop-overview">
+              <div class="map-stop-overview__copy">
+                <p class="map-stop-address">
+                  <mat-icon aria-hidden="true">place</mat-icon>
+                  <span>{{ currentTask.stop.address }}</span>
+                </p>
+                <p class="map-stop-meta">
+                  <strong>應送 {{ currentTask.stop.expectedBoxCount }} 箱</strong>
+                  @if (currentTask.stop.receivingStart && currentTask.stop.receivingEnd) {
+                    <span>
+                      · 收貨 {{ formatTime(currentTask.stop.receivingStart) }} -
+                      {{ formatTime(currentTask.stop.receivingEnd) }}
+                    </span>
+                  }
+                </p>
+              </div>
+              <em [class]="'task-status is-' + currentTask.stop.orderStatus.toLowerCase()">
+                {{ taskStatusLabel(currentTask.stop.orderStatus) }}
+              </em>
+            </div>
+
+            @if (navigationRouteState() === 'loading') {
+              <p class="navigation-route-detail">正在規劃道路路線...</p>
+            } @else if (navigationRouteState() === 'error') {
+              <p class="navigation-route-detail is-error">道路路線暫時無法取得。</p>
+            }
+
+            @if (taskActionMessage()) {
+              <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
+            }
+            @if (taskActionError()) {
+              <p class="task-feedback is-error">{{ taskActionError() }}</p>
+            }
+
+            <div class="map-stop-actions">
+              <button
+                type="button"
+                [class]="isNavigating() ? 'danger-action' : 'primary-action'"
+                (click)="isNavigating() ? stopNavigation() : startNavigation()"
+                [disabled]="!isNavigating() && !canStartNavigation()"
+              >
+                <mat-icon aria-hidden="true">{{ isNavigating() ? 'stop_circle' : 'near_me' }}</mat-icon>
+                {{ isNavigating() ? '結束導航' : '開始導航' }}
+              </button>
+
+              @if (canLoad(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="setActiveTab('tasks'); openLoadingAction(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">fact_check</mat-icon>
+                  點交作業
+                </button>
+              } @else if (canMarkArrived(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="arriveAtStop(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">location_on</mat-icon>
+                  {{ isTaskSubmitting() ? '處理中...' : '抵達門市' }}
+                </button>
+              } @else if (canCompleteDelivery(currentTask.stop)) {
+                <button
+                  type="button"
+                  class="primary-action map-stop-actions__secondary"
+                  (click)="openDeliveryAction(currentTask.stop)"
+                  [disabled]="isTaskSubmitting()"
+                >
+                  <mat-icon aria-hidden="true">inventory_2</mat-icon>
+                  交貨處理
+                </button>
+              } @else {
+                <button
+                  type="button"
+                  class="outline-action"
+                  (click)="setActiveTab('tasks')"
+                >
+                  <mat-icon aria-hidden="true">format_list_bulleted</mat-icon>
+                  查看任務清單
+                </button>
+              }
+            </div>
+            @if (!isNavigating() && pendingLoadingCount() > 0) {
+              <p class="sheet-copy">還有 {{ pendingLoadingCount() }} 筆訂單未完成倉庫點交，全部點交後才能導航。</p>
+            }
+
+            @if (isDeliveryActionOpen(currentTask.stop)) {
+              <section class="delivery-action-panel" aria-label="交貨處理">
+                <p>預計 {{ currentTask.stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
+                <label>
+                  <span>備註（選填）</span>
+                  <textarea
+                    rows="2"
+                    maxlength="500"
+                    placeholder="例如收貨人、現場狀況"
+                    [value]="deliveryNotes()"
+                    (input)="updateDeliveryNotes($event)"
+                  ></textarea>
+                </label>
+                <label class="delivery-photo-input">
+                  <span>交貨照片（選填）</span>
+                  <input
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    [disabled]="isTaskSubmitting()"
+                    (change)="selectDeliveryPhoto($event)"
+                  />
+                  @if (deliveryPhoto(); as photo) {
+                    <small>已選擇：{{ photo.name }}</small>
+                  }
+                </label>
+                <div class="delivery-action-buttons">
+                  <button
+                    type="button"
+                    class="delivery-complete-button"
+                    (click)="completeDelivery(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">check_circle</mat-icon>
+                    {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-exception-button"
+                    (click)="reportNoSignature(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                    無人簽收
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-exception-button"
+                    (click)="reportStopIssue(currentTask.stop)"
+                    [disabled]="isTaskSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">report_problem</mat-icon>
+                    貨況異常
+                  </button>
+                  <button
+                    type="button"
+                    class="delivery-cancel-button"
+                    (click)="closeDeliveryAction()"
+                  >
+                    取消
+                  </button>
+                </div>
+              </section>
+            }
+          } @else {
+            <p class="destination-copy">{{ destinationDetail() }}</p>
           }
-          @if (mileageMessage()) {
-            <p class="mileage-feedback is-success">{{ mileageMessage() }}</p>
-          }
-          @if (mileageError()) {
-            <p class="mileage-feedback is-error">{{ mileageError() }}</p>
-          }
-        </section>
         </div>
       </section>
     </section>
   } @else {
     <section class="content-panel">
       @if (activeTab() === 'tasks') {
-        <div class="panel-heading">
-          <p class="eyebrow">任務</p>
-          <h1>今日任務</h1>
-        </div>
+        <section class="duty-stage-card" aria-label="今日勤務階段">
+          <header class="duty-stage-card__header">
+            <div>
+              <h1>{{ statusLabel() }}</h1>
+            </div>
+            <span class="gps-status" [class.is-active]="!!attendance()?.gpsAllowed">
+              <mat-icon aria-hidden="true">location_on</mat-icon>
+              {{ attendance()?.gpsAllowed ? 'GPS 回報中' : 'GPS 已停止' }}
+            </span>
+          </header>
+
+          @if (attendanceViewState() === 'loading') {
+            <p class="sheet-copy">正在取得今日出勤狀態...</p>
+          } @else if (attendanceViewState() === 'error') {
+            <p class="task-feedback is-error">{{ attendanceError() }}</p>
+            <button type="button" class="outline-action" (click)="refreshAttendance()">
+              <mat-icon aria-hidden="true">refresh</mat-icon>
+              重新載入出勤狀態
+            </button>
+          } @else if (attendanceViewState() === 'not-clocked-in') {
+            <p class="sheet-copy">請先完成今日上班打卡，再進行出車前安全檢查與倉庫點交。</p>
+            <button
+              type="button"
+              class="primary-action"
+              (click)="clockIn()"
+              [disabled]="isSubmitting()"
+            >
+              <mat-icon aria-hidden="true">play_arrow</mat-icon>
+              {{ isSubmitting() ? '打卡中...' : '上班打卡' }}
+            </button>
+          } @else if (attendance(); as record) {
+            <p class="duty-stage-meta">
+              <span>上班 {{ formatTime(record.clockInAt) }}</span>
+              @if (record.clockOutAt) {
+                <span>· 下班 {{ formatTime(record.clockOutAt) }}</span>
+              }
+              @if (record.punctualityStatus) {
+                <span>· 出勤判定：<strong>{{ attendancePunctualityLabel(record) }}</strong></span>
+              }
+            </p>
+
+            @if (record.status === 'ON_BREAK') {
+              <div class="break-status">
+                <span>休息倒數</span>
+                <strong>{{ formatBreakCountdown() }}</strong>
+              </div>
+            }
+
+            @if (attendanceError()) {
+              <p class="task-feedback is-error">{{ attendanceError() }}</p>
+            }
+            @if (emergencyLeaveMessage()) {
+              <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
+            }
+            @if (emergencyLeaveError()) {
+              <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
+            }
+
+            <div class="duty-stage-actions">
+              <button
+                type="button"
+                class="outline-action"
+                (click)="startBreak()"
+                [disabled]="
+                  isSubmitting() ||
+                  record.breakUsed ||
+                  (record.status !== 'WORKING' && record.status !== 'OVERTIME')
+                "
+              >
+                <mat-icon aria-hidden="true">coffee</mat-icon>
+                {{
+                  record.status === 'ON_BREAK'
+                    ? '休息 ' + formatBreakCountdown()
+                    : record.breakUsed
+                      ? '今日已休息'
+                      : '休息'
+                }}
+              </button>
+              <button
+                type="button"
+                class="outline-action"
+                (click)="toggleEndWorkPanel()"
+              >
+                <mat-icon aria-hidden="true">{{
+                  isEndWorkPanelOpen() ? 'expand_less' : 'flag'
+                }}</mat-icon>
+                收車 / 下班
+              </button>
+              <button
+                type="button"
+                class="outline-action duty-stage-actions__emergency"
+                (click)="
+                  isEmergencyLeaveFormOpen()
+                    ? closeEmergencyLeaveForm()
+                    : openEmergencyLeaveForm()
+                "
+                [disabled]="!canRequestEmergencyLeave() && !isEmergencyLeaveFormOpen()"
+                title="途中臨時請假（由主管指派接手司機）"
+              >
+                <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                途中換手
+              </button>
+            </div>
+
+            @if (isEndWorkPanelOpen()) {
+              <div class="end-work-panel" aria-label="收車里程與下班打卡">
+                <p class="end-work-panel__title">收車里程登記與下班</p>
+                @if (mileageMessage()) {
+                  <p class="task-feedback is-success">{{ mileageMessage() }}</p>
+                }
+                @if (mileageError()) {
+                  <p class="task-feedback is-error">{{ mileageError() }}</p>
+                }
+                <div class="mileage-form-row">
+                  <label>
+                    <span>收車時行車紀錄器里程（km）</span>
+                    <input
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      step="1"
+                      placeholder="例如 18438"
+                      [value]="endMileageReading()"
+                      [disabled]="!canRecordMileage() || isMileageSubmitting()"
+                      (input)="updateEndMileage($event)"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="mileage-end-button"
+                    (click)="submitEndMileage()"
+                    [disabled]="!canRecordMileage() || isMileageSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">flag</mat-icon>
+                    登記收車
+                  </button>
+                </div>
+                <div class="end-work-panel__actions">
+                  <button
+                    type="button"
+                    class="outline-action"
+                    (click)="recalculateMileage()"
+                    [disabled]="isMileageSubmitting()"
+                  >
+                    <mat-icon aria-hidden="true">sync</mat-icon>
+                    依 GPS 重新結算
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-action"
+                    (click)="clockOut()"
+                    [disabled]="
+                      isSubmitting() ||
+                      (record.status !== 'WORKING' && record.status !== 'OVERTIME')
+                    "
+                  >
+                    <mat-icon aria-hidden="true">stop_circle</mat-icon>
+                    {{ record.status === 'CLOCKED_OUT' ? '已下班' : '下班打卡' }}
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (isEmergencyLeaveFormOpen()) {
+              <div class="end-work-panel" aria-label="途中換手臨時請假">
+                <p class="end-work-panel__title">途中臨時請假（請求主管指派接手司機）</p>
+                <label class="delivery-action-panel emergency-leave-reason">
+                  <span>請假原因</span>
+                  <textarea
+                    rows="2"
+                    maxlength="500"
+                    placeholder="請簡述需要臨時換手的原因"
+                    [value]="emergencyLeaveReason()"
+                    [disabled]="isEmergencyLeaveSubmitting()"
+                    (input)="updateEmergencyLeaveReason($event)"
+                  ></textarea>
+                </label>
+                <div class="end-work-panel__actions">
+                  <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-action"
+                    (click)="submitEmergencyLeave()"
+                    [disabled]="isEmergencyLeaveSubmitting()"
+                  >
+                    {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
+                  </button>
+                </div>
+              </div>
+            }
+          }
+        </section>
+
         @if (taskActionMessage()) {
           <p class="task-feedback is-success">{{ taskActionMessage() }}</p>
         }
@@ -371,316 +552,328 @@
               <article class="task-route-card">
                 <header class="task-route-heading">
                   <div>
-                    <p>路線 {{ route.routeId }}</p>
+                    <p>路線 #{{ route.routeId }} · {{ route.stopCount }} 個站點 · 共 {{ route.totalBoxes }} 箱</p>
                     <h2>{{ route.warehouse.name }}</h2>
                   </div>
                   <span>{{ route.vehicle.plateNumber }}</span>
                 </header>
-                <p class="task-route-meta">
-                  {{ route.stopCount }} 個站點 · {{ route.totalBoxes }} 箱
-                </p>
-                <ol class="task-stop-list">
-                  @for (stop of route.stops; track stop.orderId) {
-                    <li
-                      class="task-stop"
-                      [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)"
-                    >
-                      <span class="stop-sequence">{{ stop.sequence }}</span>
-                      <div class="task-stop-copy">
-                        <strong>{{ stop.storeName }}</strong>
-                        <small>{{ stop.address }}</small>
-                        <span>
-                          {{ stop.expectedBoxCount }} 箱@if (stop.receivingStart && stop.receivingEnd) {
-                          · {{ formatTime(stop.receivingStart) }} - {{ formatTime(stop.receivingEnd) }}
-                        }
-                          {{ stop.expectedBoxCount }} 箱
-                          @if (stop.receivingStart && stop.receivingEnd) {
-                            · {{ formatTime(stop.receivingStart) }} -
-                            {{ formatTime(stop.receivingEnd) }}
-                          }
-                        </span>
-                        <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
-                          {{ taskStatusLabel(stop.orderStatus) }}
-                        </em>
-                      </div>
-                      <div class="task-stop-actions">
-                        <button
-                          type="button"
-                          class="task-navigation-button"
-                          (click)="selectTaskForNavigation(route, stop)"
-                          [disabled]="!canNavigate(stop)"
-                          [title]="
-                            canNavigate(stop)
-                              ? '在地圖顯示並開始導航'
-                              : '此站點尚未設定座標'
-                          "
+                @if (pendingLoadingCount() > 0) {
+                  <p class="task-route-meta">還有 {{ pendingLoadingCount() }} 筆訂單未點交；全部點交後開放導航。</p>
+                }
+                <!-- 出車前安全檢查：通過才開放這條路線的點交；記出車里程時後端也會再擋一次 -->
+                <app-pre-trip-check
+                  [route]="route"
+                  (passedChange)="setInspectionReady(route.routeId, $event)"
+                />
+                @if (activeRouteStops(route); as activeStops) {
+                  @if (activeStops.length > 0) {
+                    <ol class="task-stop-list">
+                      @for (stop of activeStops; track stop.orderId) {
+                        <li
+                          class="task-stop"
+                          [class.is-selected]="isSelectedTask(route.routeId, stop.orderId)"
                         >
-                          <mat-icon aria-hidden="true">near_me</mat-icon>
-                          <span>{{ canNavigate(stop) ? '導航' : '無座標' }}</span>
-                        </button>
-                        @if (canLoad(stop)) {
-                          <button
-                            type="button"
-                            class="task-loading-button"
-                            (click)="openLoadingAction(stop)"
-                            [disabled]="isTaskSubmitting()"
-                          >
-                            <mat-icon aria-hidden="true">fact_check</mat-icon>
-                            <span>點交</span>
-                          </button>
-                        } @else if (canMarkArrived(stop)) {
-                          <button
-                            type="button"
-                            class="task-arrive-button"
-                            (click)="arriveAtStop(stop)"
-                            [disabled]="isTaskSubmitting()"
-                          >
-                            <mat-icon aria-hidden="true">location_on</mat-icon>
-                            <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
-                          </button>
-                        } @else if (canCompleteDelivery(stop)) {
-                          <button
-                            type="button"
-                            class="task-delivery-button"
-                            (click)="openDeliveryAction(stop)"
-                            [disabled]="isTaskSubmitting()"
-                          >
-                            <mat-icon aria-hidden="true">inventory_2</mat-icon>
-                            <span>交貨</span>
-                          </button>
-                        }
-                      </div>
-                        @if (isLoadingActionOpen(stop)) {
-                          <section class="delivery-action-panel" aria-label="倉庫點交">
-                            <p>應點 {{ stop.expectedBoxCount }} 箱。請清點已裝上車、外箱完好的箱數。</p>
-                          @if (stop.items.length > 0) {
-                            <section class="loading-item-list" aria-label="商品逐項點交">
-                              <header><strong>商品明細</strong><span>每項都要勾選與實點</span></header>
-                              @for (item of stop.items; track item.id) {
-                                <article>
+                          <span class="stop-sequence">{{ stop.sequence }}</span>
+                          <div class="task-stop-copy">
+                            <strong>{{ stop.storeName }}</strong>
+                            <small>{{ stop.address }}</small>
+                            <span>
+                              {{ stop.expectedBoxCount }} 箱
+                              @if (stop.receivingStart && stop.receivingEnd) {
+                                · {{ formatTime(stop.receivingStart) }} -
+                                {{ formatTime(stop.receivingEnd) }}
+                              }
+                            </span>
+                            <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                              {{ taskStatusLabel(stop.orderStatus) }}
+                            </em>
+                          </div>
+                          <div class="task-stop-actions">
+                            <button
+                              type="button"
+                              class="task-navigation-button"
+                              (click)="selectTaskForNavigation(route, stop)"
+                              [disabled]="!canNavigate(stop)"
+                              [title]="
+                                canNavigate(stop)
+                                  ? '在地圖顯示並開始導航'
+                                  : navigationUnavailableReason(stop)
+                              "
+                            >
+                              <mat-icon aria-hidden="true">near_me</mat-icon>
+                              <span>{{ canNavigate(stop) ? '導航' : navigationUnavailableLabel(stop) }}</span>
+                            </button>
+                            @if (canLoad(stop)) {
+                              <button
+                                type="button"
+                                class="task-loading-button"
+                                (click)="openLoadingAction(stop)"
+                                [disabled]="isTaskSubmitting() || !inspectionReady()[route.routeId]"
+                                [title]="inspectionReady()[route.routeId] ? '開始倉庫點交' : '請先通過出車前安全檢查'"
+                              >
+                                <mat-icon aria-hidden="true">fact_check</mat-icon>
+                                <span>點交</span>
+                              </button>
+                            } @else if (canMarkArrived(stop)) {
+                              <button
+                                type="button"
+                                class="task-arrive-button"
+                                (click)="arriveAtStop(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                <mat-icon aria-hidden="true">location_on</mat-icon>
+                                <span>{{ isTaskSubmitting() ? '處理中' : '抵達' }}</span>
+                              </button>
+                            } @else if (canCompleteDelivery(stop)) {
+                              <button
+                                type="button"
+                                class="task-delivery-button"
+                                (click)="openDeliveryAction(stop)"
+                                [disabled]="isTaskSubmitting()"
+                              >
+                                <mat-icon aria-hidden="true">inventory_2</mat-icon>
+                                <span>交貨</span>
+                              </button>
+                            }
+                          </div>
+                          @if (isLoadingActionOpen(stop)) {
+                            <section class="delivery-action-panel loading-action-panel" aria-label="倉庫點交">
+                              <div class="loading-panel-heading">
+                                <strong>倉庫點交</strong>
+                                <span>應點 <b>{{ stop.expectedBoxCount }}</b> 箱</span>
+                              </div>
+                              <p>{{ stop.items.length > 0 ? '全部相符：全勾後按「確認點交」。有不符：只勾不符商品，按「點交不符」。' : '核對訂單品項摘要與應點箱數後，勾選確認。' }}</p>
+                            @if (stop.items.length > 0) {
+                              <section class="loading-item-list" aria-label="商品逐項點交">
+                                <header class="loading-item-heading">
+                                  <div>
+                                    <strong>商品明細</strong>
+                                    <small>勾選要確認或回報不符的商品</small>
+                                  </div>
+                                  <span class="loading-progress" aria-live="polite">{{ checkedLoadingItemCount(stop) }}/{{ stop.items.length }} 已選取</span>
+                                </header>
+                                @for (item of stop.items; track item.id) {
+                                  <article class="loading-item-row"
+                                    [class.is-checked]="loadingItemForm(item.id).checked"
+                                    [class.is-mismatch]="reportingLoadingItemIds().includes(item.id)">
+                                    <label class="loading-item-check">
+                                      <input
+                                        type="checkbox"
+                                        [checked]="loadingItemForm(item.id).checked"
+                                        [disabled]="isTaskSubmitting()"
+                                        (change)="updateLoadingItemChecked(item.id, $event)"
+                                      />
+                                      <span class="loading-item-name">
+                                        <strong>{{ item.itemName }}</strong>
+                                      </span>
+                                      <b class="loading-item-expected">{{ item.expectedQuantity }} <small>{{ item.unit }}</small></b>
+                                    </label>
+                                  </article>
+                                }
+                              </section>
+                              <p class="loading-mismatch-hint">勾選至少一項不符商品即可直接送出異常，原單停止配送並重建待確認訂單。</p>
+                            } @else {
+                              <section class="loading-item-list" aria-label="訂單品項摘要核對">
+                                <header class="loading-item-heading">
+                                  <div><strong>訂單品項摘要</strong><small>舊單未提供逐項商品明細</small></div>
+                                  <span class="loading-progress" [class.is-complete]="loadingSummaryChecked()" aria-live="polite">{{ loadingSummaryChecked() ? '1/1 已核對' : '0/1 已核對' }}</span>
+                                </header>
+                                <article class="loading-item-row" [class.is-checked]="loadingSummaryChecked()">
                                   <label class="loading-item-check">
                                     <input
                                       type="checkbox"
-                                      [checked]="loadingItemForm(item.id).checked"
+                                      [checked]="loadingSummaryChecked()"
                                       [disabled]="isTaskSubmitting()"
-                                      (change)="updateLoadingItemChecked(item.id, $event)"
+                                      (change)="updateLoadingSummaryChecked($event)"
                                     />
-                                    <span>
-                                      <strong>{{ item.itemName }}</strong>
-                                      <small>
-                                        @if (item.productCode) { {{ item.productCode }} · }
-                                        應到 {{ item.expectedQuantity }} {{ item.unit }}
-                                      </small>
+                                    <span class="loading-item-name">
+                                      <strong>{{ stop.itemDescription?.trim() || '未記錄商品名稱' }}</strong>
+                                      <small>勾選表示已核對訂單摘要與箱數</small>
                                     </span>
-                                  </label>
-                                  <label>
-                                    <span>實點數量</span>
-                                    <input
-                                      type="number"
-                                      inputmode="numeric"
-                                      min="0"
-                                      step="1"
-                                      [max]="item.expectedQuantity"
-                                      [value]="loadingItemForm(item.id).loadedQuantity"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemQuantity(item.id, $event)"
-                                    />
-                                  </label>
-                                  <label class="loading-item-note">
-                                    <span>商品備註</span>
-                                    <input
-                                      type="text"
-                                      maxlength="255"
-                                      placeholder="選填"
-                                      [value]="loadingItemForm(item.id).notes"
-                                      [disabled]="isTaskSubmitting()"
-                                      (input)="updateLoadingItemNotes(item.id, $event)"
-                                    />
+                                    <b class="loading-item-expected">{{ stop.expectedBoxCount }} <small>箱</small></b>
                                   </label>
                                 </article>
-                              }
-                            </section>
-                          }
-                          <label>
-                            <span>實點箱數</span>
-                            <input
-                              type="number"
-                              inputmode="numeric"
-                              min="0"
-                              step="1"
-                              [max]="stop.expectedBoxCount"
-                              [value]="loadingBoxCount()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingBoxCount($event)"
-                            />
-                          </label>
-                          <label>
-                            <span>備註（選填）</span>
-                            <textarea
-                              rows="2"
-                              maxlength="500"
-                              placeholder="例如少了哪一箱、外箱破損"
-                              [value]="loadingNotes()"
-                              [disabled]="isTaskSubmitting()"
-                              (input)="updateLoadingNotes($event)"
-                            ></textarea>
-                          </label>
-                          @if (loadingMismatchPending()) {
-                            <p class="task-feedback is-error">
-                              實點內容與訂單不符。
-                              送出後這張單今天不配送，會建立異常單和明日補送單。請再點一次，確定再送出。
-                            </p>
-                          }
-                          <div class="delivery-action-buttons">
-                            <button
-                              type="button"
-                              class="delivery-complete-button"
-                              (click)="submitLoading(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">fact_check</mat-icon>
-                              {{
-                                isTaskSubmitting()
-                                  ? '處理中...'
-                                  : loadingMismatchPending()
-                                    ? '確定送出'
-                                    : '確認點交'
-                              }}
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-cancel-button"
-                              (click)="closeLoadingAction()"
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </section>
-                      }
-                      @if (isDeliveryActionOpen(stop)) {
-                        <section class="delivery-action-panel" aria-label="交貨處理">
-                          <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
-                          <label>
-                            <span>備註（選填）</span>
-                            <textarea
-                              rows="2"
-                              maxlength="500"
-                              placeholder="例如收貨人、現場狀況"
-                              [value]="deliveryNotes()"
-                              (input)="updateDeliveryNotes($event)"
-                            ></textarea>
-                          </label>
-                          <label class="delivery-photo-input">
-                            <span>交貨照片（選填）</span>
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                              [disabled]="isTaskSubmitting()"
-                              (change)="selectDeliveryPhoto($event)"
-                            />
-                            @if (deliveryPhoto(); as photo) {
-                              <small>已選擇：{{ photo.name }}</small>
+                              </section>
                             }
-                          </label>
-                          <div class="delivery-action-buttons">
-                            <button
-                              type="button"
-                              class="delivery-complete-button"
-                              (click)="completeDelivery(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">check_circle</mat-icon>
-                              {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-exception-button"
-                              (click)="reportNoSignature(stop)"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">warning_amber</mat-icon>
-                              無人簽收
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-exception-button"
-                              (click)="toggleDeliveryException()"
-                              [disabled]="isTaskSubmitting()"
-                            >
-                              <mat-icon aria-hidden="true">report_problem</mat-icon>
-                              貨況異常
-                            </button>
-                            <button
-                              type="button"
-                              class="delivery-cancel-button"
-                              (click)="closeDeliveryAction()"
-                            >
-                              取消
-                            </button>
-                          </div>
-                          @if (deliveryExceptionOpen()) {
-                            <label class="delivery-exception-detail">
-                              <span>異常說明</span>
-                              <textarea
-                                rows="3"
-                                maxlength="1000"
-                                placeholder="例如貨物短少、外箱破損或現場無法交付的原因"
-                                [value]="deliveryExceptionDescription()"
-                                [disabled]="isTaskSubmitting()"
-                                (input)="updateDeliveryExceptionDescription($event)"
-                              ></textarea>
+                            <details class="loading-order-note">
+                              <summary>補充備註（選填）</summary>
+                              <label>
+                                <span>整單交接說明</span>
+                                <textarea
+                                  rows="2"
+                                  maxlength="500"
+                                  placeholder="需要補充交接說明時再填寫"
+                                  [value]="loadingNotes()"
+                                  [disabled]="isTaskSubmitting()"
+                                  (input)="updateLoadingNotes($event)"
+                                ></textarea>
+                              </label>
+                            </details>
+                            <div class="delivery-action-buttons" [class.has-mismatch-action]="stop.items.length > 0">
                               <button
                                 type="button"
-                                class="delivery-exception-button"
-                                (click)="reportDeliveryException(stop)"
+                                class="delivery-complete-button"
+                                (click)="submitLoading(stop)"
+                                [disabled]="isTaskSubmitting() || !loadingChecklistComplete(stop)"
+                              >
+                                <mat-icon aria-hidden="true">fact_check</mat-icon>
+                                {{ isTaskSubmitting() ? '處理中...' : '確認點交' }}
+                              </button>
+                              <button
+                                type="button"
+                                class="delivery-cancel-button"
+                                (click)="closeLoadingAction()"
                                 [disabled]="isTaskSubmitting()"
                               >
-                                送出異常
+                                取消
                               </button>
-                            </label>
+                              @if (stop.items.length > 0) {
+                                <button
+                                  type="button"
+                                  class="loading-mismatch-button"
+                                  (click)="handleLoadingMismatch(stop)"
+                                  [disabled]="isTaskSubmitting() || checkedLoadingItemCount(stop) === 0"
+                                >
+                                  <mat-icon aria-hidden="true">report_problem</mat-icon>
+                                  {{ reportingLoadingItemIds().length > 0 ? '送出中…' : '點交不符' }}
+                                </button>
+                              }
+                            </div>
+                          </section>
+                        }
+                          @if (isDeliveryActionOpen(stop)) {
+                            <section class="delivery-action-panel" aria-label="交貨處理">
+                              <p>預計 {{ stop.expectedBoxCount }} 箱。請確認現場交貨結果。</p>
+                              <label>
+                                <span>備註（選填）</span>
+                                <textarea
+                                  rows="2"
+                                  maxlength="500"
+                                  placeholder="例如收貨人、現場狀況"
+                                  [value]="deliveryNotes()"
+                                  (input)="updateDeliveryNotes($event)"
+                                ></textarea>
+                              </label>
+                              <label class="delivery-photo-input">
+                                <span>交貨照片（選填）</span>
+                                <input
+                                  type="file"
+                                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                                  [disabled]="isTaskSubmitting()"
+                                  (change)="selectDeliveryPhoto($event)"
+                                />
+                                @if (deliveryPhoto(); as photo) {
+                                  <small>已選擇：{{ photo.name }}</small>
+                                }
+                              </label>
+                              <div class="delivery-action-buttons">
+                                <button
+                                  type="button"
+                                  class="delivery-complete-button"
+                                  (click)="completeDelivery(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">check_circle</mat-icon>
+                                  {{ isTaskSubmitting() ? '處理中...' : '確認交貨' }}
+                                </button>
+                                <button
+                                  type="button"
+                                  class="delivery-exception-button"
+                                  (click)="reportNoSignature(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">warning_amber</mat-icon>
+                                  無人簽收
+                                </button>
+                                <!-- 開支援中心的建立案件：分類是貨物問題、帶入這張單 -->
+                                <button
+                                  type="button"
+                                  class="delivery-exception-button"
+                                  (click)="reportStopIssue(stop)"
+                                  [disabled]="isTaskSubmitting()"
+                                >
+                                  <mat-icon aria-hidden="true">report_problem</mat-icon>
+                                  貨況異常
+                                </button>
+                                <button
+                                  type="button"
+                                  class="delivery-cancel-button"
+                                  (click)="closeDeliveryAction()"
+                                >
+                                  取消
+                                </button>
+                              </div>
+                            </section>
                           }
-                        </section>
+                        </li>
                       }
-                    </li>
+                    </ol>
                   }
-                </ol>
+                }
+                @if (finishedRouteStops(route); as doneStops) {
+                  @if (doneStops.length > 0) {
+                    <details class="completed-stops-group">
+                      <summary>
+                        <span>✓ 已完成／結束站點（{{ doneStops.length }} 站）</span>
+                        <span class="completed-stops-group__toggle">點擊展開 ▾</span>
+                      </summary>
+                      <ol class="task-stop-list is-finished-list">
+                        @for (stop of doneStops; track stop.orderId) {
+                          <li class="task-stop is-finished">
+                            <span class="stop-sequence">{{ stop.sequence }}</span>
+                            <div class="task-stop-copy">
+                              <strong>{{ stop.storeName }}</strong>
+                              <small>{{ stop.address }} · {{ stop.expectedBoxCount }} 箱</small>
+                            </div>
+                            <em [class]="'task-status is-' + stop.orderStatus.toLowerCase()">
+                              {{ taskStatusLabel(stop.orderStatus) }}
+                            </em>
+                          </li>
+                        }
+                      </ol>
+                    </details>
+                  }
+                }
               </article>
             }
           </div>
         }
       } @else if (activeTab() === 'schedule') {
-        <div class="panel-heading">
-          <p class="eyebrow">班表</p>
-          <h1>本月班表</h1>
-        </div>
         <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
-             每天依班別上色（scheduleDateClass），點某一天看下方明細 -->
+             日期下方顯示班別圖示／文字，點某一天看正下方明細，接著直接選擇三合一請假模式 -->
         <section class="schedule-calendar-card" aria-label="班表月曆">
           <mat-calendar
+            appScheduleCellLabels
             #scheduleCalendar
             class="driver-schedule-calendar"
             [startAt]="scheduleMonth()"
-            [selected]="selectedScheduleDate()"
+            [selected]="calendarLeaveComposer.activeMode() ? null : selectedScheduleDate()"
             [dateClass]="scheduleDateClass"
-            (selectedChange)="selectedScheduleDate.set($event!)"
+            [dateFilter]="scheduleDateFilter"
+            (selectedChange)="selectScheduleDate($event)"
           />
           <div class="schedule-legend" aria-hidden="true">
             <span class="shift-type is-work">上班</span>
             <span class="shift-type is-day_off">休假</span>
             <span class="shift-type is-leave">請假</span>
+            @if (pendingScheduleDates().size) { <span class="shift-type is-pending">申請中</span> }
           </div>
-        </section>
+          @if (pendingScheduleDates().size) {
+            <p class="schedule-pending-hint" role="status">
+              <mat-icon aria-hidden="true">hourglass_top</mat-icon>
+              {{ pendingScheduleDates().size }} 天請假申請中，等待主管審核；暫不可重複申請。
+            </p>
+          }
 
-        @if (scheduleViewState() === 'loading') {
-          <p class="schedule-state">正在取得已發布班表...</p>
-        } @else if (scheduleViewState() === 'error') {
-          <p class="schedule-state is-error">{{ scheduleError() }}</p>
-        } @else if (scheduleViewState() === 'empty') {
-          <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
-        } @else {
-          <!-- 點選那天的班次明細；沿用原本清單的一列樣式 -->
-          <div class="shift-list">
-            @if (selectedShift(); as shift) {
+          <!-- 點選日期的班次明細直接緊接在月曆下方，方便先確認當日班別再決定是否請假 -->
+          <div class="schedule-selected-shift">
+            @if (scheduleViewState() === 'loading') {
+              <p class="schedule-state">正在取得已發布班表...</p>
+            } @else if (scheduleViewState() === 'error') {
+              <p class="schedule-state is-error">{{ scheduleError() }}</p>
+            } @else if (scheduleViewState() === 'empty') {
+              <p class="schedule-state">這個月沒有已發布班表，主管發布後會顯示在月曆上。</p>
+            } @else if (selectedShift(); as shift) {
               <article class="shift-row">
                 <strong>{{ formatShiftDate(shift.workDate) }}</strong>
                 <span class="shift-type" [class]="shiftTypeClass(shift.shiftType)">{{
@@ -689,6 +882,14 @@
                 <div class="shift-details">
                   @if (shift.shiftType === 'WORK') {
                     <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
+                    @if (selectedAssignment(); as assignment) {
+                      <span>倉庫：{{ assignment.warehouseName ?? '未設定' }}</span>
+                      <span>車輛：{{ formatVehicle(assignment) }}</span>
+                    } @else if (selectedDateIsUpcoming()) {
+                      <span>倉庫：{{ profile()?.warehouseName ?? '未設定' }}（所屬倉庫）</span>
+                      <span>車輛：尚未派車</span>
+                      <small>主管發布當天路線後，才會顯示實際的倉庫與車輛。</small>
+                    }
                   }
                   @if (formatOvertime(shift.overtimeMinutes); as overtime) {
                     <span>{{ overtime }}</span>
@@ -702,160 +903,166 @@
               <p class="schedule-state">這一天沒有已發布的班次。</p>
             }
           </div>
-        }
-        <section class="mileage-panel general-leave-panel" aria-labelledby="general-leave-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">請假與特殊事由</p>
-              <h2 id="general-leave-title">申請與處理結果</h2>
-            </div>
-            <mat-icon aria-hidden="true">event_busy</mat-icon>
-          </div>
 
-          <div class="leave-mode-tabs" role="tablist" aria-label="選擇申請類型">
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'temporary'" [attr.aria-selected]="leaveApplicationTab() === 'temporary'" (click)="setLeaveApplicationTab('temporary')">當日特殊事由</button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'planned'" [attr.aria-selected]="leaveApplicationTab() === 'planned'" (click)="setLeaveApplicationTab('planned')">預排請假</button>
-            <button type="button" role="tab" [class.is-active]="leaveApplicationTab() === 'makeup'" [attr.aria-selected]="leaveApplicationTab() === 'makeup'" (click)="setLeaveApplicationTab('makeup')">事後補請</button>
-          </div>
+          <app-schedule-leave-composer
+            #calendarLeaveComposer
+            [month]="scheduleMonth()"
+            [selectedDate]="selectedScheduleDate()"
+            [shifts]="publishedShifts()"
+            [scheduleReady]="scheduleViewState() === 'ready'"
+            [requests]="leaveRequests()"
+            [requestsLoading]="isLeaveListLoading()"
+            [requestsAvailable]="leaveListAvailable()"
+            (calendarChange)="refreshScheduleCalendar()"
+            (goToToday)="showScheduleToday()"
+            (submitted)="applyCalendarLeaves($event)"
+          />
+        </section>
 
-          @if (unreadLeaveCount() > 0) {
-            <p class="leave-unread-summary" aria-live="polite">有 {{ unreadLeaveCount() }} 筆未讀審核結果</p>
-          }
-          @if (leaveMessage()) { <p class="task-feedback is-success">{{ leaveMessage() }}</p> }
-          @if (leaveError()) { <p class="task-feedback is-error">{{ leaveError() }}</p> }
-
-          @if (leaveApplicationTab() === 'temporary') {
-            <p>只處理今天 {{ leaveForm().workDate }} 的特殊事由。需要補足遲到超過 30 分鐘的時段時，請填寫起訖時間。</p>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="leaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateLeaveFormField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <div class="leave-time-fields">
-                <label><span>開始時間（整天可留白）</span><input type="time" [value]="leaveForm().leaveStart" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveStart', $event)" /></label>
-                <label><span>結束時間</span><input type="time" [value]="leaveForm().leaveEnd" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('leaveEnd', $event)" /></label>
-              </div>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請簡述今天的特殊事由" [value]="leaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateLeaveFormField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action" (click)="submitLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出當日特殊事由' }}</button>
-            </div>
-          } @else if (leaveApplicationTab() === 'planned') {
-            <p>複選明天以後的已發布上班日。待審或已核准的日期會鎖定，主管核准後才會顯示在班表。</p>
-            @if (isPlannedLeaveLoading()) { <p class="schedule-state">正在取得可預排日期...</p> }
-            <div class="planned-date-options" aria-label="可預排請假日期">
-              @for (shift of plannedLeaveShifts(); track shift.id) {
-                <button type="button" [class.is-selected]="isPlannedDateSelected(shift.workDate)" [class.is-blocked]="isPlannedDateBlocked(shift.workDate)" [disabled]="isLeaveSubmitting() || isPlannedDateBlocked(shift.workDate)" (click)="togglePlannedLeaveDate(shift.workDate)">
-                  <strong>{{ formatShiftDate(shift.workDate) }}</strong><span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
-                  @if (isPlannedDateBlocked(shift.workDate)) { <small>已送審或已核准</small> }
-                </button>
-              } @empty { @if (!isPlannedLeaveLoading()) { <p>最近 60 天沒有可預排的已發布上班日。</p> } }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="plannedLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updatePlannedLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>預排原因</span><textarea rows="3" maxlength="500" placeholder="例如回診、家庭安排" [value]="plannedLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updatePlannedLeaveField('reason', $event)"></textarea></label>
-              <button type="button" class="primary-action" (click)="submitPlannedLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出預排請假' }}</button>
-            </div>
-          } @else {
-            <p>只可選擇已結束、整天未打卡的已發布班次，不能任意挑選過去日期。</p>
-            <div class="planned-date-options" aria-label="可事後補請班次">
-              @for (candidate of makeupLeaveCandidates(); track candidate.id) {
-                <button type="button" [class.is-selected]="makeupLeaveForm().workDate === candidate.workDate" [disabled]="isLeaveSubmitting()" (click)="selectMakeupLeaveDate(candidate.workDate)">
-                  <strong>{{ formatShiftDate(candidate.workDate) }}</strong><span>整天未到班</span>
-                  <small>待補充說明</small>
-                </button>
-              } @empty { <p>目前沒有可事後補請的班次。</p> }
-            </div>
-            <div class="leave-request-form">
-              <label><span>假別</span><select [value]="makeupLeaveForm().leaveType" [disabled]="isLeaveSubmitting()" (change)="updateMakeupLeaveField('leaveType', $event)">
-                <option value="SICK">病假</option><option value="ANNUAL">年假</option><option value="PERSONAL">事假</option><option value="SPECIAL">特殊事由</option><option value="MENSTRUAL">生理假</option><option value="BEREAVEMENT">喪假</option>
-              </select></label>
-              <label><span>實際原因</span><textarea rows="3" maxlength="500" placeholder="請說明當天未到原因" [value]="makeupLeaveForm().reason" [disabled]="isLeaveSubmitting()" (input)="updateMakeupLeaveField('reason', $event)"></textarea></label>
-              <label><span>佐證照片（選填）</span><input type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" [disabled]="isLeaveSubmitting()" (change)="selectMakeupEvidence($event)" /></label>
-              @if (selectedMakeupEvidenceFile(); as evidence) { <small class="leave-file-name">{{ evidence.name }}</small> }
-              <button type="button" class="primary-action" (click)="submitMakeupLeaveRequest()" [disabled]="isLeaveSubmitting()">{{ isLeaveSubmitting() ? '送出中...' : '送出事後補請' }}</button>
-            </div>
-          }
-
-          <div class="driver-leave-history" aria-label="請假與特殊事由處理結果">
-            <label class="leave-history-filter"><span>查看日期</span><select [value]="leaveHistoryDate()" (change)="selectLeaveHistoryDate($event)"><option value="">全部日期</option>@for (date of leaveHistoryDates(); track date) { <option [value]="date">{{ formatShiftDate(date) }}</option> }</select></label>
-            @if (isLeaveListLoading()) { <p class="schedule-state">正在更新處理結果...</p> }
-            @for (request of filteredLeaveRequests(); track request.id) {
-              <article [class.is-unread]="!request.driverReadAt">
-                <header><strong>{{ formatShiftDate(request.workDate) }} · {{ leaveModeLabel(request) }}</strong><span [class]="'leave-status is-' + request.status.toLowerCase()">{{ leaveStatusLabel(request.status) }}</span></header>
-                <small>{{ leaveTypeLabel(request.leaveType) }} · {{ request.fullDay ? '整天' : formatTime(request.leaveStart) + ' - ' + formatTime(request.leaveEnd) }} · 申請於 {{ formatDateTime(request.requestedAt) }}</small>
-                <p><b>你的申請原因：</b>{{ request.requestReason }}</p>
-                <p class="decision-reason"><b>主管處理理由：</b>{{ request.decisionReason || '等待主管審核。' }}</p>
-                @if (request.evidencePhotoUrl) { <a class="leave-evidence-link" [href]="request.evidencePhotoUrl" target="_blank" rel="noopener">查看佐證照片</a> }
-                <div class="leave-request-actions">
-                  @if (!request.driverReadAt) { <button type="button" class="outline-action" (click)="markLeaveRequestRead(request)">標記已讀</button> }
-                  <button type="button" class="outline-action" (click)="toggleLeaveHistory(request)">{{ expandedLeaveId() === request.id ? '收合歷程' : '查看歷程' }}</button>
-                </div>
-                @if (expandedLeaveId() === request.id) {
-                  <div class="leave-request-events" aria-label="請假異動歷程">
-                    @if (isLeaveHistoryLoading()) { <small>正在讀取歷程...</small> } @else if (leaveHistoryErrors()[request.id]; as historyError) { <small class="is-error">{{ historyError }}</small> } @else {
-                      @for (event of leaveHistories()[request.id] ?? []; track event.id) { <p><strong>{{ leaveHistoryLabel(event.eventType) }}</strong> · {{ formatDateTime(event.occurredAt) }} @if (event.reason) { <span>· {{ event.reason }}</span> }</p> } @empty { <small>目前沒有歷程資料。</small> }
-                    }
-                  </div>
+        @if (leaveRequests().length > 0) {
+          <details class="schedule-history-card" [open]="unreadLeaveCount() > 0">
+            <summary>
+              <div class="schedule-history-card__title">
+                <strong>請假審核結果與歷程（{{ leaveRequests().length }} 筆）</strong>
+                @if (unreadLeaveCount() > 0) {
+                  <span class="leave-tab-count">{{ unreadLeaveCount() }} 筆未讀</span>
                 }
-              </article>
-            } @empty { @if (!isLeaveListLoading()) { <small>目前沒有請假或特殊事由申請。</small> } }
+              </div>
+              <span class="completed-stops-group__toggle">展開 / 收合 ▾</span>
+            </summary>
+            <div class="schedule-history-list">
+              @for (request of leaveRequests(); track request.id) {
+                <article
+                  class="schedule-history-item"
+                  [class.is-unread]="request.status !== 'PENDING' && request.reviewedAt && !request.driverReadAt"
+                >
+                  <div class="schedule-history-item__head">
+                    <strong>
+                      {{ formatShiftDate(request.workDate) }} · {{ leaveModeLabel(request) }}（{{
+                        leaveTypeLabel(request.leaveType)
+                      }}）
+                    </strong>
+                    <span class="schedule-history-status" [class]="'is-' + request.status.toLowerCase()">
+                      {{ leaveStatusLabel(request.status) }}
+                    </span>
+                  </div>
+                  @if (!request.fullDay && request.leaveStart && request.leaveEnd) {
+                    <small>時段：{{ formatTime(request.leaveStart) }} - {{ formatTime(request.leaveEnd) }}</small>
+                  }
+                  @if (request.requestReason) {
+                    <small>原因：{{ request.requestReason }}</small>
+                  }
+                  @if (request.decisionReason) {
+                    <p class="schedule-history-reply">主管回覆：{{ request.decisionReason }}</p>
+                  }
+                  @if (request.status !== 'PENDING' && request.reviewedAt && !request.driverReadAt) {
+                    <button
+                      type="button"
+                      class="outline-action schedule-history-read-btn"
+                      (click)="markLeaveRequestRead(request)"
+                    >
+                      標示已讀
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          </details>
+        }
+      } @else {
+
+        <section class="profile-card" aria-label="司機個人名片">
+          <div class="profile-photo-card">
+            <div class="profile-photo-preview">
+              @if (profilePhotoUrl(); as photoUrl) {
+                <img
+                  [src]="photoUrl"
+                  [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
+                  (error)="handleProfilePhotoLoadError()"
+                />
+              } @else {
+                <span aria-hidden="true">{{ profileInitial() }}</span>
+              }
+            </div>
+            <div class="profile-photo-copy">
+              <div class="profile-photo-title">
+                <strong>{{ profile()?.name ?? user()?.name }}</strong>
+                <span class="profile-status-pill">已安全登入</span>
+              </div>
+              <small>#{{ profile()?.id ?? user()?.id }} · 帳號 {{ profile()?.account ?? user()?.account }}</small>
+              <label
+                class="profile-photo-action"
+                [class.is-disabled]="isProfilePhotoUploading()"
+              >
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  [disabled]="isProfilePhotoUploading()"
+                  (change)="selectProfilePhoto($event)"
+                />
+                {{ isProfilePhotoUploading() ? '上傳中...' : '更換大頭照' }}
+              </label>
+            </div>
+          </div>
+
+          @if (profilePhotoMessage()) {
+            <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
+          }
+          @if (profileError()) {
+            <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
+          }
+
+          <dl class="profile-list">
+            <div>
+              <dt>所屬倉庫</dt>
+              <dd>{{ profile()?.warehouseName || '未設定' }}</dd>
+            </div>
+            <div>
+              <dt>聯絡電話</dt>
+              <dd>{{ profile()?.phone || '未設定' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <!-- 今日出勤與定位 4 格明細（由導航抽屜移入司機頁收納） -->
+        <section class="profile-attendance-card" aria-label="今日出勤與定位統計">
+          <div class="profile-attendance-card__header">
+            <strong>今日出勤與定位狀態</strong>
+            <span class="profile-status-pill">{{ statusLabel() }}</span>
+          </div>
+          <div class="profile-stats-grid">
+            <div class="profile-stat-box">
+              <span>上班打卡</span>
+              <strong>{{ attendance() ? formatTime(attendance()!.clockInAt) : '--:--' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>下班打卡</span>
+              <strong>{{ attendance() ? formatTime(attendance()!.clockOutAt) : '--:--' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>出勤判定</span>
+              <strong>{{ attendance() ? attendancePunctualityLabel(attendance()!) : '尚未打卡' }}</strong>
+            </div>
+            <div class="profile-stat-box">
+              <span>GPS 定位</span>
+              <strong>{{ attendance()?.gpsAllowed ? '回報中' : '已停止' }}</strong>
+              @if (gpsTracking.lastUploadedAt(); as lastUploaded) {
+                <small>最後 {{ formatTime(lastUploaded.toISOString()) }}</small>
+              }
+            </div>
           </div>
         </section>
 
-        <section class="mileage-panel emergency-leave-panel" aria-labelledby="emergency-leave-title">
-          <div class="mileage-heading">
-            <div>
-              <p class="eyebrow">出勤異動</p>
-              <h2 id="emergency-leave-title">臨時請假</h2>
+        <!-- 途中換手申請表單已集中在「任務頁 · 今日勤務階段卡」，司機頁預設收合成單行紀錄列 -->
+        <details class="schedule-history-card emergency-leave-panel">
+          <summary>
+            <div class="schedule-history-card__title">
+              <strong>途中換手 · 臨時請假紀錄（{{ emergencyLeaves().length }} 筆）</strong>
             </div>
-            <mat-icon aria-hidden="true">warning_amber</mat-icon>
-          </div>
-          <p>上班途中無法繼續配送時，可送出申請，由主管指定接手司機。</p>
-
-          @if (emergencyLeaveMessage()) {
-            <p class="task-feedback is-success">{{ emergencyLeaveMessage() }}</p>
-          }
-          @if (emergencyLeaveError()) {
-            <p class="task-feedback is-error">{{ emergencyLeaveError() }}</p>
-          }
-
-          @if (isEmergencyLeaveFormOpen()) {
-            <label class="delivery-action-panel emergency-leave-reason">
-              <span>請假原因</span>
-              <textarea
-                rows="3"
-                maxlength="500"
-                placeholder="請簡述需要臨時請假的原因"
-                [value]="emergencyLeaveReason()"
-                [disabled]="isEmergencyLeaveSubmitting()"
-                (input)="updateEmergencyLeaveReason($event)"
-              ></textarea>
-            </label>
-            <div class="attendance-actions emergency-leave-actions">
-              <button type="button" class="outline-action" (click)="closeEmergencyLeaveForm()">
-                取消
-              </button>
-              <button
-                type="button"
-                class="danger-action"
-                (click)="submitEmergencyLeave()"
-                [disabled]="isEmergencyLeaveSubmitting()"
-              >
-                {{ isEmergencyLeaveSubmitting() ? '送出中...' : '送出申請' }}
-              </button>
-            </div>
-          } @else {
-            <button
-              type="button"
-              class="outline-action"
-              (click)="openEmergencyLeaveForm()"
-              [disabled]="!canRequestEmergencyLeave()"
-            >
-              申請臨時請假
-            </button>
-          }
-
+            <span class="completed-stops-group__toggle">展開 / 收合 ▾</span>
+          </summary>
           <div class="emergency-leave-history" aria-label="臨時請假紀錄">
+            <small>上班途中無法繼續配送時，可於任務頁送出申請，由主管指定接手司機。</small>
             @for (leave of emergencyLeaves(); track leave.id) {
               <article>
                 <div>
@@ -874,69 +1081,8 @@
               }
             }
           </div>
-        </section>
-      } @else {
-        <div class="panel-heading">
-          <p class="eyebrow">司機</p>
-          <h1>司機資訊</h1>
-        </div>
-        <section class="profile-photo-card" aria-label="司機大頭照">
-          <div class="profile-photo-preview">
-            @if (profilePhotoUrl(); as photoUrl) {
-              <img
-                [src]="photoUrl"
-                [alt]="(profile()?.name ?? user()?.name ?? '司機') + '的大頭照'"
-                (error)="handleProfilePhotoLoadError()"
-              />
-            } @else {
-              <span aria-hidden="true">{{ profileInitial() }}</span>
-            }
-          </div>
-          <div class="profile-photo-copy">
-            <strong>{{ profile()?.name ?? user()?.name }}</strong>
-            <small>支援 JPG、PNG、WebP，檔案上限 5 MB。</small>
-            <label
-              class="profile-photo-action"
-              [class.is-disabled]="isProfilePhotoUploading()"
-            >
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                [disabled]="isProfilePhotoUploading()"
-                (change)="selectProfilePhoto($event)"
-              />
-              {{ isProfilePhotoUploading() ? '上傳中...' : '選擇大頭照' }}
-            </label>
-          </div>
-        </section>
-        @if (profilePhotoMessage()) {
-          <p class="profile-photo-feedback is-success">{{ profilePhotoMessage() }}</p>
-        }
-        @if (profileError()) {
-          <p class="profile-photo-feedback is-error">{{ profileError() }}</p>
-        }
-        <dl class="profile-list">
-          <div>
-            <dt>姓名</dt>
-            <dd>{{ profile()?.name ?? user()?.name }}</dd>
-          </div>
-          <div>
-            <dt>帳號</dt>
-            <dd>{{ profile()?.account ?? user()?.account }}</dd>
-          </div>
-          <div>
-            <dt>司機編號</dt>
-            <dd>#{{ profile()?.id ?? user()?.id }}</dd>
-          </div>
-          <div>
-            <dt>電話</dt>
-            <dd>{{ profile()?.phone || '未設定' }}</dd>
-          </div>
-          <div>
-            <dt>登入狀態</dt>
-            <dd>已安全登入</dd>
-          </div>
-        </dl>
+        </details>
+
         <button type="button" class="sign-out" (click)="signOut()">登出帳號</button>
       }
     </section>
@@ -957,14 +1103,6 @@
     </button>
     <button
       type="button"
-      [class.is-active]="activeTab() === 'profile'"
-      (click)="setActiveTab('profile')"
-    >
-      <mat-icon aria-hidden="true">person</mat-icon>
-      <span>司機</span>
-    </button>
-    <button
-      type="button"
       [class.is-active]="activeTab() === 'schedule'"
       (click)="setActiveTab('schedule')"
       [attr.aria-label]="unreadLeaveCount() ? '班表，有 ' + unreadLeaveCount() + ' 筆未讀請假結果' : '班表'"
@@ -972,78 +1110,432 @@
       <mat-icon aria-hidden="true">calendar_month</mat-icon>
       <span>班表 @if (unreadLeaveCount() > 0) { <b class="leave-tab-count">{{ unreadLeaveCount() }}</b> }</span>
     </button>
+    <button
+      type="button"
+      [class.is-active]="activeTab() === 'profile'"
+      (click)="setActiveTab('profile')"
+    >
+      <mat-icon aria-hidden="true">person</mat-icon>
+      <span>司機</span>
+    </button>
   </nav>
 </main>
 
-<!-- 與調度中心的聊天：交給 MatBottomSheet 開啟（openDriverChat），不另外開元件。
-     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到 -->
+<!-- 支援中心：交給 MatBottomSheet 開啟（openSupportCenter、reportStopIssue），不另外開元件。
+     放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到。
+     裡面三頁由 supportView 決定：home 首頁、create 建立案件、thread 對話（一般對話或某件案件） -->
 <ng-template #driverChatSheet>
   <section class="driver-chat-sheet" aria-labelledby="driver-chat-title">
     <header class="driver-chat-sheet__header">
-      <div>
-        <p class="driver-chat-sheet__eyebrow">配送支援</p>
-        <h2 id="driver-chat-title">調度中心</h2>
+      @if (supportView().kind !== 'home') {
+        <button type="button" matIconButton aria-label="回支援中心" (click)="backToSupportHome()">
+          <mat-icon aria-hidden="true">arrow_back</mat-icon>
+        </button>
+      }
+      <div class="driver-chat-sheet__heading">
+        <p class="driver-chat-sheet__eyebrow">{{ supportHeading().eyebrow }}</p>
+        <h2 id="driver-chat-title">{{ supportHeading().title }}</h2>
       </div>
-      <button type="button" matIconButton aria-label="關閉" (click)="closeDriverChat()">
+      @if (activeCase(); as current) {
+        <em [class]="caseStatusClass(current)">{{ caseStatusLabel(current) }}</em>
+      }
+      <button type="button" matIconButton aria-label="關閉" (click)="closeSupportCenter()">
         <mat-icon aria-hidden="true">close</mat-icon>
       </button>
     </header>
-    <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
-      @if (chatViewState() === 'loading') {
-        <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
-      } @else if (chatViewState() === 'error') {
-        <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
-      } @else if (chatViewState() === 'empty') {
-        <div class="driver-chat-empty">
-          <mat-icon aria-hidden="true">forum</mat-icon>
-          <strong>目前還沒有對話</strong>
-          <span>有狀況可以直接在下方留言給調度中心</span>
-        </div>
-      } @else {
-        @for (message of chatMessages(); track message.id) {
-          <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
-            <p>{{ message.content }}</p>
-            <small>
-              {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
-              @if (isOwnChatMessage(message) && message.readAt) {
-                · 已讀
+
+    @switch (supportView().kind) {
+      @case ('home') {
+        <div class="support-body">
+          @if (caseListState() === 'error') {
+            <p class="support-notice is-error" role="status">
+              案件清單暫時無法取得。還是可以回報新問題，或用一般對話聯絡調度中心。
+            </p>
+          }
+
+          @if (openCases().length > 0) {
+            <section class="support-section" aria-labelledby="support-open-title">
+              <h3 id="support-open-title" class="support-section-title">處理中的案件</h3>
+              <ul class="support-case-list">
+                @for (item of openCases(); track item.id) {
+                  <li>
+                    <!-- 還沒有人回覆的用橘框：司機一眼看得出哪件還在等 -->
+                    <button
+                      type="button"
+                      class="support-case-row"
+                      [class.is-waiting]="!item.acceptedAt"
+                      (click)="openCaseThread(item.id)"
+                    >
+                      <mat-icon aria-hidden="true">{{ caseCategoryIcon(item.category) }}</mat-icon>
+                      <span class="support-row-copy">
+                        <strong>{{ caseCategoryLabel(item.category) }}</strong>
+                        <small>{{ item.description }}</small>
+                      </span>
+                      <span class="support-case-row__meta">
+                        <em [class]="caseStatusClass(item)">{{ caseStatusLabel(item) }}</em>
+                        <small>{{ formatCaseTime(item.createdAt) }}</small>
+                      </span>
+                      @if (item.unreadCount > 0) {
+                        <b class="support-unread" [attr.aria-label]="item.unreadCount + ' 則未讀'">{{ item.unreadCount }}</b>
+                      }
+                    </button>
+                  </li>
+                }
+              </ul>
+            </section>
+          } @else if (caseListState() === 'loading') {
+            <p class="driver-chat-sheet__placeholder">正在取得案件...</p>
+          }
+
+          <section class="support-section" aria-labelledby="support-new-title">
+            <h3 id="support-new-title" class="support-section-title">回報新問題</h3>
+            <div class="support-category-grid">
+              @for (option of caseCategories; track option.code) {
+                <button
+                  type="button"
+                  class="support-category"
+                  [class.is-urgent]="option.urgent"
+                  (click)="startCase(option.code)"
+                >
+                  <mat-icon aria-hidden="true">{{ option.icon }}</mat-icon>
+                  <span>{{ option.label }}</span>
+                </button>
               }
-            </small>
-          </article>
+            </div>
+          </section>
+
+          <section class="support-section" aria-label="其他聯絡方式">
+            <button type="button" class="support-link-row" (click)="openCaseThread(null)">
+              <mat-icon aria-hidden="true">forum</mat-icon>
+              <span class="support-row-copy">
+                <strong>一般對話</strong>
+                <small>不屬於案件的事，直接留言給調度中心</small>
+              </span>
+              @if (unreadChatCount() > 0) {
+                <b class="support-unread" [attr.aria-label]="unreadChatCount() + ' 則未讀'">{{ unreadChatCount() }}</b>
+              }
+              <mat-icon aria-hidden="true">chevron_right</mat-icon>
+            </button>
+            <!-- 網路不通或 App 壞掉時案件也送不出去，一定要留一條打電話的路 -->
+            @if (warehousePhone(); as phone) {
+              <a class="support-link-row" [href]="'tel:' + phone">
+                <mat-icon aria-hidden="true">call</mat-icon>
+                <span class="support-row-copy">
+                  <strong>打給倉庫</strong>
+                  <small>{{ phone }} · 網路不通或緊急時</small>
+                </span>
+              </a>
+            }
+          </section>
+
+          @if (closedCases().length > 0) {
+            <section class="support-section">
+              <button
+                type="button"
+                class="support-toggle"
+                [attr.aria-expanded]="isClosedCaseListOpen()"
+                (click)="toggleClosedCaseList()"
+              >
+                <span>已結案（{{ closedCases().length }}）</span>
+                <mat-icon aria-hidden="true">{{ isClosedCaseListOpen() ? 'expand_less' : 'expand_more' }}</mat-icon>
+              </button>
+              @if (isClosedCaseListOpen()) {
+                <ul class="support-case-list">
+                  @for (item of closedCases(); track item.id) {
+                    <li>
+                      <button type="button" class="support-case-row is-closed" (click)="openCaseThread(item.id)">
+                        <mat-icon aria-hidden="true">{{ caseCategoryIcon(item.category) }}</mat-icon>
+                        <span class="support-row-copy">
+                          <strong>{{ caseCategoryLabel(item.category) }}</strong>
+                          <small>{{ item.resolution || item.description }}</small>
+                        </span>
+                        <span class="support-case-row__meta">
+                          <em [class]="caseStatusClass(item)">{{ caseStatusLabel(item) }}</em>
+                          <small>{{ formatCaseTime(item.handledAt ?? item.createdAt) }}</small>
+                        </span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+        </div>
+      }
+
+      @case ('create') {
+        @if (activeCategory(); as category) {
+          <form class="support-case-form" (ngSubmit)="submitCase()">
+            <div class="support-body">
+              @if (category.notice) {
+                <div class="support-notice" [class.is-danger]="category.urgent" role="note">
+                  <p>{{ category.notice }}</p>
+                  @if (category.calls) {
+                    <div class="support-calls">
+                      @for (call of category.calls; track call.tel) {
+                        <a [href]="'tel:' + call.tel">
+                          <mat-icon aria-hidden="true">call</mat-icon>
+                          {{ call.label }}
+                        </a>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- 快選只是幫忙組說明文字，不另外存；送出時組成「爆胎、警示燈亮：補充說明」 -->
+              @if (category.quickPicks.length > 0) {
+                <fieldset class="support-field">
+                  <legend>發生什麼事（可以選好幾個）</legend>
+                  <div class="support-picks">
+                    @for (pick of category.quickPicks; track pick) {
+                      <button
+                        type="button"
+                        class="support-pick"
+                        [class.is-selected]="isCasePickSelected(pick)"
+                        [attr.aria-pressed]="isCasePickSelected(pick)"
+                        (click)="toggleCasePick(pick)"
+                      >
+                        {{ pick }}
+                      </button>
+                    }
+                  </div>
+                </fieldset>
+              }
+
+              <label class="support-field">
+                <span>相關訂單</span>
+                <select (change)="selectCaseOrder($event)">
+                  <option value="" [selected]="caseOrderId() === null">不指定（整台車或路上的狀況）</option>
+                  @for (stop of caseOrderOptions(); track stop.orderId) {
+                    <option [value]="stop.orderId" [selected]="caseOrderId() === stop.orderId">
+                      {{ stop.sequence }}. {{ stop.storeName }}（{{ taskStatusLabel(stop.orderStatus) }}）
+                    </option>
+                  }
+                </select>
+              </label>
+
+              <!-- 不給預設值：要司機自己按，後台靠這一題判斷要不要馬上處理 -->
+              <fieldset class="support-field">
+                <legend>還能繼續配送嗎</legend>
+                <div class="support-choice">
+                  <button
+                    type="button"
+                    [class.is-selected]="caseCanContinue() === true"
+                    [attr.aria-pressed]="caseCanContinue() === true"
+                    (click)="setCaseCanContinue(true)"
+                  >
+                    可以
+                  </button>
+                  <button
+                    type="button"
+                    class="is-stop"
+                    [class.is-selected]="caseCanContinue() === false"
+                    [attr.aria-pressed]="caseCanContinue() === false"
+                    (click)="setCaseCanContinue(false)"
+                  >
+                    不行，需要支援
+                  </button>
+                </div>
+              </fieldset>
+
+              <label class="support-field">
+                <span>{{ category.quickPicks.length > 0 ? '補充說明（選填）' : '說明' }}</span>
+                <!-- 900 字：留位置給前面組進去的快選，加起來不超過後端的 1000 字 -->
+                <textarea
+                  rows="3"
+                  maxlength="900"
+                  placeholder="例如：停在台 1 線路肩，已開雙黃燈"
+                  [value]="caseNote()"
+                  (input)="updateCaseNote($event)"
+                ></textarea>
+              </label>
+
+              <div class="support-field">
+                <span>照片（選填）</span>
+                <div class="support-photo">
+                  <label class="support-photo-button">
+                    <mat-icon aria-hidden="true">photo_camera</mat-icon>
+                    {{ casePhoto() ? '換一張' : '拍照或選照片' }}
+                    <input
+                      class="support-photo-input"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      (change)="selectCasePhoto($event)"
+                    />
+                  </label>
+                  @if (casePhoto(); as photo) {
+                    <small>{{ photo.name }}</small>
+                    <button type="button" class="support-photo-remove" (click)="removeCasePhoto()">移除</button>
+                  }
+                </div>
+              </div>
+            </div>
+
+            @if (caseFormError()) {
+              <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ caseFormError() }}</p>
+            }
+            <button type="submit" class="primary-action support-submit" [disabled]="isSubmittingCase()">
+              <mat-icon aria-hidden="true">send</mat-icon>
+              {{ isSubmittingCase() ? '送出中...' : '送出並開始對話' }}
+            </button>
+          </form>
         }
       }
-    </section>
 
-    @if (chatSendError()) {
-      <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+      @case ('thread') {
+        @if (activeCase(); as current) {
+          <section class="driver-chat-thread" aria-live="polite" aria-label="案件對話內容">
+            <!-- 案件卡：司機當初回報的內容，放在對話最上面 -->
+            <article class="support-case-card">
+              <header>
+                <mat-icon aria-hidden="true">{{ caseCategoryIcon(current.category) }}</mat-icon>
+                <strong>{{ caseCategoryLabel(current.category) }}</strong>
+                <span [class.is-stop]="!current.canContinue">
+                  {{ current.canContinue ? '可以繼續配送' : '無法繼續配送' }}
+                </span>
+              </header>
+              <p>{{ current.description }}</p>
+              <dl>
+                @if (current.orderNumber) {
+                  <div>
+                    <dt>訂單</dt>
+                    <dd>{{ current.orderNumber }}@if (current.storeName) { · {{ current.storeName }}}</dd>
+                  </div>
+                }
+                <div>
+                  <dt>回報時間</dt>
+                  <dd>{{ formatCaseTime(current.createdAt) }}</dd>
+                </div>
+              </dl>
+              @if (current.photoUrl) {
+                <a class="support-case-card__photo" [href]="current.photoUrl" target="_blank" rel="noopener">
+                  <img [src]="current.photoUrl" alt="回報時附的照片" />
+                </a>
+              }
+            </article>
+
+            @if (caseThreadState() === 'loading') {
+              <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+            } @else if (caseThreadState() === 'error') {
+              <p class="driver-chat-sheet__placeholder is-error">目前無法取得對話內容。</p>
+            } @else if (caseMessages().length === 0) {
+              <p class="driver-chat-sheet__placeholder">
+                {{ current.status === 'CLOSED' ? '這件案件沒有對話紀錄。' : '案件已送出，調度中心的回覆會顯示在這裡。' }}
+              </p>
+            }
+            @for (message of caseMessages(); track message.id) {
+              <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+                <p>{{ message.content }}</p>
+                <small>
+                  {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+                  @if (isOwnChatMessage(message) && message.readAt) {
+                    · 已讀
+                  }
+                </small>
+              </article>
+            }
+          </section>
+
+          @if (current.status === 'CLOSED') {
+            <!-- 結案後只能看：輸入框換成處理結果。後端也要擋已結案的留言，這裡拿掉輸入框只是畫面 -->
+            <section class="support-resolution" aria-label="處理結果">
+              <strong>
+                <mat-icon aria-hidden="true">task_alt</mat-icon>
+                已結案 · {{ formatCaseTime(current.handledAt) }}
+              </strong>
+              <p>{{ current.resolution || '調度中心沒有填寫處理結果。' }}</p>
+            </section>
+          } @else {
+            @if (caseSendError()) {
+              <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ caseSendError() }}</p>
+            }
+            <form class="driver-chat-composer" (ngSubmit)="sendCaseMessage()">
+              <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+                <textarea
+                  matInput
+                  cdkTextareaAutosize
+                  cdkAutosizeMinRows="1"
+                  cdkAutosizeMaxRows="4"
+                  maxlength="1000"
+                  placeholder="補充狀況給調度中心"
+                  name="caseChatInput"
+                  aria-label="輸入這件案件的訊息"
+                  [(ngModel)]="caseChatInput"
+                ></textarea>
+              </mat-form-field>
+              <button
+                type="submit"
+                matIconButton
+                aria-label="送出"
+                [disabled]="isSendingCaseMessage() || !caseChatInput().trim()"
+              >
+                <mat-icon aria-hidden="true">send</mat-icon>
+              </button>
+            </form>
+          }
+        } @else if (isGeneralThread()) {
+          <section class="driver-chat-thread" aria-live="polite" aria-label="與調度中心的對話內容">
+            @if (chatViewState() === 'loading') {
+              <p class="driver-chat-sheet__placeholder">正在載入對話...</p>
+            } @else if (chatViewState() === 'error') {
+              <p class="driver-chat-sheet__placeholder is-error">{{ chatError() }}</p>
+            } @else if (chatViewState() === 'empty') {
+              <div class="driver-chat-empty">
+                <mat-icon aria-hidden="true">forum</mat-icon>
+                <strong>目前還沒有對話</strong>
+                <span>有狀況可以直接在下方留言給調度中心</span>
+              </div>
+            } @else {
+              @for (message of chatMessages(); track message.id) {
+                <article class="driver-chat-message" [class.is-own]="isOwnChatMessage(message)">
+                  <p>{{ message.content }}</p>
+                  <small>
+                    {{ isOwnChatMessage(message) ? '我' : '調度中心' }} · {{ formatChatTime(message.createdAt) }}
+                    @if (isOwnChatMessage(message) && message.readAt) {
+                      · 已讀
+                    }
+                  </small>
+                </article>
+              }
+            }
+          </section>
+
+          @if (chatSendError()) {
+            <p class="driver-chat-sheet__placeholder is-error" role="alert">{{ chatSendError() }}</p>
+          }
+
+          <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
+          <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
+            <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
+            <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
+              <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
+              <textarea
+                matInput
+                cdkTextareaAutosize
+                cdkAutosizeMinRows="1"
+                cdkAutosizeMaxRows="4"
+                maxlength="1000"
+                placeholder="留言給調度中心"
+                name="chatInput"
+                aria-label="輸入給調度中心的訊息"
+                [(ngModel)]="chatInput"
+              ></textarea>
+            </mat-form-field>
+            <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
+            <button
+              type="submit"
+              matIconButton
+              aria-label="送出"
+              [disabled]="isSendingChatMessage() || !chatInput().trim()"
+            >
+              <mat-icon aria-hidden="true">send</mat-icon>
+            </button>
+          </form>
+        } @else {
+          <p class="driver-chat-sheet__placeholder is-error">找不到這件案件，請回支援中心再試一次。</p>
+        }
+      }
     }
-
-    <!-- 輸入框跟後台 dispatch-shell 的司機對話同一種寫法：matInput + 自動長高 + ngModel 綁 signal -->
-    <form class="driver-chat-composer" (ngSubmit)="sendChatMessage()">
-      <!-- outline：跟後台一致；dynamic：不用 hint/error，底下不留空白 -->
-      <mat-form-field class="driver-chat-composer__field" appearance="outline" subscriptSizing="dynamic">
-        <!-- 自動長高 1～4 行，超過就在框內捲動；maxlength 跟後端的 1000 字上限一致 -->
-        <textarea
-          matInput
-          cdkTextareaAutosize
-          cdkAutosizeMinRows="1"
-          cdkAutosizeMaxRows="4"
-          maxlength="1000"
-          placeholder="留言給調度中心"
-          name="chatInput"
-          aria-label="輸入給調度中心的訊息"
-          [(ngModel)]="chatInput"
-        ></textarea>
-      </mat-form-field>
-      <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
-      <button
-        type="submit"
-        matIconButton
-        aria-label="送出"
-        [disabled]="isSendingChatMessage() || !chatInput().trim()"
-      >
-        <mat-icon aria-hidden="true">send</mat-icon>
-      </button>
-    </form>
   </section>
 </ng-template>

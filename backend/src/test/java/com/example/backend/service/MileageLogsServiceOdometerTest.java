@@ -28,7 +28,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * 出車讀數跟系統記錄的車輛里程不同時照樣出車，而且收車不會因此被擋。
+ * 出車讀數跟系統記錄的車輛里程不同時照樣出車，而且收車不會因此被擋；
+ * 收車讀數比出車多一千公里以上（多半是多打一位數）才擋。
  *
  * <p>DAO 全部用 mock。司機 7 號今天有一條已發布的路線 30，開車 5；系統記錄這台車上次收車在 18400 km。</p>
  */
@@ -95,7 +96,8 @@ class MileageLogsServiceOdometerTest {
         service = new MileageLogsService(mileageLogsDAO, driversDAO, routesDAO, mock(OrdersDAO.class), vehiclesDAO,
                 attendanceService, mock(VehicleMileageSettlementService.class), mock(EmergencyLeaveRequestsDAO.class),
                 mock(EmergencyLeaveService.class), mock(WarehouseProximityService.class),
-                mock(RouteLegMileageService.class), mock(MileagePhotoStorageService.class));
+                mock(RouteLegMileageService.class), mock(MileagePhotoStorageService.class),
+                mock(PreTripInspectionService.class), mock(DispatchVehicleMaintenanceGuard.class));
     }
 
     @Test
@@ -131,12 +133,12 @@ class MileageLogsServiceOdometerTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> service.start(DRIVER_ID, odometer(null)));
 
-        assertEquals("出車總里程不能留空", error.getMessage());
+        assertEquals("請填出車時的行車紀錄器里程", error.getMessage());
         assertEquals(18400, vehicle.getCurrentOdometerKm());
         verify(vehiclesDAO, never()).save(any());
     }
 
-    /** 只拿掉出車檢查、沒把讀數寫回車輛的話，收車會丟出「車輛總里程已變更」。 */
+    /** 只拿掉出車檢查、沒把讀數寫回車輛的話，收車會丟出「車輛里程已變更」。 */
     @Test
     void endAfterOffSystemDrivingIsNotBlocked() {
         service.start(DRIVER_ID, odometer(18450));
@@ -145,6 +147,29 @@ class MileageLogsServiceOdometerTest {
 
         assertEquals(30, response.getActualDistance());
         assertEquals(18480, vehicle.getCurrentOdometerKm());
+    }
+
+    @Test
+    void endReadingWithAnExtraDigitIsRejectedAndVehicleKeepsItsReading() {
+        service.start(DRIVER_ID, odometer(18450));
+
+        // 18480 多打一位數變 184800：比出車多了十幾萬公里
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.end(DRIVER_ID, odometer(184800)));
+
+        assertEquals("收車里程比出車多了 166350 公里，一天跑不了這麼遠，請確認是不是多打了一位數", error.getMessage());
+        assertEquals(18450, vehicle.getCurrentOdometerKm());
+        assertNull(savedMileage.getEndOdometer());
+    }
+
+    @Test
+    void endReadingExactlyOneThousandKmAfterStartIsAccepted() {
+        service.start(DRIVER_ID, odometer(18450));
+
+        MileageLogResponse response = service.end(DRIVER_ID, odometer(19450));
+
+        assertEquals(1000, response.getActualDistance());
+        assertEquals(19450, vehicle.getCurrentOdometerKm());
     }
 
     private static MileageRequestDTO odometer(Integer value) {

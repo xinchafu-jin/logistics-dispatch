@@ -4,9 +4,13 @@ import com.example.backend.constants.ScheduleStatus;
 import com.example.backend.entity.AttendanceRecordsEntity;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.DriverShiftsEntity;
+import com.example.backend.entity.DriverLeaveRequestsEntity;
+import com.example.backend.constants.LeaveRequestStatus;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.MileageLogsEntity;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.OrderItemsEntity;
+import com.example.backend.entity.PreTripInspectionsEntity;
 import com.example.backend.entity.RouteLegMileagesEntity;
 import com.example.backend.entity.RoutesEntity;
 import jakarta.persistence.EntityManager;
@@ -15,6 +19,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /** Date-bounded report reads kept separate from the existing write-path DAOs. */
 @Repository
@@ -38,12 +43,56 @@ public class ReportReadDAO {
         return query.getResultList();
     }
 
+    public List<OrdersEntity> orders(LocalDate from, LocalDate to, Long warehouseId, Long vehicleId) {
+        return ordersForVehicles(from, to, warehouseId, vehicleId == null ? null : Set.of(vehicleId));
+    }
+
+    public List<OrdersEntity> ordersForVehicles(LocalDate from, LocalDate to, Long warehouseId, Set<Long> vehicleIds) {
+        if (vehicleIds == null) {
+            return orders(from, to, warehouseId);
+        }
+        if (vehicleIds.isEmpty()) return List.of();
+        String jpql = "select o from OrdersEntity o where o.deliveryDate between :from and :to"
+                + (warehouseId == null ? "" : " and o.warehouseId = :warehouseId")
+                + " and (o.assignedVehicleId in :vehicleIds or exists (select r.id from RoutesEntity r"
+                + " where r.id = o.routeId and r.vehicleId in :vehicleIds))"
+                + " order by o.deliveryDate, o.id";
+        var query = entityManager.createQuery(jpql, OrdersEntity.class)
+                .setParameter("from", from).setParameter("to", to)
+                .setParameter("vehicleIds", vehicleIds);
+        if (warehouseId != null) {
+            query.setParameter("warehouseId", warehouseId);
+        }
+        return query.getResultList();
+    }
+
     public List<RoutesEntity> routes(LocalDate from, LocalDate to, Long warehouseId) {
         String jpql = "select r from RoutesEntity r where r.date between :from and :to"
                 + (warehouseId == null ? "" : " and r.warehouseId = :warehouseId")
                 + " order by r.date, r.id";
         var query = entityManager.createQuery(jpql, RoutesEntity.class)
                 .setParameter("from", from).setParameter("to", to);
+        if (warehouseId != null) {
+            query.setParameter("warehouseId", warehouseId);
+        }
+        return query.getResultList();
+    }
+
+    public List<RoutesEntity> routes(LocalDate from, LocalDate to, Long warehouseId, Long vehicleId) {
+        return routesForVehicles(from, to, warehouseId, vehicleId == null ? null : Set.of(vehicleId));
+    }
+
+    public List<RoutesEntity> routesForVehicles(LocalDate from, LocalDate to, Long warehouseId, Set<Long> vehicleIds) {
+        if (vehicleIds == null) {
+            return routes(from, to, warehouseId);
+        }
+        if (vehicleIds.isEmpty()) return List.of();
+        String jpql = "select r from RoutesEntity r where r.date between :from and :to"
+                + (warehouseId == null ? "" : " and r.warehouseId = :warehouseId")
+                + " and r.vehicleId in :vehicleIds order by r.date, r.id";
+        var query = entityManager.createQuery(jpql, RoutesEntity.class)
+                .setParameter("from", from).setParameter("to", to)
+                .setParameter("vehicleIds", vehicleIds);
         if (warehouseId != null) {
             query.setParameter("warehouseId", warehouseId);
         }
@@ -80,6 +129,11 @@ public class ReportReadDAO {
                         """, MileageLogsEntity.class)
                 .setParameter("from", from).setParameter("to", to)
                 .getResultList();
+    }
+
+    public List<DriverLeaveRequestsEntity> approvedLeaves(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("select l from DriverLeaveRequestsEntity l where l.workDate between :from and :to and l.status = :approved", DriverLeaveRequestsEntity.class)
+                .setParameter("from", from).setParameter("to", to).setParameter("approved", LeaveRequestStatus.APPROVED).getResultList();
     }
 
     public List<RouteLegMileagesEntity> routeLegMileages(List<Long> routeIds) {
@@ -124,5 +178,36 @@ public class ReportReadDAO {
                     .getResultList());
         }
         return records;
+    }
+
+    public List<ExceptionCasesEntity> exceptionsForOrders(List<Long> orderIds) {
+        List<ExceptionCasesEntity> records = new ArrayList<>();
+        for (int i = 0; i < orderIds.size(); i += ID_BATCH_SIZE) {
+            records.addAll(entityManager.createQuery(
+                            "select e from ExceptionCasesEntity e where e.orderId in :ids order by e.id",
+                            ExceptionCasesEntity.class)
+                    .setParameter("ids", orderIds.subList(i, Math.min(i + ID_BATCH_SIZE, orderIds.size())))
+                    .getResultList());
+        }
+        return records;
+    }
+
+    public List<PreTripInspectionsEntity> inspections(LocalDate from, LocalDate to) {
+        return entityManager.createQuery("""
+                        select i from PreTripInspectionsEntity i where i.workDate between :from and :to
+                        order by i.id
+                        """, PreTripInspectionsEntity.class)
+                .setParameter("from", from).setParameter("to", to).getResultList();
+    }
+
+    public List<OrderItemsEntity> orderItemsForOrders(List<Long> ids) {
+        List<OrderItemsEntity> rows = new ArrayList<>();
+        for (int i = 0; i < ids.size(); i += ID_BATCH_SIZE) {
+            rows.addAll(entityManager.createQuery(
+                            "select i from OrderItemsEntity i where i.order.id in :ids order by i.order.id, i.sequence, i.id",
+                            OrderItemsEntity.class)
+                    .setParameter("ids", ids.subList(i, Math.min(i + ID_BATCH_SIZE, ids.size()))).getResultList());
+        }
+        return rows;
     }
 }

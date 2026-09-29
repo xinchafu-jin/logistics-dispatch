@@ -19,6 +19,28 @@ describe('DispatchApiService', () => {
 
   afterEach(() => httpTesting.verify());
 
+  it('reads operational performance with the same period and warehouse filters as detail queries', () => {
+    service.getReportPerformance({from: '2026-09-21', to: '2026-09-27', warehouseId: 2, driverId: 3, vehicleId: 4}).subscribe();
+    const request = httpTesting.expectOne('/api/reports/performance?from=2026-09-21&to=2026-09-27&warehouseId=2&driverId=3&vehicleId=4');
+    expect(request.request.method).toBe('GET');
+    request.flush({from: '2026-09-21', to: '2026-09-27', workforce: {}, fleet: {}, warehouses: [], shifts: [], trips: []});
+  });
+
+  it('sends a selected tonnage group as comma-separated vehicle IDs', () => {
+    service.getReportSummary({from: '2026-09-28', to: '2026-09-28', vehicleIds: [7, 9]}).subscribe();
+    const request = httpTesting.expectOne('/api/reports/summary?from=2026-09-28&to=2026-09-28&vehicleIds=7,9');
+    expect(request.request.method).toBe('GET');
+    request.flush({from: '2026-09-28', to: '2026-09-28'});
+  });
+
+  it('withdraws publication for the selected date without rewriting orders', () => {
+    service.withdrawDispatch('2026-09-27').subscribe((boards) => expect(boards).toEqual([]));
+    const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-27');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    request.flush([]);
+  });
+
   it('uses the direct list endpoints exposed by every backend controller', () => {
     forkJoin({
       drivers: service.getDrivers(),
@@ -105,33 +127,63 @@ describe('DispatchApiService', () => {
     confirm.flush({ id: 47, status: 'CLOSED' });
   });
 
-  it('uses driver application and emergency leave review contracts', () => {
-    service.getPendingDriverAccountApplicationCount().subscribe();
-    service.getPendingDriverAccountApplications().subscribe();
-    service.approveDriverAccountApplication(17).subscribe();
-    service.rejectDriverAccountApplication(18, '資料不完整').subscribe();
+  it('uses the driver-case contracts for the anomaly center and the chat panel', () => {
+    service.getDriverCases().subscribe();
+    service.getDriverCases('CLOSED').subscribe();
+    service.acceptDriverCase(12).subscribe();
+    service.getDriverCaseUnfinishedOrders(12).subscribe();
+    service.closeDriverCase(12, '已派人支援', [41]).subscribe();
+    service.getDriverCaseMessages(12).subscribe();
+    service.getDriverCaseMessages(12, 30).subscribe();
+    service.sendDriverCaseMessage(12, '收到').subscribe();
+    service.markDriverCaseMessagesRead(12).subscribe();
+
+    // 不帶 status 才是進行中；帶成 "undefined" 字串後端會轉 enum 失敗
+    const open = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases' && !request.params.has('status'),
+    );
+    expect(open.request.method).toBe('GET');
+    open.flush([]);
+    const closed = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases' && request.params.get('status') === 'CLOSED',
+    );
+    closed.flush([]);
+
+    const accept = httpTesting.expectOne('/api/exceptions/driver-cases/12/accept');
+    expect(accept.request.method).toBe('PATCH');
+    accept.flush({ id: 12 });
+    const unfinished = httpTesting.expectOne('/api/exceptions/driver-cases/12/unfinished-orders');
+    expect(unfinished.request.method).toBe('GET');
+    unfinished.flush({ routeDate: null, mustResolveAll: false, orders: [] });
+    const close = httpTesting.expectOne('/api/exceptions/driver-cases/12/close');
+    expect(close.request.method).toBe('PATCH');
+    expect(close.request.body).toEqual({ resolution: '已派人支援', redeliverOrderIds: [41] });
+    close.flush({ id: 12 });
+
+    const messages = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages'
+        && request.method === 'GET' && !request.params.has('afterId'),
+    );
+    messages.flush([]);
+    const newer = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages' && request.params.get('afterId') === '30',
+    );
+    newer.flush([]);
+    const send = httpTesting.expectOne(
+      (request) => request.url === '/api/exceptions/driver-cases/12/messages' && request.method === 'POST',
+    );
+    expect(send.request.body).toEqual({ content: '收到' });
+    send.flush({ id: 31 });
+    const read = httpTesting.expectOne('/api/exceptions/driver-cases/12/messages/read');
+    expect(read.request.method).toBe('POST');
+    read.flush(1);
+  });
+
+  it('uses emergency leave review contracts', () => {
     service.getPendingEmergencyLeaveRequests().subscribe();
     service.getEmergencyLeaveReplacementCandidates(31).subscribe();
     service.approveEmergencyLeaveRequest(31, 9).subscribe();
     service.rejectEmergencyLeaveRequest(32, '請補充請假原因').subscribe();
-
-    const count = httpTesting.expectOne('/api/driver-account-applications/pending/count');
-    expect(count.request.method).toBe('GET');
-    count.flush({ count: 2 });
-
-    const applications = httpTesting.expectOne('/api/driver-account-applications/pending');
-    expect(applications.request.method).toBe('GET');
-    applications.flush([]);
-
-    const approveApplication = httpTesting.expectOne('/api/driver-account-applications/17/approve');
-    expect(approveApplication.request.method).toBe('PATCH');
-    expect(approveApplication.request.body).toBeNull();
-    approveApplication.flush({ id: 17, status: 'APPROVED' });
-
-    const rejectApplication = httpTesting.expectOne('/api/driver-account-applications/18/reject');
-    expect(rejectApplication.request.method).toBe('PATCH');
-    expect(rejectApplication.request.body).toEqual({ reason: '資料不完整' });
-    rejectApplication.flush({ id: 18, status: 'REJECTED' });
 
     const pendingLeaves = httpTesting.expectOne('/api/emergency-leave-requests/pending');
     expect(pendingLeaves.request.method).toBe('GET');
@@ -476,6 +528,58 @@ describe('DispatchApiService', () => {
       expect(request.request.params.get('period')).toBe('THIS_WEEK');
       request.flush({from: '2026-09-15', to: '2026-09-21'});
     }
+  });
+
+  it('withdraws the whole day publication with only the date, like publish', () => {
+    service.withdrawDispatch('2026-09-28').subscribe((boards) => expect(boards).toEqual([]));
+
+    const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-28');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toBeNull();
+    request.flush([]);
+  });
+
+  it('posts a mileage correction with its reason and reads the correction history', () => {
+    service.correctVehicleMileage(6, {currentOdometerKm: 18450, reason: '司機收車多打一位數'}).subscribe();
+    service.getVehicleMileageCorrections(6).subscribe();
+
+    const correct = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicles/6/mileage-corrections' && request.method === 'POST',
+    );
+    expect(correct.request.body).toEqual({currentOdometerKm: 18450, reason: '司機收車多打一位數'});
+    correct.flush({});
+
+    const history = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicles/6/mileage-corrections' && request.method === 'GET',
+    );
+    history.flush([]);
+  });
+
+  it('uses the vehicle maintenance settings, history and cancel contracts', () => {
+    service.getMaintenanceSettings().subscribe();
+    service.saveMaintenanceSettings({warningKm: 400}).subscribe();
+    service.getMaintenanceHistory(6).subscribe();
+    service.cancelMaintenance(6).subscribe();
+
+    const settings = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicle-maintenance/settings' && request.method === 'GET',
+    );
+    settings.flush({warningKm: 500});
+
+    const save = httpTesting.expectOne(
+      (request) => request.url === '/api/vehicle-maintenance/settings' && request.method === 'PUT',
+    );
+    expect(save.request.body).toEqual({warningKm: 400});
+    save.flush(save.request.body);
+
+    const history = httpTesting.expectOne('/api/vehicle-maintenance/6/history');
+    expect(history.request.method).toBe('GET');
+    history.flush([]);
+
+    const cancel = httpTesting.expectOne('/api/vehicle-maintenance/6/cancel');
+    expect(cancel.request.method).toBe('POST');
+    expect(cancel.request.body).toBeNull();
+    cancel.flush(null);
   });
 
   it('deletes a driver through the backend DELETE contract', () => {

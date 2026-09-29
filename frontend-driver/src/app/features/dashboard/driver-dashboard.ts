@@ -24,7 +24,7 @@ import {MatFormFieldModule} from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
 import {MatInputModule} from '@angular/material/input';
 import type * as maplibregl from 'maplibre-gl';
-import {Observable, of, single, switchMap} from 'rxjs';
+import {Observable, map, of, single, switchMap} from 'rxjs';
 import {DriverAuthService} from '../../core/auth/driver-auth.service';
 import {
   clearStoredMapLocation,
@@ -36,19 +36,18 @@ import {DriverGpsTrackingService} from '../../core/services/driver-gps-tracking.
 import {
   AttendanceRecordDto,
   DeliveryRecordResponse,
-  DriverLeaveHistoryResponse,
-  DriverLeaveBatchResponse,
-  DriverMakeupLeaveRequest,
-  DriverPlannedLeaveBatchRequest,
-  DriverLeaveRequest,
+  DriverCaseCategory,
+  DriverCaseDto,
   DriverLeaveRequestResponse,
   EmergencyLeaveResponse,
   DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
+  DriverAssignmentDto,
   DriverMessageDto,
   DriverMessagePushDto,
   DriverTaskStop,
+  DriverTaskOrderItem,
   DriverTaskOrderStatus,
   DriverTasksResponse,
   GpsRouteStep,
@@ -56,6 +55,10 @@ import {
 import {DriverOperationsService} from '../../core/services/driver-operations.service';
 import {DriverWeather, DriverWeatherService} from '../../core/services/driver-weather.service';
 import {BrandLogo} from '../../shared/ui/brand-logo/brand-logo';
+import {PreTripCheck} from './pre-trip-check/pre-trip-check';
+import {ScheduleLeaveComposer} from './schedule-leave-composer/schedule-leave-composer';
+import {pendingLeaveDatesInMonth} from './schedule-leave-composer/schedule-leave-status';
+import {ScheduleCellLabels} from '../../shared/ui/schedule-cell-labels/schedule-cell-labels';
 
 type AttendanceViewState = 'loading' | 'not-clocked-in' | 'ready' | 'error';
 type DriverTab = 'map' | 'tasks' | 'profile' | 'schedule';
@@ -63,38 +66,43 @@ type TaskViewState = 'loading' | 'ready' | 'empty' | 'error';
 type ScheduleViewState = 'loading' | 'ready' | 'empty' | 'error';
 type NavigationRouteState = 'idle' | 'loading' | 'ready' | 'error';
 type ChatViewState = 'loading' | 'ready' | 'empty' | 'error';
+/**
+ * 支援中心 sheet 目前在哪一頁。獨立一個 signal，一般對話原本的 chat* signal 不用跟著改：
+ * home＝首頁（分類格子、案件清單），create＝建立案件，thread＝對話（caseId 是 null 就是一般對話）
+ */
+type SupportView =
+  | {kind: 'home'}
+  | {kind: 'create'; category: DriverCaseCategory}
+  | {kind: 'thread'; caseId: number | null};
+type CaseListState = 'loading' | 'ready' | 'error';
 
 interface DriverTaskSelection {
   route: DriverRouteTask;
   stop: DriverTaskStop;
 }
 
-interface DriverLeaveForm {
-  workDate: string;
-  leaveType: DriverLeaveRequest['leaveType'];
-  leaveStart: string;
-  leaveEnd: string;
-  reason: string;
+type NavigationTaskSet = {
+  routes: {stops: Pick<DriverTaskStop, 'orderId' | 'orderStatus'>[]}[];
+};
+
+export function pendingLoadingOrderCount(tasks: NavigationTaskSet | null): number {
+  return (tasks?.routes ?? []).reduce(
+    (count, route) => count + route.stops.filter((stop) => stop.orderStatus === 'CONFIRMED').length,
+    0,
+  );
 }
 
-type LeaveApplicationTab = 'temporary' | 'planned' | 'makeup';
-
-interface DriverPlannedLeaveForm {
-  leaveType: DriverLeaveRequest['leaveType'];
-  workDates: string[];
-  reason: string;
-}
-
-interface DriverMakeupLeaveForm {
-  workDate: string;
-  leaveType: DriverLeaveRequest['leaveType'];
-  reason: string;
+export function navigationReadyForOrder(tasks: NavigationTaskSet | null, orderId: number): boolean {
+  if (!tasks || pendingLoadingOrderCount(tasks) > 0) {
+    return false;
+  }
+  const stop = tasks.routes.flatMap((route) => route.stops)
+    .find((taskStop) => taskStop.orderId === orderId);
+  return stop?.orderStatus === 'LOADED' || stop?.orderStatus === 'IN_DELIVERY';
 }
 
 interface LoadingItemForm {
   checked: boolean;
-  loadedQuantity: string;
-  notes: string;
 }
 
 type MapPosition = [lng: number, lat: number];
@@ -305,6 +313,148 @@ function readVoiceGuidancePreference(): boolean {
   }
 }
 
+// ── 支援中心：例外回報案件 ─────────────────────────────────
+
+export interface CaseCategoryOption {
+  code: DriverCaseCategory;
+  label: string;
+  /** Material Icons 的名稱 */
+  icon: string;
+  /** 常見情境，點了會組進說明。不另外存欄位：後台看說明就知道，以後改這裡不用動資料庫 */
+  quickPicks: readonly string[];
+  /** 表單最上面的提醒：人身安全優先，或提醒這類狀況已經有專用按鈕 */
+  notice?: string;
+  /** 提醒下面的撥號按鈕（手機點了直接撥） */
+  calls?: readonly {label: string; tel: string}[];
+  /** 交通事故：格子和提醒用紅色 */
+  urgent?: boolean;
+}
+
+/** 說明組起來最多幾個字；跟後端 exception_cases.description 的 VARCHAR(1000) 一致 */
+export const CASE_DESCRIPTION_MAX_LENGTH = 1000;
+
+const EMERGENCY_CALLS = [
+  {label: '撥 119', tel: '119'},
+  {label: '報警 110', tel: '110'},
+] as const;
+
+const OTHER_CASE_CATEGORY: CaseCategoryOption = {code: 'OTHER', label: '其他', icon: 'more_horiz', quickPicks: []};
+
+/**
+ * 司機可以選的分類，順序就是支援中心格子的順序。
+ * 沒有「門市拒收」：業務上沒有這種情境。無人簽收、交貨短少破損、點交不符都有專用按鈕，
+ * 那些才會改訂單狀態、建補送單；案件只負責「先問調度中心怎麼辦」，不改任何狀態。
+ */
+export const CASE_CATEGORIES: readonly CaseCategoryOption[] = [
+  {
+    code: 'VEHICLE',
+    label: '車輛問題',
+    icon: 'car_repair',
+    quickPicks: ['無法發動', '爆胎', '儀表警示燈亮', '煞車異常', '升降尾門故障'],
+  },
+  {
+    code: 'ACCIDENT',
+    label: '交通事故',
+    icon: 'car_crash',
+    quickPicks: ['擦撞，無人受傷', '有人受傷', '被後車追撞'],
+    notice: '先確認人員安全。有人受傷請撥 119，並報警 110，再回來回報。',
+    calls: EMERGENCY_CALLS,
+    urgent: true,
+  },
+  {
+    code: 'ROAD',
+    label: '路況延誤',
+    icon: 'traffic',
+    quickPicks: ['嚴重塞車', '道路封閉或施工', '豪雨淹水', '限高或限重過不去'],
+  },
+  {
+    code: 'STORE',
+    label: '門市狀況',
+    icon: 'storefront',
+    quickPicks: ['找不到門市', '地址或導航有誤', '無法停車卸貨', '門市沒開或沒人', '等候太久'],
+    notice: '確定沒人可以簽收，請回任務卡按「無人簽收」，系統才會建立補送單。這裡是先跟調度中心確認。',
+  },
+  {
+    code: 'GOODS',
+    label: '貨物問題',
+    icon: 'inventory_2',
+    quickPicks: ['外箱破損', '貨物傾倒', '裝錯貨（別家門市的貨）', '少箱'],
+    notice: '交貨時短少或破損的箱數，還是要在任務卡「交貨」裡填，系統會自動建立異常單。這裡是先回報、問怎麼處理。',
+  },
+  {
+    code: 'PERSONAL',
+    label: '身體／安全',
+    icon: 'health_and_safety',
+    quickPicks: ['身體不適', '受傷', '遇到糾紛或威脅'],
+    notice: '人身安全優先。需要救護或報警請直接撥打。',
+    calls: EMERGENCY_CALLS,
+  },
+  {
+    code: 'SYSTEM',
+    label: 'App／系統',
+    icon: 'smartphone',
+    quickPicks: ['按鈕送不出去', 'GPS 定位不準', '任務資料有誤', '照片傳不上去'],
+    notice: 'App 完全不能用時，請回支援中心首頁按「打給倉庫」。',
+  },
+  OTHER_CASE_CATEGORY,
+];
+
+/** 後端多了前端還不認識的分類時退回「其他」，畫面不會壞 */
+export function caseCategoryOption(code: DriverCaseCategory): CaseCategoryOption {
+  return CASE_CATEGORIES.find((option) => option.code === code) ?? OTHER_CASE_CATEGORY;
+}
+
+/** 畫面上的案件狀態。資料庫只有 OPEN／CLOSED；OPEN 再用「調度中心接收了沒」分成等待回覆、處理中 */
+export type CaseDisplayStatus = 'waiting' | 'handling' | 'closed';
+
+export function caseDisplayStatus(item: Pick<DriverCaseDto, 'status' | 'acceptedAt'>): CaseDisplayStatus {
+  if (item.status === 'CLOSED') {
+    return 'closed';
+  }
+  return item.acceptedAt ? 'handling' : 'waiting';
+}
+
+/**
+ * 把點選的快選和補充說明組成一段說明，例如「爆胎、儀表警示燈亮：停在台 1 線路肩」。
+ * 快選照分類裡的順序排、不照點的順序：同樣的組合每次長得一樣，後台掃清單比較快。
+ */
+export function composeCaseDescription(
+  option: CaseCategoryOption,
+  picks: readonly string[],
+  note: string,
+): string {
+  const head = option.quickPicks.filter((pick) => picks.includes(pick)).join('、');
+  const detail = note.trim();
+  if (head && detail) {
+    return `${head}：${detail}`;
+  }
+  return head || detail;
+}
+
+/** 送出前的檢查，回傳錯誤訊息，null 代表可以送。後端一樣要檢查；這裡只是讓司機不用等一趟來回才知道 */
+export function validateCaseDraft(description: string, canContinue: boolean | null): string | null {
+  if (!description) {
+    return '請點選發生的狀況，或寫一段說明。';
+  }
+  if (description.length > CASE_DESCRIPTION_MAX_LENGTH) {
+    return `說明不能超過 ${CASE_DESCRIPTION_MAX_LENGTH} 字。`;
+  }
+  if (canContinue === null) {
+    return '請選擇還能不能繼續配送。';
+  }
+  return null;
+}
+
+/** 合併訊息清單：用 id 去重（推播和 API 回應常常是同一則），依 id 由舊到新排 */
+export function mergeMessagesById(
+  current: readonly DriverMessageDto[],
+  incoming: readonly DriverMessageDto[],
+): DriverMessageDto[] {
+  const merged = new Map(current.map((message) => [message.id, message]));
+  incoming.forEach((message) => merged.set(message.id, message));
+  return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+}
+
 @Component({
   selector: 'app-driver-dashboard',
   imports: [
@@ -318,6 +468,9 @@ function readVoiceGuidancePreference(): boolean {
     TextFieldModule,
     FormsModule,
     BrandLogo,
+    PreTripCheck,
+    ScheduleLeaveComposer,
+    ScheduleCellLabels,
   ],
   templateUrl: './driver-dashboard.html',
   styleUrl: './driver-dashboard.scss',
@@ -348,7 +501,39 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly selectedShift = computed(
     () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
   );
+  // 已發布路線的派車結果（倉庫、車輛）；草稿不給司機看，主管還會改
+  private readonly publishedAssignments = signal<DriverAssignmentDto[]>([]);
+  protected readonly selectedAssignment = computed(() => {
+    const date = this.toIsoDate(this.selectedScheduleDate());
+    return this.publishedAssignments().find((assignment) => assignment.date === date) ?? null;
+  });
+  /** 沒有已發布路線時，今天以後的上班日才顯示所屬倉庫＋尚未派車；過去的日子沒派車就是沒派，不用提示 */
+  protected readonly selectedDateIsUpcoming = computed(
+    () => this.toIsoDate(this.selectedScheduleDate()) >= this.toIsoDate(new Date()),
+  );
+  protected readonly pendingScheduleDates = computed(() => pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()));
   private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
+  protected readonly calendarLeaveComposer = viewChild<ScheduleLeaveComposer>('calendarLeaveComposer');
+  protected readonly scheduleDateFilter = (date: Date) => this.calendarLeaveComposer()?.canSelectDate(date) ?? true;
+  protected selectScheduleDate(date: Date | null): void {
+    if (!date) return;
+    this.selectedScheduleDate.set(date);
+    this.calendarLeaveComposer()?.toggleDate(date);
+  }
+  protected refreshScheduleCalendar(): void { this.scheduleCalendar()?.updateTodaysDate(); }
+  protected showScheduleToday(): void {
+    const today = new Date();
+    this.selectedScheduleDate.set(today);
+    const calendar = this.scheduleCalendar();
+    if (calendar) calendar.activeDate = today;
+  }
+  protected applyCalendarLeaves(saved: DriverLeaveRequestResponse[]): void {
+    const ids = new Set(saved.map(request => request.id));
+    this.leaveRequests.update(requests => [...saved, ...requests.filter(request => !ids.has(request.id))]
+      .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)));
+    this.refreshScheduleCalendar();
+    this.loadLeaveRequests();
+  }
 
   /**
    * 月曆每一格的 class：依當天班別上色（shift-work／shift-day_off／shift-leave），樣式在 styles.scss。
@@ -359,7 +544,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return '';
     }
     const shift = this.shiftsByDate().get(this.toIsoDate(date));
-    return shift ? `shift-cell shift-${shift.shiftType.toLowerCase()}` : '';
+    const status = this.scheduleViewState() === 'loading' ? 'loading'
+      : this.scheduleViewState() === 'error' ? 'unavailable' : shift?.shiftType.toLowerCase() ?? 'not-published';
+    const pending = this.pendingScheduleDates().has(this.toIsoDate(date));
+    return `shift-cell shift-${status} ${pending ? 'leave-request-pending' : ''} ${this.calendarLeaveComposer()?.dateClass(date) ?? ''}`;
   };
 
   /**
@@ -382,24 +570,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     onCleanup(() => subscription.unsubscribe());
   });
   protected readonly todayTasks = signal<DriverTasksResponse | null>(null);
+  protected readonly pendingLoadingCount = computed(() => pendingLoadingOrderCount(this.todayTasks()));
+  /**
+   * routeId → 這條路線的出車前安全檢查通過了沒，由路線卡片上的 app-pre-trip-check 回報。
+   * 重新整理任務時不清空：同一條路線、同一台車的元件不會重建，也就不會再回報一次，清掉點交按鈕會被誤鎖
+   */
+  protected readonly inspectionReady = signal<Record<number, boolean>>({});
   protected readonly taskViewState = signal<TaskViewState>('loading');
   protected readonly taskError = signal<string | null>(null);
   protected readonly selectedTask = signal<DriverTaskSelection | null>(null);
   protected readonly activeDeliveryOrderId = signal<number | null>(null);
   protected readonly deliveryNotes = signal('');
   protected readonly deliveryPhoto = signal<File | null>(null);
-  protected readonly deliveryExceptionOpen = signal(false);
-  protected readonly deliveryExceptionDescription = signal('');
   protected readonly activeLoadingOrderId = signal<number | null>(null);
-  protected readonly loadingBoxCount = signal('');
   protected readonly loadingNotes = signal('');
   protected readonly loadingItemForms = signal<Record<number, LoadingItemForm>>({});
-  /** 箱數不符時先停一次讓司機再點一遍；改了箱數就要重新確認 */
-  protected readonly loadingMismatchPending = signal(false);
+  protected readonly loadingSummaryChecked = signal(false);
+  protected readonly reportingLoadingItemIds = signal<readonly number[]>([]);
   protected readonly taskActionError = signal<string | null>(null);
   protected readonly taskActionMessage = signal<string | null>(null);
   protected readonly isTaskSubmitting = signal(false);
-  protected readonly startMileageReading = signal('');
   protected readonly endMileageReading = signal('');
   protected readonly mileageError = signal<string | null>(null);
   protected readonly mileageMessage = signal<string | null>(null);
@@ -412,55 +602,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly isEmergencyLeaveSubmitting = signal(false);
   protected readonly isEmergencyLeaveHistoryLoading = signal(false);
   protected readonly leaveRequests = signal<DriverLeaveRequestResponse[]>([]);
-  protected readonly leaveForm = signal<DriverLeaveForm>({
-    workDate: this.toIsoDate(new Date()),
-    leaveType: 'SPECIAL',
-    leaveStart: '',
-    leaveEnd: '',
-    reason: '',
-  });
-  protected readonly leaveApplicationTab = signal<LeaveApplicationTab>('temporary');
-  protected readonly plannedLeaveForm = signal<DriverPlannedLeaveForm>({
-    leaveType: 'ANNUAL',
-    workDates: [],
-    reason: '',
-  });
-  protected readonly plannedLeaveShifts = signal<DriverShiftDto[]>([]);
-  protected readonly isPlannedLeaveLoading = signal(false);
-  protected readonly makeupLeaveForm = signal<DriverMakeupLeaveForm>({
-    workDate: '',
-    leaveType: 'SICK',
-    reason: '',
-  });
-  protected readonly selectedMakeupEvidenceFile = signal<File | null>(null);
-  protected readonly leaveHistoryDate = signal('');
   protected readonly leaveError = signal<string | null>(null);
-  protected readonly leaveMessage = signal<string | null>(null);
-  protected readonly isLeaveSubmitting = signal(false);
   protected readonly isLeaveListLoading = signal(false);
-  protected readonly isLeaveHistoryLoading = signal(false);
-  protected readonly expandedLeaveId = signal<number | null>(null);
-  protected readonly leaveHistories = signal<Record<number, DriverLeaveHistoryResponse[]>>({});
-  protected readonly leaveHistoryErrors = signal<Record<number, string>>({});
+  protected readonly leaveListAvailable = signal(false);
   protected readonly unreadLeaveCount = computed(
-    () => this.leaveRequests().filter((request) => !request.driverReadAt).length,
-  );
-  protected readonly leaveHistoryDates = computed(() =>
-    [...new Set(this.leaveRequests().map((request) => request.workDate))].sort((left, right) => right.localeCompare(left)),
-  );
-  protected readonly filteredLeaveRequests = computed(() => {
-    const workDate = this.leaveHistoryDate();
-    return workDate
-      ? this.leaveRequests().filter((request) => request.workDate === workDate)
-      : this.leaveRequests();
-  });
-  /** 事後補請只能把系統記下的當日未到紀錄補上原因，不能自行挑任意過去日期。 */
-  protected readonly makeupLeaveCandidates = computed(() =>
-    this.leaveRequests()
-      .filter((request) =>
-        request.requestMode === 'SYSTEM_NO_SHOW' && request.status === 'PENDING' && request.fullDay,
-      )
-      .sort((left, right) => right.workDate.localeCompare(left.workDate)),
+    () => this.leaveRequests().filter((request) => request.status !== 'PENDING'
+      && request.reviewedAt && !request.driverReadAt).length,
   );
   protected readonly profile = signal<DriverProfileDto | null>(null);
   protected readonly profileError = signal<string | null>(null);
@@ -472,7 +619,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   protected readonly navigationDurationSeconds = signal<number | null>(null);
   protected readonly mapLocationStatus = signal('尚未取得目前位置');
   protected readonly activeTab = signal<DriverTab>('map');
-  protected readonly isAttendanceSheetExpanded = signal(false);
+  protected readonly isAttendanceSheetExpanded = signal(true);
   protected readonly isAttendanceSheetDragging = signal(false);
   protected readonly attendanceSheetDragOffset = signal(0);
   protected readonly chatMessages = signal<DriverMessageDto[]>([]);
@@ -492,14 +639,31 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   // 聊天 sheet 是否開著；用 signal 而不是只看 driverChatSheetRef，effect 才追蹤得到
   private readonly isChatOpen = signal(false);
 
+  // ── 支援中心（例外回報案件）──
+  // sheet 裡現在是哪一頁；sheet 關掉時保留原值，下次打開再重設
+  protected readonly supportView = signal<SupportView>({kind: 'home'});
+  // 停在一般對話那一頁（不管 sheet 開沒開）；決定 thread 頁要畫一般對話還是案件
+  protected readonly isGeneralThread = computed(() => {
+    const view = this.supportView();
+    return view.kind === 'thread' && view.caseId === null;
+  });
+  // 司機「正看著」一般對話：sheet 開著而且停在一般對話。
+  // 停在支援中心首頁時訊息還沒被看到，這時標已讀的話，紅點還沒被看到就消失了
+  private readonly isViewingGeneralChat = computed(() => this.isChatOpen() && this.isGeneralThread());
+  // 司機正看著哪一件案件的對話；沒有是 null
+  private readonly viewingCaseId = computed(() => {
+    const view = this.supportView();
+    return this.isChatOpen() && view.kind === 'thread' ? view.caseId : null;
+  });
+
   /**
-   * 司機「看得到對話」而且有未讀，就標已讀。跟後台 dispatch-shell 的 markViewingDriverRead 同一種寫法。
+   * 司機「看得到一般對話」而且有未讀，就標已讀。跟後台 dispatch-shell 的 markViewingDriverRead 同一種寫法。
    *
-   * 會讓司機看到的入口有：打開 sheet、對話載入完成、開著時收到新訊息、重連補抓；
-   * 用 effect 只描述「開著＋有未讀＝標已讀」，不用在每個入口各呼叫一次，漏一個紅點就消不掉。
+   * 會讓司機看到的入口有：進入一般對話、對話載入完成、看著時收到新訊息、重連補抓；
+   * 用 effect 只描述「看著＋有未讀＝標已讀」，不用在每個入口各呼叫一次，漏一個紅點就消不掉。
    */
   private readonly markViewingChatRead = effect(() => {
-    if (!this.isChatOpen() || this.unreadChatCount() === 0) {
+    if (!this.isViewingGeneralChat() || this.unreadChatCount() === 0) {
       return;
     }
 
@@ -512,6 +676,112 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     // 失敗不重試：重抓會把未讀抓回來又觸發這裡，網路斷著就會一直打。
     // 資料庫仍是未讀，下次重連或重開 sheet 重新載入時紅點會回來，再標一次
     this.operations.markMessagesRead().subscribe({error: () => undefined});
+  });
+
+  protected readonly caseCategories = CASE_CATEGORIES;
+  protected readonly driverCases = signal<DriverCaseDto[]>([]);
+  protected readonly caseListState = signal<CaseListState>('loading');
+  // 新的在前面。用 id 排不用建立時間：id 由資料庫遞增一定不重複，時間可能一樣
+  protected readonly openCases = computed(() =>
+    this.driverCases()
+      .filter((item) => item.status === 'OPEN')
+      .sort((left, right) => right.id - left.id),
+  );
+  protected readonly closedCases = computed(() =>
+    this.driverCases()
+      .filter((item) => item.status === 'CLOSED')
+      .sort((left, right) => right.id - left.id),
+  );
+  // 首頁「已結案」清單預設收起來：當天要處理的是進行中的案件
+  protected readonly isClosedCaseListOpen = signal(false);
+  // 對話頁顯示的案件；一般對話或其他頁是 null。從清單找，推播改了狀態（結案）畫面會跟著變
+  protected readonly activeCase = computed(() => {
+    const view = this.supportView();
+    if (view.kind !== 'thread' || view.caseId === null) {
+      return null;
+    }
+    return this.driverCases().find((item) => item.id === view.caseId) ?? null;
+  });
+  protected readonly activeCategory = computed(() => {
+    const view = this.supportView();
+    return view.kind === 'create' ? caseCategoryOption(view.category) : null;
+  });
+  protected readonly supportHeading = computed(() => {
+    const view = this.supportView();
+    if (view.kind === 'home') {
+      return {eyebrow: '配送支援', title: '支援中心'};
+    }
+    if (view.kind === 'create') {
+      return {eyebrow: '回報新問題', title: caseCategoryOption(view.category).label};
+    }
+    if (view.caseId === null) {
+      return {eyebrow: '一般對話', title: '調度中心'};
+    }
+    const current = this.activeCase();
+    return {
+      eyebrow: `案件 #${view.caseId}`,
+      title: current ? caseCategoryOption(current.category).label : '案件',
+    };
+  });
+  // 地圖上支援中心按鈕的紅點：一般對話的未讀加上每件案件的未讀
+  protected readonly supportUnreadCount = computed(
+    () => this.unreadChatCount() + this.driverCases().reduce((sum, item) => sum + item.unreadCount, 0),
+  );
+  // 建立案件時可以選的訂單：今天路線上的每一站，照路線順序
+  protected readonly caseOrderOptions = computed(() =>
+    (this.todayTasks()?.routes ?? []).flatMap((route) => route.stops),
+  );
+  // 「打給倉庫」：網路不通、App 不能用時的退路，號碼來自今天路線的倉庫
+  protected readonly warehousePhone = computed(
+    () => this.todayTasks()?.routes.find((route) => route.warehouse.phone)?.warehouse.phone ?? null,
+  );
+
+  // 建立案件的表單
+  protected readonly casePicks = signal<string[]>([]);
+  protected readonly caseNote = signal('');
+  protected readonly caseOrderId = signal<number | null>(null);
+  // null＝還沒選；一定要司機自己選，不給預設值，後台靠這個判斷輕重
+  protected readonly caseCanContinue = signal<boolean | null>(null);
+  protected readonly casePhoto = signal<File | null>(null);
+  // 送出中：鎖住送出鈕。路上訊號差時按了沒反應，司機會再按，不鎖就會建出兩件一樣的案件
+  protected readonly isSubmittingCase = signal(false);
+  protected readonly caseFormError = signal<string | null>(null);
+
+  // 案件對話。一般對話仍放在 chatMessages，兩串分開存：
+  // 一般對話的紅點是從 chatMessages 算的，共用的話打開案件就會把一般對話的紅點算錯
+  protected readonly caseMessages = signal<DriverMessageDto[]>([]);
+  protected readonly caseThreadState = signal<ChatViewState>('loading');
+  // 跟一般對話的輸入框分開：換到別串時，打到一半的字才不會被送到另一串
+  protected readonly caseChatInput = signal('');
+  protected readonly isSendingCaseMessage = signal(false);
+  protected readonly caseSendError = signal('');
+
+  /**
+   * 看著某件案件的對話、而且有未讀，就標已讀；跟一般對話的 markViewingChatRead 同一套想法。
+   * 未讀看兩個地方：清單上的 unreadCount（對話還在載入時就有），和已載入訊息裡沒讀的回覆。
+   */
+  private readonly markViewingCaseRead = effect(() => {
+    const caseId = this.viewingCaseId();
+    if (caseId === null) {
+      return;
+    }
+    const listed = this.driverCases().find((item) => item.id === caseId);
+    const hasUnread =
+      (listed?.unreadCount ?? 0) > 0 ||
+      this.caseMessages().some((message) => message.senderType === 'ADMIN' && !message.readAt);
+    if (!hasUnread) {
+      return;
+    }
+
+    // 先在畫面上標掉，理由同 markViewingChatRead：不標的話 effect 重跑會連打好幾次 API
+    const readAt = new Date().toISOString();
+    this.caseMessages.update((messages) =>
+      messages.map((message) => (message.senderType === 'ADMIN' && !message.readAt ? {...message, readAt} : message)),
+    );
+    this.driverCases.update((cases) =>
+      cases.map((item) => (item.id === caseId ? {...item, unreadCount: 0} : item)),
+    );
+    this.operations.markCaseMessagesRead(caseId).subscribe({error: () => undefined});
   });
 
   protected readonly gpsTracking = inject(DriverGpsTrackingService);
@@ -586,9 +856,9 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
    * 斷線寫在 ngOnDestroy 與 signOut，不寫在 DriverAuthService.logout()：
    * 連線 service 本身要向 DriverAuthService 拿 token，反過來注入會變成互相依賴，Angular 會直接報錯。
    *
-   * 收到的推播合併到對話清單。第一次連上也要載一次對話：不載的話，
+   * 收到的推播合併到對話清單。第一次連上也要載一次對話和案件：不載的話，
    * 司機登入前調度中心就發的訊息不會算進紅點，要點開聊天才知道有人找他。
-   * 重連時同樣重載，補回斷線期間漏掉的推播。
+   * 重連時同樣重載，補回斷線期間漏掉的推播（包括斷線時被結案的案件）。
    */
   private connectChatSocket(): void {
     this.chatSocket.pushes$
@@ -596,7 +866,11 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       .subscribe((push) => this.handleChatPush(push));
     this.chatSocket.connected$
       .pipe(takeUntilDestroyed())
-      .subscribe(() => this.loadChatMessages());
+      .subscribe(() => {
+        this.loadChatMessages();
+        this.loadCases();
+        this.catchUpCaseThread();
+      });
     this.chatSocket.connect();
   }
 
@@ -640,19 +914,29 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadAttendance();
   }
 
+  /** 地圖上的支援中心按鈕：一律從首頁開始，上次停在哪一串對話不重要，首頁看得到所有未讀 */
+  protected openSupportCenter(): void {
+    this.supportView.set({kind: 'home'});
+    this.openSupportSheet();
+  }
+
+  protected closeSupportCenter(): void {
+    this.driverChatSheetRef?.dismiss();
+  }
+
   /**
-   * 打開與調度中心的聊天（Material Bottom Sheet，從底部滑上來）。
+   * 打開支援中心（Material Bottom Sheet，從底部滑上來），停在 supportView 指的那一頁。
    *
    * 內容用 <ng-template>，不另開元件：跟後台確認視窗（MatDialog）同一種寫法，一頁看得到全部。
-   * 之後的對話內容與 WebSocket 連線要放在這個元件的 signal／service，不能放在 sheet 裡：
+   * 對話內容、案件清單與 WebSocket 連線放在這個元件的 signal／service，不能放在 sheet 裡：
    * sheet 關掉時裡面的畫面會整個銷毀，放在裡面的話，關著時收不到訊息、重開要整串重載。
    */
-  protected openDriverChat(): void {
+  private openSupportSheet(): void {
     if (!this.driverChatSheet || this.driverChatSheetRef) {
       return;
     }
     this.driverChatSheetRef = this.bottomSheet.open(this.driverChatSheet, {
-      ariaLabel: '與調度中心的對話',
+      ariaLabel: '支援中心',
       // 全螢幕：尺寸寫在 styles.scss 的 .driver-chat-sheet-panel。
       // 只設 height 不夠，Material 自己的 CSS 還限制了 max-height: 80vh 和寬螢幕下的寬度
       panelClass: 'driver-chat-sheet-panel',
@@ -664,10 +948,311 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.isChatOpen.set(false);
     });
     this.loadChatMessages();
+    this.loadCases();
   }
 
-  protected closeDriverChat(): void {
-    this.driverChatSheetRef?.dismiss();
+  protected backToSupportHome(): void {
+    this.supportView.set({kind: 'home'});
+  }
+
+  protected toggleClosedCaseList(): void {
+    this.isClosedCaseListOpen.update((open) => !open);
+  }
+
+  /**
+   * 打開一串對話；caseId 是 null 就是一般對話。
+   * 一般對話在打開 sheet、WebSocket 連上時就載過，推播也會即時補進來，這裡只在上次載入失敗時重抓，
+   * 不然每次點進去都會閃一下「正在載入」。
+   */
+  protected openCaseThread(caseId: number | null): void {
+    if (caseId === null) {
+      this.supportView.set({kind: 'thread', caseId: null});
+      if (this.chatViewState() === 'error') {
+        this.loadChatMessages();
+      }
+      return;
+    }
+    // 先清掉上一件的訊息再切頁，不然會閃一下別件案件的對話
+    this.caseMessages.set([]);
+    this.caseChatInput.set('');
+    this.caseSendError.set('');
+    this.supportView.set({kind: 'thread', caseId});
+    this.loadCaseMessages(caseId);
+  }
+
+  /** 點分類開始填案件。每次都從空白表單開始，上一次沒送出的內容不留，免得帶到別的分類 */
+  protected startCase(category: DriverCaseCategory, orderId?: number): void {
+    this.casePicks.set([]);
+    this.caseNote.set('');
+    this.caseOrderId.set(orderId ?? this.defaultCaseOrderId(category));
+    this.caseCanContinue.set(null);
+    this.casePhoto.set(null);
+    this.caseFormError.set(null);
+    this.supportView.set({kind: 'create', category});
+  }
+
+  /** 任務卡的「貨況異常」：直接打開建立案件，分類是貨物問題、帶入這張單 */
+  protected reportStopIssue(stop: DriverTaskStop): void {
+    this.startCase('GOODS', stop.orderId);
+    this.openSupportSheet();
+  }
+
+  protected isCasePickSelected(pick: string): boolean {
+    return this.casePicks().includes(pick);
+  }
+
+  protected toggleCasePick(pick: string): void {
+    this.casePicks.update((picks) =>
+      picks.includes(pick) ? picks.filter((item) => item !== pick) : [...picks, pick],
+    );
+    this.caseFormError.set(null);
+  }
+
+  protected updateCaseNote(event: Event): void {
+    this.caseNote.set((event.target as HTMLTextAreaElement).value);
+    this.caseFormError.set(null);
+  }
+
+  protected selectCaseOrder(event: Event): void {
+    const value = (event.target as HTMLSelectElement).value;
+    this.caseOrderId.set(value ? Number(value) : null);
+  }
+
+  protected setCaseCanContinue(canContinue: boolean): void {
+    this.caseCanContinue.set(canContinue);
+    this.caseFormError.set(null);
+  }
+
+  /** 跟交貨照片同一套限制；選完就把 input 清掉，同一張照片移除後才能再選一次 */
+  protected selectCasePhoto(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.item(0) ?? null;
+    input.value = '';
+    if (!file) {
+      return;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      this.caseFormError.set('請選擇 5 MB 以下的 JPG、PNG 或 WebP 圖片。');
+      return;
+    }
+    this.casePhoto.set(file);
+    this.caseFormError.set(null);
+  }
+
+  protected removeCasePhoto(): void {
+    this.casePhoto.set(null);
+  }
+
+  /**
+   * 送出案件：有照片先傳照片拿網址（跟交貨照片同一支 API），再建案件；成功後直接進這件案件的對話。
+   * 失敗時表單內容全部留著，讓司機再按一次，或改打電話。
+   */
+  protected submitCase(): void {
+    const view = this.supportView();
+    if (view.kind !== 'create' || this.isSubmittingCase()) {
+      return;
+    }
+    const canContinue = this.caseCanContinue();
+    const description = composeCaseDescription(caseCategoryOption(view.category), this.casePicks(), this.caseNote());
+    const error = validateCaseDraft(description, canContinue);
+    if (error) {
+      this.caseFormError.set(error);
+      return;
+    }
+
+    this.isSubmittingCase.set(true);
+    this.caseFormError.set(null);
+    const photo = this.casePhoto();
+    // 型別要寫出來：不寫的話 TS 會推成 Observable<string> | Observable<null> 兩種，後面的 pipe 就接不起來
+    const photoUrl$: Observable<string | null> = photo
+      ? this.operations.uploadDeliveryPhoto(photo).pipe(map((response) => response.url))
+      : of(null);
+    photoUrl$
+      .pipe(
+        switchMap((photoUrl) =>
+          this.operations.createCase({
+            category: view.category,
+            orderId: this.caseOrderId(),
+            description,
+            // 上面 validateCaseDraft 已經擋掉 null，這裡一定是 true 或 false
+            canContinue: canContinue === true,
+            photoUrl,
+          }),
+        ),
+      )
+      .subscribe({
+        next: (created) => {
+          this.isSubmittingCase.set(false);
+          this.upsertCase(created);
+          this.openCaseThread(created.id);
+        },
+        error: (error: unknown) => {
+          this.isSubmittingCase.set(false);
+          this.caseFormError.set(
+            this.getCaseErrorMessage(error, '案件沒有送出，請稍後再試。緊急狀況請直接打電話給倉庫。'),
+          );
+        },
+      });
+  }
+
+  /** 在案件裡留言；跟一般對話的 sendChatMessage 同一種寫法，只是打的是這件案件的 API */
+  protected sendCaseMessage(): void {
+    const current = this.activeCase();
+    const content = this.caseChatInput().trim();
+    if (!current || current.status === 'CLOSED' || !content || this.isSendingCaseMessage()) {
+      return;
+    }
+
+    this.isSendingCaseMessage.set(true);
+    this.caseSendError.set('');
+    this.operations.sendCaseMessage(current.id, content).subscribe({
+      next: (saved) => {
+        this.isSendingCaseMessage.set(false);
+        this.caseChatInput.set('');
+        if (this.isShowingCase(current.id)) {
+          this.caseMessages.set(mergeMessagesById(this.caseMessages(), [saved]));
+          this.caseThreadState.set('ready');
+        }
+      },
+      error: (error: unknown) => {
+        this.isSendingCaseMessage.set(false);
+        this.caseSendError.set(this.getCaseErrorMessage(error, '訊息沒有送出，請稍後再試。'));
+      },
+    });
+  }
+
+  protected caseCategoryLabel(category: DriverCaseCategory): string {
+    return caseCategoryOption(category).label;
+  }
+
+  protected caseCategoryIcon(category: DriverCaseCategory): string {
+    return caseCategoryOption(category).icon;
+  }
+
+  protected caseStatusLabel(item: DriverCaseDto): string {
+    const labels: Record<CaseDisplayStatus, string> = {
+      waiting: '等待回覆',
+      handling: '處理中',
+      closed: '已結案',
+    };
+    return labels[caseDisplayStatus(item)];
+  }
+
+  protected caseStatusClass(item: DriverCaseDto): string {
+    return 'support-status is-' + caseDisplayStatus(item);
+  }
+
+  /** 案件時間：今天只顯示時分，其他天加上月日 */
+  protected formatCaseTime(value: string | null): string {
+    if (!value) {
+      return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const isToday = date.toDateString() === new Date().toDateString();
+    return new Intl.DateTimeFormat(
+      'zh-TW',
+      isToday
+        ? {hour: '2-digit', minute: '2-digit'}
+        : {month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'},
+    ).format(date);
+  }
+
+  /** 門市、貨物的狀況多半發生在正要送的那一站，先帶入導航中的目的地；其他分類跟訂單無關，預設不指定 */
+  private defaultCaseOrderId(category: DriverCaseCategory): number | null {
+    if (category !== 'STORE' && category !== 'GOODS') {
+      return null;
+    }
+    return this.selectedTask()?.stop.orderId ?? null;
+  }
+
+  /** 支援中心打開、WebSocket 連上（含重連）時抓；已經有資料就不閃成「載入中」 */
+  private loadCases(): void {
+    if (this.driverCases().length === 0) {
+      this.caseListState.set('loading');
+    }
+    this.operations.getCases().subscribe({
+      next: (cases) => {
+        this.driverCases.set(cases);
+        this.caseListState.set('ready');
+      },
+      error: () => this.caseListState.set('error'),
+    });
+  }
+
+  private loadCaseMessages(caseId: number): void {
+    this.caseThreadState.set('loading');
+    this.operations.getCaseMessages(caseId).subscribe({
+      next: (messages) => {
+        // 回應回來之前司機可能已經切到別串：丟掉，不然 A 案件的訊息會出現在 B 案件的畫面
+        if (!this.isShowingCase(caseId)) {
+          return;
+        }
+        this.caseMessages.set(mergeMessagesById(this.caseMessages(), messages));
+        this.caseThreadState.set('ready');
+      },
+      error: () => {
+        if (this.isShowingCase(caseId)) {
+          this.caseThreadState.set('error');
+        }
+      },
+    });
+  }
+
+  /**
+   * 重連時補抓停著的那件案件：斷線期間的推播不會補發。只重抓清單的話，清單上的未讀數會讓
+   * markViewingCaseRead 標已讀，後台看到「已讀」，那幾則卻從來沒出現在司機畫面上。
+   * 有訊息就只問比最後一則新的（afterId），接在後面；還沒有就整串載。
+   */
+  private catchUpCaseThread(): void {
+    const view = this.supportView();
+    if (view.kind !== 'thread' || view.caseId === null) {
+      return;
+    }
+    const caseId = view.caseId;
+    const lastId = this.caseMessages().at(-1)?.id;
+    if (lastId === undefined) {
+      this.loadCaseMessages(caseId);
+      return;
+    }
+    this.operations.getCaseMessages(caseId, lastId).subscribe({
+      next: (newer) => {
+        if (this.isShowingCase(caseId)) {
+          this.caseMessages.set(mergeMessagesById(this.caseMessages(), newer));
+        }
+      },
+      // 補抓失敗不另外提示：下次重連或重新點進這件時會再載一次
+      error: () => undefined,
+    });
+  }
+
+  /** 對話頁停在這件案件（不管 sheet 開沒開）；非同步回應回來時用它確認司機還在同一串 */
+  private isShowingCase(caseId: number): boolean {
+    const view = this.supportView();
+    return view.kind === 'thread' && view.caseId === caseId;
+  }
+
+  /** 新案件放最前面；已經有的整件換掉，但未讀數留本機的：案件推播只管狀態，未讀由訊息推播在算 */
+  private upsertCase(incoming: DriverCaseDto): void {
+    this.driverCases.update((cases) => {
+      if (!cases.some((item) => item.id === incoming.id)) {
+        return [incoming, ...cases];
+      }
+      return cases.map((item) => (item.id === incoming.id ? {...incoming, unreadCount: item.unreadCount} : item));
+    });
+  }
+
+  /**
+   * 案件 API 的錯誤訊息。404 只會是網址不存在（後端還沒部署案件 API）：
+   * GlobalExceptionHandler 會回「找不到檔案」，對司機沒有意義，改用 fallback
+   */
+  private getCaseErrorMessage(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse && error.status === 404) {
+      return fallback;
+    }
+    return this.getErrorMessage(error, fallback);
   }
 
   protected isOwnChatMessage(message: DriverMessageDto): boolean {
@@ -702,6 +1287,22 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   private handleChatPush(push: DriverMessagePushDto): void {
+    // 案件建立、接收、結案：整件換掉。接收後 acceptedAt 有值，畫面從「等待回覆」變「處理中」
+    if (push.type === 'CASE_OPENED' || push.type === 'CASE_ACCEPTED' || push.type === 'CASE_CLOSED') {
+      if (push.exceptionCase) {
+        this.upsertCase(push.exceptionCase);
+      }
+      return;
+    }
+
+    // 帶 exceptionCaseId 的是案件那一串，不能合併進一般對話，不然案件的回覆會出現在一般對話裡；
+    // 沒帶的才是一般對話
+    const caseId = push.type === 'MESSAGE' ? push.message?.exceptionCaseId : push.exceptionCaseId;
+    if (caseId != null) {
+      this.handleCasePush(caseId, push);
+      return;
+    }
+
     if (push.type === 'MESSAGE' && push.message) {
       this.chatMessages.set(this.mergeChatMessages([push.message]));
       this.chatViewState.set('ready');
@@ -720,10 +1321,56 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  /**
+   * 案件那一串的推播。正看著這件案件就直接放進畫面（標已讀交給 markViewingCaseRead），
+   * 沒在看就只在清單上把未讀加一，等司機點進去再載整串。
+   */
+  private handleCasePush(caseId: number, push: DriverMessagePushDto): void {
+    const isViewing = this.viewingCaseId() === caseId;
+    if (push.type === 'MESSAGE' && push.message) {
+      const message = push.message;
+      if (isViewing) {
+        this.caseMessages.set(mergeMessagesById(this.caseMessages(), [message]));
+        this.caseThreadState.set('ready');
+      }
+      if (message.senderType === 'ADMIN') {
+        // 後端規定先接收才能回覆，所以有回覆就一定已經接收；CASE_ACCEPTED 推播漏掉時，靠這裡補上 acceptedAt
+        this.driverCases.update((cases) =>
+          cases.map((item) =>
+            item.id !== caseId
+              ? item
+              : {
+                  ...item,
+                  acceptedAt: item.acceptedAt ?? message.createdAt,
+                  unreadCount: isViewing ? item.unreadCount : item.unreadCount + 1,
+                },
+          ),
+        );
+      }
+      return;
+    }
+
+    if (push.type === 'READ' && push.readSenderType && push.readAt) {
+      const readAt = push.readAt;
+      const readSenderType = push.readSenderType;
+      if (this.isShowingCase(caseId)) {
+        this.caseMessages.update((messages) =>
+          messages.map((message) =>
+            message.senderType === readSenderType && !message.readAt ? {...message, readAt} : message,
+          ),
+        );
+      }
+      // ADMIN＝司機自己在別台裝置讀了回覆，這件的紅點也要歸零
+      if (readSenderType === 'ADMIN') {
+        this.driverCases.update((cases) =>
+          cases.map((item) => (item.id === caseId ? {...item, unreadCount: 0} : item)),
+        );
+      }
+    }
+  }
+
   private mergeChatMessages(incoming: DriverMessageDto[]): DriverMessageDto[] {
-    const merged = new Map(this.chatMessages().map((message) => [message.id, message]));
-    incoming.forEach((message) => merged.set(message.id, message));
-    return Array.from(merged.values()).sort((left, right) => left.id - right.id);
+    return mergeMessagesById(this.chatMessages(), incoming);
   }
 
   /**
@@ -877,8 +1524,19 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
   }
 
+  protected readonly isEndWorkPanelOpen = signal(false);
+
+  protected toggleEndWorkPanel(): void {
+    this.isEndWorkPanelOpen.update((open) => !open);
+  }
+
   protected setActiveTab(tab: DriverTab): void {
     this.activeTab.set(tab);
+
+    if (tab === 'tasks') {
+      // 路線與商品明細可能在司機登入後才發布或補齊；重新進任務頁要看到最新資料。
+      this.loadTodayTasks(true);
+    }
 
     if (tab === 'schedule') {
       this.loadLeaveRequests();
@@ -891,7 +1549,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       }, 0);
     }
 
-    if (tab === 'profile') {
+    if (tab === 'tasks' || tab === 'profile') {
       this.loadEmergencyLeaves();
     }
   }
@@ -901,7 +1559,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected selectTaskForNavigation(route: DriverRouteTask, stop: DriverTaskStop): void {
-    if (!this.hasCoordinates(stop)) {
+    if (!this.canNavigate(stop)) {
       return;
     }
 
@@ -916,7 +1574,31 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected canNavigate(stop: DriverTaskStop): boolean {
-    return this.hasCoordinates(stop);
+    return this.hasCoordinates(stop) && navigationReadyForOrder(this.todayTasks(), stop.orderId);
+  }
+
+  protected canStartNavigation(): boolean {
+    const selected = this.selectedTask();
+    return selected !== null && this.canNavigate(selected.stop);
+  }
+
+  protected navigationUnavailableLabel(stop: DriverTaskStop): string {
+    if (!this.hasCoordinates(stop)) {
+      return '無座標';
+    }
+    return this.pendingLoadingCount() > 0 || stop.orderStatus === 'CONFIRMED'
+      ? '先點交'
+      : '不可導航';
+  }
+
+  protected navigationUnavailableReason(stop: DriverTaskStop): string {
+    if (!this.hasCoordinates(stop)) {
+      return '此站點尚未設定座標';
+    }
+    if (this.pendingLoadingCount() > 0) {
+      return `尚有 ${this.pendingLoadingCount()} 筆訂單未完成倉庫點交，請全部點交後再導航`;
+    }
+    return '這張訂單目前不可導航';
   }
 
   /** 還沒在倉庫點交的單先點交；點交完才能按抵達（後端也會擋） */
@@ -930,6 +1612,22 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected canCompleteDelivery(stop: DriverTaskStop): boolean {
     return stop.orderStatus === 'IN_DELIVERY';
+  }
+
+  protected isFinishedStop(stop: DriverTaskStop): boolean {
+    return (
+      stop.orderStatus === 'COMPLETED' ||
+      stop.orderStatus === 'CANCELLED' ||
+      stop.orderStatus === 'FAILED'
+    );
+  }
+
+  protected activeRouteStops(route: DriverRouteTask): DriverTaskStop[] {
+    return route.stops.filter((stop) => !this.isFinishedStop(stop));
+  }
+
+  protected finishedRouteStops(route: DriverRouteTask): DriverTaskStop[] {
+    return route.stops.filter((stop) => this.isFinishedStop(stop));
   }
 
   protected taskStatusLabel(status: DriverTaskOrderStatus): string {
@@ -958,8 +1656,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.activeDeliveryOrderId.set(stop.orderId);
     this.deliveryNotes.set('');
     this.deliveryPhoto.set(null);
-    this.deliveryExceptionOpen.set(false);
-    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
   }
@@ -968,8 +1664,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.activeDeliveryOrderId.set(null);
     this.deliveryNotes.set('');
     this.deliveryPhoto.set(null);
-    this.deliveryExceptionOpen.set(false);
-    this.deliveryExceptionDescription.set('');
     this.taskActionError.set(null);
   }
 
@@ -990,86 +1684,127 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.taskActionError.set(null);
   }
 
-  protected toggleDeliveryException(): void {
-    this.deliveryExceptionOpen.update((open) => !open);
-    this.deliveryExceptionDescription.set('');
-  }
-
-  protected updateDeliveryExceptionDescription(event: Event): void {
-    this.deliveryExceptionDescription.set((event.target as HTMLTextAreaElement).value);
-  }
-
   protected isLoadingActionOpen(stop: DriverTaskStop): boolean {
     return this.activeLoadingOrderId() === stop.orderId;
+  }
+
+  protected setInspectionReady(routeId: number, passed: boolean): void {
+    this.inspectionReady.update((ready) => ({...ready, [routeId]: passed}));
   }
 
   protected openLoadingAction(stop: DriverTaskStop): void {
     if (!this.canLoad(stop)) {
       return;
     }
+    // 按鈕沒通過時本來就不能按，這裡再擋一次；後端 DeliveryService.load 也會擋
+    const route = this.todayTasks()?.routes.find((item) => item.stops.some((routeStop) => routeStop.orderId === stop.orderId));
+    if (!route || !this.inspectionReady()[route.routeId]) {
+      this.taskActionError.set('請先通過這條路線的出車前安全檢查。');
+      return;
+    }
 
     this.closeDeliveryAction();
     this.activeLoadingOrderId.set(stop.orderId);
-    this.loadingBoxCount.set(String(stop.expectedBoxCount));
     this.loadingNotes.set('');
+    this.loadingSummaryChecked.set(false);
     this.loadingItemForms.set(
       Object.fromEntries((stop.items ?? []).map((item) => [item.id, {
         checked: false,
-        loadedQuantity: String(item.expectedQuantity),
-        notes: '',
       }])),
     );
-    this.loadingMismatchPending.set(false);
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
   }
 
   protected closeLoadingAction(): void {
     this.activeLoadingOrderId.set(null);
-    this.loadingBoxCount.set('');
     this.loadingNotes.set('');
+    this.loadingSummaryChecked.set(false);
+    this.reportingLoadingItemIds.set([]);
     this.loadingItemForms.set({});
-    this.loadingMismatchPending.set(false);
     this.taskActionError.set(null);
-  }
-
-  protected updateLoadingBoxCount(event: Event): void {
-    this.loadingBoxCount.set((event.target as HTMLInputElement).value);
-    this.loadingMismatchPending.set(false);
   }
 
   protected updateLoadingNotes(event: Event): void {
     this.loadingNotes.set((event.target as HTMLTextAreaElement).value);
   }
 
+  protected updateLoadingSummaryChecked(event: Event): void {
+    this.loadingSummaryChecked.set((event.target as HTMLInputElement).checked);
+  }
+
   protected loadingItemForm(itemId: number): LoadingItemForm {
-    return this.loadingItemForms()[itemId] ?? {checked: false, loadedQuantity: '', notes: ''};
+    return this.loadingItemForms()[itemId] ?? {checked: false};
+  }
+
+  protected checkedLoadingItemCount(stop: DriverTaskStop): number {
+    return stop.items.filter((item) => this.loadingItemForm(item.id).checked).length;
+  }
+
+  protected loadingChecklistComplete(stop: DriverTaskStop): boolean {
+    return stop.items.length > 0
+      ? this.checkedLoadingItemCount(stop) === stop.items.length
+      : this.loadingSummaryChecked();
   }
 
   protected updateLoadingItemChecked(itemId: number, event: Event): void {
+    if (this.isTaskSubmitting()) {
+      return;
+    }
     const checked = (event.target as HTMLInputElement).checked;
     this.loadingItemForms.update((items) => ({
       ...items,
       [itemId]: {...this.loadingItemForm(itemId), checked},
     }));
-    this.loadingMismatchPending.set(false);
   }
 
-  protected updateLoadingItemQuantity(itemId: number, event: Event): void {
-    const loadedQuantity = (event.target as HTMLInputElement).value;
-    this.loadingItemForms.update((items) => ({
-      ...items,
-      [itemId]: {...this.loadingItemForm(itemId), loadedQuantity},
-    }));
-    this.loadingMismatchPending.set(false);
+  protected handleLoadingMismatch(stop: DriverTaskStop): void {
+    if (!this.canLoad(stop) || this.isTaskSubmitting() || !stop.items.length) {
+      return;
+    }
+    const items = stop.items.filter((item) => this.loadingItemForm(item.id).checked);
+    if (!items.length) {
+      this.taskActionError.set('請先勾選點交不符的商品。');
+      return;
+    }
+    this.reportLoadingMismatch(stop, items);
   }
 
-  protected updateLoadingItemNotes(itemId: number, event: Event): void {
-    const notes = (event.target as HTMLInputElement).value;
-    this.loadingItemForms.update((items) => ({
-      ...items,
-      [itemId]: {...this.loadingItemForm(itemId), notes},
-    }));
+  protected reportLoadingMismatch(stop: DriverTaskStop, items: readonly DriverTaskOrderItem[]): void {
+    if (!this.canLoad(stop) || this.isTaskSubmitting() || !items.length) {
+      return;
+    }
+    const route = this.todayTasks()?.routes.find((task) => task.stops.some((row) => row.orderId === stop.orderId));
+    if (!route || !this.inspectionReady()[route.routeId]) {
+      this.taskActionError.set('請先通過這條路線的出車前安全檢查。');
+      return;
+    }
+    this.reportingLoadingItemIds.set(items.map((item) => item.id));
+    this.isTaskSubmitting.set(true);
+    this.taskActionError.set(null);
+    this.taskActionMessage.set(null);
+    this.operations.reportLoadingMismatch({
+      orderId: stop.orderId,
+      orderItemIds: items.map((item) => item.id),
+      notes: this.loadingNotes().trim() || undefined,
+    }).subscribe({
+      next: (response) => {
+        this.applyDeliveryResponse(response);
+        this.closeLoadingAction();
+        const rebuilt = response.followUpOrderNumber
+          ? `已重建訂單 ${response.followUpOrderNumber}，待主管確認。`
+          : '請主管重新建單。';
+        const products = items.map((item) => `${item.itemName}（應點 ${item.expectedQuantity} ${item.unit}）`).join('、');
+        this.taskActionMessage.set(`已送出倉庫點交不符異常：${products}。原單停止配送，${rebuilt}`);
+        this.reportingLoadingItemIds.set([]);
+        this.isTaskSubmitting.set(false);
+      },
+      error: (error: unknown) => {
+        this.reportingLoadingItemIds.set([]);
+        this.isTaskSubmitting.set(false);
+        this.taskActionError.set(this.getErrorMessage(error, '點交不符回報失敗，尚未送出異常案件，請再試。'));
+      },
+    });
   }
 
   protected submitLoading(stop: DriverTaskStop): void {
@@ -1077,41 +1812,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const rawCount = this.loadingBoxCount().trim();
-    const loadedBoxCount = Number(rawCount);
-    if (!rawCount || !Number.isInteger(loadedBoxCount) || loadedBoxCount < 0) {
-      this.taskActionError.set('請輸入 0 以上的整數箱數。');
+    if (stop.items.length === 0 && !this.loadingSummaryChecked()) {
+      this.taskActionError.set('請先核對訂單品項摘要與應點箱數，並勾選確認。');
       return;
     }
-    if (loadedBoxCount > stop.expectedBoxCount) {
-      this.taskActionError.set(`實點箱數不能多於應點的 ${stop.expectedBoxCount} 箱，多出來的請退回倉庫。`);
-      return;
-    }
-    const items = (stop.items ?? []).map((item) => {
-      const form = this.loadingItemForm(item.id);
-      const loadedQuantity = Number(form.loadedQuantity.trim());
-      return {item, form, loadedQuantity};
-    });
-    for (const {item, form, loadedQuantity} of items) {
-      if (!form.checked) {
+    const items = stop.items ?? [];
+    for (const item of items) {
+      if (!this.loadingItemForm(item.id).checked) {
         this.taskActionError.set(`請先勾選並核對商品「${item.itemName}」。`);
         return;
       }
-      if (!form.loadedQuantity.trim() || !Number.isInteger(loadedQuantity) || loadedQuantity < 0) {
-        this.taskActionError.set(`商品「${item.itemName}」的實點數量必須是 0 以上整數。`);
-        return;
-      }
-      if (loadedQuantity > item.expectedQuantity) {
-        this.taskActionError.set(`商品「${item.itemName}」的實點數量不能超過應到數量。`);
-        return;
-      }
-    }
-    const hasItemMismatch = items.some(({item, loadedQuantity}) => loadedQuantity !== item.expectedQuantity);
-    // 箱數或商品任一不符，一送出就定案，所以第一次按先停下來讓司機再確認。
-    if ((loadedBoxCount !== stop.expectedBoxCount || hasItemMismatch) && !this.loadingMismatchPending()) {
-      this.loadingMismatchPending.set(true);
-      this.taskActionError.set(null);
-      return;
     }
 
     this.isTaskSubmitting.set(true);
@@ -1121,23 +1831,25 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const notes = this.loadingNotes().trim() || undefined;
     this.operations.loading({
       orderId: stop.orderId,
-      loadedBoxCount,
+      loadedBoxCount: stop.expectedBoxCount,
       notes,
-      items: items.length === 0 ? undefined : items.map(({item, form, loadedQuantity}) => ({
+      items: items.length === 0 ? undefined : items.map((item) => ({
         orderItemId: item.id,
-        checked: form.checked,
-        loadedQuantity,
-        notes: form.notes.trim() || undefined,
+        checked: true,
+        loadedQuantity: item.expectedQuantity,
       })),
     }).subscribe({
       next: (response) => {
         this.applyDeliveryResponse(response);
         this.closeLoadingAction();
         if (response.orderStatus === 'LOADED') {
-          this.taskActionMessage.set('點交完成，可以出發配送。');
+          const remaining = this.pendingLoadingCount();
+          this.taskActionMessage.set(remaining > 0
+            ? `這張單已完成點交，還有 ${remaining} 筆訂單待點交。`
+            : '全部訂單已完成點交，可以開始導航。');
         } else {
           const followUp = response.followUpOrderNumber
-            ? `，明日補送單 ${response.followUpOrderNumber}`
+            ? `，重建單 ${response.followUpOrderNumber} 待主管確認`
             : '';
           this.taskActionError.set(`箱數不符，已建立異常單${followUp}。這張單今天不配送。`);
         }
@@ -1206,61 +1918,12 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     );
   }
 
-  protected reportDeliveryException(stop: DriverTaskStop): void {
-    const description = this.deliveryExceptionDescription().trim();
-    if (!description || this.isTaskSubmitting()) {
-      this.taskActionError.set('請填寫異常說明後再送出。');
-      return;
-    }
-
-    this.isTaskSubmitting.set(true);
-    this.taskActionError.set(null);
-    this.operations.reportException({orderId: stop.orderId, description}).subscribe({
-      next: (response) => {
-        this.applyDeliveryResponse(response);
-        this.closeDeliveryAction();
-        this.taskActionMessage.set('異常已送出，主管可在異常中心處理。');
-        this.isTaskSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.taskActionError.set(this.getErrorMessage(error, '無法送出配送異常。'));
-        this.isTaskSubmitting.set(false);
-      },
-    });
-  }
-
-  protected updateStartMileage(event: Event): void {
-    this.startMileageReading.set((event.target as HTMLInputElement).value);
-  }
-
   protected updateEndMileage(event: Event): void {
     this.endMileageReading.set((event.target as HTMLInputElement).value);
   }
 
   protected canRecordMileage(): boolean {
     return this.isWorkingOrOvertime(this.attendance()?.status);
-  }
-
-  protected submitStartMileage(): void {
-    const odometer = this.readOdometer(this.startMileageReading());
-    if (odometer === null || this.isMileageSubmitting()) {
-      return;
-    }
-
-    this.isMileageSubmitting.set(true);
-    this.mileageError.set(null);
-    this.mileageMessage.set(null);
-    this.operations.startMileage({odometer}).subscribe({
-      next: (mileageLog) => {
-        this.startMileageReading.set('');
-        this.mileageMessage.set(`已記錄出車里程 ${mileageLog.startOdometer} km。`);
-        this.isMileageSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.mileageError.set(this.getErrorMessage(error, '無法記錄出車里程。'));
-        this.isMileageSubmitting.set(false);
-      },
-    });
   }
 
   protected submitEndMileage(): void {
@@ -1376,207 +2039,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return status === 'PENDING' ? '待主管核准' : status === 'APPROVED' ? '已核准' : '已拒絕';
   }
 
-  protected updateLeaveFormField<K extends keyof DriverLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.leaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected setLeaveApplicationTab(tab: LeaveApplicationTab): void {
-    this.leaveApplicationTab.set(tab);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    if (tab === 'planned') {
-      this.loadPlannedLeaveShifts();
-    }
-  }
-
-  protected updatePlannedLeaveField<K extends keyof DriverPlannedLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.plannedLeaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected isPlannedDateSelected(workDate: string): boolean {
-    return this.plannedLeaveForm().workDates.includes(workDate);
-  }
-
-  protected isPlannedDateBlocked(workDate: string): boolean {
-    return this.leaveRequests().some((request) =>
-      request.workDate === workDate && request.fullDay && request.status !== 'REJECTED',
-    );
-  }
-
-  protected togglePlannedLeaveDate(workDate: string): void {
-    if (this.isLeaveSubmitting() || this.isPlannedDateBlocked(workDate)) {
-      return;
-    }
-    this.plannedLeaveForm.update((form) => ({
-      ...form,
-      workDates: form.workDates.includes(workDate)
-        ? form.workDates.filter((date) => date !== workDate)
-        : [...form.workDates, workDate].sort(),
-    }));
-    this.leaveError.set(null);
-  }
-
-  protected updateMakeupLeaveField<K extends keyof DriverMakeupLeaveForm>(
-    field: K,
-    event: Event,
-  ): void {
-    const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    this.makeupLeaveForm.update((form) => ({...form, [field]: target.value}));
-    this.leaveError.set(null);
-  }
-
-  protected selectMakeupLeaveDate(workDate: string): void {
-    this.makeupLeaveForm.update((form) => ({...form, workDate}));
-    this.leaveError.set(null);
-  }
-
-  protected selectMakeupEvidence(event: Event): void {
-    const file = (event.target as HTMLInputElement).files?.[0] ?? null;
-    if (file && file.size > 5 * 1024 * 1024) {
-      this.leaveError.set('佐證照片不能超過 5 MB。');
-      return;
-    }
-    this.selectedMakeupEvidenceFile.set(file);
-  }
-
-  protected selectLeaveHistoryDate(event: Event): void {
-    this.leaveHistoryDate.set((event.target as HTMLSelectElement).value);
-  }
-
-  protected submitLeaveRequest(): void {
-    const form = this.leaveForm();
-    const reason = form.reason.trim();
-    if (!reason) {
-      this.leaveError.set('請填寫當日特殊事由。');
-      return;
-    }
-    if (Boolean(form.leaveStart) !== Boolean(form.leaveEnd)) {
-      this.leaveError.set('部分時段請假要同時填寫開始與結束時間；都不填代表整天。');
-      return;
-    }
-    if (form.leaveStart && form.leaveEnd <= form.leaveStart) {
-      this.leaveError.set('請假結束時間必須晚於開始時間。');
-      return;
-    }
-
-    const request: DriverLeaveRequest = {
-      workDate: this.toIsoDate(new Date()),
-      leaveType: form.leaveType,
-      leaveStart: form.leaveStart || null,
-      leaveEnd: form.leaveEnd || null,
-      reason,
-    };
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    this.operations.submitLeaveRequest(request).subscribe({
-      next: (saved) => {
-        this.leaveRequests.update((items) =>
-          [saved, ...items.filter((item) => item.id !== saved.id)].sort(
-            (left, right) => right.requestedAt.localeCompare(left.requestedAt),
-          ),
-        );
-        this.leaveForm.set({
-          workDate: this.toIsoDate(new Date()),
-          leaveType: 'SPECIAL',
-          leaveStart: '',
-          leaveEnd: '',
-          reason: '',
-        });
-        this.leaveMessage.set('當日特殊事由已送出，主管審核後會在這裡顯示結果。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '請假申請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
-  protected submitPlannedLeaveRequest(): void {
-    const form = this.plannedLeaveForm();
-    const reason = form.reason.trim();
-    const workDates = form.workDates.filter((date) => !this.isPlannedDateBlocked(date));
-    if (workDates.length === 0 || !reason) {
-      this.leaveError.set('請至少選擇一個可申請的未來上班日，並填寫原因。');
-      return;
-    }
-
-    const request: DriverPlannedLeaveBatchRequest = {
-      groups: [{leaveType: form.leaveType, workDates, reason}],
-    };
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    this.operations.submitPlannedLeaveBatches(request).subscribe({
-      next: (batches) => {
-        const saved = batches.flatMap((batch: DriverLeaveBatchResponse) => batch.items);
-        this.leaveRequests.update((items) =>
-          [...saved, ...items.filter((item) => !saved.some((request) => request.id === item.id))]
-            .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
-        );
-        this.plannedLeaveForm.set({leaveType: form.leaveType, workDates: [], reason: ''});
-        this.leaveMessage.set('預排請假已送出，審核中日期不能重複選取。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '預排請假申請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
-  protected submitMakeupLeaveRequest(): void {
-    const form = this.makeupLeaveForm();
-    const reason = form.reason.trim();
-    if (!form.workDate || !reason) {
-      this.leaveError.set('請從可補請班次選擇日期，並填寫原因。');
-      return;
-    }
-
-    const request: DriverMakeupLeaveRequest = {
-      workDate: form.workDate,
-      leaveType: form.leaveType,
-      reason,
-    };
-    const evidence = this.selectedMakeupEvidenceFile();
-    const operation = evidence
-      ? this.operations.uploadLeaveEvidencePhoto(evidence).pipe(
-          switchMap((upload) => this.operations.submitMakeupLeave({...request, evidencePhotoUrl: upload.url})),
-        )
-      : this.operations.submitMakeupLeave(request);
-
-    this.isLeaveSubmitting.set(true);
-    this.leaveError.set(null);
-    this.leaveMessage.set(null);
-    operation.subscribe({
-      next: (saved) => {
-        this.leaveRequests.update((items) =>
-          [saved, ...items.filter((item) => item.id !== saved.id)]
-            .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
-        );
-        this.makeupLeaveForm.set({workDate: '', leaveType: 'SICK', reason: ''});
-        this.selectedMakeupEvidenceFile.set(null);
-        this.leaveMessage.set('事後補請已送出，主管審核結果會顯示在下方。');
-        this.isLeaveSubmitting.set(false);
-      },
-      error: (error: unknown) => {
-        this.leaveError.set(this.getErrorMessage(error, '事後補請未完成。'));
-        this.isLeaveSubmitting.set(false);
-      },
-    });
-  }
-
   protected leaveTypeLabel(type: DriverLeaveRequestResponse['leaveType']): string {
     return {
       SICK: '病假',
@@ -1603,33 +2065,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return status === 'PENDING' ? '待審核' : status === 'APPROVED' ? '已核准' : '未核准';
   }
 
-  protected toggleLeaveHistory(request: DriverLeaveRequestResponse): void {
-    if (this.expandedLeaveId() === request.id) {
-      this.expandedLeaveId.set(null);
-      return;
-    }
-
-    this.expandedLeaveId.set(request.id);
-    if (!this.leaveHistories()[request.id]) {
-      this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
-      this.isLeaveHistoryLoading.set(true);
-      this.operations.getLeaveRequestHistory(request.id).subscribe({
-        next: (events) => {
-          this.leaveHistories.update((histories) => ({...histories, [request.id]: events}));
-          this.leaveHistoryErrors.update((errors) => ({...errors, [request.id]: ''}));
-          this.isLeaveHistoryLoading.set(false);
-        },
-        error: (error: unknown) => {
-          this.leaveHistoryErrors.update((errors) => ({
-            ...errors,
-            [request.id]: this.getErrorMessage(error, '無法取得請假歷程。'),
-          }));
-          this.isLeaveHistoryLoading.set(false);
-        },
-      });
-    }
-  }
-
   protected markLeaveRequestRead(request: DriverLeaveRequestResponse): void {
     if (request.driverReadAt) {
       return;
@@ -1644,16 +2079,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.leaveError.set(this.getErrorMessage(error, '無法將結果標記為已讀。'));
       },
     });
-  }
-
-  protected leaveHistoryLabel(eventType: string): string {
-    return {
-      SUBMITTED: '送出申請',
-      APPROVED: '主管核准',
-      REJECTED: '主管退回',
-      TYPE_CHANGED: '修正假別',
-      PLANNED: '主管預排',
-    }[eventType] ?? eventType;
   }
 
   protected attendancePunctualityLabel(attendance: AttendanceRecordDto): string {
@@ -1917,6 +2342,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const {from, to} = this.monthRange(this.scheduleMonth());
     this.scheduleViewState.set('loading');
     this.scheduleError.set(null);
+    this.loadAssignments(from, to);
 
     this.operations.getPublishedShifts(from, to).subscribe({
       next: (shifts) => {
@@ -1936,8 +2362,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     });
   }
 
-  private loadTodayTasks(): void {
-    this.taskViewState.set('loading');
+  private loadTodayTasks(silent = false): void {
+    if (!silent) {
+      this.taskViewState.set('loading');
+    }
     this.taskError.set(null);
 
     this.operations.getTodayTasks().subscribe({
@@ -1992,41 +2420,20 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       return;
     }
     this.isLeaveListLoading.set(true);
+    this.leaveListAvailable.set(false);
     this.operations.getLeaveRequests().subscribe({
       next: (requests) => {
         this.leaveRequests.set(
           [...requests].sort((left, right) => right.requestedAt.localeCompare(left.requestedAt)),
         );
+        this.leaveListAvailable.set(true);
         this.isLeaveListLoading.set(false);
+        this.refreshScheduleCalendar();
       },
       error: (error: unknown) => {
+        this.leaveListAvailable.set(false);
         this.leaveError.set(this.getErrorMessage(error, '無法取得一般請假結果。'));
         this.isLeaveListLoading.set(false);
-      },
-    });
-  }
-
-  private loadPlannedLeaveShifts(): void {
-    if (this.isPlannedLeaveLoading()) {
-      return;
-    }
-    const from = new Date();
-    from.setDate(from.getDate() + 1);
-    const to = new Date(from);
-    to.setDate(to.getDate() + 59);
-    this.isPlannedLeaveLoading.set(true);
-    this.operations.getPublishedShifts(this.toIsoDate(from), this.toIsoDate(to)).subscribe({
-      next: (shifts) => {
-        this.plannedLeaveShifts.set(
-          shifts.filter((shift) => shift.shiftType === 'WORK')
-            .sort((left, right) => left.workDate.localeCompare(right.workDate)),
-        );
-        this.isPlannedLeaveLoading.set(false);
-      },
-      error: (error: unknown) => {
-        this.plannedLeaveShifts.set([]);
-        this.leaveError.set(this.getErrorMessage(error, '無法取得可預排請假的班表。'));
-        this.isPlannedLeaveLoading.set(false);
       },
     });
   }
@@ -2103,7 +2510,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   private readOdometer(value: string): number | null {
     const normalizedValue = value.trim();
     if (!normalizedValue) {
-      this.mileageError.set('請輸入里程表讀數。');
+      this.mileageError.set('請輸入行車紀錄器里程。');
       return null;
     }
 
@@ -2452,6 +2859,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   /** 用本地年月日組 YYYY-MM-DD；toISOString 會先轉 UTC，台灣早上 8 點前會變成前一天 */
+  /**
+   * 跟班表同一個月一起載。失敗不擋班表：派車資訊只是補充，
+   * 讀不到時上班日會顯示所屬倉庫與「尚未派車」。
+   */
+  private loadAssignments(from: string, to: string): void {
+    this.operations.getAssignments(from, to).subscribe({
+      next: (assignments) => this.publishedAssignments.set(assignments),
+      error: () => this.publishedAssignments.set([]),
+    });
+  }
+
+  protected formatVehicle(assignment: DriverAssignmentDto): string {
+    if (!assignment.vehiclePlateNumber) {
+      return '尚未派車';
+    }
+    return assignment.vehicleType
+      ? `${assignment.vehiclePlateNumber}（${assignment.vehicleType}）`
+      : assignment.vehiclePlateNumber;
+  }
+
   private toIsoDate(date: Date): string {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
@@ -2566,7 +2993,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected startNavigation(): void {
-    if (this.isNavigating()) {
+    if (this.isNavigating() || !this.canStartNavigation()) {
       return;
     }
 

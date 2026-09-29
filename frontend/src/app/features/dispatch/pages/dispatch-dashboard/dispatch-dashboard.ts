@@ -11,13 +11,13 @@ import {
   transferArrayItem,
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
-import {Component, computed, DestroyRef, effect, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
+import {Component, computed, DestroyRef, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, debounceTime, forkJoin, of, switchMap, timer} from 'rxjs';
+import {catchError, debounceTime, forkJoin, map, of, startWith, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
-import {DispatchHeaderService} from '../../../../core/services/dispatch-header.service';
+import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {
   DispatchDayDto,
@@ -28,7 +28,10 @@ import {
   GpsPingDto,
   OrderDto,
   OrderStatus,
+  PlannedPathDto,
   ReassignRequest,
+  RouteDeviationDto,
+  RouteDeviationPushDto,
   RouteMetricsDto,
   RouteStatus,
   RouteStopDto,
@@ -38,6 +41,7 @@ import {
   TemplateRouteRequest,
   UnassignedOrderDto,
   VehicleDto,
+  VehicleMaintenanceSummary,
   WarehouseDto,
 } from '../../../../core/services/dispatch-api.models';
 import {MatSlideToggleModule} from '@angular/material/slide-toggle' ;
@@ -175,12 +179,13 @@ interface VehicleOption {
   takenNote: string | null;
 }
 
-/** 已派出畫面右側「需要處理」的一項：配送異常、GPS 沒更新、還沒排進車的單 */
+/** 已派出畫面右側「需要處理」的一項：偏離路線、配送異常、GPS 沒更新、還沒排進車的單 */
 interface AttentionItem {
   key: string;
   title: string;
   detail: string;
-  kind: 'exception' | 'gps' | 'pending';
+  /** deviation＝偏離提示，deviation-alarm＝偏離超過 10 分鐘升級的警報 */
+  kind: 'deviation' | 'deviation-alarm' | 'exception' | 'gps' | 'pending';
 }
 
 /** 還沒結束、司機還要跑的單。已點交的貨在車上，也算還沒送 */
@@ -225,10 +230,14 @@ export class DispatchDashboard implements OnInit {
   private readonly socket = inject(DriverChatSocketService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
+  // 對話框開在 body 底下吃不到後台深淺色，開啟時要帶 theme.dialogPanelClass()
+  private readonly theme = inject(AdminThemeService);
   // 按「＋」清空看板前的確認視窗，寫在 dispatch-dashboard.html 最下面的 <ng-template #clearBoardDialog>
   private readonly clearBoardDialog = viewChild.required<TemplateRef<unknown>>('clearBoardDialog');
   // 在編組分頁按「儲存編組」前的確認視窗，同樣寫在 html 最下面
   private readonly saveTemplateDialog = viewChild.required<TemplateRef<unknown>>('saveTemplateDialog');
+  // 按「撤回發布」前的確認視窗，同樣寫在 html 最下面
+  private readonly withdrawDialog = viewChild.required<TemplateRef<unknown>>('withdrawDialog');
   readonly dispatchResult = signal<DispatchResultDto | null>(null);
   readonly orders = signal<OrderDto[]>([]);
   readonly stores = signal<StoreDto[]>([]);
@@ -260,7 +269,10 @@ export class DispatchDashboard implements OnInit {
 
   // ── 發布 ──────────────────────────────────────────────
   readonly publishing = signal(false);
+  readonly withdrawing = signal(false);
+  // 發布、撤回共用工具列下方這一行錯誤訊息；busy() 讓兩者不會同時在跑，不會互相蓋掉
   readonly publishError = signal('');
+  // 這次開頁面發布成功的日期；撤回成功時要刪掉，不然 published() 一直是 true，看板解不開
   private readonly publishedDates = signal<ReadonlySet<string>>(new Set());
   private daySwipe: {pointerId: number; startX: number; lastX: number} | null = null;
   private suppressDayCardClickUntil = 0;
@@ -268,8 +280,8 @@ export class DispatchDashboard implements OnInit {
   /** 發布是整天跨倉的動作；任何倉庫看到同一天已發布，就切成唯讀看板。 */
   readonly published = computed(() => {
     const date = this.dispatchDate();
-    const dayStatus = this.days().find((day) => day.date === date)?.status;
-    const dayWasPublished = ['PUBLISHED', 'IN_PROGRESS', 'CLOSED', 'UNRESOLVED'].includes(dayStatus ?? '');
+    const day = this.days().find((entry) => entry.date === date);
+    const dayWasPublished = day?.published ?? day?.status === 'PUBLISHED';
     return (
       this.publishedDates().has(date) ||
       dayWasPublished ||
@@ -281,11 +293,6 @@ export class DispatchDashboard implements OnInit {
     () => this.templates().find((item) => item.id === this.activeTemplateId()) ?? null,
   );
   readonly warehouseName = signal('高雄配送區');
-  private readonly header = inject(DispatchHeaderService);
-  // 倉庫名稱與更新時間顯示在頂部欄（dispatch-shell），這頁本身不再畫；兩個 signal 任一變了就同步過去
-  private readonly syncHeaderMeta = effect(() => {
-    this.header.meta.set(`${this.warehouseName()} · 資料更新於 ${this.updatedAt()}`);
-  });
 
   readonly tickerMessages = computed(() => {
     const orders = this.orders();
@@ -302,8 +309,10 @@ export class DispatchDashboard implements OnInit {
     ];
   });
 
-  /** 排車、改派或發布進行中都先鎖住看板操作 */
-  readonly busy = computed(() => this.optimizing() || this.saving() || this.publishing());
+  /** 排車、改派、發布或撤回進行中都先鎖住看板操作 */
+  readonly busy = computed(
+    () => this.optimizing() || this.saving() || this.publishing() || this.withdrawing(),
+  );
 
   // ── 地圖圖層 ──────────────────────────────────────────
 
@@ -385,9 +394,51 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 各司機的配送路線：倉庫出發，依派車順序直線連到各門市。
+   * 什麼時候要重抓道路形狀：看板上的日期、倉庫、已發布路線與各自的站點，任一個變了才重抓。
    *
-   * 順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
+   * 不跟著看板一起抓：派出後每送完一站就有推播、看板就重讀一次，但發布後形狀不會變，
+   * 一起抓等於一直重複下載同樣的幾百 KB。
+   * 撤回後改了路線再發布，路線 id 或站點會不同，key 就跟著變；沒改就重新發布，形狀本來就一樣。
+   * 日期、倉庫取 dispatchResult()（看板實際顯示的那包），不取 dispatchDate()：
+   * 切換日期時看板還沒讀回來，那時抓的會是新日期的形狀配上舊日期的路線。
+   */
+  private readonly plannedPathsKey = computed(() => {
+    const result = this.dispatchResult();
+    const publishedRoutes = this.routes()
+      .filter((route) => route.routeStatus === 'PUBLISHED' && route.routeId > 0)
+      .map((route) => `${route.routeId}:${route.cards.map((card) => card.storeId).join('-')}`);
+    if (!result || publishedRoutes.length === 0) {
+      return '';
+    }
+    return `${result.date}|${result.warehouse.id}|${publishedRoutes.join(',')}`;
+  });
+
+  /**
+   * 已發布路線的道路形狀（發布時後端存的），key 是 routeId；null＝還沒抓回來。
+   * 路線圖層關著就不抓；抓失敗就當作都沒有形狀，路線退回直線，不影響看板其他部分。
+   */
+  private readonly plannedPathByRoute = toSignal(
+    toObservable(computed(() => (this.showRouteLines() ? this.plannedPathsKey() : ''))).pipe(
+      switchMap((key) => {
+        const result = this.dispatchResult();
+        if (!key || !result) {
+          return of(new Map<number, PlannedPathDto>());
+        }
+        return this.api.getPlannedPaths(result.date, result.warehouse.id).pipe(
+          map((paths) => new Map(paths.map((path) => [path.routeId, path]))),
+          catchError(() => of(new Map<number, PlannedPathDto>())),
+          startWith(null),
+        );
+      }),
+    ),
+    {initialValue: null},
+  );
+
+  /**
+   * 各司機的配送路線：有道路形狀就沿實際道路畫（倉庫 → 各門市 → 回倉），
+   * 沒有就退回倉庫出發、依派車順序直線連到各門市。
+   *
+   * 直線的順序取 cards 的陣列順序，不取 sequence 欄位 —— 拖曳改的是陣列
    * （moveItemInArray / transferArrayItem），sequence 要等 reassign 回來才更新，
    * 照 sequence 畫會跟看板上看到的順序對不上。
    *
@@ -409,28 +460,43 @@ export class DispatchDashboard implements OnInit {
         .filter((driver) => driver.id != null)
         .map((driver) => [driver.id!, driver.name]),
     );
+    const plannedPathByRoute = this.plannedPathByRoute();
+    // 形狀還在抓：先不畫，不然會先閃一下直線才換成道路線
+    if (plannedPathByRoute === null) {
+      return [];
+    }
 
     const lines: RouteLine[] = [];
     for (const route of this.routes()) {
       if (route.routeStatus !== 'PUBLISHED' || route.driverId === null || route.cards.length === 0) {
         continue;
       }
+      const label = `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`;
 
-      const points: [number, number][] = [[warehouse.lat, warehouse.lng]];
+      const plannedPath = plannedPathByRoute.get(route.routeId);
+      if (plannedPath) {
+        // 各段頭尾相接（上一段的終點＝下一段的起點），直接串成一條線，重複的那一點不影響畫圖
+        lines.push({
+          id: route.routeId,
+          label,
+          coordinates: plannedPath.legs.flatMap((leg) => leg.path),
+          followsRoad: true,
+        });
+        continue;
+      }
+
+      // 沒有道路形狀：假資料腳本直接寫成已發布、V8 上線前發布的，或抓形狀失敗
+      const coordinates: [number, number][] = [[warehouse.lng, warehouse.lat]];
       for (const card of route.cards) {
         const store = storeById.get(card.storeId);
         // 沒座標的門市跳過，理由同 mapStores：0 或 undefined 會把線拉到幾內亞灣
         if (!store?.lat || !store?.lng) {
           continue;
         }
-        points.push([store.lat, store.lng]);
+        coordinates.push([store.lng, store.lat]);
       }
 
-      lines.push({
-        id: route.routeId,
-        label: `${nameById.get(route.driverId) ?? `司機 #${route.driverId}`} · ${route.plateNumber}`,
-        points,
-      });
+      lines.push({id: route.routeId, label, coordinates, followsRoad: false});
     }
 
     return lines;
@@ -468,6 +534,18 @@ export class DispatchDashboard implements OnInit {
     ),
     {initialValue: [] as GpsPingDto[]},
   );
+
+  // ── 偏離預定路線 ──────────────────────────────────────
+
+  /**
+   * 進行中的偏離，key 是偏離紀錄 id。打開看板、WebSocket 重新連上時整批重抓（loadActiveDeviations），
+   * 之間靠推播更新（applyDeviationPush）；推播在斷線期間會漏，所以以重抓的結果為準。
+   * 不分日期、倉庫，全部都留著；要顯示時才篩出這個看板上的路線。
+   */
+  private readonly activeDeviations = signal<ReadonlyMap<number, RouteDeviationDto>>(new Map());
+
+  /** 「已偏離幾分鐘」要跟著時間走：每 30 秒變一次，讀它的 computed 就會重算，不必等推播 */
+  private readonly clock = toSignal(timer(0, 30_000).pipe(map(() => Date.now())), {initialValue: Date.now()});
 
   /**
    * 地圖上的司機點。GPS 回報只有 driverId，姓名要拿 drivers() 補回來。
@@ -512,10 +590,13 @@ export class DispatchDashboard implements OnInit {
         .map((route) => [route.driverId!, route]),
     );
     const metricsByRoute = this.routeMetricsByRouteId();
+    const deviationByDriver = new Map(
+      [...this.activeDeviations().values()].map((deviation) => [deviation.driverId, deviation]),
+    );
 
     return this.livePings()
       .filter((ping) => activeOrdersByDriver.has(ping.driverId))
-      .map((ping) => {
+      .map((ping): MapPoint => {
         const order = activeOrdersByDriver.get(ping.driverId)!;
         const route = routeByDriver.get(ping.driverId);
         const metrics = route ? metricsByRoute.get(route.routeId) : undefined;
@@ -526,6 +607,11 @@ export class DispatchDashboard implements OnInit {
           `預估油耗 ${this.formatFuel(metrics?.gpsEstimatedFuelLiters)}`,
           `${storesById.get(order.storeId)?.name ?? `門市 #${order.storeId}`} · ${minutesAgo(ping.timestamp)} 分鐘前回報`,
         ];
+        const deviation = deviationByDriver.get(ping.driverId);
+        if (deviation) {
+          // 放第一行：滑過去第一眼就看到。分鐘數跟著 30 秒一次的 GPS 輪詢重畫
+          details.unshift(`偏離路線 ${minutesAgo(deviation.startedAt)} 分鐘${deviation.escalatedAt ? '（警報）' : ''}`);
+        }
         return {
           id: ping.driverId,
           label: nameById.get(ping.driverId) ?? `司機 #${ping.driverId}`,
@@ -533,13 +619,12 @@ export class DispatchDashboard implements OnInit {
           details,
           lat: ping.lat,
           lng: ping.lng,
+          alert: deviation ? (deviation.escalatedAt ? 'alarm' : 'notice') : undefined,
         };
       });
   });
 
   ngOnInit(): void {
-    // 離開這頁就清掉頂部欄的資訊，不然切到別頁還會顯示這頁的倉庫與更新時間
-    this.destroyRef.onDestroy(() => this.header.meta.set(null));
     this.loadDashboard();
     // 跟總覽分開打：編組載不到不該讓整個看板空白
     this.loadTemplates();
@@ -550,12 +635,18 @@ export class DispatchDashboard implements OnInit {
     // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
     this.socket.boardPushes$
       .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
-      .subscribe((push) => this.onBoardPush(push.date));
+      .subscribe((push) => this.onBoardPush(push));
+    // 偏離推播直接套用、不用 debounce：每一則都帶完整的那筆紀錄，不必回頭重查
+    this.loadActiveDeviations();
+    this.socket.routeDeviationPushes$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((push) => this.applyDeviationPush(push));
     // 斷線期間的推播不會補發，重新連上時自己重查一次，免得畫面停在舊的狀態
     this.socket.connected$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => {
         this.loadDays();
+        this.loadActiveDeviations();
         if (this.warehouseId()) {
           this.refreshOrdersAndBoard();
         }
@@ -606,8 +697,8 @@ export class DispatchDashboard implements OnInit {
       return;
     }
 
-    const strip = event.currentTarget as HTMLElement;
-    strip.setPointerCapture(event.pointerId);
+    // 這裡先不 setPointerCapture，等 moveDaySwipe 確定在拖才抓：一按下就抓的話，
+    // Chrome 會把之後的 click 送給抓住指標的日期列本身，日期卡的 (click) 永遠不會觸發
     this.daySwipe = {pointerId: event.pointerId, startX: event.clientX, lastX: event.clientX};
     this.daySwipeOffset.set(0);
     this.isDaySwipeDragging.set(true);
@@ -625,6 +716,11 @@ export class DispatchDashboard implements OnInit {
     this.daySwipeOffset.set(Math.max(-96, Math.min(96, distance * 0.8)));
     if (Math.abs(distance) > 2) {
       event.preventDefault();
+      // 確定在拖才抓住指標，拖出日期列外放開也收得到 pointerup
+      const strip = event.currentTarget as HTMLElement;
+      if (!strip.hasPointerCapture(event.pointerId)) {
+        strip.setPointerCapture(event.pointerId);
+      }
     }
   }
 
@@ -698,9 +794,13 @@ export class DispatchDashboard implements OnInit {
    * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
    * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
    */
-  private onBoardPush(date: string): void {
+  private onBoardPush(push: {date: string | null; resourcesChanged?: boolean}): void {
+    if (push.resourcesChanged) {
+      this.api.getDrivers().subscribe({next: drivers => this.drivers.set(drivers)});
+      this.api.getVehicles().subscribe({next: vehicles => this.vehicles.set(vehicles)});
+    }
     this.loadDays();
-    if (date === this.dispatchDate() && !this.busy()) {
+    if (push.date === this.dispatchDate() && !this.busy()) {
       this.refreshOrdersAndBoard();
     }
   }
@@ -839,11 +939,23 @@ export class DispatchDashboard implements OnInit {
   }
 
   /**
-   * 派出後右側「需要處理」：送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
-   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。
+   * 路線卡片上的保養提醒：只顯示「快到了」和「跑完會超過」。
+   * 資料不齊（UNKNOWN）不顯示在看板，免得每張卡都有灰字；到人車資源頁的車輛裡看得到
+   */
+  laneMaintenance(route: BoardRoute): VehicleMaintenanceSummary | null {
+    const maintenance = this.routeMetricsByRouteId().get(route.routeId)?.maintenance;
+    if (!maintenance || (maintenance.decision !== 'WARNING' && maintenance.decision !== 'BLOCKED')) {
+      return null;
+    }
+    return maintenance;
+  }
+
+  /**
+   * 派出後右側「需要處理」：偏離路線的司機、送不成的單、今天在跑卻沒有 GPS 的司機、還沒排進車的單。
+   * 都是調度員要動手的事，放同一個地方，不用在卡片之間找。偏離最急，排最前面，警報又排在提示前面。
    */
   readonly dispatchAttention = computed<AttentionItem[]>(() => {
-    const items: AttentionItem[] = [];
+    const items: AttentionItem[] = [...this.deviationAttention()];
     const isToday = this.dispatchDate() === todayLocalDate();
     const pingDrivers = new Set(this.livePings().map((ping) => ping.driverId));
 
@@ -876,6 +988,67 @@ export class DispatchDashboard implements OnInit {
     }
     return items;
   });
+
+  /** 這個看板上的路線正在偏離的司機；別的倉庫、別天的路線不在這裡顯示 */
+  private readonly deviationAttention = computed<AttentionItem[]>(() => {
+    // 讀 clock() 只是為了每 30 秒重算一次「已偏離幾分鐘」
+    this.clock();
+    const routeById = new Map(this.publishedRoutes().map((route) => [route.routeId, route]));
+    return [...this.activeDeviations().values()]
+      .filter((deviation) => routeById.has(deviation.routeId))
+      .sort((left, right) =>
+        Number(right.escalatedAt !== null) - Number(left.escalatedAt !== null)
+        || left.startedAt.localeCompare(right.startedAt))
+      .map((deviation) => {
+        const route = routeById.get(deviation.routeId)!;
+        const alarm = deviation.escalatedAt !== null;
+        return {
+          key: `deviation-${deviation.id}`,
+          title: `${this.driverName(deviation.driverId)} 偏離路線 ${minutesAgo(deviation.startedAt)} 分鐘${alarm ? '（警報）' : ''}`,
+          detail: `${route.plateNumber} · ${this.deviationLegLabel(route, deviation.legSequence)}`
+            + ` · 開始時離路線 ${Math.round(deviation.startDistanceMeters)} 公尺`,
+          kind: alarm ? 'deviation-alarm' : 'deviation',
+        };
+      });
+  });
+
+  /**
+   * 偏離的那一段要開往哪裡。段的切法跟後端發布時存預定路線一樣：倉庫 → 各門市（同一門市只算一站，照派車順序）→ 回倉，
+   * 所以第 N 段的終點就是去掉重複門市後的第 N 間；超過門市數就是回倉那一段。
+   */
+  private deviationLegLabel(route: BoardRoute, legSequence: number): string {
+    const storeNames: string[] = [];
+    const seenStoreIds = new Set<number>();
+    for (const card of route.cards) {
+      if (!seenStoreIds.has(card.storeId)) {
+        seenStoreIds.add(card.storeId);
+        storeNames.push(card.storeName);
+      }
+    }
+    const destination = storeNames[legSequence - 1];
+    return destination ? `往 ${destination}` : '回倉途中';
+  }
+
+  private loadActiveDeviations(): void {
+    this.api.getActiveRouteDeviations().subscribe({
+      next: (deviations) => this.activeDeviations.set(new Map(deviations.map((deviation) => [deviation.id, deviation]))),
+      // 抓失敗就保留原本的：只是警報可能不是最新，不影響看板其他部分，下次重新連線會再抓
+      error: () => undefined,
+    });
+  }
+
+  /** STARTED、ESCALATED 放進清單（同一筆就換成新的），ENDED 拿掉 */
+  private applyDeviationPush(push: RouteDeviationPushDto): void {
+    this.activeDeviations.update((current) => {
+      const next = new Map(current);
+      if (push.type === 'ENDED') {
+        next.delete(push.deviation.id);
+      } else {
+        next.set(push.deviation.id, push.deviation);
+      }
+      return next;
+    });
+  }
 
   private loadDashboard(): void {
     this.loading.set(true);
@@ -994,7 +1167,7 @@ export class DispatchDashboard implements OnInit {
         return lane;
       }
       if (lane.vehicleId === null || lane.isMaintenance || lane.hasLockedStops) {
-        const reason = lane.vehicleId === null ? '還沒選車' : lane.isMaintenance ? '車輛維修中' : '有配送中的訂單';
+        const reason = lane.vehicleId === null ? '還沒選車' : lane.isMaintenance ? '車輛保養或維修中' : '有配送中的訂單';
         notices.push(`${this.templateSlotLabel(lane.driverId, lane.vehicleId)} ${reason}，門市先不拉單`);
         return lane;
       }
@@ -1362,13 +1535,18 @@ export class DispatchDashboard implements OnInit {
       plateNumber: vehicle?.plateNumber ?? '',
       vehicleType: vehicle?.vehicleType ?? null,
       capacity: vehicle?.capacity ?? 0,
-      isMaintenance: vehicle?.status === 'MAINTENANCE',
+      // 送小保、送大保、送維修都算：不能拖單進去
+      isMaintenance: vehicle !== undefined && vehicle.status !== 'AVAILABLE',
     };
   }
 
   /** 車道司機今天不能出車的原因；沒指派司機或可以出車時回傳 null。車道紅框與狀態標籤用 */
   routeScheduleProblem(route: BoardRoute): string | null {
     return route.driverId === null ? null : this.driverScheduleNote(route.driverId);
+  }
+
+  assignedDriverMissing(route: BoardRoute): boolean {
+    return route.driverId !== null && !this.drivers().some(driver => driver.id === route.driverId);
   }
 
   /** 還沒指派司機的車道數。發布前這個數字必須是 0 */
@@ -1570,18 +1748,80 @@ export class DispatchDashboard implements OnInit {
     });
   }
 
-  /** 發布回傳跨倉的多包，挑出目前正在看的那一倉重繪。 */
+  /** 發布成功：記下這天已發布（看板切成唯讀），再重繪目前這一倉。 */
   private applyMyBoard(boards: DispatchResultDto[]): void {
     const date = this.dispatchDate();
     this.publishedDates.update((dates) => new Set(dates).add(date));
     this.loadDays();
+    this.redrawMyBoard(boards);
+    this.publishing.set(false);
+  }
+
+  /**
+   * 撤回當天全部倉庫的發布，路線翻回草稿、司機端的任務跟著消失，所以先跳確認。
+   *
+   * 能不能撤回以後端為準（DispatchGuardService.assertCanWithdraw）：只要有一張單已點交或更後面的狀態，
+   * 整批擋下。這裡跟 publish() 一樣先擋掉一定會失敗的情況，省得確認完才被退回。
+   */
+  confirmWithdraw(): void {
+    if (!this.published() || this.busy()) {
+      return;
+    }
+
+    // 過去的日期只要有單，日期列就是 UNRESOLVED 或 CLOSED，published() 一定是 true：就算後端撤回成功，看板也解不開
+    if (this.dispatchDate() < todayLocalDate()) {
+      this.publishError.set('不能撤回已經過去的日期。');
+      return;
+    }
+
+    // 日期列的狀態是後端依訂單推算的：IN_PROGRESS、CLOSED 代表已有單點交或結束，送出去一定被擋
+    const dayStatus = this.days().find((day) => day.date === this.dispatchDate())?.status;
+    if (dayStatus === 'IN_PROGRESS' || dayStatus === 'CLOSED') {
+      this.publishError.set('已有訂單點交或開始配送，不能撤回。');
+      return;
+    }
+
+    this.dialog.open(this.withdrawDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
+      // 按取消是 false；點背景、按 Esc 是 undefined，只有按「撤回」才是 true
+      if (ok) {
+        this.withdraw();
+      }
+    });
+  }
+
+  private withdraw(): void {
+    const date = this.dispatchDate();
+    this.withdrawing.set(true);
+    this.publishError.set('');
+    this.api.withdrawDispatch(date).subscribe({
+      next: (boards) => {
+        // published() 看三個來源，三個都要變回來看板才會解開：
+        // publishedDates 在這裡刪掉；日期列的狀態由 loadDays 重抓；路線狀態由 redrawMyBoard 換成已是 DRAFT 的
+        this.publishedDates.update((dates) => {
+          const next = new Set(dates);
+          next.delete(date);
+          return next;
+        });
+        this.loadDays();
+        this.redrawMyBoard(boards);
+        this.withdrawing.set(false);
+      },
+      error: (error: unknown) => {
+        // 被 assertCanWithdraw 擋下時，訊息會列出已經開始配送的單號
+        this.publishError.set(describeError(error));
+        this.withdrawing.set(false);
+      },
+    });
+  }
+
+  /** 發布、撤回都回傳跨倉的多包，挑出目前正在看的那一倉重繪；這一倉沒有路線就重抓。 */
+  private redrawMyBoard(boards: DispatchResultDto[]): void {
     const mine = boards.find((board) => board.warehouse.id === this.warehouseId());
     if (mine) {
       this.applyDispatchResult(mine);
     } else {
       this.reloadBoard();
     }
-    this.publishing.set(false);
   }
 
   // ── 常配編組 ──────────────────────────────────────────
@@ -1685,7 +1925,7 @@ export class DispatchDashboard implements OnInit {
       this.clearBoard();
       return;
     }
-    this.dialog.open(this.clearBoardDialog()).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.clearBoardDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「直接離開」才是 true
       if (ok) {
         this.clearBoard();
@@ -1824,7 +2064,7 @@ export class DispatchDashboard implements OnInit {
           : `${who}：${slot.storeIds.map((id) => this.storeName(id)).join(' → ')}`;
       }),
     };
-    this.dialog.open(this.saveTemplateDialog(), {data}).afterClosed().subscribe((ok) => {
+    this.dialog.open(this.saveTemplateDialog(), {data, panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「儲存」才是 true
       if (!ok || this.published() || this.busy()) {
         return;
@@ -2037,7 +2277,8 @@ export class DispatchDashboard implements OnInit {
       .map((route) => {
         const vehicle = vehicleById.get(route.vehicleId)!;
         const routeStops = route.stops ?? [];
-        const isMaintenance = vehicle.status === 'MAINTENANCE';
+        // 送小保、送大保、送維修都算（退役的車上面 isBoardVehicle 已經排掉）
+        const isMaintenance = vehicle.status !== 'AVAILABLE';
         return {
           // 同一台車沿用原本的 key，畫面不會整格重畫
           slotKey: previous.find((lane) => lane.vehicleId === route.vehicleId)?.slotKey ?? `slot-${++this.slotSeq}`,

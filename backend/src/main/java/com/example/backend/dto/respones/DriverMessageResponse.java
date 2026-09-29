@@ -18,6 +18,8 @@ public class DriverMessageResponse {
     private LocalDateTime createdAt;
     /** null 代表對方還沒讀 */
     private LocalDateTime readAt;
+    /** 屬於哪件案件的對話；null＝一般對話。前端靠它把推播分到對的那一串 */
+    private Long exceptionCaseId;
 
     public Long getId() {
         return id;
@@ -65,5 +67,13 @@ public class DriverMessageResponse {
 
     public void setReadAt(LocalDateTime readAt) {
         this.readAt = readAt;
+    }
+
+    public Long getExceptionCaseId() {
+        return exceptionCaseId;
+    }
+
+    public void setExceptionCaseId(Long exceptionCaseId) {
+        this.exceptionCaseId = exceptionCaseId;
     }
 }

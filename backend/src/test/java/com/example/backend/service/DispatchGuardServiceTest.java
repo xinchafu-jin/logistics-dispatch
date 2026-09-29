@@ -64,6 +64,16 @@ class DispatchGuardServiceTest {
     }
 
     @Test
+    void 不同所屬倉庫的司機也可發布路線() {
+        givenDriver(1L, "王小明", true);
+        drivers.get(0).setWarehouseId(2L);
+        givenShift(1L, ShiftType.WORK, null);
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setWarehouseId(1L);
+
+        assertDoesNotThrow(() -> guard.assertCanPublish(DATE));
+    }
+
+    @Test
     void 休假_請假_尚未安排都擋下_訊息有車牌與姓名() {
         givenDriver(1L, "王小明", true);
         givenDriver(2L, "李大華", true);
@@ -192,6 +202,39 @@ class DispatchGuardServiceTest {
         when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(List.of(waiting));
 
         assertDoesNotThrow(() -> guard.assertCanWithdraw(DATE));
+    }
+
+    @Test
+    void 撤回_已有完成訂單仍須遵守JIN的出車安全限制() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setStatus(RouteStatus.PUBLISHED);
+        List<OrdersEntity> orders = new ArrayList<>();
+        for (int index = 0; index < 4; index++) {
+            OrdersEntity order = new OrdersEntity();
+            order.setOrderNumber("DO-" + index);
+            order.setStatus(index < 3 ? OrderStatus.COMPLETED : OrderStatus.CONFIRMED);
+            order.setAssignedDriverId(1L);
+            order.setAssignedVehicleId(110L);
+            orders.add(order);
+        }
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(orders);
+
+        assertThrows(IllegalArgumentException.class, () -> guard.assertCanWithdraw(DATE));
+        assertEquals(3, orders.stream().filter(order -> order.getStatus() == OrderStatus.COMPLETED).count());
+        assertTrue(orders.stream().allMatch(order -> order.getAssignedDriverId().equals(1L)));
+    }
+
+    @Test
+    void 撤回_已有失敗或未簽收訂單仍須遵守JIN的出車安全限制() {
+        givenRoute(10L, "TN-2001", 1L, 5, OrderStatus.CONFIRMED).setStatus(RouteStatus.PUBLISHED);
+        OrdersEntity failed = new OrdersEntity();
+        failed.setStatus(OrderStatus.FAILED);
+        OrdersEntity noSignature = new OrdersEntity();
+        noSignature.setStatus(OrderStatus.NO_SIGNATURE);
+        when(ordersDAO.findByRouteIdIn(List.of(10L))).thenReturn(List.of(failed, noSignature));
+
+        assertThrows(IllegalArgumentException.class, () -> guard.assertCanWithdraw(DATE));
+        assertEquals(OrderStatus.FAILED, failed.getStatus());
+        assertEquals(OrderStatus.NO_SIGNATURE, noSignature.getStatus());
     }
 
     private String publishFailure() {

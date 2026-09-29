@@ -61,8 +61,8 @@
   align-items: center;
   justify-content: space-between;
   padding: max(8px, env(safe-area-inset-top)) 14px 8px;
-  border-bottom: 1px solid rgb(125 210 187 / 25%);
-  background: #0b1d1c;
+  border-bottom: 1px solid #c8dad3;
+  background: #f9fdfb;
 }
 
 .topbar-actions {
@@ -96,10 +96,10 @@
 }
 
 .brand {
-  --accent: #7de1c5;
-  --brand-muted: #c7d7d1;
-  --brand-node: #a5b8b0;
-  --brand-text: #f1f8f4;
+  --accent: #0e7663;
+  --brand-muted: #526f66;
+  --brand-node: #78928a;
+  --brand-text: #1f382f;
 
   display: flex;
   align-items: center;
@@ -107,7 +107,7 @@
 }
 
 .brand strong {
-  color: #f1f8f4;
+  color: #173129;
   font-size: 14px;
 }
 
@@ -119,10 +119,10 @@
   height: 38px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgb(182 218 207 / 38%);
+  border: 1px solid #c8dad3;
   border-radius: 7px;
-  color: #dff4ec;
-  background: rgb(8 25 25 / 88%);
+  color: #174c40;
+  background: #f9fdfb;
   cursor: pointer;
 }
 
@@ -142,6 +142,16 @@
 .map-content {
   // 地圖分頁沒有頂部欄，內容層吃滿整個畫面高度
   min-height: 100dvh;
+  // 這層只是擺按鈕和出勤抽屜用的透明框，卻整片蓋在地圖上（z-index 500，地圖是 0）。
+  // 手指按在框裡就算按到這層、地圖收不到，所以拖不動；手機上這個框幾乎就是整個畫面。
+  // 讓點擊穿透到地圖，真正要點的子元素在下面把 pointer-events 開回來
+  pointer-events: none;
+}
+
+// 聊天／定位按鈕、轉彎提示、出勤抽屜都是 .map-content 的直接子元素，各自恢復可點。
+// 只開到它們自己的範圍：抽屜收合時只有把手那一條，上面那一大塊地圖照樣拖得動
+.map-content > * {
+  pointer-events: auto;
 }
 
 // 地圖控制項避開瀏海與底部：指北針在左上，要讓出狀態列；
@@ -160,13 +170,6 @@
   bottom: calc(156px + env(safe-area-inset-bottom));
 }
 
-.eyebrow {
-  margin: 0 0 5px;
-  color: #68ceb7;
-  font-size: 12px;
-  font-weight: 800;
-}
-
 h1,
 h2,
 p {
@@ -176,25 +179,30 @@ p {
 h1 {
   max-width: 246px;
   margin-bottom: 0;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 29px;
   line-height: 1.22;
 }
 
 h2 {
   margin-bottom: 0;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 21px;
 }
 
 .map-quick-actions {
   position: absolute;
-  // 沒有頂部欄後直接貼著螢幕上緣，要讓出瀏海／狀態列
+  // 沒有頂部欄後直接貼著螢幕上緣，要讓出瀏海／狀態列；導航出現轉彎列時往下退到轉彎列下方
   top: calc(14px + env(safe-area-inset-top));
   right: 0;
   display: grid;
   justify-items: end;
   gap: 8px;
+  transition: top 180ms ease;
+}
+
+.map-quick-actions.has-turn-banner {
+  top: calc(88px + env(safe-area-inset-top));
 }
 
 .locate-control,
@@ -234,33 +242,107 @@ h2 {
   bottom: 86px;
   left: 0;
   display: grid;
-  height: min(68dvh, 520px);
+  height: auto;
+  max-height: min(56dvh, 420px);
   grid-template-rows: 64px minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgb(125 210 187 / 35%);
-  border-radius: 8px;
-  background: rgb(11 29 29 / 94%);
-  transform: translateY(calc(100% - 64px + var(--attendance-sheet-drag, 0px)));
+  border: 1px solid #c8dad3;
+  border-radius: 14px;
+  background: #f9fdfb;
+  box-shadow: 0 10px 28px rgb(8 35 31 / 16%);
+  transform: translateY(var(--attendance-sheet-drag, 0px));
   transition: transform 220ms ease;
   will-change: transform;
 }
 
-.attendance-sheet.is-expanded {
-  transform: translateY(var(--attendance-sheet-drag, 0px));
+.attendance-sheet:not(.is-expanded) {
+  grid-template-rows: 64px;
+}
+
+.attendance-sheet:not(.is-expanded) .attendance-drawer-handle {
+  border-bottom: 0;
 }
 
 .attendance-sheet.is-navigation-active {
-  height: min(46dvh, 360px);
+  max-height: min(46dvh, 360px);
 }
 
 .attendance-sheet.is-dragging {
   transition: none;
 }
 
-/* 收合時只保留摘要列，避免內容透過底部導覽列顯示或被誤觸。 */
+/* 收合時只保留 64px 把手膠囊在導覽列上方，不把整個白底卡片往下推到導覽列背後。 */
 .attendance-sheet:not(.is-expanded) .attendance-drawer-content {
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
+}
+
+.map-stop-overview {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.map-stop-overview__copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.map-stop-address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: #617b72;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.map-stop-address mat-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: #0e7663;
+  font-size: 16px;
+}
+
+.map-stop-address span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-stop-meta {
+  margin: 0;
+  color: #1d392f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.map-stop-meta span {
+  color: #617b72;
+  font-weight: 600;
+}
+
+.map-stop-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.map-stop-actions .primary-action,
+.map-stop-actions .danger-action,
+.map-stop-actions .outline-action {
+  width: 100%;
+  margin-top: 0;
+}
+
+.map-stop-actions__secondary {
+  border-color: #0e7663;
+  color: #ffffff;
+  background: #0e7663;
 }
 
 .attendance-drawer-handle {
@@ -272,9 +354,9 @@ h2 {
   gap: 10px;
   padding: 8px 12px;
   border: 0;
-  border-bottom: 1px solid rgb(125 210 187 / 20%);
-  color: #dff4ec;
-  background: rgb(8 25 25 / 50%);
+  border-bottom: 1px solid #c8dad3;
+  color: #174c40;
+  background: #edf5f1;
   cursor: grab;
   font: inherit;
   text-align: left;
@@ -295,7 +377,7 @@ h2 {
   width: 20px;
   height: 4px;
   border-radius: 999px;
-  background: #72c9b3;
+  background: #0e7663;
 }
 
 .attendance-drawer-summary {
@@ -306,7 +388,7 @@ h2 {
 
 .attendance-drawer-summary small {
   overflow: hidden;
-  color: #8eb7ab;
+  color: #5a8b7f;
   font-size: 10px;
   line-height: 1.3;
   text-overflow: ellipsis;
@@ -315,7 +397,7 @@ h2 {
 
 .attendance-drawer-summary strong {
   overflow: hidden;
-  color: #f3f9f6;
+  color: #173129;
   font-size: 15px;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -328,100 +410,13 @@ h2 {
   padding: 14px;
 }
 
-.route-summary {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 10px 0;
-  border-block: 1px solid rgb(125 210 187 / 25%);
-}
-
-.route-stop {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 8px;
-}
-
-.route-stop > span:last-child {
-  min-width: 0;
-}
-
-.route-stop strong,
-.route-stop small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.route-stop strong {
-  font-size: 12px;
-}
-
-.route-stop small {
-  font-size: 11px;
-  opacity: 0.65;
-}
-
-.route-stop.is-pending {
-  opacity: 0.6;
-}
-
-.route-marker {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid currentcolor;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.route-marker.is-current {
-  border-color: #b7f1df;
-  color: #08231f;
-  background: #70d5ba;
-}
-
-.route-connector {
-  display: block;
-  flex: 0 0 22px;
-  height: 1px;
-  background: #70d5ba;
-}
-
 .destination-copy {
   margin: 11px 0 0;
-  color: #b0c1bb;
+  color: #617b72;
   font-size: 12px;
   line-height: 1.4;
 }
 
-.navigation-action {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-top: 12px;
-  padding: 0 13px;
-  border-radius: 6px;
-  border: 0;
-  color: #08231f;
-  background: #70d5ba;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  text-decoration: none;
-}
-
-.navigation-action mat-icon,
 .task-navigation-button mat-icon {
   width: 17px;
   height: 17px;
@@ -429,16 +424,15 @@ h2 {
 
 .navigation-route-detail {
   margin: 8px 0 0;
-  color: #a7d8ca;
+  color: #477065;
   font-size: 12px;
   line-height: 1.4;
 }
 
 .navigation-route-detail.is-error {
-  color: #efb8b3;
+  color: #984a4a;
 }
 
-.sheet-heading,
 .attendance-actions {
   display: flex;
   align-items: center;
@@ -450,56 +444,20 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #a2b8b0;
+  color: #617b72;
   font-size: 12px;
   font-weight: 700;
 }
 
 .gps-status.is-active {
-  color: #77d7be;
+  color: #0e7663;
 }
 
 .sheet-copy {
   margin: 13px 0 0;
-  color: #b0c1bb;
+  color: #617b72;
   font-size: 13px;
   line-height: 1.45;
-}
-
-.attendance-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 15px;
-}
-
-.attendance-meta span {
-  display: grid;
-  justify-items: center;
-  min-width: 0;
-  gap: 2px;
-  padding: 7px 9px;
-  border-radius: 4px;
-  color: #b9d5cc;
-  background: #183938;
-  text-align: center;
-}
-
-.attendance-meta small {
-  color: #8eb7ab;
-  font-size: 10px;
-  line-height: 1.2;
-}
-
-.attendance-meta strong {
-  overflow-wrap: anywhere;
-  color: inherit;
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.attendance-meta-status {
-  grid-column: 1 / -1;
 }
 
 .primary-action,
@@ -529,9 +487,9 @@ h2 {
 
 .outline-action {
   margin-top: 14px;
-  border-color: #3f6259;
-  color: #d9eee7;
-  background: transparent;
+  border-color: #91b8ad;
+  color: #205b4d;
+  background: #ffffff;
 }
 
 .attendance-actions .outline-action,
@@ -568,8 +526,90 @@ h2 {
   padding: 22px 0 calc(96px + env(safe-area-inset-bottom));
 }
 
-.panel-heading {
-  margin-bottom: 18px;
+.duty-stage-card {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid #c8dad3;
+  border-radius: 12px;
+  background: #f9fdfb;
+  box-shadow: 0 2px 8px rgb(8 35 31 / 5%);
+}
+
+.duty-stage-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.duty-stage-card__header h1 {
+  max-width: none;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.duty-stage-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: #617b72;
+  font-size: 12px;
+}
+
+.duty-stage-meta strong {
+  color: #174c40;
+}
+
+.duty-stage-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+}
+
+.duty-stage-actions .outline-action {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 0;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.driver-app .duty-stage-actions .duty-stage-actions__emergency {
+  border-color: #d7aaa5;
+  color: #8a4540;
+  background: #fff7f5;
+}
+
+.end-work-panel {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #deebe5;
+}
+
+.end-work-panel__title {
+  margin: 0;
+  color: #174c40;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.end-work-panel__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.end-work-panel__actions .outline-action,
+.end-work-panel__actions .danger-action {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 0;
+  font-size: 12px;
 }
 
 .task-route-list {
@@ -578,13 +618,15 @@ h2 {
 }
 
 .task-route-card {
-  border: 1px solid #2e4a45;
-  border-radius: 8px;
-  background: #142322;
+  overflow: hidden;
+  border: 1px solid #c8dad3;
+  border-radius: 12px;
+  background: #f9fdfb;
 }
 
-.task-route-card {
-  overflow: hidden;
+.task-route-card app-pre-trip-check {
+  display: block;
+  margin: 0 16px 12px;
 }
 
 .task-route-heading {
@@ -592,18 +634,19 @@ h2 {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 15px 16px 8px;
+  padding: 15px 16px 10px;
 }
 
 .task-route-heading p,
 .task-route-meta {
   margin: 0;
-  color: #8ea69e;
+  color: #617b72;
   font-size: 12px;
 }
 
 .task-route-heading h2 {
   margin-top: 4px;
+  color: #1d392f;
   font-size: 17px;
 }
 
@@ -613,8 +656,8 @@ h2 {
   flex: 0 0 auto;
   padding: 5px 7px;
   border-radius: 4px;
-  color: #b9d5cc;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
   font-size: 12px;
   font-weight: 800;
 }
@@ -628,7 +671,41 @@ h2 {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
+}
+
+.completed-stops-group {
+  border-top: 1px solid #deebe5;
+  background: #f4f9f6;
+}
+
+.completed-stops-group > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  color: #5a8b7f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.completed-stops-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.completed-stops-group__toggle {
+  color: #0e7663;
+  font-size: 11px;
+}
+
+.task-stop-list.is-finished-list {
+  opacity: 0.78;
+}
+
+.task-stop.is-finished .task-status {
+  margin-top: 0;
 }
 
 .task-stop {
@@ -640,11 +717,11 @@ h2 {
 }
 
 .task-stop + .task-stop {
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
 }
 
 .task-stop.is-selected {
-  background: rgb(33 97 82 / 48%);
+  background: #dff4eb;
 }
 
 .stop-sequence {
@@ -654,7 +731,7 @@ h2 {
   place-items: center;
   border: 1px solid #5d9586;
   border-radius: 50%;
-  color: #94dcc8;
+  color: #226c5a;
   font-size: 12px;
   font-weight: 800;
 }
@@ -673,14 +750,14 @@ h2 {
 }
 
 .task-stop-copy strong {
-  color: #edf6f1;
+  color: #1d392f;
   font-size: 13px;
 }
 
 .task-stop-copy small,
 .task-stop-copy span {
   margin-top: 3px;
-  color: #8ea69e;
+  color: #617b72;
   font-size: 11px;
 }
 
@@ -692,7 +769,7 @@ h2 {
   place-items: center;
   border: 1px solid #416b61;
   border-radius: 6px;
-  color: #9de0ce;
+  color: #226c5a;
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -724,13 +801,13 @@ h2 {
 // 點交與抵達都是該站當下的主要動作，用同一種強調樣式
 .task-loading-button,
 .task-arrive-button {
-  border-color: #4b8f80;
-  color: #d6f4e8;
-  background: #1a5b4f;
+  border-color: #70aa9c;
+  color: #174c40;
+  background: #cceee2;
 }
 
 .task-delivery-button {
-  color: #a9e4d2;
+  color: #226c5a;
   background: #163b35;
 }
 
@@ -740,49 +817,49 @@ h2 {
   margin-top: 6px;
   padding: 3px 5px;
   border-radius: 4px;
-  color: #b9d5cc;
-  background: #183938;
+  color: #46655b;
+  background: #e7f1ed;
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
 }
 
 .task-status.is-in_delivery {
-  color: #f3d799;
-  background: #4b3920;
+  color: #795e22;
+  background: #f6edcf;
 }
 
 .task-status.is-completed {
-  color: #9de0ce;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
 }
 
 .task-status.is-failed,
 .task-status.is-cancelled {
-  color: #f3bcaf;
-  background: #4a2a2d;
+  color: #8a4a4a;
+  background: #f8e6e3;
 }
 
 .task-feedback {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid #3b6258;
+  border: 1px solid #c6ddd5;
   border-radius: 6px;
-  color: #bdd8cf;
-  background: #142d29;
+  color: #45665b;
+  background: #eff9f4;
   font-size: 12px;
   line-height: 1.45;
 }
 
 .task-feedback.is-success {
-  border-color: #3a806e;
-  color: #a7ead6;
+  border-color: #9ecfc0;
+  color: #0e7663;
 }
 
 .task-feedback.is-error {
-  border-color: #814f50;
-  color: #f4b9b4;
-  background: #352123;
+  border-color: #e0b1ad;
+  color: #8a4a4a;
+  background: #fbedeb;
 }
 
 .delivery-action-panel {
@@ -790,9 +867,9 @@ h2 {
   gap: 10px;
   margin-top: 2px;
   padding: 12px;
-  border: 1px solid #38685d;
+  border: 1px solid #c4ddd4;
   border-radius: 6px;
-  background: #102b27;
+  background: #edf8f3;
 }
 
 .task-stop .delivery-action-panel {
@@ -802,7 +879,7 @@ h2 {
 .delivery-action-panel p,
 .delivery-action-panel small {
   margin: 0;
-  color: #9eb8af;
+  color: #617b72;
   font-size: 11px;
   line-height: 1.45;
 }
@@ -817,7 +894,7 @@ h2 {
 .delivery-action-panel label > span,
 .delivery-action-panel > span,
 .mileage-form-row label > span {
-  color: #b9d5cc;
+  color: #42635a;
   font-size: 11px;
   font-weight: 800;
 }
@@ -828,11 +905,11 @@ h2 {
   width: 100%;
   min-width: 0;
   padding: 9px 10px;
-  border: 1px solid #3d655b;
+  border: 1px solid #c7dbd3;
   border-radius: 5px;
   outline: none;
-  color: #edf6f1;
-  background: #0b1d1c;
+  color: #1b392f;
+  background: #ffffff;
   font: inherit;
   font-size: 12px;
 }
@@ -841,87 +918,126 @@ h2 {
   resize: vertical;
 }
 
-.loading-item-list {
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgb(120 207 185 / 28%);
-  border-radius: 6px;
-  background: rgb(7 29 27 / 42%);
+.loading-action-panel {
+  --loading-ink: #164639;
+  --loading-muted: #55766a;
+  --loading-surface: #fff;
+  --loading-border: #d1e4dc;
+  --loading-checked: #e5f5ed;
+  --loading-pill: #e8f5ef;
+  padding: 16px;
+  gap: 14px;
+  border-radius: 14px;
+  background: #f5fbf8;
 }
 
-.loading-item-list > header,
-.loading-item-list article {
+.loading-panel-heading,
+.loading-item-heading {
   display: flex;
   align-items: center;
-  gap: 9px;
-}
-
-.loading-item-list > header {
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--loading-ink);
 }
 
-.loading-item-list > header strong {
-  color: #d6f4e8;
+.loading-panel-heading > strong { font-size: 16px; }
+.loading-panel-heading > span {
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: var(--loading-pill);
   font-size: 12px;
 }
+.loading-panel-heading b { font-size: 15px; }
+.loading-action-panel > p { color: var(--loading-muted); font-size: 12px; }
 
-.loading-item-list > header span {
-  color: #9eb8af;
-  font-size: 10px;
-}
-
-.loading-item-list article {
-  align-items: end;
-  padding-top: 8px;
-  border-top: 1px solid rgb(158 184 175 / 18%);
-}
-
-.loading-item-list article > label {
-  flex: 0 0 88px;
-}
-
-.loading-item-list article > .loading-item-check {
-  display: flex;
-  flex: 1 1 120px;
-  align-items: center;
-  gap: 8px;
-}
-
-.delivery-action-panel .loading-item-check input {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0;
-  accent-color: #70d5ba;
-}
-
-.loading-item-check span {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.loading-item-check strong,
-.loading-item-check small {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.loading-item-list { display: grid; gap: 8px; }
+.loading-item-heading { margin-bottom: 4px; }
+.loading-item-heading > div { display: grid; gap: 3px; }
+.loading-item-heading strong { font-size: 13px; }
+.loading-item-heading small { color: var(--loading-muted); font-size: 11px; }
+.loading-progress {
+  padding: 5px 9px;
+  border-radius: 20px;
+  color: var(--loading-muted);
+  background: var(--loading-surface);
+  font-size: 11px;
+  font-weight: 700;
   white-space: nowrap;
 }
+.loading-progress.is-complete { color: #fff; background: #087f6d; }
 
-.loading-item-check strong {
-  color: #edf6f1;
-  font-size: 12px;
+.loading-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--loading-border);
+  border-radius: 10px;
+  background: var(--loading-surface);
+  transition: background 150ms ease, border-color 150ms ease;
 }
-
-.loading-item-check small {
-  color: #9eb8af;
-  font-size: 10px;
+.loading-item-row.is-checked { border-color: #48a68d; background: var(--loading-checked); }
+.loading-item-row.is-mismatch { border-color: #b6634c; }
+.delivery-action-panel .loading-item-check {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
 }
-
-.loading-item-list article > .loading-item-note {
-  flex-basis: 120px;
+.delivery-action-panel .loading-item-check input {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  accent-color: #087f6d;
+  cursor: pointer;
 }
+.loading-item-name { display: grid; gap: 3px; }
+.loading-item-check strong { color: var(--loading-ink); font-size: 13px; overflow-wrap: anywhere; }
+.loading-item-check small { color: var(--loading-muted); font-size: 11px; font-weight: 500; }
+.loading-item-expected {
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--loading-ink);
+  background: var(--loading-pill);
+  font-size: 17px;
+  white-space: nowrap;
+}
+.loading-mismatch-button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 1px solid #e7c7b8;
+  border-radius: 8px;
+  color: #954529;
+  background: #fff5ef;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.loading-mismatch-button mat-icon { width: 15px; height: 15px; font-size: 15px; }
+.loading-action-panel .loading-mismatch-hint { font-size: 11px; }
+.loading-order-note { color: var(--loading-muted); font-size: 12px; }
+.loading-order-note summary { min-height: 30px; cursor: pointer; }
+.loading-order-note label { margin-top: 4px; }
+.loading-action-panel .delivery-action-buttons { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
+.loading-action-panel .delivery-action-buttons.has-mismatch-action { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.loading-action-panel .delivery-action-buttons button { min-width: 0; min-height: 44px; padding: 0 6px; border-radius: 9px; font-size: 13px; }
+.loading-action-panel .delivery-complete-button { color: #fff; background: #087f6d; }
+.loading-action-panel .delivery-cancel-button { grid-column: auto; }
+.loading-item-check:focus-within,
+.loading-action-panel button:focus-visible,
+.loading-order-note summary:focus-visible { outline: 2px solid #087f6d; outline-offset: 3px; border-radius: 5px; }
 
 .delivery-action-panel input:focus,
 .delivery-action-panel textarea:focus,
@@ -935,23 +1051,14 @@ h2 {
   gap: 6px;
 }
 
-.delivery-photo-input small,
-.delivery-exception-detail small {
-  color: #9eb8af;
+.delivery-photo-input small {
+  color: #617b72;
   font-size: 11px;
-}
-
-.delivery-exception-detail {
-  display: grid;
-  gap: 8px;
-  padding-top: 4px;
-  border-top: 1px solid rgb(158 184 175 / 24%);
 }
 
 .delivery-complete-button,
 .delivery-exception-button,
 .delivery-cancel-button,
-.mileage-start-button,
 .mileage-end-button {
   display: inline-flex;
   min-height: 38px;
@@ -967,83 +1074,40 @@ h2 {
   font-weight: 800;
 }
 
-.delivery-complete-button,
-.mileage-start-button {
+.delivery-complete-button {
   color: #08231f;
   background: #70d5ba;
 }
 
 .delivery-exception-button,
 .mileage-end-button {
-  border-color: #976565;
-  color: #f2c1bb;
-  background: #3e282a;
+  border-color: #d6a4a0;
+  color: #854a49;
+  background: #f9e7e4;
 }
 
 .delivery-cancel-button {
-  border-color: #42645b;
-  color: #b9d5cc;
+  border-color: #bfd5cc;
+  color: #42635a;
   background: transparent;
 }
 
 .delivery-complete-button mat-icon,
 .delivery-exception-button mat-icon,
-.mileage-start-button mat-icon,
-.mileage-end-button mat-icon,
-.mileage-heading mat-icon {
+.mileage-end-button mat-icon {
   width: 16px;
   height: 16px;
-}
-
-.mileage-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  padding: 15px;
-  border: 1px solid #2e4a45;
-  border-radius: 8px;
-  background: #142322;
-}
-
-.mileage-panel--drawer {
-  margin-top: 16px;
-  padding: 12px;
-}
-
-.mileage-panel--drawer .mileage-heading h2 {
-  font-size: 16px;
-}
-
-.mileage-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.mileage-heading h2 {
-  font-size: 18px;
-}
-
-.mileage-heading mat-icon {
-  color: #82dfc7;
-}
-
-.mileage-panel > p {
-  margin: -4px 0 0;
-  color: #9eb8af;
-  font-size: 12px;
-  line-height: 1.45;
 }
 
 .emergency-leave-history {
   display: grid;
   gap: 8px;
+  padding: 0 14px 14px;
 }
 
 .emergency-leave-history article {
   padding-top: 8px;
-  border-top: 1px solid #30443d;
+  border-top: 1px solid #deebe5;
 }
 
 .emergency-leave-history strong,
@@ -1054,29 +1118,16 @@ h2 {
 }
 
 .emergency-leave-history strong {
-  color: #d9eee7;
+  color: #173129;
   font-size: 12px;
 }
 
 .emergency-leave-history small,
 .emergency-leave-history span {
-  color: #a9bdb5;
+  color: #617b72;
   font-size: 11px;
   line-height: 1.45;
 }
-
-.leave-request-form,.driver-leave-history article { display:grid; gap:8px; padding:10px; border:1px solid #30443d; border-radius:5px; }
-.leave-request-form { background:#0d1d1a; }
-.leave-request-form label { display:grid; gap:5px; }
-.leave-request-form input,.leave-request-form select,.leave-request-form textarea { width:100%; padding:8px; color:#e0eee8; background:#0d1d1a; border:1px solid #36534a; border-radius:5px; }
-.leave-time-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
-.leave-unread-summary { margin:0; color:#f0c779; }
-.driver-leave-history { display:grid; gap:8px; }
-.driver-leave-history article.is-unread { border-color:#bd934a; }
-.driver-leave-history article header,.leave-request-actions { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.driver-leave-history article small,.driver-leave-history article p,.leave-request-events p { margin:0; font-size:12px; overflow-wrap:anywhere; }
-.driver-leave-history .decision-reason { color:#f0d39b; }
-.leave-request-events { display:grid; gap:5px; padding-top:7px; border-top:1px solid #30443d; }
 
 .mileage-form-row {
   display: grid;
@@ -1085,30 +1136,15 @@ h2 {
   gap: 8px;
 }
 
-.mileage-start-button,
 .mileage-end-button {
   min-width: 58px;
 }
 
-.mileage-note {
-  color: #9eb8af;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
-.mileage-recalculate-button {
-  justify-self: start;
-  min-height: 36px;
-  margin-top: 2px;
-}
-
-
 .empty-state,
-.profile-list,
 .shift-list {
-  border: 1px solid #2e4a45;
+  border: 1px solid #c8dad3;
   border-radius: 8px;
-  background: #142322;
+  background: #f9fdfb;
 }
 
 .empty-state {
@@ -1117,7 +1153,7 @@ h2 {
   padding: 28px;
   place-content: center;
   justify-items: center;
-  color: #83d6c0;
+  color: #0e7663;
   text-align: center;
 }
 
@@ -1129,26 +1165,32 @@ h2 {
 .empty-state p {
   max-width: 260px;
   margin-bottom: 0;
-  color: #a7bcb5;
+  color: #617b72;
   font-size: 13px;
   line-height: 1.55;
+}
+
+.profile-card,
+.profile-attendance-card {
+  margin-bottom: 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 12px;
+  background: #f9fdfb;
+  overflow: hidden;
 }
 
 .profile-photo-card {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
   padding: 14px;
-  border: 1px solid #2e4a45;
-  border-radius: 8px;
-  background: #142322;
+  background: #ffffff;
 }
 
 .profile-photo-preview {
-  width: 72px;
-  height: 72px;
-  flex: 0 0 72px;
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
   overflow: hidden;
   display: grid;
   place-items: center;
@@ -1156,7 +1198,7 @@ h2 {
   border-radius: 50%;
   color: #0f2522;
   background: #65d6c2;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 800;
 }
 
@@ -1168,31 +1210,52 @@ h2 {
 
 .profile-photo-copy {
   min-width: 0;
+  flex: 1;
   display: grid;
   justify-items: start;
-  gap: 7px;
+  gap: 4px;
+}
+
+.profile-photo-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .profile-photo-copy strong {
-  color: #edf7f3;
-  font-size: 18px;
+  color: #1d392f;
+  font-size: 17px;
 }
 
 .profile-photo-copy small {
-  color: #8ea69e;
-  line-height: 1.5;
+  color: #5d736b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.profile-status-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #0e7663;
+  background: #e5f2ec;
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .profile-photo-action {
   display: inline-flex;
-  min-height: 38px;
+  min-height: 32px;
   align-items: center;
   justify-content: center;
-  padding: 0 14px;
-  border: 1px solid #65d6c2;
+  margin-top: 2px;
+  padding: 0 12px;
+  border: 1px solid #74aa9b;
   border-radius: 7px;
-  color: #65d6c2;
+  color: #176c5b;
+  background: #f7fcfa;
   cursor: pointer;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -1210,16 +1273,18 @@ h2 {
 }
 
 .profile-photo-feedback {
-  margin: 0 0 14px;
-  font-size: 13px;
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid #deebe5;
+  font-size: 12px;
 }
 
 .profile-photo-feedback.is-success {
-  color: #65d6c2;
+  color: #0e7663;
 }
 
 .profile-photo-feedback.is-error {
-  color: #ff8d8d;
+  color: #a14c2e;
 }
 
 .profile-list {
@@ -1227,26 +1292,17 @@ h2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   margin: 0;
-  overflow: hidden;
+  border-top: 1px solid #deebe5;
+  background: #deebe5;
 }
 
 .profile-list div {
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 13px;
-  background: #142322;
-}
-
-.profile-list div + div {
-  border-top: 0;
-}
-
-.profile-list div:last-child {
-  grid-column: 1 / -1;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  padding: 11px 14px;
+  background: #f9fdfb;
 }
 
 .profile-list dd {
@@ -1254,15 +1310,172 @@ h2 {
 }
 
 dt {
-  color: #8ea69e;
-  font-size: 13px;
+  color: #617b72;
+  font-size: 12px;
 }
 
 dd {
   margin: 0;
-  color: #edf6f1;
-  font-size: 14px;
+  color: #173129;
+  font-size: 13px;
   font-weight: 800;
+}
+
+.profile-attendance-card {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.profile-attendance-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.profile-attendance-card__header strong {
+  color: #173129;
+  font-size: 14px;
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-stat-box {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #e5f2ec;
+  text-align: center;
+}
+
+.profile-stat-box span {
+  color: #5a8b7f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.profile-stat-box strong {
+  color: #174c40;
+  font-size: 14px;
+}
+
+.profile-stat-box small {
+  color: #5a8b7f;
+  font-size: 10px;
+}
+
+.schedule-selected-shift {
+  margin: 10px 4px 2px;
+  border-top: 1px solid #deebe5;
+}
+
+.schedule-history-card {
+  margin-bottom: 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 10px;
+  background: #f9fdfb;
+  overflow: hidden;
+}
+
+.schedule-history-card > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  color: #173129;
+  cursor: pointer;
+  font-size: 13px;
+  list-style: none;
+}
+
+.schedule-history-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.schedule-history-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-history-list {
+  display: grid;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  border-top: 1px solid #deebe5;
+}
+
+.schedule-history-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.schedule-history-item.is-unread {
+  border-color: #bd934a;
+  background: #fffdf7;
+}
+
+.schedule-history-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.schedule-history-item__head strong {
+  color: #173129;
+}
+
+.schedule-history-status {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.schedule-history-status.is-pending {
+  color: #73510c;
+  background: #fff1c8;
+}
+
+.schedule-history-status.is-approved {
+  color: #0e7663;
+  background: #e5f2ec;
+}
+
+.schedule-history-status.is-rejected {
+  color: #8a4540;
+  background: #f8e6e3;
+}
+
+.schedule-history-item small {
+  color: #617b72;
+}
+
+.schedule-history-reply {
+  margin: 2px 0 0;
+  color: #174c40;
+  font-weight: 700;
+}
+
+.schedule-history-read-btn {
+  min-height: 30px;
+  margin-top: 4px;
+  justify-self: start;
+  font-size: 11px;
 }
 
 .shift-list {
@@ -1272,36 +1485,40 @@ dd {
 .shift-row {
   display: grid;
   grid-template-columns: 0.85fr auto minmax(0, 1.25fr);
-  align-items: start;
+  align-items: center;
   gap: 8px;
-  padding: 15px 16px;
-  color: #a9bdb6;
+  padding: 12px 10px 4px;
+  color: #617b72;
   font-size: 13px;
 }
 
 .shift-row + .shift-row {
-  border-top: 1px solid #2e4a45;
+  border-top: 1px solid #deebe5;
 }
 
 .shift-row strong {
-  color: #edf6f1;
+  color: #1d392f;
 }
 
 .shift-type.is-work {
-  color: #9de0ce;
-  background: #183938;
+  color: #246a59;
+  background: #e5f2ec;
 }
 
-.shift-type.is-day_off,
+.shift-type.is-day_off {
+  color: #516860;
+  background: #e7ece9;
+}
+
 .shift-type.is-leave {
-  color: #d0d9d5;
-  background: #31403c;
+  color: #9a5a17;
+  background: #fbeedd;
 }
 
 .shift-details {
   display: grid;
   gap: 3px;
-  color: #a9bdb6;
+  color: #617b72;
 }
 
 .shift-details small {
@@ -1312,10 +1529,10 @@ dd {
 
 .sign-out {
   width: 100%;
-  margin-top: 18px;
-  border-color: #405e57;
-  color: #d6e5df;
-  background: transparent;
+  margin-top: 6px;
+  border-color: #d7aaa5;
+  color: #8a4540;
+  background: #fff7f5;
 }
 
 .bottom-navigation {
@@ -1328,10 +1545,10 @@ dd {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 7px;
-  border: 1px solid rgb(120 185 167 / 34%);
+  border: 1px solid #c8dad3;
   border-radius: 8px;
-  background: #091819;
-  box-shadow: 0 10px 26px rgb(0 0 0 / 30%);
+  background: #f9fdfb;
+  box-shadow: 0 10px 26px rgb(0 0 0 / 18%);
 }
 
 .bottom-navigation button {
@@ -1344,7 +1561,7 @@ dd {
   place-items: center;
   border: 0;
   border-radius: 6px;
-  color: #93aaa2;
+  color: #70877f;
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -1367,8 +1584,8 @@ dd {
 }
 
 .bottom-navigation button.is-active {
-  color: #e8f8f2;
-  background: #155247;
+  color: #173129;
+  background: #cceee2;
 }
 
 .leave-tab-count {
@@ -1386,308 +1603,18 @@ dd {
 }
 
 .bottom-navigation button.is-active mat-icon {
-  color: #82e0c8;
-}
-
-.driver-app .app-topbar,
-.driver-app .map-content,
-.driver-app .content-panel {
-  color: #173129;
-}
-
-.driver-app .brand {
-  --accent: #0e7663;
-  --brand-muted: #526f66;
-  --brand-node: #78928a;
-  --brand-text: #1f382f;
-}
-
-.driver-app .app-topbar {
-  border-color: #c8dad3;
-  background: #f9fdfb;
-}
-
-.driver-app .brand strong,
-.driver-app h1,
-.driver-app h2,
-.driver-app dd,
-.driver-app .bottom-navigation button.is-active {
-  color: #173129;
-}
-
-.driver-app .icon-button,
-.driver-app .locate-control,
-.driver-app .chat-control,
-.driver-app .attendance-sheet,
-.driver-app .empty-state,
-.driver-app .profile-list,
-.driver-app .shift-list,
-.driver-app .task-route-card,
-.driver-app .mileage-panel,
-.driver-app .bottom-navigation {
-  border-color: #c8dad3;
-  background: #f9fdfb;
-}
-
-.driver-app .icon-button,
-.driver-app .locate-control,
-.driver-app .chat-control {
-  color: #174c40;
-}
-
-
-.driver-app .attendance-drawer-handle {
-  border-color: #c8dad3;
-  color: #174c40;
-  background: #edf5f1;
-}
-
-.driver-app .attendance-drawer-grip {
-  background: #0e7663;
-}
-
-.driver-app .attendance-drawer-summary small {
-  color: #5a8b7f;
-}
-
-.driver-app .attendance-drawer-summary strong {
-  color: #173129;
-}
-
-.driver-app .gps-status,
-.driver-app .sheet-copy,
-.driver-app .destination-copy,
-.driver-app .empty-state p,
-.driver-app dt,
-.driver-app .shift-row,
-.driver-app .task-route-heading p,
-.driver-app .task-route-meta,
-.driver-app .task-stop-copy small,
-.driver-app .task-stop-copy span,
-.driver-app .shift-details,
-.driver-app .delivery-action-panel p,
-.driver-app .delivery-action-panel small,
-.driver-app .mileage-panel > p,
-.driver-app .emergency-leave-history small,
-.driver-app .emergency-leave-history span,
-.driver-app .mileage-note {
-  color: #617b72;
-}
-
-.driver-app .bottom-navigation button.is-active mat-icon {
   color: #087663;
 }
 
-.driver-app .attendance-meta span {
-  color: #286456;
-  background: #e5f2ec;
-}
-
-.driver-app .attendance-meta small {
-  color: #5a8b7f;
-}
-
-.driver-app .shift-row strong {
-  color: #1d392f;
-}
-
-.driver-app .task-route-heading h2,
-.driver-app .task-stop-copy strong {
-  color: #1d392f;
-}
-
-.driver-app .profile-list div + div,
-.driver-app .shift-row + .shift-row,
-.driver-app .task-stop-list,
-.driver-app .task-stop + .task-stop {
-  border-color: #deebe5;
-}
-
-.driver-app .profile-photo-card {
-  border-color: #deebe5;
-  background: #ffffff;
-}
-
-.driver-app .profile-list {
-  background: #deebe5;
-}
-
-.driver-app .profile-list div {
-  background: #ffffff;
-}
-
-.driver-app .profile-photo-copy strong {
-  color: #1d392f;
-}
-
-.driver-app .profile-photo-copy small {
-  color: #5d736b;
-}
-
-.driver-app .profile-photo-action {
-  border-color: #74aa9b;
-  color: #176c5b;
-  background: #f7fcfa;
-}
-
-.driver-app .outline-action {
-  border-color: #91b8ad;
-  color: #205b4d;
-  background: #ffffff;
-}
-
-.driver-app .sign-out {
-  border-color: #d7aaa5;
-  color: #8a4540;
-  background: #fff7f5;
-}
-
-.driver-app .bottom-navigation button {
-  color: #70877f;
-}
-
-.driver-app .bottom-navigation button.is-active {
-  background: #cceee2;
-}
-
-.driver-app .task-stop.is-selected {
-  background: #dff4eb;
-}
-
-.driver-app .task-route-heading > span,
-.driver-app .shift-type.is-work {
-  color: #246a59;
-  background: #e5f2ec;
-}
-
-.driver-app .shift-type.is-day_off {
-  color: #516860;
-  background: #e7ece9;
-}
-
-// 請假跟休假分開：月曆格子、圖例、明細標籤都用同一組橘色，一眼分得出是臨時請假
-.driver-app .shift-type.is-leave {
-  color: #9a5a17;
-  background: #fbeedd;
-}
-
-.driver-app .stop-sequence,
-.driver-app .task-navigation-button,
-.driver-app .task-delivery-button {
-  color: #226c5a;
-}
-
-.driver-app .task-loading-button,
-.driver-app .task-arrive-button {
-  border-color: #70aa9c;
-  color: #174c40;
-  background: #cceee2;
-}
-
-.driver-app .task-status {
-  color: #46655b;
-  background: #e7f1ed;
-}
-
-.driver-app .task-status.is-in_delivery {
-  color: #795e22;
-  background: #f6edcf;
-}
-
-.driver-app .task-status.is-failed,
-.driver-app .task-status.is-cancelled {
-  color: #8a4a4a;
-  background: #f8e6e3;
-}
-
-.driver-app .delivery-action-panel {
-  border-color: #c4ddd4;
-  background: #edf8f3;
-}
-
-.driver-app .delivery-action-panel label > span,
-.driver-app .mileage-form-row label > span {
-  color: #42635a;
-}
-
-.driver-app .delivery-photo-input small,
-.driver-app .delivery-exception-detail small {
-  color: #617b72;
-}
-
-.driver-app .delivery-action-panel input,
-.driver-app .delivery-action-panel textarea,
-.driver-app .mileage-form-row input {
-  border-color: #c7dbd3;
-  color: #1b392f;
-  background: #ffffff;
-}
-
-.driver-app .loading-item-list {
-  border-color: #cde2da;
-  background: #f7fcfa;
-}
-
-.driver-app .loading-item-list > header strong,
-.driver-app .loading-item-check strong {
-  color: #1d392f;
-}
-
-.driver-app .loading-item-list > header span,
-.driver-app .loading-item-check small {
-  color: #617b72;
-}
-
-.driver-app .loading-item-list article {
-  border-color: #dceae5;
-}
-
-.driver-app .delivery-cancel-button {
-  border-color: #bfd5cc;
-  color: #42635a;
-}
-
-.driver-app .delivery-exception-button,
-.driver-app .mileage-end-button {
-  border-color: #d6a4a0;
-  color: #854a49;
-  background: #f9e7e4;
-}
-
-.driver-app .navigation-route-detail {
-  color: #477065;
-}
-
-.driver-app .navigation-route-detail.is-error {
-  color: #984a4a;
-}
-
-.driver-app .emergency-leave-history article {
-  border-color: #e1e8df;
-}
-
-.driver-app .task-feedback {
-  border-color: #c6ddd5;
-  color: #45665b;
-  background: #eff9f4;
-}
-
-.driver-app .task-feedback.is-error {
-  border-color: #e0b1ad;
-  color: #8a4a4a;
-  background: #fbedeb;
-}
-
-@media (max-width: 520px) {
-  .loading-item-list article {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 92px;
-  }
-
-  .loading-item-list article > .loading-item-check,
-  .loading-item-list article > .loading-item-note {
-    grid-column: 1 / -1;
-  }
+@media (max-width: 380px) {
+  .loading-action-panel { padding: 12px; }
+  .loading-item-row { gap: 6px; padding: 8px; }
+  .delivery-action-panel .loading-item-check { gap: 6px; }
+  .loading-mismatch-button { padding: 0 6px; }
+  .loading-mismatch-button mat-icon { display: none; }
+  .loading-action-panel .delivery-action-buttons { gap: 6px; }
+  .loading-action-panel .delivery-action-buttons button { padding: 0 4px; font-size: 12px; }
+  .loading-action-panel .delivery-action-buttons mat-icon { display: none; }
 }
 
 @media (max-width: 380px) {
@@ -1722,12 +1649,22 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+}
+
+// 標題吃掉返回鈕、狀態標籤、關閉鈕以外的寬度；分類名稱太長就截斷，不把關閉鈕擠出畫面
+.driver-chat-sheet__heading {
+  flex: 1;
+  min-width: 0;
 }
 
 .driver-chat-sheet__header h2 {
   margin: 0;
+  overflow: hidden;
   color: #173129;
   font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .driver-chat-sheet__eyebrow {
@@ -1842,6 +1779,525 @@ button:disabled {
   font-size: 13px;
 }
 
+// ── 支援中心（例外回報案件）──────────────────────────────
+// 跟聊天共用同一個 sheet 和標題列，這裡是首頁、建立案件、案件卡的樣式。
+// 配色沿用聊天泡泡：深綠字 #173129、淡綠框 #c8dad3、主色 #087c6b；橘色＝等待回覆，紅色＝緊急／不能繼續
+
+// 首頁與表單的內容區：吃掉標題列以外的高度，自己捲動
+.support-body {
+  display: grid;
+  min-height: 0;
+  align-content: start;
+  gap: 18px;
+  overflow-y: auto;
+  padding: 2px 2px 12px;
+}
+
+.support-section {
+  display: grid;
+  gap: 8px;
+}
+
+.support-section-title {
+  margin: 0;
+  color: #527067;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.support-notice {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  color: #31584d;
+  background: #f2f7f5;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.support-notice p {
+  margin: 0;
+}
+
+.support-notice.is-danger,
+.support-notice.is-error {
+  border-color: #e2b4ad;
+  color: #8f3d2c;
+  background: #fbefec;
+}
+
+.support-calls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-calls a {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #b8412c;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.support-calls mat-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.support-case-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// 案件列、一般對話、打給倉庫共用的一整列按鈕
+.support-case-row,
+.support-link-row {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  color: #173129;
+  background: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.support-case-row.is-waiting {
+  border-color: #e7c28f;
+  background: #fffaf2;
+}
+
+.support-case-row.is-closed {
+  background: #f7f9f8;
+}
+
+.support-case-row > mat-icon,
+.support-link-row > mat-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: #087c6b;
+  font-size: 22px;
+}
+
+.support-link-row > mat-icon:last-child {
+  color: #87a298;
+}
+
+.support-row-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+}
+
+.support-row-copy strong {
+  font-size: 14px;
+}
+
+// 說明只留一行：清單是用來找案件的，完整內容點進去看
+.support-row-copy small {
+  overflow: hidden;
+  color: #6d827a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.support-case-row__meta {
+  display: grid;
+  flex: none;
+  justify-items: end;
+  gap: 4px;
+}
+
+.support-case-row__meta small {
+  color: #6d827a;
+  font-size: 11px;
+}
+
+.support-status {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.support-status.is-waiting {
+  color: #8a4f0c;
+  background: #fbeedd;
+}
+
+.support-status.is-handling {
+  color: #0a6a5b;
+  background: #dff3ec;
+}
+
+.support-status.is-closed {
+  color: #52615c;
+  background: #eef1ef;
+}
+
+// 紅點配色跟地圖上的 MatBadge 一致
+.support-unread {
+  display: inline-grid;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #e5484d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+// 分類格子：兩欄，每格至少 84px 高，戴手套或開車停下來也好按
+.support-category-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.support-category {
+  display: grid;
+  min-height: 84px;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 12px 8px;
+  border: 1px solid #c8dad3;
+  border-radius: 10px;
+  color: #173129;
+  background: #f9fdfb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.support-category mat-icon {
+  width: 28px;
+  height: 28px;
+  color: #087c6b;
+  font-size: 28px;
+}
+
+.support-category.is-urgent {
+  border-color: #e2b4ad;
+  color: #8f3d2c;
+  background: #fbefec;
+}
+
+.support-category.is-urgent mat-icon {
+  color: #b8412c;
+}
+
+.support-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px;
+  border: 0;
+  color: #527067;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+// 建立案件：內容區捲動，錯誤訊息和送出鈕固定在下面，不用捲到底才按得到
+.support-case-form {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 10px;
+}
+
+.support-field {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.support-field > span,
+.support-field > legend {
+  padding: 0;
+  color: #31584d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.support-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-pick {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #c8dad3;
+  border-radius: 999px;
+  color: #173129;
+  background: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.support-pick.is-selected {
+  border-color: #087c6b;
+  color: #ffffff;
+  background: #087c6b;
+}
+
+.support-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.support-choice button {
+  min-height: 46px;
+  border: 1px solid #c8dad3;
+  border-radius: 8px;
+  color: #173129;
+  background: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.support-choice button.is-selected {
+  border-color: #087c6b;
+  color: #ffffff;
+  background: #087c6b;
+}
+
+.support-choice button.is-stop.is-selected {
+  border-color: #a44646;
+  background: #a44646;
+}
+
+.support-field select,
+.support-field textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #b9d3ca;
+  border-radius: 8px;
+  color: #173129;
+  background: #ffffff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.support-field textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.support-field select:focus-visible,
+.support-field textarea:focus-visible {
+  outline: 2px solid #087c6b;
+  outline-offset: 1px;
+}
+
+.support-photo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.support-photo small {
+  overflow: hidden;
+  max-width: 160px;
+  color: #527067;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// 原生的檔案欄位很醜又看不出能拍照，藏起來改點外面的 label；聚焦時框線畫在 label 上
+.support-photo-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 1px dashed #87aa9e;
+  border-radius: 8px;
+  color: #087c6b;
+  background: #f9fdfb;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.support-photo-button:focus-within {
+  outline: 2px solid #087c6b;
+  outline-offset: 1px;
+}
+
+// 視覺上藏起來，但鍵盤和螢幕閱讀器還找得到；不能用 display: none，那樣連 label 點了都打不開
+.support-photo-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.support-photo-remove {
+  padding: 4px;
+  border: 0;
+  color: #a14c2e;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.support-submit {
+  min-height: 48px;
+  margin-top: 0;
+  font-size: 15px;
+}
+
+// 案件卡：放在案件對話最上面，就是司機當初回報的內容
+.support-case-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #c8dad3;
+  border-radius: 10px;
+  color: #173129;
+  background: #f9fdfb;
+}
+
+.support-case-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.support-case-card header mat-icon {
+  color: #087c6b;
+}
+
+.support-case-card header strong {
+  flex: 1;
+  font-size: 14px;
+}
+
+.support-case-card header span {
+  color: #0a6a5b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.support-case-card header span.is-stop {
+  color: #a44646;
+}
+
+.support-case-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.support-case-card dl {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.support-case-card dl div {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.support-case-card dt {
+  color: #6d827a;
+}
+
+.support-case-card dd {
+  margin: 0;
+  color: #31584d;
+}
+
+.support-case-card__photo img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.support-resolution {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 10px;
+  color: #0a5a4c;
+  background: #dff3ec;
+}
+
+.support-resolution strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.support-resolution mat-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+.support-resolution p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 // ── 班表月曆（Material mat-calendar）─────────────────────
 // 司機端沒有套 mat.theme()，月曆的系統色都是空的，這裡用工作台淺色面板的配色補上 token。
 // 每一格依班別上色的 class（shift-work 等）在 styles.scss：格子在 MatCalendar 自己的元件裡，這裡的樣式碰不到
@@ -1872,8 +2328,33 @@ button:disabled {
 
 .schedule-legend {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+.driver-app .shift-type.is-pending {
+  color: #73510c;
+  background: #fff1c8;
+}
+
+.schedule-pending-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  margin: 10px 6px 0;
+  color: #73510c;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.schedule-pending-hint mat-icon {
+  flex: 0 0 16px;
+  height: 16px;
+  width: 16px;
+  margin-top: 2px;
+  font-size: 16px;
 }
 
 .schedule-state {
@@ -1889,12 +2370,12 @@ button:disabled {
 }
 
 // ── 轉彎提示列 ─────────────────────────────────────────
-// 疊在地圖最上方，跟右側的聊天／定位按鈕同一條水平線；right 讓出按鈕的寬度（44px）加間距。
+// 獨佔地圖最上方一整行（100% 滿寬），右側的聊天／定位按鈕會自動退到下一行；
 // 用實心綠底白字：開車時一眼要看得清楚，不跟淺色面板混在一起
 .turn-banner {
   position: absolute;
   top: calc(14px + env(safe-area-inset-top));
-  right: 52px;
+  right: 0;
   left: 0;
   z-index: 1;
   display: grid;

@@ -17,6 +17,9 @@ public interface AttendanceRecordsDAO extends JpaRepository<AttendanceRecordsEnt
 
     Optional<AttendanceRecordsEntity> findByDriverIdAndWorkDate(Long driverId, LocalDate workDate);
 
+    List<AttendanceRecordsEntity> findByDriverIdAndWorkDateBetweenOrderByWorkDateAsc(
+            Long driverId, LocalDate from, LocalDate to);
+
     boolean existsByDriverShiftId(Long driverShiftId);
 
     boolean existsByDriverIdAndWorkDateBetweenAndLateExcusedTrue(

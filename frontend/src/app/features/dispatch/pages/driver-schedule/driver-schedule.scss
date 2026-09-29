@@ -1,1223 +1,150 @@
-:host {
-  display: block;
-  min-width: 0;
+// 司機班表：頂部一列（月份、發布狀態、班次統計、動作）→ 每週快速套用（草稿時）→ 月班表矩陣＋班次設定 → 待審請假。
+// 面板、表格、表單都用 styles.scss 的 .ui-*；這裡只放矩陣的格子、班別顏色與本頁版面
+:host { display: block; }
+
+.panel-note { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
+
+// ── 頂部列 ──
+.month-control { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.month-field { width: 170px; }
+
+.schedule-stats {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 auto 0 0; font-size: 0.75rem;
+  div { display: flex; gap: 4px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-family: var(--font-mono); font-weight: 600; }
+  .has-warning dd { color: var(--warn); }
 }
 
-.driver-schedule-page {
-  min-width: 0;
+.schedule-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.schedule-missing {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px;
+  h3 { margin: 0; font-size: 1rem; }
+  p { margin: 4px 0 0; color: var(--muted); font-size: 0.8125rem; }
 }
 
-.schedule-toolbar,
-.schedule-summary,
-.schedule-workspace,
-.schedule-grid-panel header,
-.shift-editor header,
-.month-controls,
-.schedule-actions,
-.time-fields {
-  display: flex;
-  align-items: center;
+// ── 每週快速套用 ──
+.batch-selection-heading {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  span { margin-right: auto; color: var(--muted); font-size: 0.75rem; }
 }
 
-.schedule-toolbar {
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.page-eyebrow {
-  margin: 0 0 8px;
-  color: var(--accent);
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-}
-
-.schedule-toolbar h2,
-.schedule-grid-panel h3,
-.shift-editor h3,
-.empty-state h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-weight: 600;
-}
-
-.schedule-toolbar h2 {
-  font-size: 2.25rem;
-}
-
-.schedule-toolbar > div:first-child > p:last-child {
-  max-width: 670px;
-  margin: 12px 0 0;
-  color: var(--muted);
-  line-height: 1.65;
-}
-
-.month-controls {
-  flex: 0 0 auto;
-  gap: 8px;
-}
-
-.month-controls label {
-  display: grid;
-  gap: 4px;
-}
-
-.month-field {
-  // 「2026年9月」加上月曆圖示的寬度，太寬會把旁邊的換月按鈕擠開
-  width: 150px;
-}
-
-.month-controls label span,
-.editor-form label > span {
-  color: var(--field-label);
-  font-size: 0.6875rem;
-  font-weight: 700;
-}
-
-.editor-form input,
-.editor-form select {
-  min-height: 38px;
-  padding: 0 10px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 0.8125rem;
-}
-
-.editor-form input:focus,
-.editor-form select:focus {
-  border-color: rgb(99 209 198 / 56%);
-  outline: 2px solid rgb(99 209 198 / 15%);
-  outline-offset: 1px;
-}
-
-.icon-button,
-.primary-action,
-.secondary-action,
-.leave-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 38px;
-  gap: 8px;
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.icon-button {
-  width: 38px;
-  padding: 0;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-}
-
-.icon-button mat-icon,
-.primary-action mat-icon,
-.secondary-action mat-icon,
-.leave-action mat-icon,
-.feedback mat-icon,
-.schedule-status mat-icon,
-.empty-state > mat-icon,
-.editor-placeholder mat-icon {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 17px;
-  font-size: 17px;
-  line-height: 17px;
-}
-
-.icon-button:hover:not(:disabled) {
-  color: var(--text);
-  border-color: rgb(99 209 198 / 45%);
-}
-
-.primary-action,
-.secondary-action,
-.leave-action {
-  padding: 0 13px;
-}
-
-.primary-action {
-  color: var(--button-text);
-  background: var(--accent);
-  border: 1px solid var(--accent);
-}
-
-.primary-action:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.secondary-action {
-  color: var(--text);
-  background: transparent;
-  border: 1px solid var(--border);
-}
-
-.secondary-action:hover:not(:disabled) {
-  border-color: rgb(99 209 198 / 48%);
-  background: rgb(99 209 198 / 8%);
-}
-
-.leave-action {
-  color: #f0c07a;
-  background: rgb(217 141 87 / 10%);
-  border: 1px solid rgb(217 141 87 / 36%);
-}
-
-.leave-action:hover:not(:disabled) {
-  background: rgb(217 141 87 / 18%);
-}
-
-button:disabled,
-input:disabled,
-select:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.feedback {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 18px 0 0;
-  padding: 10px 12px;
-  border: 1px solid;
-  border-radius: 5px;
-  font-size: 0.8125rem;
-}
-
-.feedback.is-error {
-  color: #f1b5b0;
-  background: rgb(178 74 65 / 12%);
-  border-color: rgb(230 108 98 / 36%);
-}
-
-.feedback.is-success {
-  color: #9ee3cf;
-  background: rgb(99 209 198 / 9%);
-  border-color: rgb(99 209 198 / 28%);
-}
-
-.empty-state {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 168px;
-  margin-top: 24px;
-  padding: 24px;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-}
-
-.empty-state > mat-icon,
-.editor-placeholder > mat-icon {
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  color: var(--accent);
-}
-
-.empty-state h3 {
-  font-size: 1.1rem;
-}
-
-.empty-state p {
-  margin: 6px 0 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-}
-
-.empty-state .primary-action {
-  margin-left: auto;
-}
-
-.schedule-summary {
-  justify-content: space-between;
-  gap: 24px;
-  margin-top: 24px;
-  padding: 14px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-.schedule-status {
-  display: flex;
-  align-items: center;
-  min-width: 138px;
-  gap: 10px;
-}
-
-.schedule-status mat-icon {
-  color: #f0c07a;
-}
-
-.schedule-status.is-published mat-icon {
-  color: var(--accent);
-}
-
-.schedule-status span,
-.schedule-status strong {
-  display: block;
-}
-
-.schedule-status span,
-.schedule-summary dt {
-  color: var(--subtle);
-  font-size: 0.6875rem;
-}
-
-.schedule-status strong {
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 0.875rem;
-}
-
-.schedule-summary dl {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(68px, 1fr));
-  flex: 1 1 auto;
-  max-width: 520px;
-  margin: 0;
-  border-left: 1px solid var(--border);
-}
-
-.schedule-summary dl div {
-  padding: 0 16px;
-  border-right: 1px solid var(--border);
-}
-
-.schedule-summary dt,
-.schedule-summary dd {
-  margin: 0;
-}
-
-.schedule-summary dd {
-  margin-top: 5px;
-  color: var(--text);
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-
-.schedule-summary .has-warning dd {
-  color: #efb45d;
-}
-
-.schedule-actions {
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.batch-schedule {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.2fr);
-  gap: 22px;
-  margin-top: 20px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.batch-schedule-heading h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.0625rem;
-  font-weight: 600;
-}
-
-.batch-schedule-heading > p:last-child {
-  margin: 7px 0 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1.55;
-}
-
-.batch-controls {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.batch-driver-selection {
-  display: grid;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.batch-selection-heading,
-.batch-driver-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-}
-
-.batch-selection-heading strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-.batch-selection-heading > span {
-  margin-right: auto;
-  color: var(--subtle);
-  font-size: 0.6875rem;
-}
-
-.batch-selection-action {
-  min-height: 28px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 700;
-}
-
-.batch-selection-action:hover:not(:disabled) {
-  color: var(--text);
-  border-color: rgb(99 209 198 / 48%);
-}
-
-.batch-selection-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
+.batch-driver-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
 .batch-driver-option {
-  display: inline-flex;
-  min-height: 34px;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--muted);
-  cursor: pointer;
+  padding: 4px 10px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
+  &.is-selected { background: var(--accent-soft); border-color: var(--accent); }
+  > span { display: grid; }
+  small { color: var(--muted); font-size: 0.6875rem; }
 }
 
-.batch-driver-option.is-selected {
-  border-color: rgb(99 209 198 / 58%);
-  color: var(--text);
-  background: rgb(99 209 198 / 9%);
+.batch-weekdays,
+.batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.batch-actions > span { margin-right: auto; color: var(--muted); font-size: 0.75rem; }
+
+// ── 月班表矩陣＋班次設定 ──
+.schedule-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
+.schedule-grid-panel { min-width: 0; }
+.schedule-grid-scroll { overflow: auto; }
+
+// 矩陣格子比一般表格緊：每格就是一顆班次按鈕
+.schedule-table {
+  width: max-content; min-width: 100%;
+  th, td { padding: 0; text-align: center; }
+  td { position: relative; min-width: 58px; height: 54px; }
+
+  // 欄頭日期固定在上、司機欄固定在左（捲動時不跟著跑）
+  thead th { position: sticky; top: 0; z-index: 2; min-width: 58px; padding: 6px 4px; font-size: 0.6875rem; }
+  thead th strong, thead th span { display: block; }
+  thead th span { color: var(--muted); font-weight: 400; }
+  thead th.is-sunday span { color: var(--danger); }
+  td.is-weekend { background: var(--surface-subtle); }
 }
 
-.batch-driver-option input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.batch-driver-option > span {
-  display: grid;
-  gap: 1px;
-}
-
-.batch-driver-option strong,
-.batch-driver-option small,
-.batch-driver-options > p {
-  margin: 0;
-  font-size: 0.6875rem;
-}
-
-.batch-driver-option small,
-.batch-driver-options > p {
-  color: var(--subtle);
-}
-
-.weekday-selector,
-.batch-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-}
-
-.weekday-button,
-.weekday-preset {
-  min-height: 32px;
-  padding: 0 10px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 700;
-}
-
-.weekday-button:hover:not(:disabled),
-.weekday-button.is-selected,
-.weekday-preset:hover:not(:disabled) {
-  color: var(--text);
-  border-color: rgb(99 209 198 / 48%);
-  background: rgb(99 209 198 / 9%);
-}
-
-.weekday-button.is-selected {
-  color: var(--button-text);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.batch-actions {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.batch-actions > span {
-  flex: 1 1 150px;
-  color: var(--subtle);
-  font-size: 0.6875rem;
-}
-
-.batch-actions .primary-action,
-.batch-actions .secondary-action {
-  min-height: 34px;
-}
-
-.schedule-workspace {
-  align-items: start;
-  gap: 20px;
-  margin-top: 20px;
-}
-
-.schedule-grid-panel,
-.shift-editor {
-  min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--metal-edge);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
-}
-
-.schedule-grid-panel {
-  flex: 1 1 auto;
-  overflow: hidden;
-}
-
-.leave-review-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
-  padding: 14px;
-  border: 1px solid var(--metal-edge);
-  border-left: 3px solid var(--accent);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.leave-review-panel > header,
-.leave-review-list article > header,
-.leave-review-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.leave-review-panel h3,
-.partial-leave-editor h4 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1rem;
-}
-
-.leave-review-panel > header > span {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.leave-review-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
-  gap: 10px;
-}
-
-.leave-review-list article {
-  display: grid;
-  align-content: start;
-  gap: 9px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel);
-}
-
-.leave-review-list article > header > div {
-  display: grid;
-  gap: 4px;
-}
-
-.leave-review-list article > header strong {
-  color: var(--text);
-  font-size: 0.8125rem;
-}
-
-.leave-review-list article > header span,
-.leave-review-list article > p,
-.leave-review-list article label > span,
-.leave-review-history {
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.5;
-}
-
-.leave-review-list article > header em {
-  flex: 0 0 auto;
-  padding: 3px 7px;
-  border-radius: 10px;
-  color: #8c641e;
-  background: rgb(217 161 76 / 14%);
-  font-size: 0.625rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.leave-review-list article > p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.leave-review-list article > label {
-  display: grid;
-  gap: 5px;
-}
-
-.leave-review-list textarea,
-.leave-review-list select,
-.partial-leave-editor textarea {
-  width: 100%;
-  min-height: 58px;
-  padding: 8px 9px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 0.75rem;
-  resize: vertical;
-}
-
-.leave-review-list select {
-  min-height: 34px;
-  padding: 0 9px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.leave-review-actions {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-}
-
-.leave-reject-action,
-.history-action {
-  min-height: 34px;
-  padding: 0 10px;
-  color: var(--muted);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 700;
-}
-
-.leave-reject-action {
-  color: #a44e39;
-  border-color: rgb(184 85 67 / 35%);
-}
-
-.leave-reject-action:hover,
-.history-action:hover {
-  background: var(--hover);
-}
-
-.leave-review-empty,
-.leave-review-error {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.leave-review-error {
-  color: #b34c3b;
-}
-
-.leave-review-history {
-  display: grid;
-  gap: 5px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-}
-
-.leave-review-history p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.schedule-grid-panel header,
-.shift-editor header {
-  justify-content: space-between;
-  gap: 12px;
-  padding: 17px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.schedule-grid-panel h3,
-.shift-editor h3 {
-  font-size: 1.0625rem;
-}
-
-.schedule-grid-panel header > span,
-.shift-editor header > div > span {
-  display: block;
-  margin-top: 4px;
-  color: var(--subtle);
-  font-size: 0.6875rem;
-}
-
-.schedule-grid-scroll {
-  max-width: 100%;
-  overflow: auto;
-}
-
-table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-th,
-td {
-  min-width: 53px;
-  height: 54px;
-  padding: 0;
-  text-align: center;
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-
-thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  color: var(--subtle);
-  background: var(--panel);
-  font-size: 0.6875rem;
-}
-
-thead th strong,
-thead th span {
-  display: block;
-}
-
-thead th strong {
-  color: var(--text);
-  font-size: 0.8125rem;
-}
-
-thead th span {
-  margin-top: 3px;
-  font-weight: 500;
-}
-
-.driver-column {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  min-width: 145px;
-  padding: 0 13px;
-  text-align: left;
-  background: var(--panel);
-}
-
-tbody .driver-column strong,
-tbody .driver-column span {
-  display: block;
-}
-
-tbody .driver-column strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-tbody .driver-column span {
-  margin-top: 3px;
-  color: var(--subtle);
-  font-size: 0.625rem;
-  font-weight: 500;
-}
+// 疊上 .schedule-table：權重要高過上面矩陣格子的 padding: 0、置中
+.schedule-table .driver-column { position: sticky; left: 0; z-index: 1; min-width: 140px; padding: 6px 10px; text-align: left; }
+.schedule-table thead .driver-column { z-index: 3; }
 
 .driver-name-trigger {
-  display: grid;
-  width: 100%;
-  gap: 3px;
-  padding: 8px 0;
-  color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font: inherit;
+  display: grid; gap: 2px; width: 100%; padding: 0; color: inherit; background: none; border: 0; font: inherit; text-align: left; cursor: pointer;
+  strong { font-size: 0.8125rem; }
+  span { color: var(--muted); font-size: 0.6875rem; font-weight: 400; }
+  &:hover strong { color: var(--accent); }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 
-.driver-name-trigger:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.driver-leave-tooltip {
-  position: fixed;
-  z-index: 100;
-  display: grid;
-  width: min(340px, calc(100vw - 24px));
-  max-height: min(320px, calc(100vh - 24px));
-  gap: 8px;
-  overflow: auto;
-  padding: 12px;
-  color: var(--text);
-  text-align: left;
-  background: color-mix(in srgb, var(--app-bg) 88%, transparent);
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
-  box-shadow: 0 14px 36px rgb(0 0 0 / 48%);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  pointer-events: none;
-}
-
-.driver-leave-tooltip > strong {
-  color: var(--text);
-  font-size: 0.75rem;
-}
-
-.driver-leave-tooltip > small {
-  color: var(--muted);
-  font-size: 0.6875rem;
-}
-
-.driver-leave-tooltip article {
-  display: grid;
-  gap: 4px;
-  padding-top: 7px;
-  border-top: 1px solid var(--border);
-}
-
-.driver-leave-tooltip article b {
-  color: var(--text);
-  font-size: 0.6875rem;
-}
-
-.driver-leave-tooltip article span,
-.driver-leave-tooltip article small {
-  color: var(--muted);
-  font-size: 0.625rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
-td.has-leave-record .shift-cell {
-  background: rgb(217 161 76 / 7%);
-}
-
-.leave-cell-marker {
-  position: absolute;
-  top: 2px;
-  right: 3px;
-  display: grid;
-  width: 17px;
-  height: 17px;
-  place-items: center;
-  color: #755014;
-  background: #f0c778;
-  border-radius: 50%;
-  pointer-events: none;
-}
-
-.leave-cell-marker mat-icon {
-  width: 11px;
-  height: 11px;
-  font-size: 11px;
-  line-height: 11px;
-}
-
-.driver-leave-detail-panel {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
-  padding: 16px;
-  border: 1px solid var(--metal-edge);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.driver-leave-detail-panel > header,
-.driver-leave-detail-list article > header {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.driver-leave-detail-panel h3 {
-  margin: 0;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1rem;
-}
-
-.driver-leave-detail-panel > p,
-.driver-leave-detail-list > p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-.driver-leave-detail-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
-  gap: 10px;
-}
-
-.driver-leave-detail-list article {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel);
-}
-
-.driver-leave-detail-list article header > div {
-  display: grid;
-  gap: 4px;
-}
-
-.driver-leave-detail-list strong {
-  color: var(--text);
-  font-size: 0.8125rem;
-}
-
-.driver-leave-detail-list span,
-.driver-leave-detail-list p,
-.driver-leave-detail-list a {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.driver-leave-detail-list a {
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.driver-leave-detail-list em {
-  flex: 0 0 auto;
-  padding: 3px 7px;
-  color: #8c641e;
-  background: rgb(217 161 76 / 14%);
-  border-radius: 10px;
-  font-size: 0.625rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.driver-leave-detail-list em.is-approved {
-  color: #2d8a73;
-  background: rgb(99 209 198 / 12%);
-}
-
-.driver-leave-detail-list em.is-rejected {
-  color: #ad5147;
-  background: rgb(184 85 67 / 12%);
-}
-
-td.is-weekend,
-thead th.is-weekend {
-  background: rgb(217 141 87 / 4%);
-}
-
-td.is-sunday,
-thead th.is-sunday {
-  background: rgb(148 163 184 / 16%);
-}
-
-.fixed-holiday {
-  display: block;
-  width: 100%;
-  min-height: 53px;
-  background: rgb(148 163 184 / 8%);
-}
-
+// 班次按鈕：上班主色、休假灰、請假提醒色、未排定紅（發布前要排完）
 .shift-cell {
-  width: 100%;
-  height: 100%;
-  min-height: 53px;
-  padding: 4px;
-  color: var(--muted);
-  background: transparent;
-  border: 0;
-  border-left: 2px solid transparent;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 700;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; height: 100%; min-height: 54px; padding: 4px;
+  color: var(--muted); background: transparent; border: 0; font: inherit; font-size: 0.6875rem; cursor: pointer;
+  &:hover { background: var(--row-hover); }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  &.is-selected { color: var(--text); background: var(--row-selected); box-shadow: inset 0 0 0 1px var(--accent); }
+  &.is-work { color: var(--accent); }
+  &.is-leave { color: var(--warn); }
+  &.is-unassigned { color: var(--danger); }
 }
 
-.shift-cell:hover,
-.shift-cell:focus-visible {
-  background: rgb(99 209 198 / 8%);
-  outline: none;
+.shift-cell mat-icon,
+.fixed-holiday mat-icon { width: 18px; height: 18px; font-size: 18px; }
+
+.fixed-holiday { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 54px; color: var(--subtle); font-size: 0.6875rem; }
+.missing-shift { display: grid; min-height: 54px; place-items: center; color: var(--subtle); font-size: 0.75rem; }
+
+// 已核准的預排請假：格子右上角的小標記
+.leave-cell-marker {
+  position: absolute; top: 2px; right: 2px; display: grid; width: 16px; height: 16px; place-items: center;
+  color: var(--button-text); background: var(--warn); border-radius: 50%; pointer-events: none;
+  mat-icon { width: 11px; height: 11px; font-size: 11px; }
 }
 
-.shift-cell.is-selected {
-  color: var(--text);
-  background: rgb(99 209 198 / 14%);
-  border-left-color: var(--accent);
+// 滑過司機名字時的本月請假小視窗
+.driver-leave-tooltip {
+  position: fixed; z-index: 100; display: grid; gap: 8px; width: min(320px, calc(100vw - 24px)); max-height: min(320px, calc(100vh - 24px));
+  overflow: auto; padding: 12px; font-size: 0.75rem; box-shadow: 0 6px 16px rgb(0 0 0 / 16%);
+  article { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--border); }
+  small { color: var(--muted); }
 }
-
-.shift-cell.is-work { color: #9ee3cf; }
-.shift-cell.is-day-off { color: #aebdff; }
-.shift-cell.is-leave { color: #f0c07a; }
-.shift-cell.is-unassigned { color: #d5a6a0; }
-.missing-shift { color: var(--subtle); font-size: 0.75rem; }
-.no-shifts { padding: 28px; color: var(--muted); font-size: 0.8125rem; }
-.schedule-grid-scroll tbody td { position: relative; }
 
 .shift-editor {
-  width: min(100%, 308px);
-  flex: 0 0 308px;
-  position: sticky;
-  top: 108px;
+  position: sticky; top: calc(var(--shell-header-height, 52px) + 12px);
+  .ui-panel__header > div { display: grid; }
 }
 
-.shift-editor header em {
-  padding: 5px 7px;
-  color: #f0c07a;
-  background: rgb(217 141 87 / 10%);
-  border: 1px solid rgb(217 141 87 / 26%);
-  border-radius: 4px;
-  font-size: 0.625rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.shift-editor header em.is-published {
-  color: #9ee3cf;
-  background: rgb(99 209 198 / 10%);
-  border-color: rgb(99 209 198 / 26%);
-}
-
-.editor-form {
-  display: grid;
-  gap: 13px;
-  padding: 18px;
-}
+.time-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.editor-submit { width: 100%; }
 
 .partial-leave-editor {
-  display: grid;
-  gap: 10px;
-  margin: 0 14px 14px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--panel);
-}
-
-.partial-leave-editor .page-eyebrow {
-  margin-bottom: -6px;
-}
-
-.partial-leave-editor > p:not(.page-eyebrow) {
-  margin: -3px 0 0;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.45;
-}
-
-.partial-leave-editor label {
-  display: grid;
-  gap: 5px;
-}
-
-.partial-leave-editor label > span {
-  color: var(--field-label);
-  font-size: 0.6875rem;
-  font-weight: 700;
-}
-
-.partial-leave-editor select,
-.partial-leave-editor input {
-  width: 100%;
-  min-height: 36px;
-  padding: 0 9px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font: inherit;
-  font-size: 0.75rem;
-}
-
-.partial-leave-editor .time-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.published-editor-note {
-  margin: 0;
-  padding: 11px 18px 0;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.5;
-}
-
-.editor-form label {
-  display: grid;
-  gap: 6px;
-}
-
-.editor-form input,
-.editor-form select {
-  width: 100%;
-}
-
-.time-fields {
-  align-items: end;
-  gap: 8px;
-}
-
-.time-fields label {
-  min-width: 0;
-  flex: 1 1 0;
-}
-
-.save-action,
-.leave-action {
-  width: 100%;
-}
-
-.shift-meta {
-  display: grid;
-  gap: 9px;
-  margin: 0;
-  padding: 15px 18px 18px;
-  border-top: 1px solid var(--border);
-}
-
-.shift-meta div {
-  display: grid;
-  gap: 3px;
-}
-
-.shift-meta dt {
-  color: var(--subtle);
-  font-size: 0.625rem;
-}
-
-.shift-meta dd {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  line-height: 1.4;
+  display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 4px;
+  h4 { margin: 0; font-size: 0.8125rem; }
+  p { margin: 0; }
+  .ui-btn-default { justify-self: start; }
 }
 
 .editor-placeholder {
-  display: grid;
-  place-items: start;
-  min-height: 290px;
-  align-content: center;
-  gap: 10px;
-  padding: 24px;
+  display: grid; justify-items: center; gap: 6px;
+  mat-icon { width: 28px; height: 28px; color: var(--subtle); font-size: 28px; }
+  h3 { margin: 0; color: var(--text); font-size: 0.875rem; }
+  p { margin: 0; }
 }
 
-.editor-placeholder h3,
-.editor-placeholder p {
-  margin: 0;
+// ── 請假明細與待審清單：表格裡直接填理由、按核准或退回 ──
+.leave-table td,
+.review-table td { vertical-align: top; }
+
+.review-table {
+  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+  select.ui-input { min-width: 110px; }
+  textarea.ui-input { width: 100%; min-width: 200px; min-height: 56px; }
 }
 
-.editor-placeholder h3 { color: var(--text); font-size: 1rem; }
-.editor-placeholder p { color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.review-error { display: block; margin-top: 4px; color: var(--danger); font-size: 0.75rem; }
+.history-row td { background: var(--surface); }
+.review-history p { margin: 0 0 4px; font-size: 0.75rem; }
 
-:host-context(.dispatch-layout.is-light-theme) {
-  .feedback.is-error {
-    color: #984b46;
-    background: #fff0ee;
-    border-color: #e4bbb7;
-  }
-
-  .feedback.is-success {
-    color: #176554;
-    background: #edf9f4;
-    border-color: #b7ded1;
-  }
-
-  .leave-action,
-  .leave-action {
-    background: #fff7e8;
-    border-color: #e2c28d;
-  }
-
-  .schedule-status mat-icon {
-    color: #895a14;
-  }
-
-  .shift-cell.is-work { color: #087360; }
-  .shift-cell.is-day-off { color: #405f9b; }
-  .shift-cell.is-leave { color: #8b5c16; }
-  .shift-cell.is-unassigned { color: #9a4c46; }
-}
-
-@media (max-width: 1180px) {
-  .schedule-summary { flex-wrap: wrap; }
-  .schedule-summary dl { order: 3; width: 100%; max-width: none; }
-  .batch-schedule { grid-template-columns: 1fr; gap: 14px; }
-  .schedule-workspace { align-items: stretch; flex-direction: column; }
-  .shift-editor { width: 100%; flex-basis: auto; position: static; }
-}
-
-@media (max-width: 760px) {
-  .schedule-toolbar,
-  .empty-state { align-items: flex-start; flex-direction: column; }
-  .schedule-toolbar h2 { font-size: 1.625rem; }
-  .month-controls { flex-wrap: wrap; }
-  .empty-state .primary-action { margin-left: 0; }
-  .schedule-summary { align-items: flex-start; flex-direction: column; gap: 16px; }
-  .schedule-summary dl { grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--border); }
-  .schedule-summary dl div { padding: 12px 0; border-bottom: 1px solid var(--border); }
-  .schedule-actions { width: 100%; }
-  .schedule-actions button { flex: 1 1 0; }
-  .batch-actions { align-items: stretch; }
-  .batch-actions > span { flex-basis: 100%; }
-  .batch-actions button { flex: 1 1 auto; }
-  .batch-selection-heading > span { flex-basis: 100%; }
-  .schedule-grid-panel header { align-items: flex-start; }
+@media (max-width: 1100px) {
+  .schedule-workspace { grid-template-columns: minmax(0, 1fr); }
+  .shift-editor { position: static; }
 }
