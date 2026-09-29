@@ -14,6 +14,7 @@ import com.example.backend.dao.StoresDAO;
 import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dto.request.DriverCaseRequestDTO;
 import com.example.backend.dto.respones.AdminDriverCaseResponse;
+import com.example.backend.dto.respones.DriverCaseOrdersResponse;
 import com.example.backend.dto.respones.DriverCasePushEvent;
 import com.example.backend.dto.respones.DriverCaseResponse;
 import com.example.backend.dto.respones.DriverMessagePushResponse;
@@ -38,6 +39,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -52,8 +54,8 @@ import java.util.function.Function;
  * 訊息的存檔、已讀、推播沿用 DriverMessagesService；這裡只管案件層級的規則：
  * 是不是這位司機的、結案了沒、接收了沒。</p>
  *
- * <p>案件不改訂單或路線狀態：無人簽收、交貨短少破損、點交不符仍然走各自的按鈕，那些才會建補送單。
- * 案件只負責「先問調度中心怎麼辦」，並留下紀錄。</p>
+ * <p>建案不改訂單或路線狀態：無人簽收、交貨短少破損、點交不符仍然走各自的按鈕。
+ * 案件負責「先問調度中心怎麼辦」並留下紀錄；結案時主管可以把路線上送不完的單改期補送（見 close）。</p>
  */
 @Service
 @Transactional
@@ -80,6 +82,8 @@ public class DriverCaseService {
     private final VehiclesDAO vehiclesDAO;
     private final AdminUsersDAO adminUsersDAO;
     private final DriverMessagesService driverMessagesService;
+    private final DeliveryService deliveryService;
+    private final DeliveryExceptionService deliveryExceptionService;
     // 只負責「發事件」，真正推播由 DriverMessagesPushService 在交易 commit 後執行
     private final ApplicationEventPublisher eventPublisher;
 
@@ -92,6 +96,8 @@ public class DriverCaseService {
             VehiclesDAO vehiclesDAO,
             AdminUsersDAO adminUsersDAO,
             DriverMessagesService driverMessagesService,
+            DeliveryService deliveryService,
+            DeliveryExceptionService deliveryExceptionService,
             ApplicationEventPublisher eventPublisher
     ) {
         this.exceptionCasesDAO = exceptionCasesDAO;
@@ -102,6 +108,8 @@ public class DriverCaseService {
         this.vehiclesDAO = vehiclesDAO;
         this.adminUsersDAO = adminUsersDAO;
         this.driverMessagesService = driverMessagesService;
+        this.deliveryService = deliveryService;
+        this.deliveryExceptionService = deliveryExceptionService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -218,13 +226,62 @@ public class DriverCaseService {
     }
 
     /**
+     * 結案視窗列給主管勾的：案件路線上還沒結束的單。
+     * 「還沒結束」跟看板日期列用同一組狀態（DispatchDayService.UNFINISHED_STATUSES），
+     * 這裡處理完的單，日期列就不會再算它未結案。
+     */
+    @Transactional(readOnly = true)
+    public DriverCaseOrdersResponse findUnfinishedOrders(Long caseId) {
+        ExceptionCasesEntity exceptionCase = findDriverCase(caseId, false);
+        DriverCaseOrdersResponse response = new DriverCaseOrdersResponse();
+        response.setOrders(List.of());
+        if (exceptionCase.getRouteId() == null) {
+            return response;
+        }
+        RoutesEntity route = routesDAO.findById(exceptionCase.getRouteId()).orElse(null);
+        if (route == null) {
+            return response;
+        }
+        List<OrdersEntity> orders = ordersDAO.findByRouteIdAndStatusInOrderBySequence(
+                route.getId(), DispatchDayService.UNFINISHED_STATUSES);
+        Map<Long, String> storeNames = storeNamesOf(orders);
+        List<DriverCaseOrdersResponse.Item> items = new ArrayList<>();
+        for (OrdersEntity order : orders) {
+            DriverCaseOrdersResponse.Item item = new DriverCaseOrdersResponse.Item();
+            item.setId(order.getId());
+            item.setOrderNumber(order.getOrderNumber());
+            item.setStoreName(storeNames.get(order.getStoreId()));
+            item.setStatus(order.getStatus());
+            items.add(item);
+        }
+        response.setRouteDate(route.getDate());
+        response.setMustResolveAll(!items.isEmpty() && route.getDate().isBefore(LocalDate.now(TAIPEI)));
+        response.setOrders(items);
+        return response;
+    }
+
+    /**
      * 在異常中心填處理結果結案，推 CASE_CLOSED。還沒人接收也可以結（例如司機重複送出同一件），
      * 鈴鐺會跟著消。handledBy 跟一般異常一樣存管理員名稱。
+     *
+     * <p>redeliverOrderIds 是主管勾選要改期補送的單（見 redeliverUnfinishedOrders）。
+     * 案件結了但單還停在點交或配送中，那天在看板日期列會一直是「未結案」，所以路線日期已過時一定要處理完。
+     * 開出的補送單號接在處理結果後面，之後查案件才知道單去哪了。</p>
      */
-    public AdminDriverCaseResponse close(Long caseId, String handledBy, String resolution) {
+    public AdminDriverCaseResponse close(Long caseId, String handledBy, String resolution,
+                                         Collection<Long> redeliverOrderIds) {
         ExceptionCasesEntity exceptionCase = findDriverCase(caseId, true);
         requireOpen(exceptionCase, "這件案件已經結案");
         String text = requireText(resolution, "處理結果不能為空", "處理結果不能超過 1000 字");
+        List<String> redelivered = redeliverUnfinishedOrders(
+                exceptionCase, redeliverOrderIds == null ? Set.of() : new HashSet<>(redeliverOrderIds));
+        if (!redelivered.isEmpty()) {
+            text = text + "\n改期補送：" + String.join("、", redelivered);
+            if (text.length() > MAX_TEXT_LENGTH) {
+                // 丟例外整筆交易回滾，上面改的訂單、開的補送單都不會留下
+                throw new IllegalArgumentException("處理結果加上補送單號超過 1000 字，請縮短處理結果");
+            }
+        }
         exceptionCase.setStatus(ExceptionStatus.CLOSED);
         exceptionCase.setHandledBy(handledBy);
         exceptionCase.setHandledAt(LocalDateTime.now(TAIPEI));
@@ -232,6 +289,55 @@ public class DriverCaseService {
         exceptionCasesDAO.save(exceptionCase);
         publishCaseEvent(DriverMessagePushType.CASE_CLOSED, exceptionCase);
         return toAdminResponse(exceptionCase);
+    }
+
+    /**
+     * 把勾選的單改期補送：原單 FAILED、開 DR- 補送單（DeliveryService.redeliverAfterDriverReport）。
+     * 路線日期已過時，沒勾的單不能留，不然那天永遠結不了；當天的可以不勾，讓司機繼續送。
+     *
+     * <p>鎖的順序跟點交、撤回發布一樣「先路線、後訂單」：司機這時還在按點交或抵達，
+     * 兩邊會排隊而不是互相卡死；鎖住之後才判斷狀態，司機剛送完的單就不會被改成 FAILED。</p>
+     *
+     * @return 每張補送單一行「原單號 → 補送單號（日期）」，寫進處理結果用
+     */
+    private List<String> redeliverUnfinishedOrders(ExceptionCasesEntity exceptionCase, Set<Long> orderIds) {
+        Long routeId = exceptionCase.getRouteId();
+        if (routeId == null) {
+            if (!orderIds.isEmpty()) {
+                throw new IllegalArgumentException("這件案件沒有路線，沒有訂單可以改期");
+            }
+            return List.of();
+        }
+        RoutesEntity route = routesDAO.findForUpdate(routeId)
+                .orElseThrow(() -> new EntityNotFoundException("找不到路線，ID：" + routeId));
+        Map<Long, OrdersEntity> unfinished = new LinkedHashMap<>();
+        for (OrdersEntity order : ordersDAO.findByRouteIdForUpdate(routeId)) {
+            if (DispatchDayService.UNFINISHED_STATUSES.contains(order.getStatus())) {
+                unfinished.put(order.getId(), order);
+            }
+        }
+        for (Long orderId : orderIds) {
+            if (!unfinished.containsKey(orderId)) {
+                throw new IllegalArgumentException("有訂單不在這條路線上或已經結束，請重新整理後再結案");
+            }
+        }
+        LocalDate today = LocalDate.now(TAIPEI);
+        int left = unfinished.size() - orderIds.size();
+        if (left > 0 && route.getDate().isBefore(today)) {
+            throw new IllegalArgumentException("路線日期已過，還有 " + left + " 張單沒結束，要全部改期補送才能結案");
+        }
+
+        LocalDateTime now = LocalDateTime.now(TAIPEI);
+        List<String> redelivered = new ArrayList<>();
+        for (OrdersEntity order : unfinished.values()) {
+            if (!orderIds.contains(order.getId())) {
+                continue;
+            }
+            LocalDate deliveryDate = deliveryExceptionService.nextDispatchDate(order, today);
+            OrdersEntity followUpOrder = deliveryService.redeliverAfterDriverReport(order, deliveryDate, now);
+            redelivered.add(order.getOrderNumber() + " → " + followUpOrder.getOrderNumber() + "（" + deliveryDate + "）");
+        }
+        return redelivered;
     }
 
     @Transactional(readOnly = true)

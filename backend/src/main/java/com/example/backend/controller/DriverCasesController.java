@@ -1,9 +1,10 @@
 package com.example.backend.controller;
 
 import com.example.backend.constants.ExceptionStatus;
+import com.example.backend.dto.request.DriverCaseCloseRequestDTO;
 import com.example.backend.dto.request.DriverMessageRequestDTO;
-import com.example.backend.dto.request.ExceptionResolutionRequestDTO;
 import com.example.backend.dto.respones.AdminDriverCaseResponse;
+import com.example.backend.dto.respones.DriverCaseOrdersResponse;
 import com.example.backend.dto.respones.DriverMessageResponse;
 import com.example.backend.service.DriverCaseService;
 import jakarta.validation.Valid;
@@ -49,14 +50,20 @@ public class DriverCasesController {
         return driverCaseService.accept(caseId, adminId(jwt));
     }
 
-    /** 填處理結果結案；處理人跟一般異常一樣記管理員名稱。 */
+    /** 結案視窗要列的：案件路線上還沒結束的單，以及是不是一定要全部處理（路線日期已過）。 */
+    @GetMapping("/{caseId}/unfinished-orders")
+    public DriverCaseOrdersResponse findUnfinishedOrders(@PathVariable Long caseId) {
+        return driverCaseService.findUnfinishedOrders(caseId);
+    }
+
+    /** 填處理結果結案，可一併把路線上送不完的單改期補送；處理人跟一般異常一樣記管理員名稱。 */
     @PatchMapping("/{caseId}/close")
     public AdminDriverCaseResponse close(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long caseId,
-            @Valid @RequestBody ExceptionResolutionRequestDTO request
+            @Valid @RequestBody DriverCaseCloseRequestDTO request
     ) {
-        return driverCaseService.close(caseId, adminName(jwt), request.getResolution());
+        return driverCaseService.close(caseId, adminName(jwt), request.getResolution(), request.getRedeliverOrderIds());
     }
 
     /** 案件對話；afterId 省略時回最近 50 則，帶了只回比它新的。 */
