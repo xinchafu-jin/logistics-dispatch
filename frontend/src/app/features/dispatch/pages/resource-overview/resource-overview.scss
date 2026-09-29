@@ -32,16 +32,16 @@
 .driver-detail-block:last-child { border-right: 0; }
 
 .driver-list-heading > span {
-  padding: 9px 12px; color: var(--field-label); background: var(--surface); font-size: 0.8125rem; font-weight: 600;
+  padding: 9px 12px; color: var(--field-label); background: var(--surface); font-size: 0.9375rem; font-weight: 600;
   small { margin-left: 4px; color: var(--muted); font-family: var(--font-mono); font-weight: 400; }
 }
 
-.driver-detail-block { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 10px 12px; font-size: 0.8125rem; }
+.driver-detail-block { display: grid; align-content: start; gap: 6px; min-width: 0; padding: 10px 12px; font-size: 0.9375rem; }
 .driver-resource-card:hover .driver-detail-block { background: var(--row-hover); }
 
 // 每格的標題：窄螢幕疊成卡片時才顯示；寬螢幕上面已經有欄名，只留給螢幕閱讀器
 .driver-detail-block h4 {
-  display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 0.75rem; font-weight: 500;
+  display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: 0.875rem; font-weight: 500;
   mat-icon { width: 16px; height: 16px; font-size: 16px; }
 }
 
@@ -58,11 +58,11 @@
 .driver-details dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .driver-card-actions { margin-top: 2px; }
 .driver-unassigned { color: var(--warn); font-weight: 600; }
-.driver-work-time { font-size: 0.875rem; font-weight: 600; }
+.driver-work-time { font-size: 1rem; font-weight: 600; }
 
 // ── 車輛、店家、倉庫表格 ──
 .resource-table td { vertical-align: top; }
-.resource-table small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+.resource-table small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.875rem; }
 .resource-table strong { font-weight: 600; }
 .col-actions { width: 1%; }
 .row-actions { display: flex; gap: 6px; }
@@ -95,8 +95,8 @@
 .status-toggle input:disabled + .status-toggle__track { cursor: wait; opacity: 0.5; }
 
 // ── 右側資源狀態 ──
-.updated-at { color: var(--muted); font-size: 0.75rem; }
-.assignment-note { margin: 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+.updated-at { color: var(--muted); font-size: 0.875rem; }
+.assignment-note { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
 
 // ── 新增／編輯彈窗 ──
 .resource-form {
@@ -106,7 +106,7 @@
 }
 
 .maintenance-help {
-  margin: 0; padding: 8px 10px; color: var(--muted); font-size: 0.75rem; line-height: 1.7;
+  margin: 0; padding: 8px 10px; color: var(--muted); font-size: 0.875rem; line-height: 1.7;
   background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
 }
 
@@ -114,7 +114,7 @@
 
 .mileage-correction {
   display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 4px;
-  h4 { margin: 0; font-size: 0.8125rem; }
+  h4 { margin: 0; font-size: 0.9375rem; }
 }
 
 .correction-actions { display: flex; justify-content: flex-end; gap: 8px; }
@@ -125,25 +125,25 @@
   &.is-warning { background: var(--warn-soft); border-color: var(--warn); }
   &.is-blocked { background: var(--danger-soft); border-color: var(--danger); }
   dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
-  dt { color: var(--muted); font-size: 0.75rem; }
+  dt { color: var(--muted); font-size: 0.875rem; }
   dd { margin: 0; font-family: var(--font-mono); font-weight: 600; }
 }
 
 .maintenance-counts,
-.maintenance-reasons { margin: 0; color: var(--muted); font-size: 0.75rem; }
+.maintenance-reasons { margin: 0; color: var(--muted); font-size: 0.875rem; }
 
 // 保養、維修、里程更正紀錄：一筆一列
 .maintenance-history {
   display: grid; gap: 6px;
-  h4 { margin: 0; font-size: 0.8125rem; }
-  > p { margin: 0; color: var(--muted); font-size: 0.75rem; }
-  article { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem; }
-  article strong { font-size: 0.8125rem; }
+  h4 { margin: 0; font-size: 0.9375rem; }
+  > p { margin: 0; color: var(--muted); font-size: 0.875rem; }
+  article { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 3px; font-size: 0.875rem; }
+  article strong { font-size: 0.9375rem; }
   article span { color: var(--muted); }
   article .ui-btn-default { justify-self: start; margin-top: 4px; }
 }
 
-.confirm-copy { margin: 0; font-size: 0.8125rem; }
+.confirm-copy { margin: 0; font-size: 0.9375rem; }
 
 @media (max-width: 980px) {
   .resource-workspace { grid-template-columns: minmax(0, 1fr); }

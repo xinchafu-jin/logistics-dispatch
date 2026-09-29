@@ -246,6 +246,7 @@ mat-icon {
   gap: 12px;
   width: min(100%, 1440px);
   margin: 0 auto;
+  font-size: 0.9375rem;
 }
 
 .ui-page > * {
@@ -271,7 +272,7 @@ mat-icon {
 
 .ui-panel__header h3 {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -356,7 +357,7 @@ mat-icon {
   border: 0;
   border-bottom: 2px solid transparent;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -387,7 +388,7 @@ mat-icon {
   background: var(--surface-active);
   border-radius: 2px;
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   line-height: 1;
 }
 
@@ -414,7 +415,7 @@ mat-icon {
   border-collapse: separate;
   border-spacing: 0;
   color: var(--text);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 
@@ -473,7 +474,7 @@ mat-icon {
   width: 100%;
   border-collapse: collapse;
   color: var(--text);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 
@@ -514,7 +515,7 @@ mat-icon {
   border: 1px solid transparent;
   border-radius: 4px;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -619,7 +620,7 @@ mat-icon {
   border: 0;
   border-right: 1px solid var(--border);
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -661,7 +662,7 @@ mat-icon {
   border-radius: 4px;
   outline: 0;
   font: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   transition: border-color 120ms ease;
 
   &::placeholder {
@@ -747,7 +748,7 @@ textarea.ui-input,
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 2px;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -785,7 +786,7 @@ textarea.ui-input,
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 
@@ -816,7 +817,7 @@ textarea.ui-input,
   margin: 0;
   padding: 28px 16px;
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   text-align: center;
 }
 
@@ -853,7 +854,7 @@ textarea.ui-input,
   background: transparent;
   border: 0;
   outline: 0;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
 }
 
 // 表單：兩欄，標籤在上、控制項在下；佔滿一整列的加 .ui-form__wide。勾選框用 .ui-check
@@ -876,7 +877,7 @@ textarea.ui-input,
 
 .ui-field > span {
   color: var(--field-label);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 500;
 }
 
@@ -884,7 +885,7 @@ textarea.ui-input,
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   cursor: pointer;
 }
 
@@ -1044,7 +1045,7 @@ textarea.ui-input,
   --mat-form-field-container-vertical-padding: 4px;
   --mat-icon-button-state-layer-size: 28px;
   --mat-icon-button-icon-color: var(--muted);
-  --mat-form-field-container-text-size: 0.8125rem;
+  --mat-form-field-container-text-size: 0.9375rem;
   --mat-form-field-outlined-container-shape: 4px;
   --mat-form-field-outlined-input-text-color: var(--text);
   --mat-form-field-outlined-input-text-placeholder-color: var(--subtle);
