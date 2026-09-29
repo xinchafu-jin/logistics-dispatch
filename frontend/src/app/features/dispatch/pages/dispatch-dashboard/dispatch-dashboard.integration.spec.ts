@@ -83,6 +83,38 @@ describe('MAJOR dispatch integration', () => {
     expect(page.confirmingOrderId()).toBeNull();
   });
 
+  it('does not allow manually confirming a follow-up that awaits anomaly review', () => {
+    const card: Parameters<DispatchDashboard['confirmPendingOrder']>[0] = {
+      orderId: 3, orderNumber: 'UN-3', storeId: 1, storeCode: 'S1',
+      storeName: '店', boxCount: 3, awaitingExceptionReview: true,
+    };
+
+    page.confirmPendingOrder(card);
+
+    expect(page.confirmingOrderId()).toBeNull();
+  });
+
+  it('points an overdue unassigned order with an open case to anomaly center', () => {
+    page.unassigned.set([{
+      orderId: 9, orderNumber: 'DO-9', storeId: 1, storeCode: 'S1',
+      storeName: '店', boxCount: 4, awaitingExceptionReview: true,
+    }]);
+
+    expect(page.dispatchAttention()).toContainEqual(expect.objectContaining({
+      title: 'DO-9 已送異常中心', link: '/dispatch/anomalies',
+    }));
+  });
+
+  it('does not show a resolved historic failed stop as still needing attention', () => {
+    page.routes.set([{...lane(), routeStatus: 'PUBLISHED', cards: [{
+      orderId: 9, orderNumber: 'DO-9', storeId: 1, storeCode: 'S1',
+      storeName: '店', boxCount: 4, openException: false,
+    }]}]);
+    page.orders.set([{id: 9, status: 'FAILED'} as Parameters<typeof page.orders.set>[0][number]]);
+
+    expect(page.dispatchAttention()).not.toContainEqual(expect.objectContaining({key: 'order-9'}));
+  });
+
   it('also locks the board when a loaded route is published', () => {
     page.routes.set([{...lane(), routeStatus: 'PUBLISHED'}]);
     expect(page.published()).toBe(true);

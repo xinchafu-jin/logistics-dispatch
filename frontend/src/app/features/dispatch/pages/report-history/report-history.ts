@@ -459,7 +459,8 @@ export class ReportHistory implements OnInit, OnDestroy {
   protected exceptionTypeLabel(type: unknown): string {
     const labels: Record<string, string> = {NO_SIGNATURE: '無人簽收回報', DRIVER_REPORT: '司機現場通報',
       SHORTAGE: '交貨差異回報', DAMAGE: '交貨差異回報', SHORTAGE_AND_DAMAGE: '交貨差異回報',
-      PHONE_HANDLED: '電話處理補登', LOADING_MISMATCH: '倉庫點交不符'};
+      PHONE_HANDLED: '電話處理補登', LOADING_MISMATCH: '倉庫點交不符',
+      UNSETTLED_ORDER: '未結訂單異常'};
     return typeof type === 'string' ? labels[type] ?? type : '--';
   }
 

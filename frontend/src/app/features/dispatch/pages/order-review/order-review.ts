@@ -271,7 +271,7 @@ export class OrderReview implements OnInit {
   }
 
   openEditOrder(order: DeliveryOrder): void {
-    if (order.raw.awaitingAutomaticDispatch) {
+    if (order.raw.awaitingAutomaticDispatch || order.raw.awaitingExceptionReview) {
       return;
     }
     this.orderForm.set({
@@ -423,7 +423,7 @@ export class OrderReview implements OnInit {
   }
 
   requestDeleteOrder(order: DeliveryOrder): void {
-    if (order.raw.awaitingAutomaticDispatch) {
+    if (order.raw.awaitingAutomaticDispatch || order.raw.awaitingExceptionReview) {
       return;
     }
     this.deleteTarget.set(order);
@@ -558,7 +558,8 @@ export class OrderReview implements OnInit {
   }
 
   canReview(order: DeliveryOrder): boolean {
-    return order.status === '待總部確認' && !order.raw.awaitingAutomaticDispatch;
+    return order.status === '待總部確認'
+      && !order.raw.awaitingAutomaticDispatch && !order.raw.awaitingExceptionReview;
   }
 
   /** 搜尋與配送日期條件：清單和分頁籤筆數共用，兩邊才不會對不起來 */

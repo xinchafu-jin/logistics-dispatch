@@ -17,6 +17,8 @@ import java.util.Optional;
 @Repository
 public interface ExceptionCasesDAO extends JpaRepository<ExceptionCasesEntity, Long> {
 
+    List<ExceptionCasesEntity> findByStatus(ExceptionStatus status);
+
     List<ExceptionCasesEntity> findByStatusAndQueuedAtIsNotNullOrderByQueuedAtAsc(
             ExceptionStatus status
     );
@@ -54,8 +56,21 @@ public interface ExceptionCasesDAO extends JpaRepository<ExceptionCasesEntity, L
     boolean existsByFollowUpOrderIdAndTypeAndStatus(
             Long followUpOrderId, ExceptionType type, ExceptionStatus status);
 
+    boolean existsByFollowUpOrderIdAndStatus(Long followUpOrderId, ExceptionStatus status);
+
+    boolean existsByOrderIdAndType(Long orderId, ExceptionType type);
+
     List<ExceptionCasesEntity> findByFollowUpOrderIdInAndTypeAndStatus(
             List<Long> followUpOrderIds, ExceptionType type, ExceptionStatus status);
+
+    List<ExceptionCasesEntity> findByFollowUpOrderIdInAndStatus(
+            List<Long> followUpOrderIds, ExceptionStatus status);
+
+    List<ExceptionCasesEntity> findByOrderIdInAndTypeAndStatus(
+            List<Long> orderIds, ExceptionType type, ExceptionStatus status);
+
+    List<ExceptionCasesEntity> findByOrderIdInAndStatus(
+            List<Long> orderIds, ExceptionStatus status);
 
     // ── 司機例外回報（type = DRIVER_REPORT），索引見 V14 ──
 

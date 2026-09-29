@@ -48,6 +48,7 @@ public class OrdersService {
     public List<OrdersDTO> findAll() {
         List<OrdersDTO> result = ordersDAO.findAll().stream().map(this::toDTO).toList();
         Set<Long> automaticOrderIds = new HashSet<>();
+        Set<Long> reviewOrderIds = new HashSet<>();
         exceptionCasesDAO.findByTypeAndStatusOrderByIdAsc(
                 ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)
                 .forEach(item -> {
@@ -55,8 +56,16 @@ public class OrdersService {
                         automaticOrderIds.add(item.getFollowUpOrderId());
                     }
                 });
+        exceptionCasesDAO.findByStatus(ExceptionStatus.OPEN)
+                .forEach(item -> {
+                    if (item.getType() != ExceptionType.NO_SIGNATURE && item.getFollowUpOrderId() != null) {
+                        reviewOrderIds.add(item.getFollowUpOrderId());
+                    }
+                });
         result.forEach(item -> item.setAwaitingAutomaticDispatch(
                 automaticOrderIds.contains(item.getId())));
+        result.forEach(item -> item.setAwaitingExceptionReview(
+                reviewOrderIds.contains(item.getId())));
         return result;
     }
 
@@ -158,6 +167,10 @@ public class OrdersService {
         if (exceptionCasesDAO.existsByFollowUpOrderIdAndTypeAndStatus(
                 orderId, ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)) {
             throw new IllegalArgumentException("無人簽收重送單將於隔日 06:00 自動送入待排車，不能手動確認或修改");
+        }
+        // 點交不符、跨日未結等後續單只能從異常中心確認，否則案件仍 OPEN、單卻已可排車。
+        if (exceptionCasesDAO.existsByFollowUpOrderIdAndStatus(orderId, ExceptionStatus.OPEN)) {
+            throw new IllegalArgumentException("這張後續訂單仍在異常中心待確認，不能從一般訂單入口操作");
         }
     }
 

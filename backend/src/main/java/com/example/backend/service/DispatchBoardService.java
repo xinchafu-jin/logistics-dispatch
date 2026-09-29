@@ -26,6 +26,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -89,12 +90,12 @@ public class DispatchBoardService {
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.PENDING_CONFIRM, warehouseId
                 );
-        Map<Long, ExceptionCasesEntity> awaitingAutomaticDispatch = new HashMap<>();
+        Map<Long, ExceptionCasesEntity> awaitingException = new HashMap<>();
         if (!pendingConfirm.isEmpty()) {
-            exceptionCasesDAO.findByFollowUpOrderIdInAndTypeAndStatus(
+            exceptionCasesDAO.findByFollowUpOrderIdInAndStatus(
                     pendingConfirm.stream().map(OrdersEntity::getId).toList(),
-                    ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)
-                    .forEach(item -> awaitingAutomaticDispatch.put(item.getFollowUpOrderId(), item));
+                    ExceptionStatus.OPEN)
+                    .forEach(item -> awaitingException.put(item.getFollowUpOrderId(), item));
         }
         Map<Long, List<OrdersEntity>> ordersByRoute = new HashMap<>();
         Set<Long> storeIds = new LinkedHashSet<>();
@@ -113,6 +114,17 @@ public class DispatchBoardService {
             if (route.getDriverId() != null) {
                 driverIds.add(route.getDriverId());
             }
+        }
+        Set<Long> openExceptionOrderIds = new HashSet<>();
+        List<Long> problemOrderIds = ordersByRoute.values().stream()
+                .flatMap(List::stream)
+                .filter(order -> order.getStatus() == OrderStatus.FAILED
+                        || order.getStatus() == OrderStatus.NO_SIGNATURE)
+                .map(OrdersEntity::getId)
+                .toList();
+        if (!problemOrderIds.isEmpty()) {
+            exceptionCasesDAO.findByOrderIdInAndStatus(problemOrderIds, ExceptionStatus.OPEN)
+                    .forEach(item -> openExceptionOrderIds.add(item.getOrderId()));
         }
         for (OrdersEntity order : unassigned) {
             storeIds.add(order.getStoreId());
@@ -133,7 +145,8 @@ public class DispatchBoardService {
             List<DispatchResponse.StopResponse> stops = new ArrayList<>();
             int remainingBoxes = 0;
             for (OrdersEntity order : ordersByRoute.getOrDefault(route.getId(), List.of())) {
-                stops.add(toStop(order, stores.get(order.getStoreId()), route.getStatus()));
+                stops.add(toStop(order, stores.get(order.getStoreId()), route.getStatus(),
+                        openExceptionOrderIds.contains(order.getId())));
                 remainingBoxes += order.getBoxCount();
             }
             if (stops.isEmpty()) {
@@ -169,14 +182,28 @@ public class DispatchBoardService {
         result.setDate(date);
         result.setWarehouse(toWarehouse(warehouse));
         result.setRoutes(routeResponses);
-        result.setUnassignedOrders(toUnassignedList(unassigned, stores));
+        List<DispatchResponse.UnassignedOrderResponse> unassignedResponses = toUnassignedList(unassigned, stores);
+        if (!unassigned.isEmpty()) {
+            Set<Long> unsettledIds = new HashSet<>();
+            exceptionCasesDAO.findByOrderIdInAndTypeAndStatus(
+                    unassigned.stream().map(OrdersEntity::getId).toList(),
+                    ExceptionType.UNSETTLED_ORDER, ExceptionStatus.OPEN)
+                    .forEach(item -> unsettledIds.add(item.getOrderId()));
+            unassignedResponses.forEach(item -> item.setAwaitingExceptionReview(
+                    unsettledIds.contains(item.getOrderId())));
+        }
+        result.setUnassignedOrders(unassignedResponses);
         List<DispatchResponse.UnassignedOrderResponse> pendingResponses =
                 toUnassignedList(pendingConfirm, stores);
         for (DispatchResponse.UnassignedOrderResponse item : pendingResponses) {
-            ExceptionCasesEntity incident = awaitingAutomaticDispatch.get(item.getOrderId());
+            ExceptionCasesEntity incident = awaitingException.get(item.getOrderId());
             if (incident != null) {
-                item.setAwaitingAutomaticDispatch(true);
-                item.setAutoDispatchAt(incident.getReviewAvailableAt());
+                if (incident.getType() == ExceptionType.NO_SIGNATURE) {
+                    item.setAwaitingAutomaticDispatch(true);
+                    item.setAutoDispatchAt(incident.getReviewAvailableAt());
+                } else {
+                    item.setAwaitingExceptionReview(true);
+                }
             }
         }
         result.setPendingConfirmOrders(pendingResponses);
@@ -243,13 +270,15 @@ public class DispatchBoardService {
     private DispatchResponse.StopResponse toStop(
             OrdersEntity order,
             StoresEntity store,
-            RouteStatus routeStatus
+            RouteStatus routeStatus,
+            boolean openException
     ) {
         DispatchResponse.StopResponse stop = new DispatchResponse.StopResponse();
         stop.setSequence(order.getSequence());
         stop.setOrderId(order.getId());
         stop.setOrderNumber(order.getOrderNumber());
         stop.setOrderStatus(order.getStatus());
+        stop.setOpenException(openException);
         stop.setDraggable(routeStatus == RouteStatus.DRAFT
                 && order.getStatus() == OrderStatus.CONFIRMED);
         stop.setBoxCount(order.getBoxCount());

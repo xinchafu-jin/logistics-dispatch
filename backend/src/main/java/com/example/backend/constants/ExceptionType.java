@@ -14,5 +14,7 @@ public enum ExceptionType {
     /** 電話處理後補登 */
     PHONE_HANDLED,
     /** 倉庫點交時實點箱數與應到箱數不符 */
-    LOADING_MISMATCH
+    LOADING_MISMATCH,
+    /** 配送日已過，訂單仍未確認或尚未開始點交配送 */
+    UNSETTLED_ORDER
 }

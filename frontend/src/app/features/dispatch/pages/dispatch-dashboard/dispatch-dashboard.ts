@@ -13,6 +13,7 @@ import {
 } from '@angular/cdk/drag-drop';
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
+import {RouterLink} from '@angular/router';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
 import {bufferTime, catchError, filter, forkJoin, map, of, startWith, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
@@ -93,7 +94,9 @@ function minutesAgo(timestamp: string): number {
  */
 interface BoardCard {
   orderId: number;
+  openException?: boolean;
   awaitingAutomaticDispatch?: boolean;
+  awaitingExceptionReview?: boolean;
   autoDispatchAt?: string | null;
   orderNumber: string;
   storeId: number;
@@ -140,8 +143,11 @@ interface BoardRoute {
 function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
   return {
     orderId: source.orderId,
+    openException: 'openException' in source ? source.openException : false,
     awaitingAutomaticDispatch: 'awaitingAutomaticDispatch' in source
       ? source.awaitingAutomaticDispatch : false,
+    awaitingExceptionReview: 'awaitingExceptionReview' in source
+      ? source.awaitingExceptionReview : false,
     autoDispatchAt: 'autoDispatchAt' in source ? source.autoDispatchAt : null,
     orderNumber: source.orderNumber,
     storeId: source.storeId,
@@ -192,6 +198,7 @@ interface AttentionItem {
   detail: string;
   /** deviation＝偏離提示，deviation-alarm＝偏離超過 10 分鐘升級的警報 */
   kind: 'deviation' | 'deviation-alarm' | 'exception' | 'gps' | 'pending';
+  link?: string;
 }
 
 /** 還沒結束、司機還要跑的單。已點交的貨在車上，也算還沒送 */
@@ -203,7 +210,7 @@ const DELIVERY_PROBLEM: readonly OrderStatus[] = ['FAILED', 'NO_SIGNATURE'];
   selector: 'app-dispatch-dashboard',
   imports: [
     LiveFleetMap, DatePipe, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
-    MatSlideToggleModule, MatIconModule, MatButtonModule, MatDialogModule,
+    MatSlideToggleModule, MatIconModule, MatButtonModule, MatDialogModule, RouterLink,
   ],
   templateUrl: './dispatch-dashboard.html',
   styleUrl: './dispatch-dashboard.scss',
@@ -873,7 +880,8 @@ export class DispatchDashboard implements OnInit {
 
   /** 在看板上直接確認：確認後這張單會從待確認移到待排單，就能拖或自動排車 */
   confirmPendingOrder(card: BoardCard): void {
-    if (card.awaitingAutomaticDispatch || this.published() || this.busy() || this.confirmingOrderId() !== null) {
+    if (card.awaitingAutomaticDispatch || card.awaitingExceptionReview || this.published()
+        || this.busy() || this.confirmingOrderId() !== null) {
       return;
     }
     this.confirmingOrderId.set(card.orderId);
@@ -970,12 +978,13 @@ export class DispatchDashboard implements OnInit {
 
     for (const route of this.publishedRoutes()) {
       for (const card of route.cards) {
-        if (DELIVERY_PROBLEM.includes(this.boardCardStatus(card))) {
+        if (card.openException && DELIVERY_PROBLEM.includes(this.boardCardStatus(card))) {
           items.push({
             key: `order-${card.orderId}`,
             title: `${card.orderNumber} ${this.boardCardStatusLabel(card)}`,
-            detail: `${route.plateNumber} · ${card.storeName}，補送單要到異常中心確認`,
+            detail: `${route.plateNumber} · ${card.storeName}，異常中心追蹤中`,
             kind: 'exception',
+            link: '/dispatch/anomalies',
           });
         }
       }
@@ -993,7 +1002,9 @@ export class DispatchDashboard implements OnInit {
       items.push({key: `confirm-${card.orderId}`, title: `${card.orderNumber} 待確認`, detail: card.storeName, kind: 'pending'});
     }
     for (const card of this.unassigned()) {
-      items.push({key: `pool-${card.orderId}`, title: `${card.orderNumber} 尚未排入車`, detail: card.storeName, kind: 'pending'});
+      items.push(card.awaitingExceptionReview
+        ? {key: `pool-${card.orderId}`, title: `${card.orderNumber} 已送異常中心`, detail: `${card.storeName} · 待主管確認後重排`, kind: 'exception', link: '/dispatch/anomalies'}
+        : {key: `pool-${card.orderId}`, title: `${card.orderNumber} 尚未排入車`, detail: card.storeName, kind: 'pending'});
     }
     return items;
   });

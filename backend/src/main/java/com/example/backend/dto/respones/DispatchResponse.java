@@ -451,6 +451,9 @@ public class DispatchResponse {
          */
         private OrderStatus orderStatus;
 
+        /** 此來源訂單仍有未結案的配送異常，供看板區分歷史失敗與待處理案件。 */
+        private boolean openException;
+
         /**
          * 後端依路線及訂單狀態算出的可拖曳旗標。
          * 只有草稿路線內的 CONFIRMED 訂單會是 true。
@@ -523,6 +526,14 @@ public class DispatchResponse {
 
         public void setOrderStatus(OrderStatus orderStatus) {
             this.orderStatus = orderStatus;
+        }
+
+        public boolean isOpenException() {
+            return openException;
+        }
+
+        public void setOpenException(boolean openException) {
+            this.openException = openException;
         }
 
         public Boolean getDraggable() {
@@ -639,6 +650,8 @@ public class DispatchResponse {
 
         private boolean awaitingAutomaticDispatch;
 
+        private boolean awaitingExceptionReview;
+
         /** 無人簽收待自動送待排的時間；一般待確認訂單為 null。 */
         private java.time.LocalDateTime autoDispatchAt;
 
@@ -671,6 +684,14 @@ public class DispatchResponse {
 
         public void setAwaitingAutomaticDispatch(boolean awaitingAutomaticDispatch) {
             this.awaitingAutomaticDispatch = awaitingAutomaticDispatch;
+        }
+
+        public boolean isAwaitingExceptionReview() {
+            return awaitingExceptionReview;
+        }
+
+        public void setAwaitingExceptionReview(boolean awaitingExceptionReview) {
+            this.awaitingExceptionReview = awaitingExceptionReview;
         }
 
         public java.time.LocalDateTime getAutoDispatchAt() {

@@ -204,6 +204,22 @@ describe('OrderReview Excel 匯入', () => {
     expect(component.canReview(component.selectedOrder()!)).toBe(false);
   });
 
+  it('未結異常後續單只引導到異常中心，不提供一般審單操作', () => {
+    component.ngOnInit();
+    httpTesting.expectOne('/api/orders').flush([{
+      ...savedOrder(8, 'UN-8'), awaitingExceptionReview: true,
+    }]);
+    httpTesting.expectOne('/api/stores').flush([STORE]);
+    httpTesting.expectOne('/api/warehouses').flush([WAREHOUSE]);
+    component.selectOrder('UN-8');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('待異常中心確認');
+    expect(host.querySelector('.detail-actions button')).toBeNull();
+    expect(component.canReview(component.selectedOrder()!)).toBe(false);
+  });
+
   it('檔案格式不對時停在 failed，不會送出任何請求', async () => {
     await component.onImportFileSelected(
       fileEvent([

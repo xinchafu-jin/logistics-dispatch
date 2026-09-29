@@ -183,6 +183,7 @@ public class ReportOutcomesService {
         return switch (type) {
             case NO_SIGNATURE -> "無人簽收重送";
             case LOADING_MISMATCH -> "出貨點交不符重送";
+            case UNSETTLED_ORDER -> "逾日未結重送";
             case SHORTAGE -> "短少補送";
             case DAMAGE -> "破損補送";
             case SHORTAGE_AND_DAMAGE -> "短少與破損補送";

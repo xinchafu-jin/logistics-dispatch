@@ -21,6 +21,9 @@ public class OrdersDTO {
     /** 無人簽收重送單仍在等系統隔日 06:00 自動送待排；唯讀狀態。 */
     private boolean awaitingAutomaticDispatch;
 
+    /** 後續訂單仍須在異常中心確認；一般審單入口不可先行核准。 */
+    private boolean awaitingExceptionReview;
+
     @NotBlank(message = ORDER_NUMBER_REQUIRED)
     @Size(max = 30, message = ORDER_NUMBER_MAX_LENGTH)
     private String orderNumber;
@@ -75,6 +78,11 @@ public class OrdersDTO {
     public boolean isAwaitingAutomaticDispatch() { return awaitingAutomaticDispatch; }
     public void setAwaitingAutomaticDispatch(boolean awaitingAutomaticDispatch) {
         this.awaitingAutomaticDispatch = awaitingAutomaticDispatch;
+    }
+
+    public boolean isAwaitingExceptionReview() { return awaitingExceptionReview; }
+    public void setAwaitingExceptionReview(boolean awaitingExceptionReview) {
+        this.awaitingExceptionReview = awaitingExceptionReview;
     }
 
     public String getOrderNumber() { return orderNumber; }

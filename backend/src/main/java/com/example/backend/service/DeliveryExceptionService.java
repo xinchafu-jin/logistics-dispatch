@@ -12,10 +12,12 @@ import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.respones.ExceptionCaseResponse;
 import com.example.backend.entity.DeliveryRecordsEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
+import com.example.backend.entity.OrderItemsEntity;
 import com.example.backend.entity.OrdersEntity;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -26,7 +28,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-/** 無人簽收隔日 06:00 自動送待排；其餘配送異常進主管確認區。 */
+/** 無人簽收隔日 06:00 自動送待排；逾日未處理與其餘配送異常進主管確認區。 */
 @Service
 public class DeliveryExceptionService {
 
@@ -52,15 +54,15 @@ public class DeliveryExceptionService {
         this.dispatchBoardPushService = dispatchBoardPushService;
     }
 
-    /** 每分鐘處理到期案件：無人簽收自動送待排，其餘送主管確認區。 */
+    /** 每分鐘補掃跨日未處理訂單及到期案件；停機期間的日期也不會漏掉。 */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Taipei")
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void queueDueCases() {
         queueDueCases(LocalDateTime.now(TAIPEI));
     }
 
     /** 查詢前再補掃一次，避免後端在 06:00 停機而漏掉自動處理。 */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public List<ExceptionCaseResponse> findPendingConfirmation() {
         queueDueCases(LocalDateTime.now(TAIPEI));
         List<ExceptionCasesEntity> pending = new ArrayList<>(exceptionCasesDAO
@@ -153,6 +155,15 @@ public class DeliveryExceptionService {
         if (followUpOrder.getRouteId() != null) {
             throw new IllegalArgumentException("異常重建單已排車，請先確認現有指派，不能直接改日期");
         }
+        OrdersEntity unsettledSource = null;
+        if (exceptionCase.getType() == ExceptionType.UNSETTLED_ORDER) {
+            unsettledSource = ordersDAO.findForUpdate(exceptionCase.getOrderId())
+                    .orElseThrow(() -> new EntityNotFoundException("找不到未結異常的來源訂單"));
+            if (unsettledSource.getStatus() != OrderStatus.PENDING_CONFIRM
+                    && unsettledSource.getStatus() != OrderStatus.CONFIRMED) {
+                throw new IllegalArgumentException("來源訂單狀態已變更，請重新整理異常案件後再處理");
+            }
+        }
         if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM
                 || followUpOrder.getStatus() == OrderStatus.CONFIRMED) {
             // 無人簽收已改為自動處理；這裡其餘異常都以主管確認的台北日期回到當天待排區。
@@ -167,6 +178,13 @@ public class DeliveryExceptionService {
         } else if (followUpOrder.getStatus() != OrderStatus.CONFIRMED) {
             throw new IllegalArgumentException(
                     "後續訂單狀態不可確認：" + followUpOrder.getStatus());
+        }
+
+        if (unsettledSource != null) {
+            // 原日期保留未完成歷史；主管確認後才結束原單，舊日未結數才會消失。
+            unsettledSource.setStatus(OrderStatus.FAILED);
+            ordersDAO.save(unsettledSource);
+            dispatchBoardPushService.markChanged(unsettledSource.getDeliveryDate());
         }
 
         exceptionCase.setStatus(ExceptionStatus.CLOSED);
@@ -229,6 +247,7 @@ public class DeliveryExceptionService {
     }
 
     void queueDueCases(LocalDateTime now) {
+        queueUnsettledOrders(now);
         List<ExceptionCasesEntity> automaticCases = exceptionCasesDAO.findDueNoSignatureForUpdate(
                 ExceptionStatus.OPEN, ExceptionType.NO_SIGNATURE, now);
         for (ExceptionCasesEntity exceptionCase : automaticCases) {
@@ -238,6 +257,65 @@ public class DeliveryExceptionService {
                 ExceptionStatus.OPEN, now, ExceptionType.NO_SIGNATURE);
         dueCases.forEach(item -> item.setQueuedAt(now));
         exceptionCasesDAO.saveAll(dueCases);
+    }
+
+    /** 當天完全沒進入點交或配送的舊單，各產生一件異常及待確認後續單。 */
+    private void queueUnsettledOrders(LocalDateTime now) {
+        List<Long> overdueIds = ordersDAO.findOverdueUnsettledIds(now.toLocalDate(),
+                List.of(OrderStatus.PENDING_CONFIRM, OrderStatus.CONFIRMED),
+                ExceptionType.UNSETTLED_ORDER, ExceptionStatus.OPEN);
+        for (Long orderId : overdueIds) {
+            // 與確認、刪除及司機點交共用訂單鎖；補掃重跑也只會建一件。
+            OrdersEntity source = ordersDAO.findForUpdate(orderId).orElse(null);
+            if (source == null || !source.getDeliveryDate().isBefore(now.toLocalDate())
+                    || (source.getStatus() != OrderStatus.PENDING_CONFIRM
+                    && source.getStatus() != OrderStatus.CONFIRMED)
+                    || exceptionCasesDAO.existsByOrderIdAndType(orderId, ExceptionType.UNSETTLED_ORDER)
+                    || exceptionCasesDAO.existsByFollowUpOrderIdAndStatus(orderId, ExceptionStatus.OPEN)) {
+                continue;
+            }
+
+            OrdersEntity followUp = new OrdersEntity();
+            int retryCount = (source.getRetryCount() == null ? 0 : source.getRetryCount()) + 1;
+            followUp.setOrderNumber("UN-"
+                    + now.toLocalDate().plusDays(1).format(DateTimeFormatter.BASIC_ISO_DATE).substring(2)
+                    + "-" + Long.toString(source.getId(), 36).toUpperCase()
+                    + "-" + Integer.toString(retryCount, 36).toUpperCase());
+            followUp.setStoreId(source.getStoreId());
+            followUp.setWarehouseId(source.getWarehouseId());
+            followUp.setSourceVendor(source.getSourceVendor());
+            followUp.setItemDescription(source.getItemDescription());
+            followUp.setBoxCount(source.getBoxCount());
+            followUp.setNotes(source.getNotes());
+            followUp.setDeliveryDate(now.toLocalDate().plusDays(1));
+            followUp.setStatus(OrderStatus.PENDING_CONFIRM);
+            followUp.setOrderType(OrderType.REDELIVERY);
+            followUp.setParentOrderId(source.getId());
+            followUp.setRetryCount(retryCount);
+            for (OrderItemsEntity item : source.getItems()) {
+                OrderItemsEntity copy = new OrderItemsEntity();
+                copy.setProductCode(item.getProductCode());
+                copy.setItemName(item.getItemName());
+                copy.setExpectedQuantity(item.getExpectedQuantity());
+                copy.setUnit(item.getUnit());
+                copy.setSequence(item.getSequence());
+                copy.setNotes(item.getNotes());
+                followUp.addItem(copy);
+            }
+            followUp = ordersDAO.save(followUp);
+
+            ExceptionCasesEntity incident = new ExceptionCasesEntity();
+            incident.setOrderId(source.getId());
+            incident.setFollowUpOrderId(followUp.getId());
+            incident.setType(ExceptionType.UNSETTLED_ORDER);
+            incident.setStatus(ExceptionStatus.OPEN);
+            incident.setReviewAvailableAt(source.getDeliveryDate().plusDays(1).atStartOfDay());
+            incident.setQueuedAt(now);
+            incident.setDescription("訂單 " + source.getOrderNumber() + " 原訂 " + source.getDeliveryDate()
+                    + " 配送，當日仍未完成確認或點交；請主管確認後重新排車。");
+            exceptionCasesDAO.save(incident);
+            dispatchBoardPushService.markChanged(source.getDeliveryDate());
+        }
     }
 
     /** 已入人工佇列的舊案件也走這裡；鎖案件後只處理仍待確認的重送單，避免重複建單。 */

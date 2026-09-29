@@ -75,6 +75,19 @@ class OrdersServiceAutoNoSignatureGuardTest {
     }
 
     @Test
+    void 未結與點交異常後續單只能在異常中心確認() {
+        when(cases.existsByFollowUpOrderIdAndStatus(4L, ExceptionStatus.OPEN)).thenReturn(true);
+        OrderReviewRequestDTO request = new OrderReviewRequestDTO();
+        request.setAction(OrderReviewAction.CONFIRM);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.review(4L, request));
+
+        assertTrue(error.getMessage().contains("異常中心"));
+        verify(orders, never()).findForUpdate(any());
+    }
+
+    @Test
     void 審單清單標示無人簽收等待系統自動送單() {
         OrdersEntity followUp = new OrdersEntity();
         followUp.setId(2L);
@@ -88,5 +101,22 @@ class OrdersServiceAutoNoSignatureGuardTest {
         var result = service.findAll();
 
         assertTrue(result.getFirst().isAwaitingAutomaticDispatch());
+    }
+
+    @Test
+    void 審單清單標示未結異常等待主管從異常中心確認() {
+        OrdersEntity followUp = new OrdersEntity();
+        followUp.setId(4L);
+        followUp.setOrderNumber("UN-4");
+        ExceptionCasesEntity incident = new ExceptionCasesEntity();
+        incident.setType(ExceptionType.UNSETTLED_ORDER);
+        incident.setFollowUpOrderId(4L);
+        when(orders.findAll()).thenReturn(List.of(followUp));
+        when(cases.findByStatus(ExceptionStatus.OPEN))
+                .thenReturn(List.of(incident));
+
+        var result = service.findAll();
+
+        assertTrue(result.getFirst().isAwaitingExceptionReview());
     }
 }

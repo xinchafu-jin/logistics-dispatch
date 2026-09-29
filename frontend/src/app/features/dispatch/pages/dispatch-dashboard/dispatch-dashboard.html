@@ -492,6 +492,9 @@
               >
                 <strong>{{ item.title }}</strong>
                 <p>{{ item.detail }}</p>
+                @if (item.link) {
+                  <a [routerLink]="item.link">前往異常中心</a>
+                }
               </article>
             } @empty {
               <p class="board-empty">目前沒有要處理的事</p>
@@ -512,6 +515,8 @@
                       <span class="pending-auto-dispatch">
                         {{ card.autoDispatchAt ? (card.autoDispatchAt | date:'M/d HH:mm') + ' 自動待排' : '等待自動處理' }}
                       </span>
+                    } @else if (card.awaitingExceptionReview) {
+                      <span class="pending-auto-dispatch">請至異常中心確認</span>
                     } @else {
                     <button
                       type="button"

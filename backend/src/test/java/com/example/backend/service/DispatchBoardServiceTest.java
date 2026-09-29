@@ -3,6 +3,7 @@ package com.example.backend.service;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
+import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
@@ -13,6 +14,7 @@ import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.ExceptionCasesEntity;
+import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
 import com.example.backend.entity.WarehousesEntity;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,13 +45,15 @@ class DispatchBoardServiceTest {
     private static final Long WAREHOUSE = 1L;
 
     private StoresDAO storesDAO;
+    private OrdersDAO ordersDAO;
+    private RoutesDAO routesDAO;
     private ExceptionCasesDAO casesDAO;
     private DispatchBoardService service;
 
     @BeforeEach
     void setUp() {
-        OrdersDAO ordersDAO = mock(OrdersDAO.class);
-        RoutesDAO routesDAO = mock(RoutesDAO.class);
+        ordersDAO = mock(OrdersDAO.class);
+        routesDAO = mock(RoutesDAO.class);
         storesDAO = mock(StoresDAO.class);
         VehiclesDAO vehiclesDAO = mock(VehiclesDAO.class);
         DriversDAO driversDAO = mock(DriversDAO.class);
@@ -80,6 +84,8 @@ class DispatchBoardServiceTest {
             }
             return found;
         });
+        when(vehiclesDAO.findAllById(any())).thenReturn(List.of());
+        when(driversDAO.findAllById(any())).thenReturn(List.of());
 
         service = new DispatchBoardService(
                 ordersDAO, routesDAO, storesDAO, vehiclesDAO, driversDAO, warehousesDAO, casesDAO);
@@ -108,9 +114,10 @@ class DispatchBoardServiceTest {
     void 無人簽收待自動送單在看板標示時間_不顯示一般確認動作() {
         ExceptionCasesEntity incident = new ExceptionCasesEntity();
         incident.setFollowUpOrderId(2L);
+        incident.setType(ExceptionType.NO_SIGNATURE);
         incident.setReviewAvailableAt(LocalDateTime.of(2026, 9, 27, 6, 0));
-        when(casesDAO.findByFollowUpOrderIdInAndTypeAndStatus(
-                List.of(2L), ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN))
+        when(casesDAO.findByFollowUpOrderIdInAndStatus(
+                List.of(2L), ExceptionStatus.OPEN))
                 .thenReturn(List.of(incident));
 
         DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
@@ -118,6 +125,71 @@ class DispatchBoardServiceTest {
         assertEquals(true, board.getPendingConfirmOrders().getFirst().isAwaitingAutomaticDispatch());
         assertEquals(incident.getReviewAvailableAt(),
                 board.getPendingConfirmOrders().getFirst().getAutoDispatchAt());
+    }
+
+    @Test
+    void 未結異常後續單在看板提示異常中心確認() {
+        ExceptionCasesEntity incident = new ExceptionCasesEntity();
+        incident.setFollowUpOrderId(2L);
+        incident.setType(ExceptionType.UNSETTLED_ORDER);
+        when(casesDAO.findByFollowUpOrderIdInAndStatus(List.of(2L), ExceptionStatus.OPEN))
+                .thenReturn(List.of(incident));
+
+        DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
+
+        assertEquals(true, board.getPendingConfirmOrders().getFirst().isAwaitingExceptionReview());
+        assertEquals(false, board.getPendingConfirmOrders().getFirst().isAwaitingAutomaticDispatch());
+    }
+
+    @Test
+    void 舊日未排單已有未結異常時不再只標成待排車() {
+        ExceptionCasesEntity incident = new ExceptionCasesEntity();
+        incident.setOrderId(1L);
+        incident.setType(ExceptionType.UNSETTLED_ORDER);
+        when(casesDAO.findByOrderIdInAndTypeAndStatus(
+                List.of(1L), ExceptionType.UNSETTLED_ORDER, ExceptionStatus.OPEN))
+                .thenReturn(List.of(incident));
+
+        DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
+
+        assertEquals(true, board.getUnassignedOrders().getFirst().isAwaitingExceptionReview());
+    }
+
+    @Test
+    void 已結案的舊路線失敗單不再顯示待處理提醒() {
+        RoutesEntity route = new RoutesEntity();
+        route.setId(8L);
+        route.setVehicleId(3L);
+        route.setStatus(RouteStatus.PUBLISHED);
+        when(routesDAO.findByDateAndWarehouseId(DATE, WAREHOUSE)).thenReturn(List.of(route));
+        OrdersEntity failed = order(5L, "DO-FAILED", 101L, OrderStatus.FAILED);
+        when(ordersDAO.findByRouteIdAndStatusInOrderBySequence(any(), any()))
+                .thenReturn(List.of(failed));
+
+        DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
+
+        assertEquals(false, board.getRoutes().getFirst().getStops().getFirst().isOpenException());
+        verify(casesDAO).findByOrderIdInAndStatus(List.of(5L), ExceptionStatus.OPEN);
+    }
+
+    @Test
+    void 舊路線失敗單有未結案時仍顯示異常提醒() {
+        RoutesEntity route = new RoutesEntity();
+        route.setId(8L);
+        route.setVehicleId(3L);
+        route.setStatus(RouteStatus.PUBLISHED);
+        when(routesDAO.findByDateAndWarehouseId(DATE, WAREHOUSE)).thenReturn(List.of(route));
+        OrdersEntity failed = order(5L, "DO-FAILED", 101L, OrderStatus.FAILED);
+        when(ordersDAO.findByRouteIdAndStatusInOrderBySequence(any(), any()))
+                .thenReturn(List.of(failed));
+        ExceptionCasesEntity incident = new ExceptionCasesEntity();
+        incident.setOrderId(5L);
+        when(casesDAO.findByOrderIdInAndStatus(List.of(5L), ExceptionStatus.OPEN))
+                .thenReturn(List.of(incident));
+
+        DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
+
+        assertEquals(true, board.getRoutes().getFirst().getStops().getFirst().isOpenException());
     }
 
     private OrdersEntity order(Long id, String orderNumber, Long storeId, OrderStatus status) {

@@ -24,7 +24,7 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'FAILED';
-export type OrderType = 'NORMAL' | 'REPLENISHMENT';
+export type OrderType = 'NORMAL' | 'REPLENISHMENT' | 'REDELIVERY';
 export type ExceptionStatus = 'OPEN' | 'CLOSED';
 export type ExceptionType =
   | 'NO_SIGNATURE'
@@ -33,7 +33,8 @@ export type ExceptionType =
   | 'SHORTAGE_AND_DAMAGE'
   | 'DRIVER_REPORT'
   | 'PHONE_HANDLED'
-  | 'LOADING_MISMATCH';
+  | 'LOADING_MISMATCH'
+  | 'UNSETTLED_ORDER';
 export type EmergencyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AttendanceStatus = 'WORKING' | 'ON_BREAK' | 'OVERTIME' | 'CLOCKED_OUT';
 
@@ -546,6 +547,8 @@ export interface OrderDto {
   id?: number;
   /** 異常中心等待隔日 06:00 系統自動送待排的無人簽收重送單。 */
   awaitingAutomaticDispatch?: boolean;
+  /** 非無人簽收後續單須先由異常中心確認。 */
+  awaitingExceptionReview?: boolean;
   orderNumber: string;
   storeId: number;
   /** 出貨倉庫，後端必填 */
@@ -746,6 +749,8 @@ export interface RouteStopDto {
   sequence: number;
   orderId: number;
   orderNumber: string;
+  /** 歷史失敗單只有案件仍未結時才需要在右側顯示待處理提醒。 */
+  openException?: boolean;
   boxCount: number;
   itemDescription: string | null;
   storeId: number;
@@ -766,6 +771,7 @@ export interface RouteStopDto {
 export interface UnassignedOrderDto {
   orderId: number;
   awaitingAutomaticDispatch?: boolean;
+  awaitingExceptionReview?: boolean;
   /** 無人簽收的系統自動送待排時間；一般訂單沒有此值。 */
   autoDispatchAt?: string | null;
   orderNumber: string;

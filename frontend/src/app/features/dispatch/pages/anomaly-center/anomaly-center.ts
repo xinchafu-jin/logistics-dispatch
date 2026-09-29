@@ -387,6 +387,7 @@ export class AnomalyCenter implements OnInit {
       DRIVER_REPORT: '司機回報',
       PHONE_HANDLED: '電話補登',
       LOADING_MISMATCH: '點交不符',
+      UNSETTLED_ORDER: '未結訂單異常',
     }[type];
   }
 

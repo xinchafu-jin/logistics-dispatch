@@ -67,7 +67,7 @@ class DeliveryExceptionServiceConfirmTest {
     }
 
     @ParameterizedTest
-    @EnumSource(value = ExceptionType.class, names = "NO_SIGNATURE", mode = EnumSource.Mode.EXCLUDE)
+    @EnumSource(value = ExceptionType.class, names = {"NO_SIGNATURE", "UNSETTLED_ORDER"}, mode = EnumSource.Mode.EXCLUDE)
     void 所有非無人簽收異常_確認後改為今天待排且保留原單歷史(ExceptionType type) {
         incident.setType(type);
         var response = service.confirm(7L, "主管");

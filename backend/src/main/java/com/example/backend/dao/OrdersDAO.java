@@ -61,6 +61,19 @@ public interface OrdersDAO extends JpaRepository<OrdersEntity, Long> {
     /** 看板日期列：一段日期內全部倉庫的訂單，不分狀態，由 Service 分組計數。 */
     List<OrdersEntity> findByDeliveryDateBetween(LocalDate from, LocalDate to);
 
+    /** 補掃跨日仍未確認／未開始配送的訂單；已建立未結異常或本身是待審後續單的排除。 */
+    @Query("select orders.id from OrdersEntity orders where orders.deliveryDate < :today "
+            + "and orders.status in :statuses "
+            + "and not exists (select incident.id from ExceptionCasesEntity incident "
+            + "where incident.orderId = orders.id and incident.type = :type) "
+            + "and not exists (select incident.id from ExceptionCasesEntity incident "
+            + "where incident.followUpOrderId = orders.id and incident.status = :openStatus) "
+            + "order by orders.deliveryDate, orders.id")
+    List<Long> findOverdueUnsettledIds(@Param("today") LocalDate today,
+            @Param("statuses") Collection<OrderStatus> statuses,
+            @Param("type") com.example.backend.constants.ExceptionType type,
+            @Param("openStatus") com.example.backend.constants.ExceptionStatus openStatus);
+
     /** 看板日期列：區間前面還沒結案的日子，補撈那幾天的全部訂單來算數量。 */
     List<OrdersEntity> findByDeliveryDateIn(Collection<LocalDate> dates);
 
