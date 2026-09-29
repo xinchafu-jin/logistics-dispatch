@@ -170,13 +170,6 @@
   bottom: calc(156px + env(safe-area-inset-bottom));
 }
 
-.eyebrow {
-  margin: 0 0 5px;
-  color: #68ceb7;
-  font-size: 12px;
-  font-weight: 800;
-}
-
 h1,
 h2,
 p {
@@ -531,10 +524,6 @@ h2 {
 .content-panel {
   min-height: calc(100dvh - 60px - env(safe-area-inset-top));
   padding: 22px 0 calc(96px + env(safe-area-inset-bottom));
-}
-
-.panel-heading {
-  margin-bottom: 18px;
 }
 
 .duty-stage-card {

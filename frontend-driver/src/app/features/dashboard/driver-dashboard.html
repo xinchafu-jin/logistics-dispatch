@@ -331,7 +331,6 @@
         <section class="duty-stage-card" aria-label="今日勤務階段">
           <header class="duty-stage-card__header">
             <div>
-              <p class="eyebrow">今日勤務階段</p>
               <h1>{{ statusLabel() }}</h1>
             </div>
             <span class="gps-status" [class.is-active]="!!attendance()?.gpsAllowed">
@@ -840,10 +839,6 @@
           </div>
         }
       } @else if (activeTab() === 'schedule') {
-        <div class="panel-heading">
-          <p class="eyebrow">班表</p>
-          <h1>本月班表</h1>
-        </div>
         <!-- Material 月曆，跟後台同一個套件；換月用月曆自己的上一月／下一月，換月時由 followScheduleCalendarMonth 重載班表。
              日期下方顯示班別圖示／文字，點某一天看正下方明細，接著直接選擇三合一請假模式 -->
         <section class="schedule-calendar-card" aria-label="班表月曆">
@@ -887,6 +882,14 @@
                 <div class="shift-details">
                   @if (shift.shiftType === 'WORK') {
                     <span>{{ formatTime(shift.workStart) }} - {{ formatTime(shift.workEnd) }}</span>
+                    @if (selectedAssignment(); as assignment) {
+                      <span>倉庫：{{ assignment.warehouseName ?? '未設定' }}</span>
+                      <span>車輛：{{ formatVehicle(assignment) }}</span>
+                    } @else if (selectedDateIsUpcoming()) {
+                      <span>倉庫：{{ profile()?.warehouseName ?? '未設定' }}（所屬倉庫）</span>
+                      <span>車輛：尚未派車</span>
+                      <small>主管發布當天路線後，才會顯示實際的倉庫與車輛。</small>
+                    }
                   }
                   @if (formatOvertime(shift.overtimeMinutes); as overtime) {
                     <span>{{ overtime }}</span>
@@ -967,10 +970,6 @@
           </details>
         }
       } @else {
-        <div class="panel-heading">
-          <p class="eyebrow">司機</p>
-          <h1>司機與出勤資訊</h1>
-        </div>
 
         <section class="profile-card" aria-label="司機個人名片">
           <div class="profile-photo-card">
