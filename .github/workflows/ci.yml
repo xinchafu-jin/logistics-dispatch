@@ -1,10 +1,24 @@
-# 後端測試 + 兩個前端的 production build。
+# 後端測試 + 兩個前端的單元測試與 production build。
 #
 # 什麼時候跑：
 #   - push 到 main 以外的分支：合併前就先知道有沒有壞
 #   - 被 build-images.yml 當成第一步呼叫（workflow_call）：
-#     main 上測試沒過就不建映像、不部署，壞掉的版本不會上線
+#     main 上任何一項沒過就不建映像、不部署，壞掉的版本不會上線
 #   （PR 不另外觸發：同一個 repo 的分支 push 時已經跑過，PR 頁面會直接顯示那次的結果）
+#
+# 後端測試的環境（每一條都是在乾淨環境實測出來才寫的）：
+#   1. 一顆全新空白的 MySQL 8.4，先用 Flyway CLI 從 V1 套到最新（順便驗證能從頭套完）。
+#   2. 再載入 .github/ci/base-fixture.sql：一組合成的最小基礎資料（3 個倉庫其中 1 個停用、6 間門市、3 位司機、1 位主管）。
+#      部分整合測試直接查「最小 id 的倉庫與門市」、要求司機 id 1、2 存在、還要有一個停用的倉庫，
+#      空資料庫上會在 setUp 就 NullPointerException。
+#      這份資料沒有任何可登入的帳密，只存在於這裡的臨時資料庫，不會進正式環境。
+#   3. 三個環境變數一定要給：APP_JWT_SECRET（至少 32 bytes）、APP_CRYPTO_PASSWORD（至少 32 字元）、
+#      APP_CRYPTO_SALT（偶數長度、至少 16 字元的 hex）。缺任何一個，所有要啟動 Spring 的測試都會在建立 bean 時全部失敗。
+#      值是用 run id 組出來的假值，不是 secret。
+#   4. 這裡沒有 OSRM：OSRM_BASE_URL 指向連不上的位址，需要路網的測試不在 CI 驗證。
+#
+# TZ 固定台北：系統的「今天」是台北的日期，runner 預設 UTC，台北凌晨時兩者差一天，
+# 用「今天」算日期的測試會偶爾誤判；固定時區讓 CI 跟開發機一致。
 
 name: CI
 
@@ -14,12 +28,14 @@ on:
   workflow_call:
   workflow_dispatch:
 
+env:
+  TZ: Asia/Taipei
+
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
-    # 用一顆完全空白的 MySQL 驗證 V1～V最新能從頭套完。
-    # 不建立帳號、訂單或任何 demo 資料。
     services:
       mysql:
         image: mysql:8.4           # 跟 deploy/docker-compose.yml 同版本
@@ -38,6 +54,11 @@ jobs:
       DB_URL: jdbc:mysql://127.0.0.1:3306/logistics?serverTimezone=Asia/Taipei&rewriteBatchedStatements=true
       DB_USER: root
       DB_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+      APP_JWT_SECRET: ci-jwt-${{ github.run_id }}-${{ github.run_attempt }}-0123456789abcdef0123456789
+      APP_CRYPTO_PASSWORD: ci-crypto-${{ github.run_id }}-${{ github.run_attempt }}-0123456789abcdef
+      APP_CRYPTO_SALT: deadbeefcafebabe
+      OSRM_BASE_URL: http://127.0.0.1:1
+      SHOW_SQL: "false"
 
     defaults:
       run:
@@ -54,6 +75,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4   # 快取 ~/.gradle，第二次起省掉下載依賴的時間
 
       # 用與後端相同版本的 Flyway，驗證空資料庫能完整套用所有 migration。
+      # 順序要在載入基礎資料之前：基礎資料要插進 Flyway 建好的表。
       - name: Migrate schema
         working-directory: .
         run: |
@@ -63,11 +85,27 @@ jobs:
             -url="$DB_URL" -user="$DB_USER" -password="$DB_PASSWORD" \
             -locations=filesystem:/flyway/sql migrate
 
-      - name: Compile backend
-        run: ./gradlew classes --no-daemon
+      - name: Load CI base data
+        working-directory: .
+        run: |
+          docker exec -i ${{ job.services.mysql.id }} \
+            mysql -uroot -p"$DB_PASSWORD" --default-character-set=utf8mb4 logistics \
+            < .github/ci/base-fixture.sql
+
+      - name: Test
+        run: ./gradlew test --no-daemon
+
+      # 失敗時把 HTML 報告留下來，不用在 log 裡翻 stack trace
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/test/
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -88,6 +126,10 @@ jobs:
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
 
       - run: npm ci --ignore-scripts
+
+      # 單元測試不需要瀏覽器（jsdom）；先測再建，測試壞了不必等 production build
+      - name: Unit tests
+        run: npx ng test --watch=false
 
       # production build 會檢查 angular.json 的 budgets，超過上限直接失敗——
       # 這一步要在這裡擋下，不然會等到建映像時才爆
