@@ -104,8 +104,8 @@ export class DriverCasesService {
     return this.api.acceptDriverCase(caseId).pipe(tap((updated) => this.upsert(updated)));
   }
 
-  close(caseId: number, resolution: string): Observable<DriverCaseDto> {
-    return this.api.closeDriverCase(caseId, resolution).pipe(tap((closed) => this.upsert(closed)));
+  close(caseId: number, resolution: string, redeliverOrderIds: number[] = []): Observable<DriverCaseDto> {
+    return this.api.closeDriverCase(caseId, resolution, redeliverOrderIds).pipe(tap((closed) => this.upsert(closed)));
   }
 
   requestOpenChat(caseId: number): void {

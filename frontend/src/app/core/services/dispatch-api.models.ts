@@ -1031,3 +1031,19 @@ export interface DriverCaseDto {
   /** 結案的管理員名稱 */
   handledBy: string | null;
 }
+
+/** 結案視窗列的：案件路線上還沒結束的單（GET /api/exceptions/driver-cases/{id}/unfinished-orders） */
+export interface DriverCaseOrdersDto {
+  /** 案件沒有路線（上班前回報）時是 null，orders 是空的 */
+  routeDate: string | null;
+  /** 路線日期已過：這些單要全部改期補送才能結案，不然看板日期列會一直是「未結案」 */
+  mustResolveAll: boolean;
+  orders: DriverCaseOrderDto[];
+}
+
+export interface DriverCaseOrderDto {
+  id: number;
+  orderNumber: string;
+  storeName: string | null;
+  status: OrderStatus;
+}

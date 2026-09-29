@@ -14,6 +14,7 @@ import {
   DispatchDayDto,
   DispatchResultDto,
   DriverCaseDto,
+  DriverCaseOrdersDto,
   DriverDto,
   DriverLeaveHistoryDto,
   DriverLeaveBatchDto,
@@ -711,9 +712,15 @@ export class DispatchApiService {
     return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/accept`, null);
   }
 
-  /** 填處理結果結案；還沒接收也能結（例如司機重複送出） */
-  closeDriverCase(caseId: number, resolution: string): Observable<DriverCaseDto> {
-    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/close`, {resolution});
+  /** 結案視窗要列的：案件路線上還沒結束的單 */
+  getDriverCaseUnfinishedOrders(caseId: number): Observable<DriverCaseOrdersDto> {
+    return this.http.get<DriverCaseOrdersDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/unfinished-orders`);
+  }
+
+  /** 填處理結果結案；還沒接收也能結（例如司機重複送出）。redeliverOrderIds 是要改期補送的單 */
+  closeDriverCase(caseId: number, resolution: string, redeliverOrderIds: number[] = []): Observable<DriverCaseDto> {
+    return this.http.patch<DriverCaseDto>(`${API_ROOT}/exceptions/driver-cases/${caseId}/close`,
+      {resolution, redeliverOrderIds});
   }
 
   /** 案件對話；afterId 的用法跟一般對話一樣 */
