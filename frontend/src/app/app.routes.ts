@@ -66,7 +66,7 @@ export const routes: Routes = [
       },
       {
         path: 'history',
-        data: { title: '歷史報表查詢中心' },
+        data: { title: '歷史報表' },
         loadComponent: () =>
           import('./features/dispatch/pages/report-history/report-history').then(
             (component) => component.ReportHistory,
