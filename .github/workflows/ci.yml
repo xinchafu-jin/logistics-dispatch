@@ -76,13 +76,19 @@ jobs:
 
       # 用與後端相同版本的 Flyway，驗證空資料庫能完整套用所有 migration。
       # 順序要在載入基礎資料之前：基礎資料要插進 Flyway 建好的表。
+      #
+      # allowPublicKeyRetrieval=true 只加在這一步：Flyway 映像沒有附 MySQL 官方驅動，用的是 MariaDB 驅動，
+      # 它預設不走 TLS，MySQL 8.4 的 caching_sha2_password 第一次登入就會要公鑰而被拒
+      # （RSA public key is not available client side）。後端測試用 MySQL 官方驅動，預設走 TLS，不需要。
+      # 這顆資料庫只活在這個 job、密碼是假的，讓驅動向伺服器要公鑰沒有被攔截的風險；
+      # 正式環境的做法不同，見 docs/deployment.md「caching_sha2_password」一節。
       - name: Migrate schema
         working-directory: .
         run: |
           docker run --rm --network host \
             -v "$PWD/backend/src/main/resources/db/migration:/flyway/sql:ro" \
             flyway/flyway:11.14.1 \
-            -url="$DB_URL" -user="$DB_USER" -password="$DB_PASSWORD" \
+            -url="$DB_URL&allowPublicKeyRetrieval=true" -user="$DB_USER" -password="$DB_PASSWORD" \
             -locations=filesystem:/flyway/sql migrate
 
       - name: Load CI base data
