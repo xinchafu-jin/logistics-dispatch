@@ -101,6 +101,20 @@ export interface AdminUserDto {
   phone: string;
 }
 
+/** 個人資料（GET/PUT /api/admin-users/me）；姓名以資料庫為準，不是登入 Token 裡的 */
+export interface AdminProfileDto {
+  account: string;
+  name: string;
+  phone: string | null;
+}
+
+/** 手機號碼有變時才要帶 currentPassword：手機是忘記密碼的驗證依據 */
+export interface AdminProfileUpdateRequest {
+  name: string;
+  phone: string;
+  currentPassword?: string;
+}
+
 /** 後端只回傳遮罩後的 API Key，完整內容不會再次傳回前端。 */
 export interface AiApiKeyStatusDto {
   configured: boolean;

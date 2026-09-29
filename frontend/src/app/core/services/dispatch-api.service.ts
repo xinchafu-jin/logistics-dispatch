@@ -6,6 +6,8 @@ import {
   AdminStickyNoteRequestDto,
   AdminUserCreateRequest,
   AdminUserDto,
+  AdminProfileDto,
+  AdminProfileUpdateRequest,
   AiApiKeyRequest,
   AiApiKeyStatusDto,
   AiChatReply,
@@ -284,6 +286,14 @@ export class DispatchApiService {
 
   createAdminUser(request: AdminUserCreateRequest): Observable<AdminUserDto> {
     return this.http.post<AdminUserDto>(`${API_ROOT}/admin-users`, request);
+  }
+
+  getAdminProfile(): Observable<AdminProfileDto> {
+    return this.http.get<AdminProfileDto>(`${API_ROOT}/admin-users/me`);
+  }
+
+  updateAdminProfile(request: AdminProfileUpdateRequest): Observable<AdminProfileDto> {
+    return this.http.put<AdminProfileDto>(`${API_ROOT}/admin-users/me`, request);
   }
 
   getAiApiKeyStatus(): Observable<AiApiKeyStatusDto> {

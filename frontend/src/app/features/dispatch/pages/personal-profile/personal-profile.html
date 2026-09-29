@@ -22,7 +22,7 @@
               @if (profileForm.controls.name.touched && profileForm.controls.name.hasError('required')) {
                 <mat-error>請輸入姓名。</mat-error>
               } @else if (profileForm.controls.name.touched && profileForm.controls.name.hasError('maxlength')) {
-                <mat-error>姓名不可超過 50 個字元。</mat-error>
+                <mat-error>姓名不可超過 60 個字元。</mat-error>
               }
             </mat-form-field>
           </label>
@@ -31,23 +31,47 @@
             <span>聯絡電話</span>
             <mat-form-field class="admin-field" appearance="outline" subscriptSizing="dynamic">
               <input matInput formControlName="phone" autocomplete="tel" inputmode="tel" aria-label="聯絡電話" />
-              @if (profileForm.controls.phone.touched && profileForm.controls.phone.hasError('pattern')) {
-                <mat-error>請輸入有效的電話格式。</mat-error>
+              @if (profileForm.controls.phone.touched && profileForm.controls.phone.hasError('required')) {
+                <mat-error>請輸入手機號碼，忘記密碼時要用它驗證身分。</mat-error>
+              } @else if (profileForm.controls.phone.touched && profileForm.controls.phone.hasError('pattern')) {
+                <mat-error>手機號碼格式為 09 開頭的 10 碼數字。</mat-error>
               }
             </mat-form-field>
           </label>
+
+          @if (phoneChanged()) {
+            <label class="ui-field">
+              <span>目前的密碼</span>
+              <mat-form-field class="admin-field" appearance="outline" subscriptSizing="dynamic">
+                <input
+                  matInput
+                  type="password"
+                  formControlName="currentPassword"
+                  autocomplete="current-password"
+                  aria-label="目前的密碼"
+                />
+                <mat-hint>手機號碼是忘記密碼的驗證依據，修改前要確認是本人。</mat-hint>
+                @if (profileForm.controls.currentPassword.hasError('required')) {
+                  <mat-error>修改手機號碼需要輸入目前的密碼。</mat-error>
+                }
+              </mat-form-field>
+            </label>
+          }
         </div>
 
         <div class="form-actions">
-          <button type="submit" class="ui-btn-primary">
+          <button type="submit" class="ui-btn-primary" [disabled]="isProfileLoading() || isProfileSaving()">
             <mat-icon aria-hidden="true">save</mat-icon>
-            儲存個人資料
+            {{ isProfileSaving() ? '儲存中...' : '儲存個人資料' }}
           </button>
         </div>
       </form>
 
       @if (profileFeedback()) {
-        <p class="ui-alert is-warn">{{ profileFeedback() }}</p>
+        <p class="ui-alert is-ok" role="status">{{ profileFeedback() }}</p>
+      }
+      @if (profileError()) {
+        <p class="ui-alert is-danger" role="alert">{{ profileError() }}</p>
       }
     </div>
   </section>
