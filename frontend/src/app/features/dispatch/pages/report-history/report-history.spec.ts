@@ -559,6 +559,15 @@ describe('ReportHistory links from the supervisor summary', () => {
     expect(outcome.loadedAt).toBeNull();
   });
 
+  it('exports the order-level handoff note separately from item notes and leaves older missing notes blank', () => {
+    const page = open({sheet: 'loading-quality'}) as any;
+    const data = {orders: [], outcomes: {orders: [row(1, {loadingNotes: '外箱已擦乾，交接請留意'}), row(2)]}};
+    const exported = page.loadingOutcomeExportRows(data);
+    expect(exported[0][8]).toBe('點交備註');
+    expect(exported[1][8]).toBe('外箱已擦乾，交接請留意');
+    expect(exported[2][8]).toBeNull();
+  });
+
   it('uses returned item evidence as fallback and keeps unknown actual quantities and time blank', () => {
     const page = open({sheet: 'loading-quality'}) as any;
     const outcome = row(10, {items: [{productCode: 'MILK', itemName: '鮮乳', expectedQuantity: 15,

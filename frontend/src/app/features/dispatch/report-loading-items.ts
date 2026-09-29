@@ -49,8 +49,10 @@ export function reportLoadingItems(items: readonly LoadingItemEvidence[] | null 
       unit: item.unit?.trim() || '（單位未記錄）',
       checkedAt: item.checkedAt ?? null,
       notes: item.loadingNotes?.trim() || null,
-      status: item.loadingMismatchReported ? 'MISMATCH_REPORTED'
-        : difference === null ? 'NOT_RECORDED' : difference > 0 ? 'MISSING' : difference < 0 ? 'EXCESS' : 'MATCHED',
+      status: difference !== null && difference > 0 ? 'MISSING'
+        : difference !== null && difference < 0 ? 'EXCESS'
+          : item.loadingMismatchReported ? 'MISMATCH_REPORTED'
+            : difference === null ? 'NOT_RECORDED' : 'MATCHED',
     };
   });
 }
@@ -67,5 +69,8 @@ export function loadingMismatchSummary(items: readonly ReportLoadingItem[]): str
   return differences.map(item => item.itemName + '：' + (item.status === 'MISSING'
     ? '缺少 ' + item.missingQuantity + ' ' + item.unit
     : item.status === 'EXCESS' ? '多出 ' + item.excessQuantity + ' ' + item.unit
-      : item.status === 'MISMATCH_REPORTED' ? '已回報點交不符，實點數量未記錄' : '點交數量未記錄')).join('\n');
+      : item.status === 'MISMATCH_REPORTED' ? item.loadedQuantity === null
+        ? '已回報點交不符，實點數量未記錄'
+        : '已回報點交不符，實點 ' + item.loadedQuantity + ' ' + item.unit
+        : '點交數量未記錄')).join('\n');
 }

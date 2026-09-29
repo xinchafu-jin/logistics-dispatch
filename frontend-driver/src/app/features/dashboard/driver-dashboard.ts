@@ -102,6 +102,7 @@ export function navigationReadyForOrder(tasks: NavigationTaskSet | null, orderId
 
 interface LoadingItemForm {
   checked: boolean;
+  loadedQuantity: string;
 }
 
 type MapPosition = [lng: number, lat: number];
@@ -1699,6 +1700,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.loadingItemForms.set(
       Object.fromEntries((stop.items ?? []).map((item) => [item.id, {
         checked: false,
+        loadedQuantity: '',
       }])),
     );
     this.taskActionError.set(null);
@@ -1723,7 +1725,39 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   protected loadingItemForm(itemId: number): LoadingItemForm {
-    return this.loadingItemForms()[itemId] ?? {checked: false};
+    return this.loadingItemForms()[itemId] ?? {checked: false, loadedQuantity: ''};
+  }
+
+  protected updateLoadingItemQuantity(itemId: number, event: Event): void {
+    if (this.isTaskSubmitting()) {
+      return;
+    }
+    const loadedQuantity = (event.target as HTMLInputElement).value;
+    this.loadingItemForms.update((items) => ({
+      ...items,
+      [itemId]: {...this.loadingItemForm(itemId), loadedQuantity},
+    }));
+  }
+
+  private measuredLoadingQuantity(itemId: number): number | null {
+    const text = this.loadingItemForm(itemId).loadedQuantity.trim();
+    if (!/^\d+$/.test(text)) {
+      return null;
+    }
+    const value = Number(text);
+    return Number.isSafeInteger(value) ? value : null;
+  }
+
+  protected loadingMismatchReady(stop: DriverTaskStop): boolean {
+    const checked = stop.items.filter((item) => this.loadingItemForm(item.id).checked);
+    return checked.length > 0 && stop.items.every((item) => {
+      const actual = this.measuredLoadingQuantity(item.id);
+      return actual !== null && (this.loadingItemForm(item.id).checked || actual === item.expectedQuantity);
+    });
+  }
+
+  protected measuredLoadingItemCount(stop: DriverTaskStop): number {
+    return stop.items.filter((item) => this.measuredLoadingQuantity(item.id) !== null).length;
   }
 
   protected checkedLoadingItemCount(stop: DriverTaskStop): number {
@@ -1732,7 +1766,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
 
   protected loadingChecklistComplete(stop: DriverTaskStop): boolean {
     return stop.items.length > 0
-      ? this.checkedLoadingItemCount(stop) === stop.items.length
+      ? stop.items.every((item) => this.loadingItemForm(item.id).checked
+          && this.measuredLoadingQuantity(item.id) === item.expectedQuantity)
       : this.loadingSummaryChecked();
   }
 
@@ -1756,6 +1791,10 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.taskActionError.set('請先勾選點交不符的商品。');
       return;
     }
+    if (!this.loadingMismatchReady(stop)) {
+      this.taskActionError.set('請填寫每項商品的實點數量；數量不符的商品也要勾選。');
+      return;
+    }
     this.reportLoadingMismatch(stop, items);
   }
 
@@ -1768,13 +1807,23 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       this.taskActionError.set('請先通過這條路線的出車前安全檢查。');
       return;
     }
+    if (!this.loadingMismatchReady(stop)) {
+      this.taskActionError.set('請填寫每項商品的實點數量；數量不符的商品也要勾選。');
+      return;
+    }
+    const productSummary = items.map((item) =>
+      `${item.itemName}（應點 ${item.expectedQuantity}、實點 ${this.measuredLoadingQuantity(item.id)} ${item.unit}）`).join('、');
     this.reportingLoadingItemIds.set(items.map((item) => item.id));
     this.isTaskSubmitting.set(true);
     this.taskActionError.set(null);
     this.taskActionMessage.set(null);
     this.operations.reportLoadingMismatch({
       orderId: stop.orderId,
-      orderItemIds: items.map((item) => item.id),
+      items: stop.items.map((item) => ({
+        orderItemId: item.id,
+        loadedQuantity: this.measuredLoadingQuantity(item.id)!,
+        mismatchReported: this.loadingItemForm(item.id).checked,
+      })),
       notes: this.loadingNotes().trim() || undefined,
     }).subscribe({
       next: (response) => {
@@ -1783,8 +1832,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         const rebuilt = response.followUpOrderNumber
           ? `已重建訂單 ${response.followUpOrderNumber}，待主管確認。`
           : '請主管重新建單。';
-        const products = items.map((item) => `${item.itemName}（應點 ${item.expectedQuantity} ${item.unit}）`).join('、');
-        this.taskActionMessage.set(`已送出倉庫點交不符異常：${products}。原單停止配送，${rebuilt}`);
+        this.taskActionMessage.set(`已送出倉庫點交不符異常：${productSummary}。原單停止配送，${rebuilt}`);
         this.reportingLoadingItemIds.set([]);
         this.isTaskSubmitting.set(false);
       },
@@ -1811,6 +1859,15 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
         this.taskActionError.set(`請先勾選並核對商品「${item.itemName}」。`);
         return;
       }
+      const actual = this.measuredLoadingQuantity(item.id);
+      if (actual === null) {
+        this.taskActionError.set(`請填寫商品「${item.itemName}」的實點數量。`);
+        return;
+      }
+      if (actual !== item.expectedQuantity) {
+        this.taskActionError.set(`商品「${item.itemName}」實點數量不符，請按「點交不符」。`);
+        return;
+      }
     }
 
     this.isTaskSubmitting.set(true);
@@ -1825,7 +1882,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       items: items.length === 0 ? undefined : items.map((item) => ({
         orderItemId: item.id,
         checked: true,
-        loadedQuantity: item.expectedQuantity,
+        loadedQuantity: this.measuredLoadingQuantity(item.id)!,
       })),
     }).subscribe({
       next: (response) => {

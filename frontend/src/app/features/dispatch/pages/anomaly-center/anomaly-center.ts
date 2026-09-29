@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, TemplateRef, computed, effect, inject, OnInit, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { debounceTime } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -8,6 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import {MatIconModule} from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { DispatchApiService } from '../../../../core/services/dispatch-api.service';
+import { DispatchBoardEventsService } from '../../../../core/services/dispatch-board-events.service';
 import { AdminThemeService } from '../../../../core/theme/admin-theme.service';
 import { DriverCasesService, driverCaseCategoryLabel } from '../../../../core/services/driver-cases.service';
 import { DriverChatSocketService } from '../../../../core/services/driver-chat-socket.service';
@@ -18,7 +20,7 @@ import {
 } from '../../../../core/services/dispatch-api.models';
 
 type ExceptionFilter = 'ALL' | 'NO_SIGNATURE' | 'GOODS_ISSUE';
-/** driver＝司機即時回報（接收、結案），delivery＝隔日 06:00 進來的配送異常（確認補送） */
+/** driver＝司機即時回報；delivery＝無人簽收等待自動送待排，及其餘待主管確認的配送異常。 */
 type AnomalyView = 'driver' | 'delivery';
 type CaseListFilter = 'OPEN' | 'CLOSED';
 
@@ -30,6 +32,7 @@ type CaseListFilter = 'OPEN' | 'CLOSED';
 })
 export class AnomalyCenter implements OnInit {
   private readonly api = inject(DispatchApiService);
+  private readonly boardEvents = inject(DispatchBoardEventsService);
   private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
   // 對話框開在 body 底下吃不到後台深淺色，開啟時要帶 theme.dialogPanelClass()
@@ -38,7 +41,8 @@ export class AnomalyCenter implements OnInit {
 
   // ── 司機回報：資料在 DriverCasesService（鈴鐺、聊天室共用同一份，靠推播即時更新）──
   protected readonly driverCases = inject(DriverCasesService);
-  protected readonly isSocketConnected = inject(DriverChatSocketService).isConnected;
+  private readonly socket = inject(DriverChatSocketService);
+  protected readonly isSocketConnected = this.socket.isConnected;
   /**
    * 結案視窗的內容，寫在 anomaly-center.html 最下面。用 MatDialog 開、不沿用本頁的 .modal-backdrop：
    * 頁面在 dispatch-shell 的 z-index: 0 堆疊裡，本頁的視窗 z-index 再高也蓋不過聊天室（z-index 80）；
@@ -144,6 +148,21 @@ export class AnomalyCenter implements OnInit {
 
   ngOnInit(): void {
     this.loadPendingConfirmations();
+    // 06:00 自動送待排會推看板變更；異常中心開著時也要移除已自動處理的案件。
+    this.socket.boardPushes$
+      .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.view() === 'delivery' && !this.confirming()) {
+          this.loadPendingConfirmations();
+        }
+      });
+    this.socket.connected$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (this.view() === 'delivery' && !this.confirming()) {
+          this.loadPendingConfirmations();
+        }
+      });
     // 進頁面重抓一次司機回報；之後的變化靠推播
     this.driverCases.load();
     // 鈴鐺點進來會帶 ?case=ID：切到司機回報並選中那一件
@@ -178,6 +197,9 @@ export class AnomalyCenter implements OnInit {
 
   protected setView(view: AnomalyView): void {
     this.view.set(view);
+    if (view === 'delivery' && !this.confirming()) {
+      this.loadPendingConfirmations();
+    }
   }
 
   // ── 司機回報 ───────────────────────────────────────────
@@ -313,11 +335,13 @@ export class AnomalyCenter implements OnInit {
 
   protected selectIncident(incidentId: number): void {
     this.selectedIncidentId.set(incidentId);
-    this.actionMessage.set('確認後，後續訂單會送入待排車。');
+    this.actionMessage.set(this.selectedIncident()?.type === 'NO_SIGNATURE'
+      ? '無人簽收會在隔日 06:00 自動送入待排車，不需主管確認。'
+      : '確認後，後續訂單會送入待排車。');
   }
 
   protected openConfirmDialog(): void {
-    if (this.selectedIncident() && !this.confirming()) {
+    if (this.selectedIncident()?.type !== 'NO_SIGNATURE' && this.selectedIncident() && !this.confirming()) {
       this.confirmDialogOpen.set(true);
     }
   }
@@ -330,7 +354,7 @@ export class AnomalyCenter implements OnInit {
 
   protected confirmSelected(): void {
     const incident = this.selectedIncident();
-    if (!incident || this.confirming()) {
+    if (!incident || incident.type === 'NO_SIGNATURE' || this.confirming()) {
       return;
     }
 
@@ -338,6 +362,8 @@ export class AnomalyCenter implements OnInit {
     this.errorMessage.set('');
     this.api.confirmExceptionCase(incident.id).subscribe({
       next: (confirmed) => {
+        // API 成功後立即刷新本機看板；後端推播則同步其他主管的畫面。
+        this.boardEvents.notifyBoardChanged();
         this.incidents.update((incidents) => incidents.filter((item) => item.id !== incident.id));
         this.selectedIncidentId.set(null);
         this.syncSelection();

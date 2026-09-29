@@ -87,6 +87,16 @@ describe('DriverOperationsService', () => {
     request.flush({orderId: 113, orderStatus: 'FAILED', exceptionCaseId: 501});
   });
 
+  it('sends measured product quantities with a loading mismatch', () => {
+    const body = {orderId: 113, items: [{orderItemId: 601, loadedQuantity: 2, mismatchReported: true},
+      {orderItemId: 602, loadedQuantity: 8, mismatchReported: false}], notes: '少兩箱'};
+    service.reportLoadingMismatch(body).subscribe();
+    const request = httpTesting.expectOne('/api/driver/loading/mismatch');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual(body);
+    request.flush({orderId: 113, orderStatus: 'FAILED', exceptionCaseId: 501});
+  });
+
   it('uses the road route and emergency leave contracts', () => {
     const route = {
       fromLat: 22.6273,

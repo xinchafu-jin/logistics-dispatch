@@ -18,6 +18,9 @@ public class OrdersDTO {
 
     private Long id;
 
+    /** 無人簽收重送單仍在等系統隔日 06:00 自動送待排；唯讀狀態。 */
+    private boolean awaitingAutomaticDispatch;
+
     @NotBlank(message = ORDER_NUMBER_REQUIRED)
     @Size(max = 30, message = ORDER_NUMBER_MAX_LENGTH)
     private String orderNumber;
@@ -68,6 +71,11 @@ public class OrdersDTO {
     // ===== Getter & Setter =====
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public boolean isAwaitingAutomaticDispatch() { return awaitingAutomaticDispatch; }
+    public void setAwaitingAutomaticDispatch(boolean awaitingAutomaticDispatch) {
+        this.awaitingAutomaticDispatch = awaitingAutomaticDispatch;
+    }
 
     public String getOrderNumber() { return orderNumber; }
     public void setOrderNumber(String orderNumber) { this.orderNumber = orderNumber; }

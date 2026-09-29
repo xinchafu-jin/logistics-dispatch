@@ -196,7 +196,7 @@
   .board-dropzone { padding: 0; }
 }
 
-// 待確認的單不能拖，先確認才會進待排單；補送單（點交不符、無人簽收）也在這裡
+// 待確認的單不能拖；無人簽收重送單由系統在隔日 06:00 自動送待排。
 .pending-group {
   display: grid; gap: 6px; margin-bottom: 10px; padding: 8px;
   background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 4px;
@@ -211,6 +211,10 @@
   color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 3px;
   font: inherit; font-size: 0.75rem;
   &:disabled { cursor: wait; opacity: 0.6; }
+}
+
+.pending-auto-dispatch {
+  color: var(--muted); font-size: 0.75rem; white-space: nowrap;
 }
 
 // ── 已派出：一台車一張進度卡（.ui-panel）、右邊「需要處理」、圖例 ──

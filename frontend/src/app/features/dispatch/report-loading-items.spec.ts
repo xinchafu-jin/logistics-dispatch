@@ -30,6 +30,16 @@ describe('Original-order loading item reports', () => {
     expect(loadingMismatchSummary(rows)).toBe('鮮乳：已回報點交不符，實點數量未記錄\n雞蛋：點交數量未記錄');
   });
 
+  it('uses the recorded actual quantity for a reported shortage or damage', () => {
+    const shortage = reportLoadingItems([product({loadedQuantity: 12, loadingMismatchReported: true})]);
+    expect(shortage[0]).toMatchObject({loadedQuantity: 12, missingQuantity: 3, status: 'MISSING'});
+    expect(loadingMismatchSummary(shortage)).toBe('鮮乳：缺少 3 瓶');
+
+    const damage = reportLoadingItems([product({loadedQuantity: 15, loadingMismatchReported: true})]);
+    expect(damage[0]).toMatchObject({loadedQuantity: 15, missingQuantity: 0, status: 'MISMATCH_REPORTED'});
+    expect(loadingMismatchSummary(damage)).toBe('鮮乳：已回報點交不符，實點 15 瓶');
+  });
+
   it.each([undefined, null, -1, Number.NaN, Number.POSITIVE_INFINITY, 2.5, '12'])('does not invent a shortage for invalid or missing actual quantity %s', actual => {
     const items = reportLoadingItems([product({loadedQuantity: actual as any})]);
     expect(items[0]).toMatchObject({loadedQuantity: null, missingQuantity: null, excessQuantity: null, status: 'NOT_RECORDED'});

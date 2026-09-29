@@ -3,14 +3,12 @@ package com.example.backend.service;
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
 import com.example.backend.constants.OrderStatus;
-import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.DeliveryRecordsDAO;
 import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.OrdersEntity;
-import com.example.backend.entity.RoutesEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,7 +17,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,6 +28,7 @@ class DeliveryExceptionServiceConfirmTest {
     private ExceptionCasesDAO cases;
     private OrdersDAO orders;
     private RoutesDAO routes;
+    private DispatchBoardPushService boardPush;
     private DeliveryExceptionService service;
     private OrdersEntity source;
     private OrdersEntity rebuilt;
@@ -43,7 +41,8 @@ class DeliveryExceptionServiceConfirmTest {
         cases = mock(ExceptionCasesDAO.class);
         orders = mock(OrdersDAO.class);
         routes = mock(RoutesDAO.class);
-        service = new DeliveryExceptionService(cases, mock(DeliveryRecordsDAO.class), orders, routes);
+        boardPush = mock(DispatchBoardPushService.class);
+        service = new DeliveryExceptionService(cases, mock(DeliveryRecordsDAO.class), orders, routes, boardPush);
         source = new OrdersEntity();
         source.setId(1L);
         source.setDeliveryDate(today.minusDays(2));
@@ -83,6 +82,7 @@ class DeliveryExceptionServiceConfirmTest {
         assertEquals(OrderStatus.FAILED, source.getStatus());
         assertEquals(10L, source.getRouteId());
         verify(orders).save(rebuilt);
+        verify(boardPush).markChanged(today.plusDays(1));
         // 已发布路線不影響新單的配送日期，但也不在此改寫既有路線。
         verifyNoInteractions(routes);
         verify(orders, never()).save(source);
@@ -95,25 +95,30 @@ class DeliveryExceptionServiceConfirmTest {
         rebuilt.setDeliveryDate(today.minusDays(1));
         service.confirm(7L, "主管");
         assertEquals(today, rebuilt.getDeliveryDate());
+        verify(boardPush).markChanged(today.minusDays(1));
     }
 
     @Test
-    void 無人簽收_保留自動隔日配送日期() {
-        incident.setType(ExceptionType.NO_SIGNATURE);
+    void 後續單本來就在今天_不多推一次舊日期() {
+        incident.setType(ExceptionType.DAMAGE);
+        rebuilt.setDeliveryDate(today);
+
         service.confirm(7L, "主管");
+
+        assertEquals(today, rebuilt.getDeliveryDate());
+        verifyNoInteractions(boardPush);
+    }
+
+    @Test
+    void 無人簽收_不能再由主管手動確認() {
+        incident.setType(ExceptionType.NO_SIGNATURE);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.confirm(7L, "主管"));
+        assertEquals("無人簽收於隔日 06:00 自動送入待排車，不需主管確認", error.getMessage());
         assertEquals(today.plusDays(1), rebuilt.getDeliveryDate());
-        assertEquals(OrderStatus.CONFIRMED, rebuilt.getStatus());
-        verify(routes).findByDateAndWarehouseId(today.plusDays(1), 3L);
-    }
-
-    @Test
-    void 無人簽收_仍避開已發布而不能重排的日期() {
-        incident.setType(ExceptionType.NO_SIGNATURE);
-        RoutesEntity published = new RoutesEntity();
-        published.setStatus(RouteStatus.PUBLISHED);
-        when(routes.findByDateAndWarehouseId(today.plusDays(1), 3L)).thenReturn(List.of(published));
-        service.confirm(7L, "主管");
-        assertEquals(today.plusDays(2), rebuilt.getDeliveryDate());
+        assertEquals(OrderStatus.PENDING_CONFIRM, rebuilt.getStatus());
+        verifyNoInteractions(boardPush);
+        verify(orders, never()).save(any());
     }
 
     @Test

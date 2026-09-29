@@ -1,4 +1,5 @@
 import {
+  DatePipe,
   DecimalPipe,
 }
   from '@angular/common';
@@ -13,7 +14,7 @@ import {
 import {HttpErrorResponse} from '@angular/common/http';
 import {Component, computed, DestroyRef, inject, OnInit, signal, TemplateRef, viewChild} from '@angular/core';
 import {takeUntilDestroyed, toObservable, toSignal} from '@angular/core/rxjs-interop';
-import {catchError, debounceTime, forkJoin, map, of, startWith, switchMap, timer} from 'rxjs';
+import {bufferTime, catchError, filter, forkJoin, map, of, startWith, switchMap, timer} from 'rxjs';
 import {LiveFleetMap, MapPoint, RouteLine} from '../../components/live-fleet-map/live-fleet-map';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
@@ -92,6 +93,8 @@ function minutesAgo(timestamp: string): number {
  */
 interface BoardCard {
   orderId: number;
+  awaitingAutomaticDispatch?: boolean;
+  autoDispatchAt?: string | null;
   orderNumber: string;
   storeId: number;
   storeCode: string;
@@ -137,6 +140,9 @@ interface BoardRoute {
 function toBoardCard(source: RouteStopDto | UnassignedOrderDto): BoardCard {
   return {
     orderId: source.orderId,
+    awaitingAutomaticDispatch: 'awaitingAutomaticDispatch' in source
+      ? source.awaitingAutomaticDispatch : false,
+    autoDispatchAt: 'autoDispatchAt' in source ? source.autoDispatchAt : null,
     orderNumber: source.orderNumber,
     storeId: source.storeId,
     storeCode: source.storeCode,
@@ -196,7 +202,7 @@ const DELIVERY_PROBLEM: readonly OrderStatus[] = ['FAILED', 'NO_SIGNATURE'];
 @Component({
   selector: 'app-dispatch-dashboard',
   imports: [
-    LiveFleetMap, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
+    LiveFleetMap, DatePipe, DecimalPipe, CdkDropListGroup, CdkDropList, CdkDrag,
     MatSlideToggleModule, MatIconModule, MatButtonModule, MatDialogModule,
   ],
   templateUrl: './dispatch-dashboard.html',
@@ -631,11 +637,14 @@ export class DispatchDashboard implements OnInit {
     // AI 清單在聊天面板確認後，資料庫已經換了，重讀一次才不會用舊畫面蓋回去
     this.boardEvents.boardChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.reloadBoard());
-    // 後端在訂單或路線 commit 後推「哪一天變了」。同一波操作可能連續推好幾則，等 0.5 秒沒有新的再重查一次
+      .subscribe(() => {
+        this.loadDays();
+        this.refreshOrdersAndBoard();
+      });
+    // 同一筆移單會推舊日及新日；整批處理，不能用 debounceTime 只留下最後一天。
     this.socket.boardPushes$
-      .pipe(debounceTime(500), takeUntilDestroyed(this.destroyRef))
-      .subscribe((push) => this.onBoardPush(push));
+      .pipe(bufferTime(500), filter((pushes) => pushes.length > 0), takeUntilDestroyed(this.destroyRef))
+      .subscribe((pushes) => this.onBoardPushes(pushes));
     // 偏離推播直接套用、不用 debounce：每一則都帶完整的那筆紀錄，不必回頭重查
     this.loadActiveDeviations();
     this.socket.routeDeviationPushes$
@@ -794,13 +803,13 @@ export class DispatchDashboard implements OnInit {
    * 收到「某一天變了」：日期列一律重查（每格都可能變）；變的是正在看的那天才重讀看板。
    * 自己正在存檔或排車時先不重讀：那個動作結束後本來就會重畫，這時插進來會蓋掉還沒存完的畫面。
    */
-  private onBoardPush(push: {date: string | null; resourcesChanged?: boolean}): void {
-    if (push.resourcesChanged) {
+  private onBoardPushes(pushes: readonly {date: string | null; resourcesChanged?: boolean}[]): void {
+    if (pushes.some((push) => push.resourcesChanged)) {
       this.api.getDrivers().subscribe({next: drivers => this.drivers.set(drivers)});
       this.api.getVehicles().subscribe({next: vehicles => this.vehicles.set(vehicles)});
     }
     this.loadDays();
-    if (push.date === this.dispatchDate() && !this.busy()) {
+    if (pushes.some((push) => push.date === this.dispatchDate()) && !this.busy()) {
       this.refreshOrdersAndBoard();
     }
   }
@@ -864,7 +873,7 @@ export class DispatchDashboard implements OnInit {
 
   /** 在看板上直接確認：確認後這張單會從待確認移到待排單，就能拖或自動排車 */
   confirmPendingOrder(card: BoardCard): void {
-    if (this.published() || this.busy() || this.confirmingOrderId() !== null) {
+    if (card.awaitingAutomaticDispatch || this.published() || this.busy() || this.confirmingOrderId() !== null) {
       return;
     }
     this.confirmingOrderId.set(card.orderId);

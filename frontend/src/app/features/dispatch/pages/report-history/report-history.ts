@@ -575,8 +575,8 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
   private loadingOutcomeExportRows(preview: ReportPreview): unknown[][] {
     const orders = this.outcomeRows(preview, true);
-    return [['日期', '訂單', '出貨倉庫', '門市', '訂單箱數', '點交時間', '點交結果', '異常描述'],
-      ...orders.map(r => [r.date, r.orderNumber, r.warehouseName, r.storeName, r.orderedBoxCount, this.loadingRecordedAt(r, preview), this.loadingResult(r), r.loadingIssue]),
+    return [['日期', '訂單', '出貨倉庫', '門市', '訂單箱數', '點交時間', '點交結果', '異常描述', '點交備註'],
+      ...orders.map(r => [r.date, r.orderNumber, r.warehouseName, r.storeName, r.orderedBoxCount, this.loadingRecordedAt(r, preview), this.loadingResult(r), r.loadingIssue, r.loadingNotes ?? null]),
       [], ['訂單', '商品代碼', '品項', '應點數量', '實點數量', '缺少數量', '單位', '點交結果', '點交時間', '備註'],
       ...orders.flatMap(r => this.loadingItemsForOutcome(r, preview).map(i => [r.orderNumber, i.productCode, i.itemName, i.expectedQuantity,
         i.loadedQuantity, i.missingQuantity, i.unit, this.loadingItemLabel(i), i.checkedAt, i.notes]))];

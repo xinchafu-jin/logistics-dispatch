@@ -28,14 +28,34 @@ public interface ExceptionCasesDAO extends JpaRepository<ExceptionCasesEntity, L
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select item from ExceptionCasesEntity item "
             + "where item.status = :status "
+            + "and item.type <> :automaticType "
             + "and item.reviewAvailableAt is not null "
             + "and item.reviewAvailableAt <= :now "
             + "and item.queuedAt is null "
             + "order by item.reviewAvailableAt asc, item.id asc")
     List<ExceptionCasesEntity> findDueForUpdate(
             @Param("status") ExceptionStatus status,
+            @Param("now") LocalDateTime now,
+            @Param("automaticType") ExceptionType automaticType
+    );
+
+    /** 無人簽收到隔日 06:00 自動送待排；已入人工佇列的舊案件也要補掃。 */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select item from ExceptionCasesEntity item "
+            + "where item.status = :status and item.type = :type "
+            + "and item.reviewAvailableAt is not null and item.reviewAvailableAt <= :now "
+            + "order by item.reviewAvailableAt asc, item.id asc")
+    List<ExceptionCasesEntity> findDueNoSignatureForUpdate(
+            @Param("status") ExceptionStatus status,
+            @Param("type") ExceptionType type,
             @Param("now") LocalDateTime now
     );
+
+    boolean existsByFollowUpOrderIdAndTypeAndStatus(
+            Long followUpOrderId, ExceptionType type, ExceptionStatus status);
+
+    List<ExceptionCasesEntity> findByFollowUpOrderIdInAndTypeAndStatus(
+            List<Long> followUpOrderIds, ExceptionType type, ExceptionStatus status);
 
     // ── 司機例外回報（type = DRIVER_REPORT），索引見 V14 ──
 

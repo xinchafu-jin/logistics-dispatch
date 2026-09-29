@@ -80,6 +80,7 @@ V1 僅一筆資料，但保留為獨立資料表以支援未來多倉。
 | itemDescription | String | 品項描述 |
 | boxCount | Integer | **箱數，系統的唯一容量單位**（排車、交貨、異常皆以箱計）|
 | notes | String | 備註 |
+| loadingNotes | String | 此次整單點交備註，最多 500 字；V17 新增，與建單／逐商品備註分開，舊資料維持空值 |
 | deliveryDate | Date | 配送日期 |
 | status | Enum | PENDING_CONFIRM / CONFIRMED / SCHEDULED / PUBLISHED / IN_DELIVERY / COMPLETED / CANCELLED / FAILED |
 | routeId | Long | 所屬配送計畫 |

@@ -108,6 +108,17 @@ class ReportOutcomesServiceTest {
         assertEquals(OrderStatus.PENDING_CONFIRM.name(), result.orders().getFirst().status());
     }
 
+    @Test void returnsOrderLoadingNotesSeparatelyFromProductAndOrderCreationNotes() {
+        var original = order(1, 1, day, OrderStatus.LOADED);
+        original.setLoadedAt(day.atTime(8, 0));
+        original.setNotes("原有建單備註");
+        original.setLoadingNotes("外箱已擦乾，交接請留意");
+        var row = service.outcomes(range, null, now, true).orders().getFirst();
+        assertEquals("外箱已擦乾，交接請留意", row.loadingNotes());
+        assertNull(row.loadingIssue());
+        assertEquals("原有建單備註", original.getNotes());
+    }
+
     @Test void vehicleFilterAppliesToDeliveryDetailsAndWarehouseRows() {
         var selected = order(1, 1, day, OrderStatus.COMPLETED);
         selected.setAssignedVehicleId(30L);

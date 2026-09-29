@@ -643,15 +643,15 @@
                                 <strong>倉庫點交</strong>
                                 <span>應點 <b>{{ stop.expectedBoxCount }}</b> 箱</span>
                               </div>
-                              <p>{{ stop.items.length > 0 ? '全部相符：全勾後按「確認點交」。有不符：只勾不符商品，按「點交不符」。' : '核對訂單品項摘要與應點箱數後，勾選確認。' }}</p>
+                              <p>{{ stop.items.length > 0 ? '每項都填實點數量，歷史才看得到完整點交。全部相符請全勾後確認；有不符只勾不符商品。' : '核對訂單品項摘要與應點箱數後，勾選確認。' }}</p>
                             @if (stop.items.length > 0) {
                               <section class="loading-item-list" aria-label="商品逐項點交">
                                 <header class="loading-item-heading">
                                   <div>
                                     <strong>商品明細</strong>
-                                    <small>勾選要確認或回報不符的商品</small>
+                                    <small>每項填實點箱數；不符時勾選不符商品</small>
                                   </div>
-                                  <span class="loading-progress" aria-live="polite">{{ checkedLoadingItemCount(stop) }}/{{ stop.items.length }} 已選取</span>
+                                  <span class="loading-progress" aria-live="polite">{{ measuredLoadingItemCount(stop) }}/{{ stop.items.length }} 已清點</span>
                                 </header>
                                 @for (item of stop.items; track item.id) {
                                   <article class="loading-item-row"
@@ -667,12 +667,23 @@
                                       <span class="loading-item-name">
                                         <strong>{{ item.itemName }}</strong>
                                       </span>
-                                      <b class="loading-item-expected">{{ item.expectedQuantity }} <small>{{ item.unit }}</small></b>
+                                      <b class="loading-item-expected">應 {{ item.expectedQuantity }} <small>{{ item.unit }}</small></b>
+                                    </label>
+                                    <label class="loading-item-quantity">
+                                      <span>實點</span>
+                                      <span class="loading-item-quantity-field">
+                                        <input type="number" min="0" step="1" inputmode="numeric"
+                                          [attr.aria-label]="item.itemName + '實點數量'"
+                                          [value]="loadingItemForm(item.id).loadedQuantity"
+                                          [disabled]="isTaskSubmitting()"
+                                          (input)="updateLoadingItemQuantity(item.id, $event)" />
+                                        <small>{{ item.unit }}</small>
+                                      </span>
                                     </label>
                                   </article>
                                 }
                               </section>
-                              <p class="loading-mismatch-hint">勾選至少一項不符商品即可直接送出異常，原單停止配送並重建待確認訂單。</p>
+                              <p class="loading-mismatch-hint">異常時每項都填數量，只勾不符商品；未勾選且數量相符的商品會一併記錄為已核對。</p>
                             } @else {
                               <section class="loading-item-list" aria-label="訂單品項摘要核對">
                                 <header class="loading-item-heading">
@@ -696,20 +707,17 @@
                                 </article>
                               </section>
                             }
-                            <details class="loading-order-note">
-                              <summary>補充備註（選填）</summary>
-                              <label>
-                                <span>整單交接說明</span>
-                                <textarea
-                                  rows="2"
-                                  maxlength="500"
-                                  placeholder="需要補充交接說明時再填寫"
-                                  [value]="loadingNotes()"
-                                  [disabled]="isTaskSubmitting()"
-                                  (input)="updateLoadingNotes($event)"
-                                ></textarea>
-                              </label>
-                            </details>
+                            <label class="loading-order-note">
+                              <span>點交備註 <small>選填</small></span>
+                              <textarea
+                                rows="3"
+                                maxlength="500"
+                                placeholder="例如：鮮乳外箱破損、交接時需留意的事項"
+                                [value]="loadingNotes()"
+                                [disabled]="isTaskSubmitting()"
+                                (input)="updateLoadingNotes($event)"
+                              ></textarea>
+                            </label>
                             <div class="delivery-action-buttons" [class.has-mismatch-action]="stop.items.length > 0">
                               <button
                                 type="button"
@@ -733,7 +741,7 @@
                                   type="button"
                                   class="loading-mismatch-button"
                                   (click)="handleLoadingMismatch(stop)"
-                                  [disabled]="isTaskSubmitting() || checkedLoadingItemCount(stop) === 0"
+                                  [disabled]="isTaskSubmitting() || !loadingMismatchReady(stop)"
                                 >
                                   <mat-icon aria-hidden="true">report_problem</mat-icon>
                                   {{ reportingLoadingItemIds().length > 0 ? '送出中…' : '點交不符' }}
@@ -946,8 +954,8 @@
                   @if (!request.fullDay && request.leaveStart && request.leaveEnd) {
                     <small>時段：{{ formatTime(request.leaveStart) }} - {{ formatTime(request.leaveEnd) }}</small>
                   }
-                  @if (request.reason) {
-                    <small>原因：{{ request.reason }}</small>
+                  @if (request.requestReason) {
+                    <small>原因：{{ request.requestReason }}</small>
                   }
                   @if (request.decisionReason) {
                     <p class="schedule-history-reply">主管回覆：{{ request.decisionReason }}</p>

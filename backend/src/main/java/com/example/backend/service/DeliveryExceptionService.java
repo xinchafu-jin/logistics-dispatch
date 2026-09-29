@@ -22,9 +22,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
-/** 隔日配送異常進入主管確認區及結案的流程。 */
+/** 無人簽收隔日 06:00 自動送待排；其餘配送異常進主管確認區。 */
 @Service
 public class DeliveryExceptionService {
 
@@ -34,33 +36,46 @@ public class DeliveryExceptionService {
     private final DeliveryRecordsDAO deliveryRecordsDAO;
     private final OrdersDAO ordersDAO;
     private final RoutesDAO routesDAO;
+    private final DispatchBoardPushService dispatchBoardPushService;
 
     public DeliveryExceptionService(
             ExceptionCasesDAO exceptionCasesDAO,
             DeliveryRecordsDAO deliveryRecordsDAO,
             OrdersDAO ordersDAO,
-            RoutesDAO routesDAO
+            RoutesDAO routesDAO,
+            DispatchBoardPushService dispatchBoardPushService
     ) {
         this.exceptionCasesDAO = exceptionCasesDAO;
         this.deliveryRecordsDAO = deliveryRecordsDAO;
         this.ordersDAO = ordersDAO;
         this.routesDAO = routesDAO;
+        this.dispatchBoardPushService = dispatchBoardPushService;
     }
 
-    /** 每分鐘將已到隔日 06:00 的案件送入主管確認區。 */
+    /** 每分鐘處理到期案件：無人簽收自動送待排，其餘送主管確認區。 */
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Taipei")
     @Transactional
     public void queueDueCases() {
         queueDueCases(LocalDateTime.now(TAIPEI));
     }
 
-    /** 查詢前再補掃一次，避免後端在排程時間停機而漏掉案件。 */
+    /** 查詢前再補掃一次，避免後端在 06:00 停機而漏掉自動處理。 */
     @Transactional
     public List<ExceptionCaseResponse> findPendingConfirmation() {
         queueDueCases(LocalDateTime.now(TAIPEI));
-        return exceptionCasesDAO
+        List<ExceptionCasesEntity> pending = new ArrayList<>(exceptionCasesDAO
                 .findByStatusAndQueuedAtIsNotNullOrderByQueuedAtAsc(ExceptionStatus.OPEN)
-                .stream()
+                .stream().filter(item -> item.getType() != ExceptionType.NO_SIGNATURE).toList());
+        // 新的無人簽收案件在 06:00 前也要看得到，但不提供主管確認按鈕。
+        pending.addAll(exceptionCasesDAO.findByTypeAndStatusOrderByIdAsc(
+                        ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN).stream()
+                .filter(item -> item.getStatus() == ExceptionStatus.OPEN
+                        && item.getReviewAvailableAt() != null && item.getFollowUpOrderId() != null)
+                .toList());
+        pending.sort(Comparator.comparing(ExceptionCasesEntity::getReviewAvailableAt,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(ExceptionCasesEntity::getId));
+        return pending.stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -85,7 +100,7 @@ public class DeliveryExceptionService {
                 .orElseThrow(() -> new EntityNotFoundException(
                         "找不到配送異常，ID：" + exceptionCaseId));
         if (exceptionCase.getType() == ExceptionType.NO_SIGNATURE) {
-            throw new IllegalArgumentException("無人簽收請使用確認補送或恢復原單流程");
+            throw new IllegalArgumentException("無人簽收會在隔日 06:00 自動送入待排車；誤按請恢復原單配送");
         }
         if (exceptionCase.getType() == ExceptionType.DRIVER_REPORT) {
             // 要走 DriverCaseService.close：那邊才會推 CASE_CLOSED，司機端才知道結案了
@@ -117,6 +132,9 @@ public class DeliveryExceptionService {
         if (exceptionCase.getStatus() != ExceptionStatus.OPEN) {
             throw new IllegalArgumentException("此配送異常已經結案");
         }
+        if (exceptionCase.getType() == ExceptionType.NO_SIGNATURE) {
+            throw new IllegalArgumentException("無人簽收於隔日 06:00 自動送入待排車，不需主管確認");
+        }
         if (exceptionCase.getReviewAvailableAt() == null
                 || exceptionCase.getReviewAvailableAt().isAfter(now)) {
             throw new IllegalArgumentException("此配送異常尚未到隔日確認時間");
@@ -132,17 +150,20 @@ public class DeliveryExceptionService {
                     .orElseThrow(() -> new EntityNotFoundException(
                             "找不到後續訂單，ID：" + exceptionCase.getFollowUpOrderId()));
         }
-        boolean dispatchToday = exceptionCase.getType() != ExceptionType.NO_SIGNATURE;
-        if (dispatchToday && followUpOrder.getRouteId() != null) {
+        if (followUpOrder.getRouteId() != null) {
             throw new IllegalArgumentException("異常重建單已排車，請先確認現有指派，不能直接改日期");
         }
         if (followUpOrder.getStatus() == OrderStatus.PENDING_CONFIRM
-                || (dispatchToday && followUpOrder.getStatus() == OrderStatus.CONFIRMED)) {
-            // 除無人簽收保留隔日排程，其餘異常以主管確認的台北日期回到當天待排區。
-            followUpOrder.setDeliveryDate(dispatchToday
-                    ? now.toLocalDate() : nextDispatchDate(followUpOrder, now.toLocalDate()));
+                || followUpOrder.getStatus() == OrderStatus.CONFIRMED) {
+            // 無人簽收已改為自動處理；這裡其餘異常都以主管確認的台北日期回到當天待排區。
+            LocalDate previousDate = followUpOrder.getDeliveryDate();
+            followUpOrder.setDeliveryDate(now.toLocalDate());
             followUpOrder.setStatus(OrderStatus.CONFIRMED);
             ordersDAO.save(followUpOrder);
+            // EntityListener 只能看到新日期；主管若正看著舊日看板，也要通知它重讀並移除這張單。
+            if (!previousDate.equals(followUpOrder.getDeliveryDate())) {
+                dispatchBoardPushService.markChanged(previousDate);
+            }
         } else if (followUpOrder.getStatus() != OrderStatus.CONFIRMED) {
             throw new IllegalArgumentException(
                     "後續訂單狀態不可確認：" + followUpOrder.getStatus());
@@ -207,11 +228,63 @@ public class DeliveryExceptionService {
         return "NS-" + compactDate + "-" + sourceId + "-" + retry;
     }
 
-    private void queueDueCases(LocalDateTime now) {
+    void queueDueCases(LocalDateTime now) {
+        List<ExceptionCasesEntity> automaticCases = exceptionCasesDAO.findDueNoSignatureForUpdate(
+                ExceptionStatus.OPEN, ExceptionType.NO_SIGNATURE, now);
+        for (ExceptionCasesEntity exceptionCase : automaticCases) {
+            autoDispatchNoSignature(exceptionCase, now);
+        }
         List<ExceptionCasesEntity> dueCases = exceptionCasesDAO.findDueForUpdate(
-                ExceptionStatus.OPEN, now);
+                ExceptionStatus.OPEN, now, ExceptionType.NO_SIGNATURE);
         dueCases.forEach(item -> item.setQueuedAt(now));
         exceptionCasesDAO.saveAll(dueCases);
+    }
+
+    /** 已入人工佇列的舊案件也走這裡；鎖案件後只處理仍待確認的重送單，避免重複建單。 */
+    private void autoDispatchNoSignature(ExceptionCasesEntity exceptionCase, LocalDateTime now) {
+        if (exceptionCase.getStatus() != ExceptionStatus.OPEN
+                || exceptionCase.getType() != ExceptionType.NO_SIGNATURE
+                || exceptionCase.getReviewAvailableAt() == null
+                || exceptionCase.getReviewAvailableAt().isAfter(now)) {
+            return;
+        }
+        OrdersEntity followUpOrder;
+        if (exceptionCase.getFollowUpOrderId() == null) {
+            // 舊示範案件有缺來源訂單的孤兒紀錄；保留原樣，不讓它擋住其他可自動排車的案件。
+            if (exceptionCase.getOrderId() == null
+                    || ordersDAO.findForUpdate(exceptionCase.getOrderId()).isEmpty()) {
+                return;
+            }
+            followUpOrder = createLegacyFollowUpOrder(exceptionCase, now.toLocalDate());
+        } else {
+            var existing = ordersDAO.findForUpdate(exceptionCase.getFollowUpOrderId());
+            if (existing.isEmpty()) {
+                return;
+            }
+            followUpOrder = existing.get();
+        }
+        if (followUpOrder.getStatus() != OrderStatus.PENDING_CONFIRM
+                || followUpOrder.getRouteId() != null) {
+            // 已另行處理的舊資料不能在排程中擅自改日期或撤銷既有指派。
+            return;
+        }
+
+        LocalDate previousDate = followUpOrder.getDeliveryDate();
+        followUpOrder.setDeliveryDate(nextDispatchDate(followUpOrder, now.toLocalDate()));
+        followUpOrder.setStatus(OrderStatus.CONFIRMED);
+        ordersDAO.save(followUpOrder);
+        if (!previousDate.equals(followUpOrder.getDeliveryDate())) {
+            dispatchBoardPushService.markChanged(previousDate);
+        }
+
+        if (exceptionCase.getQueuedAt() == null) {
+            exceptionCase.setQueuedAt(now);
+        }
+        exceptionCase.setStatus(ExceptionStatus.CLOSED);
+        exceptionCase.setHandledBy("系統自動送待排");
+        exceptionCase.setHandledAt(now);
+        exceptionCase.setResolution("無人簽收已自動送入 " + followUpOrder.getDeliveryDate() + " 的待排車區");
+        exceptionCasesDAO.save(exceptionCase);
     }
 
     private LocalDate nextDispatchDate(OrdersEntity order, LocalDate today) {

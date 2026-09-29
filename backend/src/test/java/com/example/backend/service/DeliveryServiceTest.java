@@ -12,6 +12,7 @@ import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
 import com.example.backend.dto.request.ArriveRequestDTO;
 import com.example.backend.dto.request.LoadingItemDTO;
+import com.example.backend.dto.request.LoadingMismatchItemDTO;
 import com.example.backend.dto.request.LoadingRequestDTO;
 import com.example.backend.dto.request.LoadingMismatchRequestDTO;
 import com.example.backend.dto.request.NoSignatureRequestDTO;
@@ -130,6 +131,31 @@ class DeliveryServiceTest {
     }
 
     @Test
+    void 正常點交保存整單備註_不覆寫建單或商品備註() {
+        order.setNotes("建單時原有備註");
+        var item = orderItem(601L, "鮮乳", 12, "箱");
+        item.setNotes("商品原有備註");
+        order.addItem(item);
+        var request = loading(12, "  外箱已擦乾，交接請留意  ");
+        request.setItems(List.of(loadingItem(601L, true, 12)));
+        service.load(DRIVER_ID, request);
+        assertEquals("外箱已擦乾，交接請留意", order.getLoadingNotes());
+        assertEquals("建單時原有備註", order.getNotes());
+        assertEquals("商品原有備註", item.getNotes());
+        assertNull(item.getLoadingNotes(), "整單備註不能冒充逐商品點交備註");
+        verify(ordersDAO).save(order);
+    }
+
+    @Test
+    void 無商品明細的舊單也保存點交備註_空白備註維持空值() {
+        service.load(DRIVER_ID, loading(12, "  舊單已核對  "));
+        assertEquals("舊單已核對", order.getLoadingNotes());
+        order.setStatus(OrderStatus.CONFIRMED);
+        service.load(DRIVER_ID, loading(12, "   "));
+        assertNull(order.getLoadingNotes());
+    }
+
+    @Test
     void 安全檢查沒通過_不能點交_訂單也不會被鎖() {
         when(preTripInspectionService.requirePassed(DRIVER_ID, ROUTE_ID))
                 .thenThrow(new IllegalArgumentException("出車前安全檢查沒有通過，請聯絡主管處理"));
@@ -204,6 +230,8 @@ class DeliveryServiceTest {
         assertEquals(OrderStatus.FAILED, order.getStatus());
         assertNull(order.getLoadedAt());
 
+        assertEquals("少兩箱", order.getLoadingNotes());
+
         ArgumentCaptor<OrdersEntity> savedOrders = ArgumentCaptor.forClass(OrdersEntity.class);
         verify(ordersDAO, times(2)).save(savedOrders.capture());
         OrdersEntity followUp = savedOrders.getAllValues().stream()
@@ -217,6 +245,7 @@ class DeliveryServiceTest {
         assertEquals(1, followUp.getRetryCount());
         assertEquals(12, followUp.getBoxCount(), "整張重送，箱數跟原單一樣");
         assertEquals(tomorrow, followUp.getDeliveryDate());
+        assertNull(followUp.getLoadingNotes(), "重建單不能繼承前一次點交的備註");
         assertEquals("LD-" + tomorrow.format(DateTimeFormatter.BASIC_ISO_DATE).substring(2)
                 + "-" + Long.toString(ORDER_ID, 36).toUpperCase() + "-1", followUp.getOrderNumber());
 
@@ -248,6 +277,7 @@ class DeliveryServiceTest {
         order.addItem(bread);
         var response = service.reportLoadingMismatch(DRIVER_ID,
                 new LoadingMismatchRequestDTO(ORDER_ID, 601L, "包装破損"));
+        assertEquals("包装破損", order.getLoadingNotes());
         assertEquals(OrderStatus.FAILED, response.getOrderStatus());
         assertEquals(OrderStatus.FAILED, order.getStatus());
         assertNull(order.getLoadedAt());
@@ -272,6 +302,7 @@ class DeliveryServiceTest {
         var rebuilt = savedOrders.getAllValues().stream().filter(saved -> saved != order).findFirst().orElseThrow();
         assertEquals(OrderStatus.PENDING_CONFIRM, rebuilt.getStatus());
         assertEquals(ORDER_ID, rebuilt.getParentOrderId());
+        assertNull(rebuilt.getLoadingNotes());
         assertEquals(2, rebuilt.getItems().size());
         for (var item : rebuilt.getItems()) {
             assertFalse(item.isLoadingMismatchReported());
@@ -282,6 +313,89 @@ class DeliveryServiceTest {
         assertThrows(IllegalArgumentException.class, () -> service.reportLoadingMismatch(DRIVER_ID,
                 new LoadingMismatchRequestDTO(ORDER_ID, 601L, null)));
         verify(exceptionCasesDAO, times(1)).save(any());
+    }
+
+    @Test
+    void 回報不符時保存司機填的逐商品實點數量_供歷史紀錄查詢() {
+        OrderItemsEntity milk = orderItem(601L, "鮮乳", 4, "箱");
+        OrderItemsEntity bread = orderItem(602L, "麵包", 8, "箱");
+        order.addItem(milk);
+        order.addItem(bread);
+
+        var response = service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null,
+                        List.of(new LoadingMismatchItemDTO(601L, 2)), "少兩箱"));
+
+        assertEquals(OrderStatus.FAILED, response.getOrderStatus());
+        assertEquals(2, milk.getLoadedQuantity());
+        assertEquals(2, response.getItems().getFirst().getLoadedQuantity());
+        assertNull(bread.getLoadedQuantity());
+        assertNull(bread.getCheckedAt());
+        var savedCase = ArgumentCaptor.forClass(ExceptionCasesEntity.class);
+        verify(exceptionCasesDAO).save(savedCase.capture());
+        assertTrue(savedCase.getValue().getDescription().contains("應點 4箱，實點 2箱"));
+        assertFalse(savedCase.getValue().getDescription().contains("實點數量未記錄"));
+    }
+
+    @Test
+    void 回報其中一項不符仍保存整張單所有商品的完成數量() {
+        OrderItemsEntity milk = orderItem(601L, "鮮乳", 4, "箱");
+        OrderItemsEntity bread = orderItem(602L, "麵包", 8, "箱");
+        order.addItem(milk);
+        order.addItem(bread);
+
+        var response = service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null, List.of(
+                        new LoadingMismatchItemDTO(601L, 2, true),
+                        new LoadingMismatchItemDTO(602L, 8, false)), "鮮乳少兩箱"));
+
+        assertEquals(OrderStatus.FAILED, response.getOrderStatus());
+        assertEquals(2, response.getItems().size());
+        assertEquals(2, milk.getLoadedQuantity());
+        assertTrue(milk.isLoadingMismatchReported());
+        assertEquals(8, bread.getLoadedQuantity());
+        assertFalse(bread.isLoadingMismatchReported());
+        assertNotNull(bread.getCheckedAt());
+        assertEquals(1, response.getCheckedItemCount());
+        assertFalse(response.getItemChecklistCompleted());
+    }
+
+    @Test
+    void 整張點交不符回報不能遺漏其他商品或把數量不符的商品當相符() {
+        OrderItemsEntity milk = orderItem(601L, "鮮乳", 4, "箱");
+        OrderItemsEntity bread = orderItem(602L, "麵包", 8, "箱");
+        order.addItem(milk);
+        order.addItem(bread);
+
+        assertThrows(IllegalArgumentException.class, () -> service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null,
+                        List.of(new LoadingMismatchItemDTO(601L, 2, true)), null)));
+        assertThrows(IllegalArgumentException.class, () -> service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null, List.of(
+                        new LoadingMismatchItemDTO(601L, 2, true),
+                        new LoadingMismatchItemDTO(602L, 7, false)), null)));
+
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        assertNull(milk.getCheckedAt());
+        assertNull(bread.getCheckedAt());
+        verify(exceptionCasesDAO, never()).save(any());
+    }
+
+    @Test
+    void 不符商品實點數量缺漏或負數不能建立異常() {
+        var milk = orderItem(601L, "鮮乳", 4, "箱");
+        order.addItem(milk);
+
+        assertThrows(IllegalArgumentException.class, () -> service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null,
+                        List.of(new LoadingMismatchItemDTO(601L, null)), null)));
+        assertThrows(IllegalArgumentException.class, () -> service.reportLoadingMismatch(DRIVER_ID,
+                new LoadingMismatchRequestDTO(ORDER_ID, null, null,
+                        List.of(new LoadingMismatchItemDTO(601L, -1)), null)));
+
+        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
+        assertNull(milk.getCheckedAt());
+        verify(exceptionCasesDAO, never()).save(any());
     }
 
     @Test

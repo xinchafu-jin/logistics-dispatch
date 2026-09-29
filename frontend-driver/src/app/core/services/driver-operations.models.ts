@@ -250,7 +250,11 @@ export interface LoadingRequest {
 export type LoadingMismatchRequest = {
   orderId: number;
   notes?: string;
-} & ({orderItemIds: number[]; orderItemId?: never} | {orderItemId: number; orderItemIds?: never});
+} & (
+  {items: {orderItemId: number; loadedQuantity: number; mismatchReported: boolean}[]; orderItemIds?: never; orderItemId?: never}
+  | {orderItemIds: number[]; items?: never; orderItemId?: never}
+  | {orderItemId: number; items?: never; orderItemIds?: never}
+);
 
 /** 相符時是 LOADED；不符時是 FAILED，並帶回異常與待主管確認的重建單。 */
 export interface LoadingResponse {

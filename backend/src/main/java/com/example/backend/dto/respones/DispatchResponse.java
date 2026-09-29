@@ -637,6 +637,11 @@ public class DispatchResponse {
 
         private Long orderId;
 
+        private boolean awaitingAutomaticDispatch;
+
+        /** 無人簽收待自動送待排的時間；一般待確認訂單為 null。 */
+        private java.time.LocalDateTime autoDispatchAt;
+
         private String orderNumber;
 
         private Integer boxCount;
@@ -658,6 +663,22 @@ public class DispatchResponse {
 
         public Long getOrderId() {
             return orderId;
+        }
+
+        public boolean isAwaitingAutomaticDispatch() {
+            return awaitingAutomaticDispatch;
+        }
+
+        public void setAwaitingAutomaticDispatch(boolean awaitingAutomaticDispatch) {
+            this.awaitingAutomaticDispatch = awaitingAutomaticDispatch;
+        }
+
+        public java.time.LocalDateTime getAutoDispatchAt() {
+            return autoDispatchAt;
+        }
+
+        public void setAutoDispatchAt(java.time.LocalDateTime autoDispatchAt) {
+            this.autoDispatchAt = autoDispatchAt;
         }
 
         public void setOrderId(Long orderId) {

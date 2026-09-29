@@ -187,6 +187,23 @@ describe('OrderReview Excel 匯入', () => {
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('系統自動產生');
   });
 
+  it('無人簽收重送單只標示待自動排車，不提供主管核准或編刪', () => {
+    component.ngOnInit();
+    httpTesting.expectOne('/api/orders').flush([{
+      ...savedOrder(7, 'NS-7'), awaitingAutomaticDispatch: true,
+    }]);
+    httpTesting.expectOne('/api/stores').flush([STORE]);
+    httpTesting.expectOne('/api/warehouses').flush([WAREHOUSE]);
+    component.selectOrder('NS-7');
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('待自動排車');
+    expect(host.textContent).toContain('隔日 06:00');
+    expect(host.querySelector('.detail-actions button')).toBeNull();
+    expect(component.canReview(component.selectedOrder()!)).toBe(false);
+  });
+
   it('檔案格式不對時停在 failed，不會送出任何請求', async () => {
     await component.onImportFileSelected(
       fileEvent([

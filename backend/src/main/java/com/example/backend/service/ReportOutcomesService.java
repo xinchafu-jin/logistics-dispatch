@@ -161,7 +161,7 @@ public class ReportOutcomesService {
                 record == null ? null : record.getDeliveredAt(), order.getLoadedAt(), order.getBoxCount(), record == null ? null : record.getExpectedBoxCount(),
                 record == null ? null : record.getDeliveredBoxCount(), record == null ? null : record.getShortageBoxCount(),
                 record == null ? null : record.getDamagedBoxCount(), record == null ? null : record.getReplacementRequiredBoxCount(),
-                loadingIssues.get(order.getId()), items, order.getOrderType() == null ? null : order.getOrderType().name(),
+                loadingIssues.get(order.getId()), order.getLoadingNotes(), items, order.getOrderType() == null ? null : order.getOrderType().name(),
                 order.getParentOrderId(), record != null, isRecovery(order), recoveryReasons.get(order.getId()));
     }
 

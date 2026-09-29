@@ -69,6 +69,10 @@ public class OrdersEntity {
     @Column
     private LocalDateTime loadedAt;
 
+    /** 此次倉庫點交的整單備註；與建單備註及逐商品紀錄分開保存。 */
+    @Column(length = 500)
+    private String loadingNotes;
+
     /** 一般訂單、補貨單或無人簽收後建立的重送單。 */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -217,6 +221,14 @@ public class OrdersEntity {
 
     public void setLoadedAt(LocalDateTime loadedAt) {
         this.loadedAt = loadedAt;
+    }
+
+    public String getLoadingNotes() {
+        return loadingNotes;
+    }
+
+    public void setLoadingNotes(String loadingNotes) {
+        this.loadingNotes = loadingNotes;
     }
 
     public OrderType getOrderType() {

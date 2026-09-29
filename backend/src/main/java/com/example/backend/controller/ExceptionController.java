@@ -20,7 +20,7 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 
-/** 主管查詢並確認隔日配送異常的 API。 */
+/** 無人簽收自動送待排；其餘配送異常由主管確認的 API。 */
 @RestController
 @RequestMapping("/api/exceptions")
 public class ExceptionController {
@@ -36,7 +36,7 @@ public class ExceptionController {
         this.noSignatureRecoveryService = noSignatureRecoveryService;
     }
 
-    /** 查看隔日 06:00 後已進入確認區、尚未結案的配送異常。 */
+    /** 查看待自動送待排的無人簽收，及已進入主管確認區的其他異常。 */
     @GetMapping("/pending-confirmation")
     public List<ExceptionCaseResponse> findPendingConfirmation(
             @AuthenticationPrincipal Jwt jwt
@@ -45,7 +45,7 @@ public class ExceptionController {
         return deliveryExceptionService.findPendingConfirmation();
     }
 
-    /** 確認異常並將後續訂單送入待排車；處理主管由 JWT 取得。 */
+    /** 主管確認非無人簽收異常並將後續訂單送入待排車；處理主管由 JWT 取得。 */
     @PatchMapping("/{exceptionCaseId}/confirm")
     public ExceptionCaseResponse confirm(
             @AuthenticationPrincipal Jwt jwt,

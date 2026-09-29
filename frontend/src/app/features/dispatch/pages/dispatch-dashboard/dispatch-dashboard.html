@@ -76,7 +76,7 @@
             <span class="dispatch-day-date">{{ dayTitle(day.date) }}</span>
             <span class="dispatch-day-status" [attr.data-status]="day.status">{{ dayStatusLabel(day) }}</span>
             @if (day.pendingConfirmCount > 0) {
-              <span class="dispatch-day-pending">待確認 {{ day.pendingConfirmCount }}</span>
+              <span class="dispatch-day-pending">待處理 {{ day.pendingConfirmCount }}</span>
             }
           </button>
         }
@@ -500,14 +500,19 @@
         } @else {
         <!-- 待排單區固定在旁邊：自動排車排不進去的、還沒排的訂單都在這裡，可以拖進有車的格子 -->
         <aside class="board-lane pending-pool">
-          <!-- 待確認的單不能拖：先確認才會進下面的待排單。補送單（點交不符、無人簽收）也會出現在這裡 -->
+          <!-- 一般待確認單可由主管確認；無人簽收重送單只能等系統 06:00 自動送待排。 -->
           @if (pendingConfirm().length > 0) {
             <section class="pending-group" aria-labelledby="pending-confirm-title">
-              <h5 id="pending-confirm-title">待確認 <span>{{ pendingConfirm().length }}</span></h5>
+              <h5 id="pending-confirm-title">待確認／待自動處理 <span>{{ pendingConfirm().length }}</span></h5>
               @for (card of pendingConfirm(); track card.orderId) {
                 <article class="board-card pending-order-card" [attr.title]="boardCardDescription(card)">
                   <header>
                     <strong>{{ card.orderNumber }}</strong>
+                    @if (card.awaitingAutomaticDispatch) {
+                      <span class="pending-auto-dispatch">
+                        {{ card.autoDispatchAt ? (card.autoDispatchAt | date:'M/d HH:mm') + ' 自動待排' : '等待自動處理' }}
+                      </span>
+                    } @else {
                     <button
                       type="button"
                       class="pending-confirm-button"
@@ -516,6 +521,7 @@
                     >
                       {{ confirmingOrderId() === card.orderId ? '確認中…' : '確認' }}
                     </button>
+                    }
                   </header>
                   <p>
                     <b>{{ card.storeName }}</b>

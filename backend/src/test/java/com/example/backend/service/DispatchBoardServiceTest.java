@@ -1,6 +1,9 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.ExceptionStatus;
+import com.example.backend.constants.ExceptionType;
+import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -9,12 +12,14 @@ import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.OrdersEntity;
+import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.StoresEntity;
 import com.example.backend.entity.WarehousesEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -38,6 +43,7 @@ class DispatchBoardServiceTest {
     private static final Long WAREHOUSE = 1L;
 
     private StoresDAO storesDAO;
+    private ExceptionCasesDAO casesDAO;
     private DispatchBoardService service;
 
     @BeforeEach
@@ -48,6 +54,7 @@ class DispatchBoardServiceTest {
         VehiclesDAO vehiclesDAO = mock(VehiclesDAO.class);
         DriversDAO driversDAO = mock(DriversDAO.class);
         WarehousesDAO warehousesDAO = mock(WarehousesDAO.class);
+        casesDAO = mock(ExceptionCasesDAO.class);
 
         WarehousesEntity warehouse = new WarehousesEntity();
         warehouse.setId(WAREHOUSE);
@@ -75,7 +82,7 @@ class DispatchBoardServiceTest {
         });
 
         service = new DispatchBoardService(
-                ordersDAO, routesDAO, storesDAO, vehiclesDAO, driversDAO, warehousesDAO);
+                ordersDAO, routesDAO, storesDAO, vehiclesDAO, driversDAO, warehousesDAO, casesDAO);
     }
 
     @Test
@@ -95,6 +102,22 @@ class DispatchBoardServiceTest {
         assertEquals("B 店", board.getPendingConfirmOrders().get(0).getStoreName());
         assertEquals("A 店", board.getUnassignedOrders().get(0).getStoreName());
         verify(storesDAO, times(1)).findAllById(any());
+    }
+
+    @Test
+    void 無人簽收待自動送單在看板標示時間_不顯示一般確認動作() {
+        ExceptionCasesEntity incident = new ExceptionCasesEntity();
+        incident.setFollowUpOrderId(2L);
+        incident.setReviewAvailableAt(LocalDateTime.of(2026, 9, 27, 6, 0));
+        when(casesDAO.findByFollowUpOrderIdInAndTypeAndStatus(
+                List.of(2L), ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN))
+                .thenReturn(List.of(incident));
+
+        DispatchResponse board = service.getBoard(DATE, WAREHOUSE);
+
+        assertEquals(true, board.getPendingConfirmOrders().getFirst().isAwaitingAutomaticDispatch());
+        assertEquals(incident.getReviewAvailableAt(),
+                board.getPendingConfirmOrders().getFirst().getAutoDispatchAt());
     }
 
     private OrdersEntity order(Long id, String orderNumber, Long storeId, OrderStatus status) {

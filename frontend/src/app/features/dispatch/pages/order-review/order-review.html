@@ -119,7 +119,7 @@
                 <td>{{ order.area }} · <span class="ui-mono">{{ order.deliveryWindow }}</span></td>
                 <td class="ui-mono">{{ order.raw.deliveryDate || '未提供' }}</td>
                 <td>{{ order.cargo }}</td>
-                <td><span class="ui-status-dot" [class]="'status-' + order.status">{{ order.status }}</span></td>
+                <td><span class="ui-status-dot" [class]="'status-' + order.status">{{ order.raw.awaitingAutomaticDispatch ? '待自動排車' : order.status }}</span></td>
               </tr>
             } @empty {
               <tr>
@@ -137,7 +137,7 @@
       @if (selectedOrder(); as order) {
         <header class="ui-panel__header">
           <h3>{{ order.store }} <span class="detail-id ui-mono">{{ order.id }}</span></h3>
-          <span class="ui-status-dot" [class]="'status-' + order.status">{{ order.status }}</span>
+          <span class="ui-status-dot" [class]="'status-' + order.status">{{ order.raw.awaitingAutomaticDispatch ? '待自動排車' : order.status }}</span>
         </header>
 
         <div class="ui-panel__body">
@@ -154,9 +154,10 @@
             </tbody>
           </table>
 
-          <p class="action-message">{{ actionMessage() }}</p>
+          <p class="action-message">{{ order.raw.awaitingAutomaticDispatch ? '無人簽收重送單將於隔日 06:00 由系統自動送入待排車，不需主管核准。' : actionMessage() }}</p>
 
           <div class="detail-actions">
+            @if (!order.raw.awaitingAutomaticDispatch) {
             <button type="button" class="ui-btn-default" title="編輯訂單" (click)="openEditOrder(order)">
               <mat-icon aria-hidden="true">edit</mat-icon>
               編輯
@@ -173,6 +174,7 @@
             >
               核准並待排車
             </button>
+            }
           </div>
         </div>
       } @else {

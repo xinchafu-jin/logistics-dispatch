@@ -128,6 +128,7 @@
                       <tr class="sub-row">
                         <td colspan="5">
                           <details class="item-details"><summary>{{ row.orderNumber }} · 查看商品點交與原因</summary>
+                            @if (row.loadingNotes) { <p class="sheet-note">點交備註：{{ row.loadingNotes }}</p> }
                             @if (row.loadingIssue) { <p class="sheet-note">{{ row.loadingIssue }}</p> }
                             <div class="ui-panel ui-table-wrap">
                               <table class="ui-table">

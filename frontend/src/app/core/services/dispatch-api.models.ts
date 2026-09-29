@@ -412,6 +412,7 @@ export interface ReportOrderOutcomeDto {
   windowStart: string | null; windowEnd: string | null; arrivedAt: string | null; deliveredAt: string | null; loadedAt: string | null;
   orderedBoxCount: number | null; expectedBoxCount: number | null; deliveredBoxCount: number | null; shortageBoxCount: number | null;
   damagedBoxCount: number | null; replacementRequiredBoxCount: number | null; loadingIssue: string | null;
+  loadingNotes?: string | null;
   items: {productCode: string | null; itemName: string; expectedQuantity: number | null;
     loadedQuantity: number | null; unit: string; notes: string | null; loadingMismatchReported?: boolean}[];
 }
@@ -543,6 +544,8 @@ export interface WarehouseDto {
 
 export interface OrderDto {
   id?: number;
+  /** 異常中心等待隔日 06:00 系統自動送待排的無人簽收重送單。 */
+  awaitingAutomaticDispatch?: boolean;
   orderNumber: string;
   storeId: number;
   /** 出貨倉庫，後端必填 */
@@ -762,6 +765,9 @@ export interface RouteStopDto {
 /** 沒排進任何路線的訂單 */
 export interface UnassignedOrderDto {
   orderId: number;
+  awaitingAutomaticDispatch?: boolean;
+  /** 無人簽收的系統自動送待排時間；一般訂單沒有此值。 */
+  autoDispatchAt?: string | null;
   orderNumber: string;
   boxCount: number;
   storeId: number;

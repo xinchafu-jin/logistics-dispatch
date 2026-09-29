@@ -87,6 +87,7 @@ public class DeliveryService {
         List<LoadingResponse.ItemResult> itemResults = validateAndRecordItems(
                 order, driverId, request.getItems(), now);
         boolean itemContentsMatched = itemResults.stream().allMatch(LoadingResponse.ItemResult::getMatched);
+        order.setLoadingNotes(trimToNull(request.getNotes()));
 
         if (loaded == expected && itemContentsMatched) {
             order.setStatus(OrderStatus.LOADED);
@@ -109,32 +110,69 @@ public class DeliveryService {
         if (itemIds.size() != selectedIds.size()) {
             throw new IllegalArgumentException("回報商品不可重複");
         }
+        Map<Long, Integer> measuredQuantities = new HashMap<>();
+        boolean fullMeasurement = request.items() != null && request.items().stream()
+                .anyMatch(item -> item != null && item.mismatchReported() != null);
+        if (request.items() != null) {
+            for (var measured : request.items()) {
+                if (measured == null || measured.orderItemId() == null
+                        || measured.loadedQuantity() == null || measured.loadedQuantity() < 0) {
+                    throw new IllegalArgumentException("請填寫不符商品的實點數量，且不得小於 0");
+                }
+                measuredQuantities.put(measured.orderItemId(), measured.loadedQuantity());
+            }
+        }
+        if (fullMeasurement) {
+            Set<Long> allItemIds = order.getItems().stream().map(OrderItemsEntity::getId)
+                    .collect(java.util.stream.Collectors.toSet());
+            if (measuredQuantities.size() != request.items().size()
+                    || !allItemIds.equals(measuredQuantities.keySet())) {
+                throw new IllegalArgumentException("請填寫這張訂單每項商品的實點數量");
+            }
+            for (OrderItemsEntity item : order.getItems()) {
+                if (!itemIds.contains(item.getId())
+                        && !measuredQuantities.get(item.getId()).equals(item.getExpectedQuantity())) {
+                    throw new IllegalArgumentException("商品「" + item.getItemName() + "」數量不符，請勾選為點交不符");
+                }
+            }
+        }
         List<OrderItemsEntity> selectedItems = order.getItems().stream()
                 .filter(candidate -> itemIds.contains(candidate.getId())).toList();
         if (selectedItems.size() != itemIds.size()) {
             throw new IllegalArgumentException("回報商品不屬於這張訂單");
         }
         // 全部商品驗證後才寫入；只記錄勾選的不符商品，其餘不自動當成相符。
-        List<LoadingResponse.ItemResult> results = selectedItems.stream().map(item -> {
-            item.setLoadingMismatchReported(true);
-            item.setLoadedQuantity(null);
+        List<OrderItemsEntity> recordedItems = fullMeasurement ? order.getItems() : selectedItems;
+        List<LoadingResponse.ItemResult> results = recordedItems.stream().map(item -> {
+            Integer actual = measuredQuantities.get(item.getId());
+            boolean mismatch = itemIds.contains(item.getId());
+            item.setLoadingMismatchReported(mismatch);
+            item.setLoadedQuantity(actual);
             item.setCheckedAt(now);
             item.setCheckedByDriverId(driverId);
-            item.setLoadingNotes("司機回報點交不符，實點數量未記錄");
+            item.setLoadingNotes(mismatch
+                    ? actual == null ? "司機回報點交不符，實點數量未記錄" : "司機回報點交不符"
+                    : null);
             return new LoadingResponse.ItemResult(item.getId(), item.getItemName(), item.getExpectedQuantity(),
-                    null, item.getUnit(), false, now, item.getLoadingNotes());
+                    actual, item.getUnit(), !mismatch && actual != null
+                            && actual.equals(item.getExpectedQuantity()), now, item.getLoadingNotes());
         }).toList();
-        String details = selectedItems.stream().map(item -> "商品「%s」應點 %d%s%s".formatted(
+        String details = selectedItems.stream().map(item -> "商品「%s」應點 %d%s%s%s".formatted(
                 item.getItemName(), item.getExpectedQuantity(), item.getUnit(),
+                measuredQuantities.containsKey(item.getId())
+                        ? "，實點 " + measuredQuantities.get(item.getId()) + item.getUnit() : "",
                 trimToNull(item.getProductCode()) == null ? "" : "（商品代碼：" + item.getProductCode() + "）"))
                 .reduce((left, right) -> left + "；" + right).orElseThrow();
         String notes = trimToNull(request.notes()) == null ? "" : "；司機備註：" + request.notes().trim();
-        String description = "倉庫點交不符：" + details + "；實點數量未記錄" + notes;
+        String missingMeasurement = measuredQuantities.size() == selectedItems.size()
+                ? "" : "；部分實點數量未記錄";
+        String description = "倉庫點交不符：" + details + missingMeasurement + notes;
         if (description.codePointCount(0, description.length()) > 1000) {
             // 商品多時描述採摘要；每項商品仍有獨立旗標及原單明細，不遺失或截斷證據。
             description = "倉庫點交不符：已回報 " + selectedItems.size()
-                    + " 項商品不符，完整商品與應點數量請見原單商品點交紀錄；實點數量未記錄" + notes;
+                    + " 項商品不符，完整商品與實點數量請見原單商品點交紀錄" + missingMeasurement + notes;
         }
+        order.setLoadingNotes(trimToNull(request.notes()));
         return recordLoadingMismatch(order, now, description, results);
     }
 
@@ -238,7 +276,7 @@ public class DeliveryService {
         return toResponse(record, order, exceptionCaseId, followUpOrder);
     }
 
-    /** 無人簽收會保留原單與本次紀錄，並建立隔日待確認的重送新單。 */
+    /** 無人簽收會保留原單與本次紀錄，並建立隔日 06:00 自動送待排的重送新單。 */
     public DeliveryRecordResponse noSignature(Long driverId, NoSignatureRequestDTO request) {
         LocalDateTime now = LocalDateTime.now(TAIPEI);
         OrdersEntity order = findAuthorizedOrderForUpdate(driverId, request.getOrderId(), now.toLocalDate());

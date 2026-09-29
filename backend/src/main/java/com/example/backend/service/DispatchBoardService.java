@@ -2,6 +2,9 @@ package com.example.backend.service;
 
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
+import com.example.backend.constants.ExceptionStatus;
+import com.example.backend.constants.ExceptionType;
+import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.DriversDAO;
 import com.example.backend.dao.OrdersDAO;
 import com.example.backend.dao.RoutesDAO;
@@ -10,6 +13,7 @@ import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.entity.DriversEntity;
+import com.example.backend.entity.ExceptionCasesEntity;
 import com.example.backend.entity.OrdersEntity;
 import com.example.backend.entity.RoutesEntity;
 import com.example.backend.entity.StoresEntity;
@@ -53,6 +57,7 @@ public class DispatchBoardService {
     private final VehiclesDAO vehiclesDAO;
     private final DriversDAO driversDAO;
     private final WarehousesDAO warehousesDAO;
+    private final ExceptionCasesDAO exceptionCasesDAO;
 
     public DispatchBoardService(
             OrdersDAO ordersDAO,
@@ -60,7 +65,8 @@ public class DispatchBoardService {
             StoresDAO storesDAO,
             VehiclesDAO vehiclesDAO,
             DriversDAO driversDAO,
-            WarehousesDAO warehousesDAO
+            WarehousesDAO warehousesDAO,
+            ExceptionCasesDAO exceptionCasesDAO
     ) {
         this.ordersDAO = ordersDAO;
         this.routesDAO = routesDAO;
@@ -68,6 +74,7 @@ public class DispatchBoardService {
         this.vehiclesDAO = vehiclesDAO;
         this.driversDAO = driversDAO;
         this.warehousesDAO = warehousesDAO;
+        this.exceptionCasesDAO = exceptionCasesDAO;
     }
 
     public DispatchResponse getBoard(LocalDate date, Long warehouseId) {
@@ -82,6 +89,13 @@ public class DispatchBoardService {
                 ordersDAO.findByDeliveryDateAndStatusAndWarehouseIdAndRouteIdIsNull(
                         date, OrderStatus.PENDING_CONFIRM, warehouseId
                 );
+        Map<Long, ExceptionCasesEntity> awaitingAutomaticDispatch = new HashMap<>();
+        if (!pendingConfirm.isEmpty()) {
+            exceptionCasesDAO.findByFollowUpOrderIdInAndTypeAndStatus(
+                    pendingConfirm.stream().map(OrdersEntity::getId).toList(),
+                    ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)
+                    .forEach(item -> awaitingAutomaticDispatch.put(item.getFollowUpOrderId(), item));
+        }
         Map<Long, List<OrdersEntity>> ordersByRoute = new HashMap<>();
         Set<Long> storeIds = new LinkedHashSet<>();
         Set<Long> vehicleIds = new LinkedHashSet<>();
@@ -156,7 +170,16 @@ public class DispatchBoardService {
         result.setWarehouse(toWarehouse(warehouse));
         result.setRoutes(routeResponses);
         result.setUnassignedOrders(toUnassignedList(unassigned, stores));
-        result.setPendingConfirmOrders(toUnassignedList(pendingConfirm, stores));
+        List<DispatchResponse.UnassignedOrderResponse> pendingResponses =
+                toUnassignedList(pendingConfirm, stores);
+        for (DispatchResponse.UnassignedOrderResponse item : pendingResponses) {
+            ExceptionCasesEntity incident = awaitingAutomaticDispatch.get(item.getOrderId());
+            if (incident != null) {
+                item.setAwaitingAutomaticDispatch(true);
+                item.setAutoDispatchAt(incident.getReviewAvailableAt());
+            }
+        }
+        result.setPendingConfirmOrders(pendingResponses);
         result.setDriversTakenElsewhere(driversTakenElsewhere(date, warehouseId));
         return result;
     }

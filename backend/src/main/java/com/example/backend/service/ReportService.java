@@ -163,15 +163,17 @@ public class ReportService {
                     .map(log -> new DriverDate(log.getDriverId(), log.getDate()))
                     .forEach(vehicleDriverDays::add);
         }
-        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo())
-                .stream().filter(shift -> driverId == null || driverId.equals(shift.getDriverId()))
-                .filter(shift -> vehicleIds == null || vehicleDriverDays.contains(
-                        new DriverDate(shift.getDriverId(), shift.getWorkDate()))).toList();
         Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId, Function.identity(),
                         (first, ignored) -> first));
         Map<Long, DriversEntity> drivers = index(driversDAO.findAll(), DriversEntity::getId);
         LocalDateTime now = LocalDateTime.now(TAIPEI);
+        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo())
+                .stream().filter(shift -> driverId == null || driverId.equals(shift.getDriverId()))
+                .filter(shift -> vehicleIds == null || vehicleDriverDays.contains(
+                        new DriverDate(shift.getDriverId(), shift.getWorkDate())))
+                .filter(shift -> hasOccurredForHistory(shift, attendanceByShift.get(shift.getId()), now))
+                .toList();
 
         int work = 0;
         int dayOff = 0;
@@ -351,10 +353,13 @@ public class ReportService {
 
     public ReportResponses.Drivers driversForVehicles(Range range, Long driverId, Set<Long> vehicleIds) {
         List<DriversEntity> allDrivers = driversDAO.findAll();
-        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo());
         Map<Long, AttendanceRecordsEntity> attendanceByShift = reportReadDAO.attendance(range.getFrom(), range.getTo())
                 .stream().collect(Collectors.toMap(AttendanceRecordsEntity::getDriverShiftId,
                         Function.identity(), (first, ignored) -> first));
+        LocalDateTime now = LocalDateTime.now(TAIPEI);
+        List<DriverShiftsEntity> shifts = reportReadDAO.publishedShifts(range.getFrom(), range.getTo()).stream()
+                .filter(shift -> hasOccurredForHistory(shift, attendanceByShift.get(shift.getId()), now))
+                .toList();
         List<MileageLogsEntity> mileage = reportReadDAO.mileage(range.getFrom(), range.getTo()).stream()
                 .filter(log -> vehicleIds == null || selectedVehicle(vehicleIds, log.getVehicleId())).toList();
         List<RoutesEntity> routes = reportRoutes(range, null, vehicleIds);
@@ -369,7 +374,6 @@ public class ReportService {
         }
         Map<Long, RoutesEntity> routeById = index(routes, RoutesEntity::getId);
         List<OrdersEntity> orders = reportOrders(range, null, vehicleIds);
-        LocalDateTime now = LocalDateTime.now(TAIPEI);
         List<ReportResponses.DriverRow> rows = new ArrayList<>();
 
         for (DriversEntity driver : allDrivers) {
@@ -977,6 +981,23 @@ public class ReportService {
     private static LocalDateTime scheduledStart(DriverShiftsEntity shift) {
         return shift.getShiftType() == ShiftType.WORK && shift.getWorkStart() != null
                 ? LocalDateTime.of(shift.getWorkDate(), shift.getWorkStart()) : null;
+    }
+
+    static boolean hasOccurredForHistory(DriverShiftsEntity shift, AttendanceRecordsEntity punch,
+            LocalDateTime now) {
+        if (shift.getWorkDate().isAfter(now.toLocalDate())) {
+            return false;
+        }
+        if (shift.getWorkDate().isBefore(now.toLocalDate()) || shift.getShiftType() != ShiftType.WORK) {
+            return true;
+        }
+        LocalDateTime start = scheduledStart(shift);
+        if (start == null || !now.isBefore(start)) {
+            return true;
+        }
+        // Early check-in is already a real attendance event, even if scheduled start is still ahead.
+        return punch != null && ((punch.getClockInAt() != null && !punch.getClockInAt().isAfter(now))
+                || (punch.getClockOutAt() != null && !punch.getClockOutAt().isAfter(now)));
     }
 
     private static LocalDateTime scheduledEnd(DriverShiftsEntity shift) {

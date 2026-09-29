@@ -71,41 +71,82 @@ describe('Driver warehouse loading checklist UI', () => {
   afterEach(() => {fixture?.destroy(); vi.restoreAllMocks();});
   async function render() {fixture.detectChanges(); await fixture.whenStable(); fixture.detectChanges();}
   const firstStop = () => page.todayTasks().routes[0].stops[0];
+  const activeStop = (): DriverTaskStop => page.todayTasks().routes[0].stops
+    .find((item: DriverTaskStop) => item.orderId === page.activeLoadingOrderId());
   async function open() {page.openLoadingAction(firstStop()); await render();}
+  async function fillQuantity(productId: number, quantity: number) {
+    const index = activeStop().items.findIndex((item: DriverTaskOrderItem) => item.id === productId);
+    const input = fixture.nativeElement.querySelectorAll('.loading-item-quantity input')[index] as HTMLInputElement;
+    input.value = String(quantity);
+    input.dispatchEvent(new Event('input'));
+    await render();
+  }
   async function checkAll() {
+    for (const item of activeStop().items) await fillQuantity(item.id, item.expectedQuantity);
     for (const checkbox of fixture.nativeElement.querySelectorAll('.loading-item-check input')) checkbox.click();
     await render();
   }
   async function checkProduct(productId: number) {
-    const index = firstStop().items.findIndex((item: DriverTaskOrderItem) => item.id === productId);
+    const index = activeStop().items.findIndex((item: DriverTaskOrderItem) => item.id === productId);
+    for (const item of activeStop().items) await fillQuantity(item.id, item.expectedQuantity);
     const checkbox = fixture.nativeElement.querySelectorAll('.loading-item-check input')[index] as HTMLInputElement;
     if (!checkbox.checked) checkbox.click();
     await render();
   }
 
-  it('shows product names, right-hand box counts and checkboxes without actual-quantity or per-product note inputs', async () => {
+  it('shows product names, expected boxes, checkboxes, and editable actual quantities', async () => {
     await open();
     const panel = fixture.nativeElement.querySelector('.loading-action-panel');
     expect([...panel.querySelectorAll('.loading-item-name strong')].map((n: any) => n.textContent.trim())).toEqual(['飲用水', '麵包']);
-    expect([...panel.querySelectorAll('.loading-item-expected')].map((n: any) => n.textContent.trim())).toEqual(['4 箱', '6 箱']);
-    expect(panel.querySelectorAll('input').length).toBe(2);
+    expect([...panel.querySelectorAll('.loading-item-expected')].map((n: any) => n.textContent.trim())).toEqual(['應 4 箱', '應 6 箱']);
+    expect(panel.querySelectorAll('input').length).toBe(4);
     expect(panel.querySelectorAll('input[type=checkbox]').length).toBe(2);
-    expect(panel.querySelector('input[type=number]')).toBeNull();
+    expect(panel.querySelectorAll('input[type=number]').length).toBe(2);
     expect(panel.querySelector('select')).toBeNull();
-    expect(panel.textContent).not.toContain('實點數量');
+    expect(panel.textContent).toContain('實點');
     expect(panel.textContent).not.toContain('商品備註');
     expect(panel.querySelectorAll('.loading-mismatch-button').length).toBe(1);
     expect(panel.querySelector('.loading-item-list .loading-mismatch-button')).toBeNull();
     expect(panel.querySelector('.delivery-cancel-button').nextElementSibling.matches('.loading-mismatch-button')).toBe(true);
     expect([...panel.querySelectorAll('.delivery-action-buttons button')].map((button: any) => button.textContent.replace(/fact_check|report_problem/g, '').trim()))
       .toEqual(['確認點交', '取消', '點交不符']);
-    expect(panel.querySelector('details').open).toBe(false);
+    const notes = panel.querySelector('.loading-order-note textarea');
+    expect(notes).not.toBeNull();
+    expect(notes.closest('details')).toBeNull();
+    expect(notes.disabled).toBe(false);
+    expect(notes.maxLength).toBe(500);
+    expect(panel.querySelector('.loading-order-note').textContent).toContain('點交備註');
+  });
+
+  async function fillNotes(value: string) {
+    const notes = fixture.nativeElement.querySelector('.loading-order-note textarea') as HTMLTextAreaElement;
+    notes.value = value;
+    notes.dispatchEvent(new Event('input'));
+    await render();
+  }
+
+  it('sends the directly editable order note with normal loading and clears it for the next order', async () => {
+    await open(); await fillNotes('  外箱已擦乾，交接請留意  '); await checkAll();
+    fixture.nativeElement.querySelector('.delivery-complete-button').click(); await render();
+    expect(api.loading).toHaveBeenCalledWith(expect.objectContaining({notes: '外箱已擦乾，交接請留意'}));
+    page.openLoadingAction(page.todayTasks().routes[0].stops[1]); await render();
+    expect(fixture.nativeElement.querySelector('.loading-order-note textarea').value).toBe('');
+  });
+
+  it('sends the same order note into the mismatch request alongside the selected product', async () => {
+    await open(); await fillNotes('  鮮乳外箱破損  '); await checkProduct(10);
+    fixture.nativeElement.querySelector('.loading-mismatch-button').click(); await render();
+    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1,
+      items: [{orderItemId: 10, loadedQuantity: 4, mismatchReported: true},
+        {orderItemId: 11, loadedQuantity: 6, mismatchReported: false}], notes: '鮮乳外箱破損'});
   });
 
   it('requires every product to be checked, submits the displayed quantities, and waits for all other orders before navigation', async () => {
     await open();
     const confirm = fixture.nativeElement.querySelector('.loading-action-panel .delivery-complete-button');
     expect(confirm.disabled).toBe(true);
+    await fillQuantity(10, 4);
+    await fillQuantity(11, 6);
     fixture.nativeElement.querySelector('.loading-item-check input').click(); await render();
     expect(confirm.disabled).toBe(true);
     fixture.nativeElement.querySelectorAll('.loading-item-check input')[1].click(); await render();
@@ -120,6 +161,32 @@ describe('Driver warehouse loading checklist UI', () => {
     expect([...fixture.nativeElement.querySelectorAll('.task-navigation-button')].every((b: any) => !b.disabled)).toBe(true);
   });
 
+  it('requires measured quantities and routes a shortage to the mismatch action', async () => {
+    await open();
+    fixture.nativeElement.querySelector('.loading-item-check input').click(); await render();
+    expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(true);
+    page.handleLoadingMismatch(firstStop());
+    expect(page.taskActionError()).toContain('實點數量');
+
+    await fillQuantity(10, 2);
+    expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(true);
+    await fillQuantity(11, 6);
+    expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(false);
+    fixture.nativeElement.querySelector('.loading-mismatch-button').click(); await render();
+    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1,
+      items: [{orderItemId: 10, loadedQuantity: 2, mismatchReported: true},
+        {orderItemId: 11, loadedQuantity: 6, mismatchReported: false}], notes: undefined});
+  });
+
+  it('does not confirm normal loading when a checked product quantity differs', async () => {
+    await open(); await checkAll();
+    await fillQuantity(10, 2);
+    expect(fixture.nativeElement.querySelector('.delivery-complete-button').disabled).toBe(true);
+    page.submitLoading(firstStop());
+    expect(page.taskActionError()).toContain('點交不符');
+    expect(api.loading).not.toHaveBeenCalled();
+  });
+
   it('checking just one mismatched product allows one direct click on the footer mismatch button to send the existing exception', async () => {
     await open();
     expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(true);
@@ -128,7 +195,9 @@ describe('Driver warehouse loading checklist UI', () => {
     expect(fixture.nativeElement.querySelector('.delivery-complete-button').disabled).toBe(true);
     expect(api.reportLoadingMismatch).not.toHaveBeenCalled();
     fixture.nativeElement.querySelector('.loading-mismatch-button').click(); await render();
-    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1, orderItemIds: [11], notes: undefined});
+    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1,
+      items: [{orderItemId: 10, loadedQuantity: 4, mismatchReported: false},
+        {orderItemId: 11, loadedQuantity: 6, mismatchReported: true}], notes: undefined});
     expect(api.reportLoadingMismatch).toHaveBeenCalledTimes(1);
     expect(api.loading).not.toHaveBeenCalled();
     expect(firstStop().orderStatus).toBe('FAILED');
@@ -153,7 +222,9 @@ describe('Driver warehouse loading checklist UI', () => {
   it('submits all checked mismatched products together in one request, not a separate case per product', async () => {
     await open(); await checkAll();
     fixture.nativeElement.querySelector('.loading-mismatch-button').click(); await render();
-    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1, orderItemIds: [10, 11], notes: undefined});
+    expect(api.reportLoadingMismatch).toHaveBeenCalledWith({orderId: 1,
+      items: [{orderItemId: 10, loadedQuantity: 4, mismatchReported: true},
+        {orderItemId: 11, loadedQuantity: 6, mismatchReported: true}], notes: undefined});
     expect(api.reportLoadingMismatch).toHaveBeenCalledTimes(1);
     expect(api.loading).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('.task-feedback').textContent).toContain('飲用水');
@@ -167,6 +238,7 @@ describe('Driver warehouse loading checklist UI', () => {
     expect(api.reportLoadingMismatch).not.toHaveBeenCalled();
     await open();
     expect([...fixture.nativeElement.querySelectorAll('.loading-item-check input')].every((input: any) => !input.checked)).toBe(true);
+    expect([...fixture.nativeElement.querySelectorAll('.loading-item-quantity input')].every((input: any) => input.value === '')).toBe(true);
     expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(true);
   });
 
@@ -182,12 +254,13 @@ describe('Driver warehouse loading checklist UI', () => {
     expect([...fixture.nativeElement.querySelectorAll('.loading-action-panel button')].every((b: any) => b.disabled)).toBe(true);
     expect(fixture.nativeElement.querySelector('.loading-item-row').classList.contains('is-mismatch')).toBe(true);
     expect([...fixture.nativeElement.querySelectorAll('.loading-item-check input')].every((input: any) => input.disabled)).toBe(true);
+    expect(fixture.nativeElement.querySelector('.loading-order-note textarea').disabled).toBe(true);
     result.next(mismatch(1)); result.complete(); await render();
   });
 
   it('does not pretend an exception was sent when the request fails', async () => {
     api.reportLoadingMismatch.mockReturnValue(throwError(() => new HttpErrorResponse({status: 400, error: {message: '伺服器拒絕'}})));
-    await open(); await checkProduct(10);
+    await open(); await fillNotes('外箱破損，等待倉庫確認'); await checkProduct(10);
     fixture.nativeElement.querySelector('.loading-mismatch-button').click(); await render();
     expect(firstStop().orderStatus).toBe('CONFIRMED');
     expect(fixture.nativeElement.querySelector('.loading-action-panel')).not.toBeNull();
@@ -196,6 +269,7 @@ describe('Driver warehouse loading checklist UI', () => {
     expect(page.taskActionError()).toBe('伺服器拒絕');
     expect(fixture.nativeElement.querySelector('.loading-item-check input').checked).toBe(true);
     expect(fixture.nativeElement.querySelector('.loading-mismatch-button').disabled).toBe(false);
+    expect(fixture.nativeElement.querySelector('.loading-order-note textarea').value).toBe('外箱破損，等待倉庫確認');
   });
 
   it('does not permit a mismatch report before the existing safety inspection passes', async () => {

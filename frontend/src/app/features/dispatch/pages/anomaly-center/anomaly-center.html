@@ -2,7 +2,7 @@
   <!-- 上排：兩種異常的分頁，旁邊是還要處理的筆數；下排：狀態篩選與摘要數字 -->
   <section class="ui-panel" aria-label="異常篩選">
     <div class="ui-tabs-bar">
-      <!-- 兩種異常的時機和處理方式不同，不混在同一組篩選裡：司機回報是即時的，到期配送異常要等隔日 06:00 -->
+      <!-- 無人簽收在隔日 06:00 自動送待排；其他配送異常仍需主管確認。 -->
       <div class="ui-tabs-bar__tabs" role="tablist" aria-label="切換異常類型">
         <button
           type="button"
@@ -23,8 +23,8 @@
           [attr.aria-selected]="view() === 'delivery'"
           (click)="setView('delivery')"
         >
-          到期配送異常
-          <span class="ui-tab__count" [attr.aria-label]="summary().total + ' 筆待確認'">{{ summary().total }}</span>
+          配送異常
+          <span class="ui-tab__count" [attr.aria-label]="summary().total + ' 筆待處理'">{{ summary().total }}</span>
         </button>
       </div>
 
@@ -86,7 +86,7 @@
             </button>
           }
         </div>
-        <p class="summary-stats" aria-label="到期異常摘要">
+        <p class="summary-stats" aria-label="配送異常摘要">
           <span>待補送 <strong>{{ summary().replacementBoxes }}</strong> 箱</span>
         </p>
       }
@@ -233,21 +233,21 @@
       <p class="ui-alert is-ok"><mat-icon aria-hidden="true">check_circle</mat-icon>{{ actionMessage() }}</p>
     }
 
-    <section class="ui-split" aria-label="到期異常提醒">
-      <section class="ui-panel" aria-label="到期配送異常清單">
+    <section class="ui-split" aria-label="配送異常提醒">
+      <section class="ui-panel" aria-label="配送異常清單">
         @if (loading()) {
-          <p class="ui-empty">正在讀取到期異常提醒...</p>
+          <p class="ui-empty">正在讀取配送異常提醒...</p>
         } @else if (errorMessage()) {
           <p class="ui-empty">提醒資料暫時無法讀取，請使用右上角重新整理。</p>
         } @else if (filteredIncidents().length === 0) {
           <p class="ui-empty">
-            目前沒有到期提醒。當天建立的異常會在隔日 06:00 後才進入這裡。
+            目前沒有待處理的配送異常。無人簽收會在隔日 06:00 自動送入待排車。
           </p>
         } @else {
           <div class="ui-table-wrap">
             <table class="ui-table incident-table">
               <thead>
-                <tr><th>異常</th><th>類型</th><th>來源訂單</th><th>後續訂單</th><th>送審時間</th><th>狀態</th></tr>
+                <tr><th>異常</th><th>類型</th><th>來源訂單</th><th>後續訂單</th><th>處理時間</th><th>狀態</th></tr>
               </thead>
               <tbody>
                 @for (incident of filteredIncidents(); track incident.id) {
@@ -263,8 +263,8 @@
                     <td><strong>{{ exceptionTypeLabel(incident.type) }}</strong></td>
                     <td class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</td>
                     <td class="ui-mono">{{ incident.followUpOrderNumber ?? '--' }}</td>
-                    <td class="ui-mono">{{ formatDateTime(incident.queuedAt) }}</td>
-                    <td><span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">待確認</span></td>
+                    <td class="ui-mono">{{ formatDateTime(incident.type === 'NO_SIGNATURE' ? incident.reviewAvailableAt : incident.queuedAt) }}</td>
+                    <td><span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">{{ incident.type === 'NO_SIGNATURE' ? '等待自動送待排' : '待確認' }}</span></td>
                   </tr>
                 }
               </tbody>
@@ -277,7 +277,7 @@
         @if (selectedIncident(); as incident) {
           <header class="ui-panel__header">
             <h3 id="incident-detail-title">{{ exceptionTypeLabel(incident.type) }} <span class="detail-id ui-mono">異常 #{{ incident.id }}</span></h3>
-            <span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">待確認</span>
+            <span class="ui-tag" [class]="'severity-' + severityClass(incident.type)">{{ incident.type === 'NO_SIGNATURE' ? '等待自動送待排' : '待確認' }}</span>
           </header>
 
           <div class="ui-panel__body">
@@ -288,9 +288,9 @@
                 <tr><th>應到數量</th><td class="ui-mono">{{ quantity(incident.expectedBoxCount) }}</td></tr>
                 <tr><th>實到數量</th><td class="ui-mono">{{ quantity(incident.deliveredBoxCount) }}</td></tr>
                 <tr><th>待補送數量</th><td class="ui-mono">{{ quantity(incident.replacementRequiredBoxCount) }}</td></tr>
-                <tr><th>送審時間</th><td class="ui-mono">{{ formatDateTime(incident.queuedAt) }}</td></tr>
+                <tr><th>{{ incident.type === 'NO_SIGNATURE' ? '預計自動送待排' : '送審時間' }}</th><td class="ui-mono">{{ formatDateTime(incident.type === 'NO_SIGNATURE' ? incident.reviewAvailableAt : incident.queuedAt) }}</td></tr>
                 <tr><th>異常說明</th><td class="pre-wrap">{{ incident.description || '尚無額外異常說明。' }}</td></tr>
-                <tr><th>確認後處理</th><td>{{ incident.type === 'NO_SIGNATURE' ? '無人簽收保留隔日排程，確認後送入待排車。' : '重建單的配送日期會更新為確認當天，送入當天的待排訂單區。' }}</td></tr>
+                <tr><th>處理方式</th><td>{{ incident.type === 'NO_SIGNATURE' ? '隔日 06:00 由系統自動送入當天待排訂單區，不需主管確認。' : '主管確認後，重建單更新為確認當天，送入當天待排訂單區。' }}</td></tr>
               </tbody>
             </table>
 
@@ -298,13 +298,15 @@
               <button type="button" class="ui-btn-default" (click)="refresh()" [disabled]="confirming()">
                 重新整理
               </button>
-              <button type="button" class="ui-btn-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
-                確認並待排車
-              </button>
+              @if (incident.type !== 'NO_SIGNATURE') {
+                <button type="button" class="ui-btn-primary" (click)="openConfirmDialog()" [disabled]="confirming()">
+                  確認並待排車
+                </button>
+              }
             </div>
           </div>
         } @else {
-          <p class="ui-empty">選取一筆到期異常後，可查看明細並確認送入待排車。</p>
+          <p class="ui-empty">選取一筆配送異常，可查看明細及後續處理方式。</p>
         }
       </aside>
     </section>
@@ -326,7 +328,7 @@
             </header>
             <div class="ui-panel__body">
               <p class="confirmation-copy">
-                {{ incident.type === 'NO_SIGNATURE' ? '確認後保留無人簽收的隔日排程。' : '確認後，重建單的配送日期會更新為今天。' }}後續訂單會送入待排車，異常案件會結案。來源訂單：<span class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</span>。
+                確認後，重建單的配送日期會更新為今天，送入待排車，異常案件會結案。來源訂單：<span class="ui-mono">{{ incident.sourceOrderNumber ?? '--' }}</span>。
               </p>
             </div>
             <div class="ui-modal__actions">

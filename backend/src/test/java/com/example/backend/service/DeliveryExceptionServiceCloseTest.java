@@ -37,7 +37,7 @@ class DeliveryExceptionServiceCloseTest {
     void setUp() {
         exceptionCasesDAO = mock(ExceptionCasesDAO.class);
         service = new DeliveryExceptionService(exceptionCasesDAO, mock(DeliveryRecordsDAO.class),
-                mock(OrdersDAO.class), mock(RoutesDAO.class));
+                mock(OrdersDAO.class), mock(RoutesDAO.class), mock(DispatchBoardPushService.class));
     }
 
     @Test

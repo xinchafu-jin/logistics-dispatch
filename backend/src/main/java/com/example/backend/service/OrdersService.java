@@ -1,10 +1,13 @@
 package com.example.backend.service;
 
 import com.example.backend.dao.OrdersDAO;
+import com.example.backend.dao.ExceptionCasesDAO;
 import com.example.backend.dao.StoresDAO;
 import com.example.backend.dao.WarehousesDAO;
 import com.example.backend.constants.OrderReviewAction;
 import com.example.backend.constants.OrderStatus;
+import com.example.backend.constants.ExceptionStatus;
+import com.example.backend.constants.ExceptionType;
 import com.example.backend.dto.request.OrderReviewRequestDTO;
 import com.example.backend.dto.request.OrderItemDTO;
 import com.example.backend.dto.request.OrdersDTO;
@@ -27,20 +30,34 @@ public class OrdersService {
     private final OrdersDAO ordersDAO;
     private final StoresDAO storesDAO;
     private final WarehousesDAO warehousesDAO;
+    private final ExceptionCasesDAO exceptionCasesDAO;
 
     public OrdersService(
             OrdersDAO ordersDAO,
             StoresDAO storesDAO,
-            WarehousesDAO warehousesDAO
+            WarehousesDAO warehousesDAO,
+            ExceptionCasesDAO exceptionCasesDAO
     ) {
         this.ordersDAO = ordersDAO;
         this.storesDAO = storesDAO;
         this.warehousesDAO = warehousesDAO;
+        this.exceptionCasesDAO = exceptionCasesDAO;
     }
 
     @Transactional(readOnly = true)
     public List<OrdersDTO> findAll() {
-        return ordersDAO.findAll().stream().map(this::toDTO).toList();
+        List<OrdersDTO> result = ordersDAO.findAll().stream().map(this::toDTO).toList();
+        Set<Long> automaticOrderIds = new HashSet<>();
+        exceptionCasesDAO.findByTypeAndStatusOrderByIdAsc(
+                ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)
+                .forEach(item -> {
+                    if (item.getFollowUpOrderId() != null) {
+                        automaticOrderIds.add(item.getFollowUpOrderId());
+                    }
+                });
+        result.forEach(item -> item.setAwaitingAutomaticDispatch(
+                automaticOrderIds.contains(item.getId())));
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +99,7 @@ public class OrdersService {
     }
 
     public OrdersDTO update(Long id, OrdersDTO dto) {
+        requireNotAwaitingAutomaticDispatch(id);
         OrdersEntity entity = findEntity(id);
         if (entity.getRouteId() != null) {
             throw new IllegalArgumentException("訂單已排入路線，請先撤回並解除編組後再修改");
@@ -95,6 +113,7 @@ public class OrdersService {
     }
 
     public void delete(Long id) {
+        requireNotAwaitingAutomaticDispatch(id);
         OrdersEntity entity = findEntity(id);
         if (entity.getRouteId() != null) {
             throw new IllegalArgumentException("訂單已排入路線，不能刪除");
@@ -107,6 +126,7 @@ public class OrdersService {
     }
 
     public OrdersDTO review(Long id, OrderReviewRequestDTO request) {
+        requireNotAwaitingAutomaticDispatch(id);
         OrdersEntity entity = ordersDAO.findForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException("找不到訂單，ID：" + id));
         if (request.getAction() == OrderReviewAction.CONFIRM) {
@@ -131,6 +151,14 @@ public class OrdersService {
             throw new IllegalArgumentException("不支援的訂單操作");
         }
         return toDTO(ordersDAO.save(entity));
+    }
+
+    private void requireNotAwaitingAutomaticDispatch(Long orderId) {
+        // 排程先鎖異常案件再鎖訂單；這裡先查案件，避免一般訂單確認入口繞過 06:00。
+        if (exceptionCasesDAO.existsByFollowUpOrderIdAndTypeAndStatus(
+                orderId, ExceptionType.NO_SIGNATURE, ExceptionStatus.OPEN)) {
+            throw new IllegalArgumentException("無人簽收重送單將於隔日 06:00 自動送入待排車，不能手動確認或修改");
+        }
     }
 
     private OrdersEntity findEntity(Long id) {

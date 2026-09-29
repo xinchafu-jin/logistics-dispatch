@@ -31,7 +31,7 @@ public record ReportOutcomesResponse(LocalDate from, LocalDate to, LocalDateTime
             boolean dueUnassigned, LocalDateTime windowStart, LocalDateTime windowEnd,
             LocalDateTime arrivedAt, LocalDateTime deliveredAt, LocalDateTime loadedAt,
             Integer orderedBoxCount, Integer expectedBoxCount, Integer deliveredBoxCount, Integer shortageBoxCount, Integer damagedBoxCount,
-            Integer replacementRequiredBoxCount, String loadingIssue, List<ItemCheck> items,
+            Integer replacementRequiredBoxCount, String loadingIssue, String loadingNotes, List<ItemCheck> items,
             String orderType, Long parentOrderId, boolean attempted, boolean recovery, String recoveryReason) {}
     public record ItemCheck(String productCode, String itemName, Integer expectedQuantity,
             Integer loadedQuantity, String unit, String notes, boolean loadingMismatchReported) {}

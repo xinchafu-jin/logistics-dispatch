@@ -1,7 +1,7 @@
 import {TestBed} from '@angular/core/testing';
 import {MatDialog} from '@angular/material/dialog';
-import {of} from 'rxjs';
-import {afterEach, beforeEach, describe, expect} from 'vitest';
+import {EMPTY, of, Subject} from 'rxjs';
+import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {DispatchBoardEventsService} from '../../../../core/services/dispatch-board-events.service';
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
@@ -24,11 +24,15 @@ const day = (date: string, status: DispatchDayDto['status'], published: boolean)
 
 describe('MAJOR dispatch integration', () => {
   let page: DispatchDashboard;
+  let boardChanges: Subject<void>;
   beforeEach(() => {
+    boardChanges = new Subject<void>();
     TestBed.configureTestingModule({providers: [
       {provide: DispatchApiService, useValue: {getLiveFleet: () => of([])}},
-      {provide: DispatchBoardEventsService, useValue: {}},
-      {provide: DriverChatSocketService, useValue: {}},
+      {provide: DispatchBoardEventsService, useValue: {boardChanged$: boardChanges.asObservable()}},
+      {provide: DriverChatSocketService, useValue: {
+        boardPushes$: EMPTY, routeDeviationPushes$: EMPTY, connected$: EMPTY,
+      }},
       {provide: MatDialog, useValue: {}},
     ]});
     page = TestBed.runInInjectionContext(() => new DispatchDashboard());
@@ -67,8 +71,54 @@ describe('MAJOR dispatch integration', () => {
     expect(page.published()).toBe(true);
   });
 
+  it('does not allow manually confirming a no-signature order awaiting 06:00 auto dispatch', () => {
+    const card: Parameters<DispatchDashboard['confirmPendingOrder']>[0] = {
+      orderId: 2, orderNumber: 'NS-2', storeId: 1, storeCode: 'S1',
+      storeName: '店', boxCount: 3, awaitingAutomaticDispatch: true,
+      autoDispatchAt: '2026-09-30T06:00:00',
+    };
+
+    page.confirmPendingOrder(card);
+
+    expect(page.confirmingOrderId()).toBeNull();
+  });
+
   it('also locks the board when a loaded route is published', () => {
     page.routes.set([{...lane(), routeStatus: 'PUBLISHED'}]);
     expect(page.published()).toBe(true);
+  });
+
+  it('refreshes both old-date cards and the current board after an anomaly is confirmed', () => {
+    const internals = page as unknown as {
+      loadDashboard(): void; loadTemplates(): void; loadActiveDeviations(): void;
+      loadDays(): void; refreshOrdersAndBoard(): void;
+    };
+    vi.spyOn(internals, 'loadDashboard').mockImplementation(() => {});
+    vi.spyOn(internals, 'loadTemplates').mockImplementation(() => {});
+    vi.spyOn(internals, 'loadActiveDeviations').mockImplementation(() => {});
+    const loadDays = vi.spyOn(internals, 'loadDays').mockImplementation(() => {});
+    const refreshBoard = vi.spyOn(internals, 'refreshOrdersAndBoard').mockImplementation(() => {});
+
+    page.ngOnInit();
+    boardChanges.next();
+
+    expect(loadDays).toHaveBeenCalledOnce();
+    expect(refreshBoard).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the old-date push when an order moves from the old day to today', () => {
+    const internals = page as unknown as {
+      loadDays(): void;
+      refreshOrdersAndBoard(): void;
+      onBoardPushes(pushes: readonly {date: string | null; resourcesChanged?: boolean}[]): void;
+    };
+    const loadDays = vi.spyOn(internals, 'loadDays').mockImplementation(() => {});
+    const refreshBoard = vi.spyOn(internals, 'refreshOrdersAndBoard').mockImplementation(() => {});
+    page.dispatchDate.set('2026-09-25');
+
+    internals.onBoardPushes([{date: '2026-09-25'}, {date: '2026-09-29'}]);
+
+    expect(loadDays).toHaveBeenCalledOnce();
+    expect(refreshBoard).toHaveBeenCalledOnce();
   });
 });

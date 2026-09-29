@@ -293,7 +293,8 @@ POST /api/driver/mileage/end
 
 | 端點 | Request body |
 |---|---|
-| `/api/driver/loading` | `{ orderId, loadedBoxCount, notes }`：倉庫點交，一次一張單。箱數相符轉 `LOADED`；不符則原單 `FAILED`，並建立異常單與明日補送單 |
+| `/api/driver/loading` | `{ orderId, loadedBoxCount, notes, items }`：倉庫點交，一次一張單。`notes` 是選填整單點交備註，最多 500 字；相符與不符都保存在原單的 `loadingNotes`，不覆寫建單或商品備註。箱數／商品相符轉 `LOADED`；不符則原單 `FAILED`，並建立異常與待主管確認的重建單 |
+| `/api/driver/loading/mismatch` | `{ orderId, items: [{ orderItemId, loadedQuantity, mismatchReported }], notes }`：每項商品都填實點數量，至少一項 `mismatchReported: true`；其餘數量需與應點相符，全部商品的清點結果都存入原單供歷史查看。舊版 `orderItemId`／`orderItemIds` 或未帶 `mismatchReported` 的逐項請求仍相容，未提供的實點數量不推測。`notes` 同時保存在原單點交紀錄與異常原因中；新重建單不繼承前次點交備註 |
 | `/api/driver/gps` | `{ lat, lng }` |
 | `/api/driver/arrive` | `{ orderId }`：訂單須為 `LOADED`（已點交） |
 | `/api/driver/deliver` | `{ orderId, boxCount, notes, photo }` |
@@ -317,6 +318,10 @@ PATCH /api/exceptions/{id} — Request:
   "handledBy": ""
 }
 ```
+
+無人簽收會先建立隔日待確認重送單並在異常中心顯示；隔日台北時間 06:00 由系統自動轉為 `CONFIRMED`，進入對應日期的待排車看板，案件記錄系統處理結果。主管不需、也不能對無人簽收呼叫 `PATCH /api/exceptions/{id}/confirm`；此端點仍用於其他需人工確認的配送異常。若 06:00 後端未運行，復機後會補掃並以補掃當天為配送日（已發布日期會順延）。
+
+無人簽收重送單等待自動處理期間，普通訂單的確認、修改與刪除 API 也會拒絕操作；拖曳看板只顯示自動處理時間，不提供人工確認按鈕，審單頁也標示待自動排車並隱藏人工操作。原單及異常歷史保留。
 
 ## 報表
 

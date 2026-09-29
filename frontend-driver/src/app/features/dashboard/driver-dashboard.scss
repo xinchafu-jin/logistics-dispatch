@@ -980,7 +980,7 @@ h2 {
 
 .loading-item-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 88px;
   align-items: center;
   gap: 10px;
   padding: 9px 10px;
@@ -1019,6 +1019,15 @@ h2 {
   font-size: 17px;
   white-space: nowrap;
 }
+.loading-item-quantity { display: grid; gap: 3px; color: var(--loading-muted); font-size: 11px; font-weight: 700; }
+.loading-item-quantity-field { display: flex; align-items: center; gap: 3px; }
+.loading-item-quantity input {
+  width: 58px; min-width: 0; height: 36px; padding: 0 5px;
+  border: 1px solid #a8c9bc; border-radius: 7px; background: #fff;
+  color: var(--loading-ink); font: inherit; font-size: 15px; text-align: center;
+}
+.loading-item-quantity input:focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
+.loading-item-quantity small { font-size: 11px; white-space: nowrap; }
 .loading-mismatch-button {
   display: inline-flex;
   min-height: 44px;
@@ -1038,9 +1047,10 @@ h2 {
 }
 .loading-mismatch-button mat-icon { width: 15px; height: 15px; font-size: 15px; }
 .loading-action-panel .loading-mismatch-hint { font-size: 11px; }
-.loading-order-note { color: var(--loading-muted); font-size: 12px; }
-.loading-order-note summary { min-height: 30px; cursor: pointer; }
-.loading-order-note label { margin-top: 4px; }
+.loading-order-note { color: var(--loading-ink); font-size: 12px; }
+.loading-order-note > span { display: flex; align-items: center; gap: 6px; }
+.loading-order-note small { color: var(--loading-muted); font-size: 11px; font-weight: 400; }
+.loading-order-note textarea { min-height: 76px; resize: vertical; }
 .loading-action-panel .delivery-action-buttons { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 10px; }
 .loading-action-panel .delivery-action-buttons.has-mismatch-action { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .loading-action-panel .delivery-action-buttons button { min-width: 0; min-height: 44px; padding: 0 6px; border-radius: 9px; font-size: 13px; }
@@ -1048,7 +1058,7 @@ h2 {
 .loading-action-panel .delivery-cancel-button { grid-column: auto; }
 .loading-item-check:focus-within,
 .loading-action-panel button:focus-visible,
-.loading-order-note summary:focus-visible { outline: 2px solid #087f6d; outline-offset: 3px; border-radius: 5px; }
+.loading-order-note textarea:focus-visible { outline: 2px solid #087f6d; outline-offset: 3px; border-radius: 5px; }
 
 .delivery-action-panel input:focus,
 .delivery-action-panel textarea:focus,
