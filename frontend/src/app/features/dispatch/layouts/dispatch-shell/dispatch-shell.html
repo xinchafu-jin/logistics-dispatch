@@ -476,7 +476,6 @@
                   </mat-expansion-panel>
                 }
 
-                <!-- 送出邏輯還沒接，先 preventDefault 避免瀏覽器送出表單重新整理頁面 -->
                 <form class="chat-composer" (ngSubmit)="chatSend()">
                   <!-- outline：面板背景半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
                   <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
@@ -490,11 +489,11 @@
                       name="chatInput"
                       aria-label="輸入給 AI 調度助理的訊息"
                       [(ngModel)]="chatInput"
+                      (keydown)="onChatKeydown($event, 'ai')"
                     ></textarea>
                   </mat-form-field>
-                  <!-- 送出方法還沒寫，先停用；只有圖示所以要 aria-label -->
                   <button type="submit"
-                          matIconButton aria-label="送出"
+                          matIconButton aria-label="送出" [disabled]="!chatInput().trim()"
                   >
                     <mat-icon aria-hidden="true">send</mat-icon>
                   </button>
@@ -539,6 +538,7 @@
                       name="driverChatInput"
                       [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
                       [(ngModel)]="driverChatInput"
+                      (keydown)="onChatKeydown($event, 'driver')"
                     ></textarea>
                   </mat-form-field>
                   <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
@@ -612,6 +612,7 @@
                         name="caseChatInput"
                         [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
                         [(ngModel)]="caseChatInput"
+                        (keydown)="onChatKeydown($event, 'case')"
                       ></textarea>
                     </mat-form-field>
                     <button
