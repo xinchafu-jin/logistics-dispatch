@@ -101,6 +101,20 @@ export interface AdminUserDto {
   phone: string;
 }
 
+/** 個人資料（GET/PUT /api/admin-users/me）；姓名以資料庫為準，不是登入 Token 裡的 */
+export interface AdminProfileDto {
+  account: string;
+  name: string;
+  phone: string | null;
+}
+
+/** 手機號碼有變時才要帶 currentPassword：手機是忘記密碼的驗證依據 */
+export interface AdminProfileUpdateRequest {
+  name: string;
+  phone: string;
+  currentPassword?: string;
+}
+
 /** 後端只回傳遮罩後的 API Key，完整內容不會再次傳回前端。 */
 export interface AiApiKeyStatusDto {
   configured: boolean;
@@ -870,7 +884,7 @@ export interface OptimizeSlotsRequest {
  */
 
 /** 對應後端 AiActionType */
-export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY' | 'UNASSIGN_DRIVER';
+export type AiActionType = 'ASSIGN_DRIVER' | 'MOVE_ORDER' | 'PUBLISH_DAY' | 'UNASSIGN_DRIVER' | 'WITHDRAW_DAY';
 
 /** POST /api/ai/chat 的請求本體 */
 export interface AiChatRequest {
@@ -897,9 +911,9 @@ export interface AiPendingActionDto {
   summary: string;
   /** 配送日期，yyyy-MM-dd */
   date: string;
-  /** PUBLISH_DAY 為 null：發布範圍是當天全部倉庫 */
+  /** PUBLISH_DAY、WITHDRAW_DAY 為 null：發布與撤回的範圍都是當天全部倉庫 */
   warehouseId: number | null;
-  /** 只給分組標題顯示用；PUBLISH_DAY 為 null，畫面顯示「全部倉庫」 */
+  /** 只給分組標題顯示用；PUBLISH_DAY、WITHDRAW_DAY 為 null，畫面顯示「全部倉庫」 */
   warehouseName: string | null;
   /** ASSIGN_DRIVER、UNASSIGN_DRIVER 為該路線的車；MOVE_ORDER 為目標車；PUBLISH_DAY 為 null */
   vehicleId: number | null;
@@ -1030,4 +1044,20 @@ export interface DriverCaseDto {
   acceptedAdminName: string | null;
   /** 結案的管理員名稱 */
   handledBy: string | null;
+}
+
+/** 結案視窗列的：案件路線上還沒結束的單（GET /api/exceptions/driver-cases/{id}/unfinished-orders） */
+export interface DriverCaseOrdersDto {
+  /** 案件沒有路線（上班前回報）時是 null，orders 是空的 */
+  routeDate: string | null;
+  /** 路線日期已過：這些單要全部改期補送才能結案，不然看板日期列會一直是「未結案」 */
+  mustResolveAll: boolean;
+  orders: DriverCaseOrderDto[];
+}
+
+export interface DriverCaseOrderDto {
+  id: number;
+  orderNumber: string;
+  storeName: string | null;
+  status: OrderStatus;
 }

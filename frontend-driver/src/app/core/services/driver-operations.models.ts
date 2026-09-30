@@ -54,6 +54,17 @@ export interface DriverShiftDto {
   version: number;
 }
 
+/** 月曆用：某一天已發布的派車結果（GET /api/driver/assignments）。沒有已發布路線的日子不會出現 */
+export interface DriverAssignmentDto {
+  date: string;
+  warehouseId: number | null;
+  warehouseName: string | null;
+  /** 路線還沒排車時是 null */
+  vehiclePlateNumber: string | null;
+  /** 車型是後台自由填寫的文字，可能是 null */
+  vehicleType: string | null;
+}
+
 export interface GpsPingRequest {
   lat: number;
   lng: number;

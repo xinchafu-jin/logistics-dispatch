@@ -294,7 +294,7 @@
 
       <a mat-list-item class="nav-item" routerLink="/dispatch/history" routerLinkActive="is-active">
         <mat-icon matListItemIcon aria-hidden="true">history</mat-icon>
-        <span>歷史報表查詢中心</span>
+        <span>歷史報表</span>
       </a>
     </mat-nav-list>
   </aside>
@@ -424,9 +424,23 @@
                 <!-- 由上而下：訊息（自己捲動）→ 待執行清單 → 輸入框；清單與輸入框固定在底部，訊息再多也不會把它們擠出面板 -->
                 <div class="chat-messages">
                   @for (message of chatOutput(); track $index) {
-                    <p class="chat-message" [class.is-user]="message.role === 'user'">{{ message.text }}</p>
+                    <!-- 助理的回覆是 Markdown 轉出來的 HTML，[innerHTML] 會經過 Angular 消毒；調度員打的字維持純文字 -->
+                    @if (message.html) {
+                      <div class="chat-message chat-message--md" [innerHTML]="message.html"></div>
+                    } @else {
+                      <p class="chat-message" [class.is-user]="message.role === 'user'">{{ message.text }}</p>
+                    }
+                  }
+                  <!-- role="status"：螢幕閱讀器會念出來，但不像 alert 那樣打斷 -->
+                  @if (chatWaiting()) {
+                    <p class="chat-message chat-message--waiting" role="status">思考中…</p>
                   }
                 </div>
+
+                <!-- 放在訊息與清單之間、不跟著訊息捲動：確認被擋的原因要一直看得到，調度員才能對著清單改 -->
+                @if (aiChatError()) {
+                  <p class="chat-panel__error" role="alert">{{ aiChatError() }}</p>
+                }
 
                 <!-- 待執行清單：空的時候整塊不顯示。顯示的是後端組好的 summary，不是 AI 的回覆文字 -->
                 @if (aiPendingAction().length > 0) {
@@ -451,12 +465,12 @@
                             }
                             <div>{{ action.summary }}</div>
                           </div>
-                          <!-- 刪除單一項目，邏輯還沒接（delPlan 要改成收 action.id）；
-                               aria-label 帶 summary，不然螢幕閱讀器只會念出好幾個一樣的「移除」 -->
+                          <!-- aria-label 帶 summary，不然螢幕閱讀器只會念出好幾個一樣的「移除」 -->
                           <button
                             type="button"
                             matIconButton
                             class="chat-panel__icon-button"
+                            [disabled]="aiPlanBusy()"
                             [attr.aria-label]="'移除：' + action.summary"
                             (click)="delPan(action.id)"
                           >
@@ -468,15 +482,16 @@
 
                     <!-- 清除與確認放在抽屜裡：收合時按不到，調度員一定得先看過清單才能確認 -->
                     <mat-action-row>
-                      <!-- 邏輯還沒接：DELETE /api/ai/plan -->
-                      <button type="button" class="ui-btn-default" (click)="delAllPlan()">全部清除</button>
+                      <!-- 等 AI 回覆時也鎖住：那一輪對話可能正在往清單加動作，這時確認會漏掉後加的 -->
+                      <button type="button" class="ui-btn-default" [disabled]="aiPlanBusy() || chatWaiting()" (click)="delAllPlan()">全部清除</button>
                       <!-- 先開確認視窗（模板在本檔最下面），按「執行」才 POST /api/ai/plan/confirm -->
-                      <button type="button" class="ui-btn-primary" (click)="openConfirmPlan()">確認執行</button>
+                      <button type="button" class="ui-btn-primary" [disabled]="aiPlanBusy() || chatWaiting()" (click)="openConfirmPlan()">
+                        {{ aiPlanBusy() ? '處理中…' : '確認執行' }}
+                      </button>
                     </mat-action-row>
                   </mat-expansion-panel>
                 }
 
-                <!-- 送出邏輯還沒接，先 preventDefault 避免瀏覽器送出表單重新整理頁面 -->
                 <form class="chat-composer" (ngSubmit)="chatSend()">
                   <!-- outline：面板背景半透明，fill 的底色疊上去會變灰；dynamic：不用 hint/error，底下不留空白 -->
                   <mat-form-field class="chat-composer__field" appearance="outline" subscriptSizing="dynamic">
@@ -492,9 +507,10 @@
                       [(ngModel)]="chatInput"
                     ></textarea>
                   </mat-form-field>
-                  <!-- 送出方法還沒寫，先停用；只有圖示所以要 aria-label -->
+                  <!-- 等回覆中或只有空白時停用；只有圖示所以要 aria-label -->
                   <button type="submit"
                           matIconButton aria-label="送出"
+                          [disabled]="chatWaiting() || !chatInput().trim()"
                   >
                     <mat-icon aria-hidden="true">send</mat-icon>
                   </button>

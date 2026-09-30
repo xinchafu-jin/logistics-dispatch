@@ -43,6 +43,7 @@ import {
   DriverProfileDto,
   DriverRouteTask,
   DriverShiftDto,
+  DriverAssignmentDto,
   DriverMessageDto,
   DriverMessagePushDto,
   DriverTaskStop,
@@ -499,6 +500,16 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   );
   protected readonly selectedShift = computed(
     () => this.shiftsByDate().get(this.toIsoDate(this.selectedScheduleDate())) ?? null,
+  );
+  // 已發布路線的派車結果（倉庫、車輛）；草稿不給司機看，主管還會改
+  private readonly publishedAssignments = signal<DriverAssignmentDto[]>([]);
+  protected readonly selectedAssignment = computed(() => {
+    const date = this.toIsoDate(this.selectedScheduleDate());
+    return this.publishedAssignments().find((assignment) => assignment.date === date) ?? null;
+  });
+  /** 沒有已發布路線時，今天以後的上班日才顯示所屬倉庫＋尚未派車；過去的日子沒派車就是沒派，不用提示 */
+  protected readonly selectedDateIsUpcoming = computed(
+    () => this.toIsoDate(this.selectedScheduleDate()) >= this.toIsoDate(new Date()),
   );
   protected readonly pendingScheduleDates = computed(() => pendingLeaveDatesInMonth(this.leaveRequests(), this.scheduleMonth()));
   private readonly scheduleCalendar = viewChild<MatCalendar<Date>>('scheduleCalendar');
@@ -2331,6 +2342,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     const {from, to} = this.monthRange(this.scheduleMonth());
     this.scheduleViewState.set('loading');
     this.scheduleError.set(null);
+    this.loadAssignments(from, to);
 
     this.operations.getPublishedShifts(from, to).subscribe({
       next: (shifts) => {
@@ -2603,7 +2615,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     const maplibregl = await import('maplibre-gl');
-    maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+    // 資料夾改名的原因見後台 live-fleet-map.ts：讓修正 .mjs MIME 之前快取的舊 worker 失效
+    maplibregl.setWorkerUrl('/maplibre-v2/maplibre-gl-worker.mjs');
     this.maplibre = maplibregl;
     this.driverMap = new maplibregl.Map({
       container: mapElement,
@@ -2847,6 +2860,26 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
   }
 
   /** 用本地年月日組 YYYY-MM-DD；toISOString 會先轉 UTC，台灣早上 8 點前會變成前一天 */
+  /**
+   * 跟班表同一個月一起載。失敗不擋班表：派車資訊只是補充，
+   * 讀不到時上班日會顯示所屬倉庫與「尚未派車」。
+   */
+  private loadAssignments(from: string, to: string): void {
+    this.operations.getAssignments(from, to).subscribe({
+      next: (assignments) => this.publishedAssignments.set(assignments),
+      error: () => this.publishedAssignments.set([]),
+    });
+  }
+
+  protected formatVehicle(assignment: DriverAssignmentDto): string {
+    if (!assignment.vehiclePlateNumber) {
+      return '尚未派車';
+    }
+    return assignment.vehicleType
+      ? `${assignment.vehiclePlateNumber}（${assignment.vehicleType}）`
+      : assignment.vehiclePlateNumber;
+  }
+
   private toIsoDate(date: Date): string {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }

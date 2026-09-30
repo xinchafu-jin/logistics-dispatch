@@ -42,6 +42,10 @@ public interface RoutesDAO extends JpaRepository<RoutesEntity, Long> {
     List<RoutesEntity> findByDateAndDriverIdAndStatusOrderByIdAsc(
             LocalDate date, Long driverId, RouteStatus status);
 
+    /** 司機端月曆：一段期間內已發布給本人的路線，看那天在哪個倉庫、開哪台車。 */
+    List<RoutesEntity> findByDriverIdAndStatusAndDateBetweenOrderByDateAsc(
+            Long driverId, RouteStatus status, LocalDate from, LocalDate to);
+
     boolean existsByDateAndDriverIdAndStatus(
             LocalDate date, Long driverId, RouteStatus status);
 

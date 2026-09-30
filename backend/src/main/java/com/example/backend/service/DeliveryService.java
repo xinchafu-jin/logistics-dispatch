@@ -274,6 +274,30 @@ public class DeliveryService {
         return toResponse(record, order, exceptionCase.getId(), followUpOrder);
     }
 
+    /**
+     * 司機回報結案時，主管決定這張單改天再送：原單改 FAILED，開一張 DR- 補送單直接進待排車。
+     * 補送單不走待確認：主管結案時已經決定要補送、也選好日期了，再確認一次只是多一步。
+     * 已經抵達門市的話，那筆配送紀錄補上處理時間，里程計算下一段才有離店時間。
+     */
+    OrdersEntity redeliverAfterDriverReport(OrdersEntity order, LocalDate deliveryDate, LocalDateTime now) {
+        deliveryRecordsDAO.findFirstByOrderIdOrderByIdDesc(order.getId())
+                .filter(this::isInProgress)
+                .ifPresent(record -> {
+                    record.setHandledAt(now);
+                    if (record.getNotes() == null) {
+                        record.setNotes("司機回報結案，改期補送");
+                    }
+                    deliveryRecordsDAO.save(record);
+                });
+        OrdersEntity followUpOrder = createRedeliveryOrder(order, "DR", deliveryDate);
+        followUpOrder.setStatus(OrderStatus.CONFIRMED);
+        followUpOrder = ordersDAO.save(followUpOrder);
+
+        order.setStatus(OrderStatus.FAILED);
+        ordersDAO.save(order);
+        return followUpOrder;
+    }
+
     /** 整張原單改日重送。無人簽收（NS）與點交不符（LD）共用，單號前綴區分是哪一種。 */
     private OrdersEntity createRedeliveryOrder(
             OrdersEntity sourceOrder,

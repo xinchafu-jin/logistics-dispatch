@@ -19,6 +19,7 @@ on:
       - '.dockerignore'
       - '.github/workflows/build-images.yml'
       - '.github/workflows/ci.yml'
+      - '.github/ci/**'         # CI 的基礎資料改了，測試結果就可能變，要重新驗證
   workflow_dispatch:        # 允許手動觸發，第一次測試用得到
 
 env:

@@ -5,6 +5,7 @@ import com.example.backend.constants.DriverMessagePushType;
 import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.ExceptionType;
 import com.example.backend.constants.MessageSender;
+import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.dao.AdminUsersDAO;
 import com.example.backend.dao.DriversDAO;
@@ -15,6 +16,7 @@ import com.example.backend.dao.StoresDAO;
 import com.example.backend.dao.VehiclesDAO;
 import com.example.backend.dto.request.DriverCaseRequestDTO;
 import com.example.backend.dto.respones.AdminDriverCaseResponse;
+import com.example.backend.dto.respones.DriverCaseOrdersResponse;
 import com.example.backend.dto.respones.DriverCasePushEvent;
 import com.example.backend.dto.respones.DriverCaseResponse;
 import com.example.backend.entity.AdminUsersEntity;
@@ -35,11 +37,13 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -70,7 +74,10 @@ class DriverCaseServiceTest {
     private ExceptionCasesDAO exceptionCasesDAO;
     private DriversDAO driversDAO;
     private RoutesDAO routesDAO;
+    private OrdersDAO ordersDAO;
     private AdminUsersDAO adminUsersDAO;
+    private DeliveryService deliveryService;
+    private DeliveryExceptionService deliveryExceptionService;
     private DriverMessagesService driverMessagesService;
     private ApplicationEventPublisher eventPublisher;
     private DriverCaseService service;
@@ -80,12 +87,15 @@ class DriverCaseServiceTest {
         exceptionCasesDAO = mock(ExceptionCasesDAO.class);
         driversDAO = mock(DriversDAO.class);
         routesDAO = mock(RoutesDAO.class);
-        OrdersDAO ordersDAO = mock(OrdersDAO.class);
+        ordersDAO = mock(OrdersDAO.class);
         adminUsersDAO = mock(AdminUsersDAO.class);
         driverMessagesService = mock(DriverMessagesService.class);
+        deliveryService = mock(DeliveryService.class);
+        deliveryExceptionService = mock(DeliveryExceptionService.class);
         eventPublisher = mock(ApplicationEventPublisher.class);
         service = new DriverCaseService(exceptionCasesDAO, driversDAO, routesDAO, ordersDAO,
-                mock(StoresDAO.class), mock(VehiclesDAO.class), adminUsersDAO, driverMessagesService, eventPublisher);
+                mock(StoresDAO.class), mock(VehiclesDAO.class), adminUsersDAO, driverMessagesService,
+                deliveryService, deliveryExceptionService, eventPublisher);
 
         givenDriver(DRIVER_ID, true);
         givenTodayRoute(DRIVER_ID, ROUTE_ID);
@@ -334,7 +344,7 @@ class DriverCaseServiceTest {
     void 結案_沒接收也能結_寫處理結果_推CASE_CLOSED() {
         ExceptionCasesEntity exceptionCase = givenCase(DRIVER_ID, ExceptionStatus.OPEN, null);
 
-        service.close(CASE_ID, "王主管", "  重複回報  ");
+        service.close(CASE_ID, "王主管", "  重複回報  ", null);
 
         assertEquals(ExceptionStatus.CLOSED, exceptionCase.getStatus());
         assertEquals("王主管", exceptionCase.getHandledBy());
@@ -348,7 +358,7 @@ class DriverCaseServiceTest {
         givenCase(DRIVER_ID, ExceptionStatus.OPEN, ADMIN_ID);
 
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> service.close(CASE_ID, "王主管", "   "));
+                () -> service.close(CASE_ID, "王主管", "   ", null));
 
         assertEquals("處理結果不能為空", error.getMessage());
         verify(exceptionCasesDAO, never()).save(any());
@@ -358,11 +368,110 @@ class DriverCaseServiceTest {
     void 舊版回報沒有司機_也能結案_只推後台() {
         givenCase(null, ExceptionStatus.OPEN, null);
 
-        service.close(CASE_ID, "王主管", "舊資料清理");
+        service.close(CASE_ID, "王主管", "舊資料清理", null);
 
         DriverCasePushEvent event = publishedCaseEvent();
         assertNotNull(event.getAdminPush());
         assertNull(event.getDriverPush());
+    }
+
+    // ── 結案時改期補送 ──
+
+    @Test
+    void 結案_勾選的單改期補送_處理結果接上補送單號() {
+        ExceptionCasesEntity exceptionCase = givenCaseOnRoute(LocalDate.now(TAIPEI));
+        OrdersEntity loaded = routeOrder(41L, "A-41", OrderStatus.LOADED);
+        OrdersEntity inDelivery = routeOrder(43L, "A-43", OrderStatus.IN_DELIVERY);
+        when(ordersDAO.findByRouteIdForUpdate(ROUTE_ID)).thenReturn(List.of(loaded, inDelivery));
+        LocalDate tomorrow = LocalDate.now(TAIPEI).plusDays(1);
+        when(deliveryExceptionService.nextDispatchDate(any(), any())).thenReturn(tomorrow);
+        when(deliveryService.redeliverAfterDriverReport(eq(loaded), eq(tomorrow), any()))
+                .thenReturn(followUp("DR-41"));
+
+        service.close(CASE_ID, "王主管", "車輛故障", List.of(41L));
+
+        verify(deliveryService).redeliverAfterDriverReport(eq(loaded), eq(tomorrow), any());
+        verify(deliveryService, never()).redeliverAfterDriverReport(eq(inDelivery), any(), any());
+        assertEquals(ExceptionStatus.CLOSED, exceptionCase.getStatus());
+        assertEquals("車輛故障\n改期補送：A-41 → DR-41（" + tomorrow + "）", exceptionCase.getResolution());
+    }
+
+    @Test
+    void 結案_路線日期已過_還有沒勾的單_擋下也不改任何單() {
+        ExceptionCasesEntity exceptionCase = givenCaseOnRoute(LocalDate.now(TAIPEI).minusDays(1));
+        when(ordersDAO.findByRouteIdForUpdate(ROUTE_ID)).thenReturn(List.of(
+                routeOrder(41L, "A-41", OrderStatus.LOADED),
+                routeOrder(43L, "A-43", OrderStatus.IN_DELIVERY),
+                routeOrder(44L, "A-44", OrderStatus.COMPLETED)));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.close(CASE_ID, "王主管", "車輛故障", List.of(41L)));
+
+        assertEquals("路線日期已過，還有 1 張單沒結束，要全部改期補送才能結案", error.getMessage(),
+                "已完成的 44 不算；沒勾的只剩 43");
+        assertEquals(ExceptionStatus.OPEN, exceptionCase.getStatus());
+        verify(deliveryService, never()).redeliverAfterDriverReport(any(), any(), any());
+    }
+
+    @Test
+    void 結案_當天路線_沒勾的單可以留著讓司機繼續送() {
+        ExceptionCasesEntity exceptionCase = givenCaseOnRoute(LocalDate.now(TAIPEI));
+        when(ordersDAO.findByRouteIdForUpdate(ROUTE_ID)).thenReturn(List.of(
+                routeOrder(41L, "A-41", OrderStatus.LOADED)));
+
+        service.close(CASE_ID, "王主管", "已排除，繼續配送", List.of());
+
+        assertEquals(ExceptionStatus.CLOSED, exceptionCase.getStatus());
+        assertEquals("已排除，繼續配送", exceptionCase.getResolution());
+        verify(deliveryService, never()).redeliverAfterDriverReport(any(), any(), any());
+    }
+
+    @Test
+    void 結案_勾到已結束或別條路線的單_擋下() {
+        givenCaseOnRoute(LocalDate.now(TAIPEI));
+        when(ordersDAO.findByRouteIdForUpdate(ROUTE_ID)).thenReturn(List.of(
+                routeOrder(41L, "A-41", OrderStatus.COMPLETED)));
+
+        IllegalArgumentException finished = assertThrows(IllegalArgumentException.class,
+                () -> service.close(CASE_ID, "王主管", "處理", List.of(41L)));
+        IllegalArgumentException otherRoute = assertThrows(IllegalArgumentException.class,
+                () -> service.close(CASE_ID, "王主管", "處理", List.of(ORDER_ON_OTHER_ROUTE)));
+
+        assertEquals("有訂單不在這條路線上或已經結束，請重新整理後再結案", finished.getMessage());
+        assertEquals(finished.getMessage(), otherRoute.getMessage());
+        verify(deliveryService, never()).redeliverAfterDriverReport(any(), any(), any());
+    }
+
+    @Test
+    void 結案_案件沒有路線卻帶了訂單_擋下() {
+        givenCase(DRIVER_ID, ExceptionStatus.OPEN, ADMIN_ID);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.close(CASE_ID, "王主管", "處理", List.of(41L)));
+
+        assertEquals("這件案件沒有路線，沒有訂單可以改期", error.getMessage());
+    }
+
+    @Test
+    void 結案視窗的訂單_只列沒結束的_路線日期已過要全部處理() {
+        givenCaseOnRoute(LocalDate.now(TAIPEI).minusDays(1));
+        when(ordersDAO.findByRouteIdAndStatusInOrderBySequence(ROUTE_ID, DispatchDayService.UNFINISHED_STATUSES))
+                .thenReturn(List.of(routeOrder(41L, "A-41", OrderStatus.LOADED)));
+
+        DriverCaseOrdersResponse response = service.findUnfinishedOrders(CASE_ID);
+
+        assertTrue(response.isMustResolveAll());
+        assertEquals(1, response.getOrders().size());
+        assertEquals("A-41", response.getOrders().getFirst().getOrderNumber());
+    }
+
+    @Test
+    void 結案視窗的訂單_當天路線_不用全部處理() {
+        givenCaseOnRoute(LocalDate.now(TAIPEI));
+        when(ordersDAO.findByRouteIdAndStatusInOrderBySequence(ROUTE_ID, DispatchDayService.UNFINISHED_STATUSES))
+                .thenReturn(List.of(routeOrder(41L, "A-41", OrderStatus.LOADED)));
+
+        assertFalse(service.findUnfinishedOrders(CASE_ID).isMustResolveAll());
     }
 
     // ── 異常中心清單 ──
@@ -422,6 +531,33 @@ class DriverCaseServiceTest {
         order.setId(orderId);
         order.setRouteId(routeId);
         order.setStoreId(3L);
+        return order;
+    }
+
+    /** 案件掛在路線 30 上；路線日期由測試決定（過去的日子才會要求全部處理） */
+    private ExceptionCasesEntity givenCaseOnRoute(LocalDate routeDate) {
+        ExceptionCasesEntity exceptionCase = givenCase(DRIVER_ID, ExceptionStatus.OPEN, ADMIN_ID);
+        exceptionCase.setRouteId(ROUTE_ID);
+        RoutesEntity route = new RoutesEntity();
+        route.setId(ROUTE_ID);
+        route.setDate(routeDate);
+        route.setDriverId(DRIVER_ID);
+        route.setStatus(RouteStatus.PUBLISHED);
+        when(routesDAO.findForUpdate(ROUTE_ID)).thenReturn(Optional.of(route));
+        when(routesDAO.findById(ROUTE_ID)).thenReturn(Optional.of(route));
+        return exceptionCase;
+    }
+
+    private OrdersEntity routeOrder(long orderId, String orderNumber, OrderStatus status) {
+        OrdersEntity order = order(orderId, ROUTE_ID);
+        order.setOrderNumber(orderNumber);
+        order.setStatus(status);
+        return order;
+    }
+
+    private OrdersEntity followUp(String orderNumber) {
+        OrdersEntity order = new OrdersEntity();
+        order.setOrderNumber(orderNumber);
         return order;
     }
 

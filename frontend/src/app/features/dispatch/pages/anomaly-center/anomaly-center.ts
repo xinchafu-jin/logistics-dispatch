@@ -13,8 +13,11 @@ import { DriverCasesService, driverCaseCategoryLabel } from '../../../../core/se
 import { DriverChatSocketService } from '../../../../core/services/driver-chat-socket.service';
 import {
   DriverCaseDto,
+  DriverCaseOrderDto,
+  DriverCaseOrdersDto,
   ExceptionCaseDto,
   ExceptionType,
+  OrderStatus,
 } from '../../../../core/services/dispatch-api.models';
 
 type ExceptionFilter = 'ALL' | 'NO_SIGNATURE' | 'GOODS_ISSUE';
@@ -57,6 +60,21 @@ export class AnomalyCenter implements OnInit {
   readonly closingCaseId = signal<number | null>(null);
   readonly closeResolution = signal('');
   readonly closeError = signal('');
+  /**
+   * 案件路線上還沒結束的單，結案時可以勾選改期補送。
+   * 司機回報結案不會自己動訂單；不處理的話，路線日期一過，看板日期列那天就會一直是「未結案」。
+   */
+  readonly closeOrders = signal<DriverCaseOrdersDto | null>(null);
+  readonly closeOrdersState = signal<'loading' | 'ready' | 'error'>('loading');
+  readonly redeliverOrderIds = signal<ReadonlySet<number>>(new Set());
+  /** 路線日期已過時，沒勾的單還剩幾張；後端也會擋，這裡先讓按鈕停用、把原因寫出來 */
+  readonly unresolvedOrderCount = computed(() => {
+    const orders = this.closeOrders();
+    if (!orders?.mustResolveAll) {
+      return 0;
+    }
+    return orders.orders.filter((order) => !this.redeliverOrderIds().has(order.id)).length;
+  });
 
   readonly visibleCases = computed(() =>
     this.caseFilter() === 'OPEN' ? this.driverCases.openCases() : this.driverCases.closedCases(),
@@ -238,6 +256,7 @@ export class AnomalyCenter implements OnInit {
     this.closingCaseId.set(item.id);
     this.closeResolution.set('');
     this.closeError.set('');
+    this.loadCloseOrders(item);
     this.closeCaseDialogRef = this.dialog.open(this.closeCaseDialogTemplate(), {
       width: '520px',
       maxWidth: 'calc(100vw - 32px)',
@@ -249,6 +268,58 @@ export class AnomalyCenter implements OnInit {
     });
   }
 
+  /**
+   * 預設勾選：日期已過的全勾（本來就一定要處理）；司機說不能繼續配送也全勾；
+   * 不然只勾案件綁的那張。主管可以再改。
+   */
+  private loadCloseOrders(item: DriverCaseDto): void {
+    this.closeOrders.set(null);
+    this.closeOrdersState.set('loading');
+    this.redeliverOrderIds.set(new Set());
+    this.api.getDriverCaseUnfinishedOrders(item.id).subscribe({
+      next: (orders) => {
+        if (this.closingCaseId() !== item.id) {
+          return;
+        }
+        const checkAll = orders.mustResolveAll || item.canContinue === false;
+        this.redeliverOrderIds.set(new Set(orders.orders
+          .filter((order) => checkAll || order.id === item.orderId)
+          .map((order) => order.id)));
+        this.closeOrders.set(orders);
+        this.closeOrdersState.set('ready');
+      },
+      error: () => {
+        if (this.closingCaseId() === item.id) {
+          this.closeOrdersState.set('error');
+        }
+      },
+    });
+  }
+
+  protected toggleRedeliverOrder(orderId: number, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.redeliverOrderIds.update((ids) => {
+      const next = new Set(ids);
+      if (checked) {
+        next.add(orderId);
+      } else {
+        next.delete(orderId);
+      }
+      return next;
+    });
+    this.closeError.set('');
+  }
+
+  protected closeOrderStatusLabel(order: DriverCaseOrderDto): string {
+    const labels: Partial<Record<OrderStatus, string>> = {
+      PENDING_CONFIRM: '待確認',
+      CONFIRMED: '未點交',
+      LOADED: '已點交',
+      IN_DELIVERY: '配送中',
+    };
+    return labels[order.status] ?? order.status;
+  }
+
   protected updateCloseResolution(event: Event): void {
     this.closeResolution.set((event.target as HTMLTextAreaElement).value);
     this.closeError.set('');
@@ -257,12 +328,13 @@ export class AnomalyCenter implements OnInit {
   protected submitCloseCase(): void {
     const caseId = this.closingCaseId();
     const resolution = this.closeResolution().trim();
-    if (caseId === null || !resolution || this.caseAction() !== null) {
+    if (caseId === null || !resolution || this.caseAction() !== null
+      || this.closeOrdersState() !== 'ready' || this.unresolvedOrderCount() > 0) {
       return;
     }
     this.caseAction.set('close');
     this.closeError.set('');
-    this.driverCases.close(caseId, resolution).subscribe({
+    this.driverCases.close(caseId, resolution, [...this.redeliverOrderIds()]).subscribe({
       next: () => {
         this.caseAction.set(null);
         this.closeCaseDialogRef?.close();

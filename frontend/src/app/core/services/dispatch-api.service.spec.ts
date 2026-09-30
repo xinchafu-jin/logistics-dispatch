@@ -131,7 +131,8 @@ describe('DispatchApiService', () => {
     service.getDriverCases().subscribe();
     service.getDriverCases('CLOSED').subscribe();
     service.acceptDriverCase(12).subscribe();
-    service.closeDriverCase(12, '已派人支援').subscribe();
+    service.getDriverCaseUnfinishedOrders(12).subscribe();
+    service.closeDriverCase(12, '已派人支援', [41]).subscribe();
     service.getDriverCaseMessages(12).subscribe();
     service.getDriverCaseMessages(12, 30).subscribe();
     service.sendDriverCaseMessage(12, '收到').subscribe();
@@ -151,9 +152,12 @@ describe('DispatchApiService', () => {
     const accept = httpTesting.expectOne('/api/exceptions/driver-cases/12/accept');
     expect(accept.request.method).toBe('PATCH');
     accept.flush({ id: 12 });
+    const unfinished = httpTesting.expectOne('/api/exceptions/driver-cases/12/unfinished-orders');
+    expect(unfinished.request.method).toBe('GET');
+    unfinished.flush({ routeDate: null, mustResolveAll: false, orders: [] });
     const close = httpTesting.expectOne('/api/exceptions/driver-cases/12/close');
     expect(close.request.method).toBe('PATCH');
-    expect(close.request.body).toEqual({ resolution: '已派人支援' });
+    expect(close.request.body).toEqual({ resolution: '已派人支援', redeliverOrderIds: [41] });
     close.flush({ id: 12 });
 
     const messages = httpTesting.expectOne(

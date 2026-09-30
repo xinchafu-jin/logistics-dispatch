@@ -366,6 +366,52 @@
           (input)="updateCloseResolution($event)"
         ></textarea>
       </mat-form-field>
+      <section class="close-case-orders" aria-label="路線上還沒結束的單">
+        @switch (closeOrdersState()) {
+          @case ('loading') {
+            <p class="close-case-orders-hint">讀取路線上的訂單...</p>
+          }
+          @case ('error') {
+            <p class="ui-alert is-danger" role="alert">讀不到路線上的訂單，請關閉視窗後再試一次。</p>
+          }
+          @case ('ready') {
+            @if (closeOrders(); as orders) {
+              @if (orders.orders.length === 0) {
+                <p class="close-case-orders-hint">路線上沒有還沒結束的單，不用處理訂單。</p>
+              } @else {
+                <p class="close-case-orders-hint">
+                  勾選的單會改成配送失敗，並開一張補送單排到下一個還沒發布的日子。
+                  @if (orders.mustResolveAll) {
+                    路線日期（{{ orders.routeDate }}）已過，要全部改期補送才能結案。
+                  } @else {
+                    沒勾的單留在路線上，由司機繼續送。
+                  }
+                </p>
+                <ul>
+                  @for (order of orders.orders; track order.id) {
+                    <li>
+                      <label>
+                        <input
+                          type="checkbox"
+                          [checked]="redeliverOrderIds().has(order.id)"
+                          [disabled]="caseAction() === 'close'"
+                          (change)="toggleRedeliverOrder(order.id, $event)"
+                        />
+                        <span class="order-number">{{ order.orderNumber }}</span>
+                        <span>{{ order.storeName ?? '未知門市' }}</span>
+                        <span class="order-status">{{ closeOrderStatusLabel(order) }}</span>
+                      </label>
+                    </li>
+                  }
+                </ul>
+                @if (unresolvedOrderCount() > 0) {
+                  <p class="ui-alert is-danger" role="alert">還有 {{ unresolvedOrderCount() }} 張單沒勾，路線日期已過不能留單。</p>
+                }
+              }
+            }
+          }
+        }
+      </section>
       @if (closeError()) {
         <p class="ui-alert is-danger" role="alert">{{ closeError() }}</p>
       }
@@ -376,7 +422,8 @@
         type="button"
         class="ui-btn-primary"
         (click)="submitCloseCase()"
-        [disabled]="caseAction() === 'close' || !closeResolution().trim()"
+        [disabled]="caseAction() === 'close' || !closeResolution().trim()
+          || closeOrdersState() !== 'ready' || unresolvedOrderCount() > 0"
       >
         {{ caseAction() === 'close' ? '結案中...' : '確認結案' }}
       </button>

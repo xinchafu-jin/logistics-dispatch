@@ -214,7 +214,12 @@ public class DeliveryExceptionService {
         exceptionCasesDAO.saveAll(dueCases);
     }
 
-    private LocalDate nextDispatchDate(OrdersEntity order, LocalDate today) {
+    /**
+     * 補送單的配送日期：從今天（原單日期還沒到就用原單日期）開始，跳過這個倉庫已經發布路線的日子。
+     * 已發布的日子司機已經拿到任務，塞新單進去不會出現在任何人的路線上。
+     * 司機回報結案改期補送（DriverCaseService）也用這個規則。
+     */
+    LocalDate nextDispatchDate(OrdersEntity order, LocalDate today) {
         LocalDate candidate = order.getDeliveryDate().isBefore(today)
                 ? today
                 : order.getDeliveryDate();

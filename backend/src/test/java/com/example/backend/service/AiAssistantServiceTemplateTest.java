@@ -62,7 +62,8 @@ class AiAssistantServiceTemplateTest {
         when(templatesService.findAll()).thenReturn(List.of(template));
 
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                null, driversService, warehousesService, templatesService, vehiclesService);
+                null, driversService, warehousesService, templatesService, vehiclesService,
+                null, null, null, null, null);
     }
 
     @Test

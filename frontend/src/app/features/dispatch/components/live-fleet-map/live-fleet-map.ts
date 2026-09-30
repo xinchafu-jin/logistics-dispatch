@@ -140,7 +140,10 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
 
     await this.loadMapLibreStyles();
     const maplibregl = await import('maplibre-gl');
-    maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+    // 資料夾是 maplibre-v2 不是 maplibre：2026-09-29 以前 Nginx 把 .mjs 送成 application/octet-stream，
+    // 看過那時候網站的瀏覽器快取了錯誤的 worker，地圖會一直空白。換資料夾名稱讓網址變新，
+    // worker 裡用相對路徑載入的 maplibre-gl-shared.mjs 也一起換掉（只加 ?v= 管不到它）。
+    maplibregl.setWorkerUrl('/maplibre-v2/maplibre-gl-worker.mjs');
     this.maplibre = maplibregl;
     this.map = new maplibregl.Map({
       container: canvas,
@@ -177,7 +180,7 @@ export class LiveFleetMap implements AfterViewInit, OnDestroy {
     return new Promise((resolve, reject) => {
       const link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = '/maplibre/maplibre-gl.css';
+      link.href = '/maplibre-v2/maplibre-gl.css';
       link.dataset['maplibreStyle'] = '';
       link.onload = () => resolve();
       link.onerror = () => reject(new Error('MapLibre 樣式載入失敗'));

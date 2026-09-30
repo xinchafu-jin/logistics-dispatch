@@ -1,15 +1,23 @@
 package com.example.backend.service;
 
 import com.example.backend.constants.AiActionType;
+import com.example.backend.constants.ExceptionStatus;
 import com.example.backend.constants.OrderStatus;
 import com.example.backend.constants.RouteStatus;
 import com.example.backend.constants.ShiftType;
+import com.example.backend.constants.VehicleStatus;
 import com.example.backend.dispatch.OsrmRouteResponse;
 import com.example.backend.dto.request.*;
+import com.example.backend.dto.respones.DispatchDayResponse;
 import com.example.backend.dto.respones.DispatchResponse;
 import com.example.backend.dto.respones.DriverAvailabilityResponse;
+import com.example.backend.dto.respones.DriverLeaveResponse;
+import com.example.backend.dto.respones.ExceptionCaseResponse;
 import com.example.backend.dto.respones.PendingActionResponse;
+import com.example.backend.dto.respones.ReportResponses;
+import com.example.backend.dto.respones.RouteDeviationResponse;
 import com.example.backend.dto.respones.TemplatesDTO;
+import com.example.backend.dto.respones.VehicleMaintenanceSummaryResponse;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -48,6 +56,11 @@ public class AiAssistantService {
     private final WarehousesService warehousesService;
     private final TemplatesService templatesService;
     private final VehiclesService vehiclesService;
+    private final DriverLeaveRequestService driverLeaveRequestService;
+    private final DeliveryExceptionService deliveryExceptionService;
+    private final GpsPingsService gpsPingsService;
+    private final RouteDeviationService routeDeviationService;
+    private final ReportService reportService;
 
 
     public AiAssistantService(
@@ -61,7 +74,12 @@ public class AiAssistantService {
             DriversService driversService,
             WarehousesService warehousesService,
             TemplatesService templatesService,
-            VehiclesService vehiclesService) {
+            VehiclesService vehiclesService,
+            DriverLeaveRequestService driverLeaveRequestService,
+            DeliveryExceptionService deliveryExceptionService,
+            GpsPingsService gpsPingsService,
+            RouteDeviationService routeDeviationService,
+            ReportService reportService) {
         this.ordersService = ordersService;
         this.driverScheduleService = driverScheduleService;
         this.dispatchWorkflowService = dispatchWorkflowService;
@@ -69,6 +87,11 @@ public class AiAssistantService {
         this.warehousesService = warehousesService;
         this.templatesService = templatesService;
         this.vehiclesService = vehiclesService;
+        this.driverLeaveRequestService = driverLeaveRequestService;
+        this.deliveryExceptionService = deliveryExceptionService;
+        this.gpsPingsService = gpsPingsService;
+        this.routeDeviationService = routeDeviationService;
+        this.reportService = reportService;
         this.openAiChatModel = openAiChatModel;
         this.adminUsersService = adminUsersService;
         this.baseUrl = baseUrl;
@@ -131,7 +154,13 @@ public class AiAssistantService {
                         "▎ 待執行清單的內容一律以 listPendingActions 查詢結果為準,不可依照對話記憶推測。使用者要求加入動作時,一律呼叫對應工具,不要因為「記得加過」而跳過。" +
                         "▎ 使用者指定某天用某個編組時，先用 listTemplates 確認編組名稱，再對每一天各呼叫一次 applyTemplate。" +
                         "一次講好幾天但有某天沒說用哪個編組時，要先問清楚，不可自己挑。" +
-                        "applyTemplate 會直接改掉那天的草稿，套用後先用 getDispatchBoard 看結果，再提出換人、移單、發布等動作。")
+                        "applyTemplate 會直接改掉那天的草稿，套用後先用 getDispatchBoard 看結果，再提出換人、移單、發布等動作。" +
+                        "▎ 已發布的日子要修改時，先用 proposeWithdraw 把撤回加入清單。取消司機可以跟撤回放在同一份清單一起確認；" +
+                        "applyTemplate、optimizeRoutes 是直接寫入，要等調度員確認撤回後才能做，這時請調度員先按確認，不要重複嘗試。" +
+                        "▎ 問到一段日期的排班狀況（哪幾天還沒排、還沒發布）用 getDispatchDays，不要逐日逐倉查看板。" +
+                        "▎ 請假審核、例外案件結案、車輛送保養你只能查不能改，調度員要處理時請他到對應的頁面操作。" +
+                        // 前端會把回覆當 Markdown 轉成 HTML；聊天面板很窄，標題太大、程式碼區塊會出現橫向捲軸
+                        "▎ 回覆格式：可以用條列、粗體和表格，不要用標題（#）和程式碼區塊。表格最多四欄，欄位多就改用條列。")
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .defaultTools(this)
                 .build();
@@ -202,9 +231,12 @@ public class AiAssistantService {
         List<PendingActionResponse> reassignActions = new ArrayList<>();
         Map<String, List<PendingActionResponse>> groups = new LinkedHashMap<>();
         Set<LocalDate> publishDates = new LinkedHashSet<>();
+        Set<LocalDate> withdrawDates = new LinkedHashSet<>();
         for (PendingActionResponse action : actions) {
             if (action.getType() == AiActionType.PUBLISH_DAY) {
                 publishDates.add(action.getDate());
+            } else if (action.getType() == AiActionType.WITHDRAW_DAY) {
+                withdrawDates.add(action.getDate());
             } else {
                 reassignActions.add(action);
             }
@@ -235,6 +267,12 @@ public class AiAssistantService {
                 apply(dto, action);
             }
             waiting.add(new PreparedReassign(dto, heldDriverIds(board)));
+        }
+
+        // 撤回不管加入順序，一律排在改派之前：reassign 遇到已發布的路線會整個擋下。
+        // 放在第一輪之後，過期的動作會先被 apply 擋掉，不會白撤回一次
+        for (LocalDate date : withdrawDates) {
+            results.addAll(dispatchWorkflowService.withdraw(date));
         }
 
         // 第二輪：每次挑一組「要用的司機沒被其他還沒送的組佔著」的先送。
@@ -637,6 +675,118 @@ public class AiAssistantService {
         return addPublishAction(conversationId, date);
     }
 
+    @Tool(description = "撤回某一天的發布，讓排班變回草稿才能修改。撤回範圍是當天全部倉庫，不能只撤回單一倉庫；"
+            + "撤回後司機手機上當天的任務會消失，已做的出車前安全檢查作廢。已有訂單點交或開始配送的日子不能撤回。"
+            + "此動作不會立即執行，只會加入待執行清單；確認時一律先撤回、再改派、最後發布")
+    String proposeWithdraw(
+            @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
+            ToolContext toolContext
+    ) {
+        String conversationId = (String) toolContext.getContext().get("conversationId");
+        return addWithdrawAction(conversationId, date);
+    }
+
+    @Tool(description = "查詢一段日期每天的排班概況（全部倉庫合計）：狀態、是否已發布、訂單數、待確認數、未排入路線數、已結束數。"
+            + "狀態：EMPTY 沒單、UNPLANNED 有單沒路線、DRAFT 有草稿沒發布、PUBLISHED 已發布、IN_PROGRESS 配送中、"
+            + "CLOSED 全部結束、UNRESOLVED 日期已過還有單沒結束。開始日之前還沒結案的日子也會一併列出。一次最多 31 天")
+    List<DispatchDayResponse> getDispatchDays(
+            @ToolParam(description = "開始日期，格式 yyyy-MM-dd") String from,
+            @ToolParam(description = "結束日期（含），格式 yyyy-MM-dd") String to) {
+        return dispatchWorkflowService.getDays(LocalDate.parse(from), LocalDate.parse(to));
+    }
+
+    @Tool(description = "自動排車：用 OR-Tools 把某天某倉已確認的訂單重新排成路線，車輛與司機由系統依訂單量和當天班表挑選，"
+            + "等同派車看板的自動排車。直接寫成那天那個倉的草稿（會取代原本的草稿），不會發布，司機也看不到。"
+            + "已發布的日子會被擋下，要先撤回並由調度員確認。要指定人車時改用 applyTemplate")
+    String optimizeRoutes(
+            @ToolParam(description = "配送日期，格式 yyyy-MM-dd") String date,
+            @ToolParam(description = "倉庫名稱，必須是 listWarehouses 回傳的完整名稱") String warehouseName,
+            ToolContext toolContext) {
+        String conversationId = (String) toolContext.getContext().get("conversationId");
+        return optimizeRoutesOn(conversationId, LocalDate.parse(date), warehouseName);
+    }
+
+    @Tool(description = "查詢等待主管審核的請假單：司機、日期、全天或時段、假別、事由。"
+            + "假別：SICK 病假、PERSONAL 事假、ANNUAL 特休、SPECIAL 公假、BEREAVEMENT 喪假、MENSTRUAL 生理假、ABSENT 曠職。"
+            + "申請方式：PREPLANNED 預排、TEMPORARY 臨時、MAKEUP 事後補請、SYSTEM_NO_SHOW 系統判定未到、ADMIN_PLANNED_PARTIAL 主管代排時段假。"
+            + "只能查詢，核准或駁回要到班表頁操作")
+    List<String> listPendingLeaveRequests() {
+        List<String> lines = new ArrayList<>();
+        for (DriverLeaveResponse leave : driverLeaveRequestService.findPending()) {
+            lines.add(leaveLine(leave));
+        }
+        return lines;
+    }
+
+    @Tool(description = "查詢尚未結案的配送例外案件：類型、來源訂單、短少與損毀箱數、補送單與補送日期。"
+            + "類型：NO_SIGNATURE 無人簽收、SHORTAGE 短少、DAMAGE 損毀、SHORTAGE_AND_DAMAGE 短少加損毀、"
+            + "DRIVER_REPORT 司機回報、PHONE_HANDLED 電話處理補登、LOADING_MISMATCH 倉庫點交箱數不符。"
+            + "只能查詢，確認或結案要到例外中心操作")
+    List<String> listOpenExceptions() {
+        List<String> lines = new ArrayList<>();
+        for (ExceptionCaseResponse item : deliveryExceptionService.findAll(ExceptionStatus.OPEN, null)) {
+            lines.add(exceptionLine(item));
+        }
+        return lines;
+    }
+
+    @Tool(description = "查詢每台車的保養狀況：車輛狀態、目前行車紀錄器里程、離小保／大保／退役還剩幾公里（負數代表已超過）、需要注意的原因。"
+            + "車輛狀態：AVAILABLE 可用、MAINTENANCE 維修中、MINOR_MAINTENANCE 小保中、MAJOR_MAINTENANCE 大保中。"
+            + "判定：BLOCKED 不能出車、WARNING 快到了、UNKNOWN 資料不齊、NORMAL 正常。已退役的車不列出")
+    List<String> listVehicleMaintenance() {
+        Map<Long, String> warehouseNames = new HashMap<>();
+        for (WarehousesDTO warehouse : warehousesService.findAll()) {
+            warehouseNames.put(warehouse.getId(), warehouse.getName());
+        }
+        List<String> lines = new ArrayList<>();
+        for (VehiclesDTO vehicle : vehiclesService.findAll()) {
+            if (vehicle.getStatus() == VehicleStatus.RETIRED) {
+                continue;
+            }
+            lines.add(maintenanceLine(vehicle, warehouseNames.get(vehicle.getWarehouseId())));
+        }
+        return lines;
+    }
+
+    @Tool(description = "查詢車隊即時狀況：目前出勤中且 GPS 有回報的司機（最後回報時間與經緯度），"
+            + "以及進行中的偏離預定路線警報（誰、幾點開始、當時偏離幾公尺、是否已升級）。"
+            + "只有經緯度、沒有地址，不要自己猜地名；要看位置請調度員開車隊地圖")
+    List<String> getFleetLive() {
+        Map<Long, String> driverNames = new HashMap<>();
+        for (DriversDTO driver : driversService.findAll()) {
+            driverNames.put(driver.getId(), driver.getName());
+        }
+        List<String> lines = new ArrayList<>();
+        List<GpsPingDTO> positions = gpsPingsService.findLatestFleetPositions();
+        lines.add("出勤中且有位置回報的司機 " + positions.size() + " 位");
+        for (GpsPingDTO ping : positions) {
+            lines.add(driverNames.get(ping.getDriverId()) + "：" + ping.getTimestamp().toLocalTime().withNano(0)
+                    + " 回報，位置 " + ping.getLat() + "," + ping.getLng());
+        }
+        List<RouteDeviationResponse> deviations = routeDeviationService.findActive();
+        lines.add("進行中的偏離路線警報 " + deviations.size() + " 筆");
+        for (RouteDeviationResponse deviation : deviations) {
+            lines.add(deviationLine(deviation, driverNames.get(deviation.getDriverId())));
+        }
+        return lines;
+    }
+
+    @Tool(description = "查詢一段日期的營運摘要：訂單總數與各狀態數量、箱數、門市數、已發布路線數、出車司機與車輛數、完成率。"
+            + "一次最多查一年")
+    List<String> getReportSummary(
+            @ToolParam(description = "開始日期，格式 yyyy-MM-dd") String from,
+            @ToolParam(description = "結束日期（含），格式 yyyy-MM-dd") String to,
+            @ToolParam(description = "倉庫名稱，必須是 listWarehouses 回傳的完整名稱；不填就是全部倉庫", required = false)
+            String warehouseName) {
+        Long warehouseId = null;
+        if (warehouseName != null && !warehouseName.isBlank()) {
+            warehouseId = findWarehouseIdByName(warehouseName);
+        }
+        ReportService.Range range = new ReportService.Range(LocalDate.parse(from), LocalDate.parse(to));
+        // 第三個參數是車輛篩選，null 代表不限車輛
+        return summaryLines(reportService.summaryForVehicles(range, warehouseId, null), warehouseName);
+    }
+
     @Tool(description = "取消某天某條路線的司機" +
             "，路線與訂單保留、改為未指派。" +
             "用在司機不能出車，或要調去別條路線而原路線暫時沒人接手時。" +
@@ -660,7 +810,7 @@ public class AiAssistantService {
         LocalDate deliveryDate = LocalDate.parse(date);
         Long warehouseId = findWarehouseIdByName(warehouseName);
         DispatchResponse board = dispatchWorkflowService.getBoard(deliveryDate, warehouseId);
-        ensureNotPublished(board);
+        ensureNotPublished(conversationId, board);
         // 找不到車牌時 findRouteByPlate 自己會丟例外，走到下一行 route 一定不是 null
         DispatchResponse.RouteResponse route = findRouteByPlate(board, plateNumber);
         // 放在「本來就沒有司機」前面：車上沒司機、但清單裡有一筆指派給這台車時，
@@ -698,6 +848,182 @@ public class AiAssistantService {
         List<PendingActionResponse> plan = addToPlan(conversationId, pendingActionResponse);
         return "已加入待執行清單：" + pendingActionResponse.getSummary()
                 + "。目前清單共 " + plan.size() + " 項，尚未執行，在畫面上確認後才會生效。";
+    }
+
+    private String addWithdrawAction(String conversationId, String date) {
+        LocalDate deliveryDate = LocalDate.parse(date);
+        if (hasPendingWithdraw(conversationId, deliveryDate)) {
+            throw new IllegalArgumentException(date + " 的撤回已經在待執行清單裡");
+        }
+        if (!isPublished(deliveryDate)) {
+            throw new IllegalArgumentException(date + " 沒有已發布的排班，不需要撤回");
+        }
+        // 已有單點交或開始配送就當場擋，訊息直接回給 AI
+        dispatchWorkflowService.assertCanWithdraw(deliveryDate);
+
+        PendingActionResponse action = new PendingActionResponse();
+        action.setType(AiActionType.WITHDRAW_DAY);
+        action.setDate(deliveryDate);
+        // 後果寫進 summary：確認視窗顯示的是這段，調度員按下去之前要看得到
+        action.setSummary("撤回 " + date + " 全部倉庫的發布（司機手機上的任務會消失，已做的出車前檢查作廢）");
+
+        List<PendingActionResponse> plan = addToPlan(conversationId, action);
+        return "已加入待執行清單：" + action.getSummary()
+                + "。目前清單共 " + plan.size() + " 項，尚未執行，在畫面上確認後才會生效。";
+    }
+
+    /**
+     * 自動排車跟套用編組一樣不走待執行清單：只動草稿、對司機沒有影響。
+     * 格子給空的，車輛與司機交給 optimizeSlots 自己挑，跟看板上不填格子直接按自動排車是同一條路。
+     */
+    private String optimizeRoutesOn(String conversationId, LocalDate date, String warehouseName) {
+        if (date.isBefore(LocalDate.now(TAIPEI))) {
+            throw new IllegalArgumentException("不能重排已經過去的日期：" + date);
+        }
+        Long warehouseId = findWarehouseIdByName(warehouseName);
+        // 清單裡這個倉那天的動作是照舊路線提出的，重排後就對不上了；發布、撤回不指到特定路線，不受影響
+        for (PendingActionResponse action : getPlan(conversationId)) {
+            if (date.equals(action.getDate()) && warehouseId.equals(action.getWarehouseId())) {
+                throw new IllegalArgumentException(date + " " + warehouseName + " 還有待確認的動作（"
+                        + action.getSummary() + "），請先在畫面上確認或刪除，再自動排車");
+            }
+        }
+
+        OptimizeSlotsDTO dto = new OptimizeSlotsDTO();
+        dto.setDate(date);
+        dto.setWarehouseId(warehouseId);
+        dto.setSlots(new ArrayList<>());
+        DispatchResponse board = dispatchWorkflowService.optimizeSlots(dto);
+
+        return "已重排 " + date + " 的路線，寫成草稿，尚未發布：\n" + boardSummary(board);
+    }
+
+    /** 當天只要有一條路線已發布就算；看的是全部倉庫，跟撤回的範圍一致 */
+    private boolean isPublished(LocalDate date) {
+        // getDays 會多帶開始日之前還沒結案的日子，所以要比日期
+        for (DispatchDayResponse day : dispatchWorkflowService.getDays(date, date)) {
+            if (date.equals(day.getDate())) {
+                return day.isPublished();
+            }
+        }
+        return false;
+    }
+
+    private boolean hasPendingWithdraw(String conversationId, LocalDate date) {
+        for (PendingActionResponse action : getPlan(conversationId)) {
+            if (action.getType() == AiActionType.WITHDRAW_DAY && date.equals(action.getDate())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** 一個倉排完後的一行摘要：幾條路線、幾張單沒排進去、排車時的提醒 */
+    private String boardSummary(DispatchResponse board) {
+        String line = board.getWarehouse().getName() + " 排出 " + board.getRoutes().size() + " 條路線";
+        if (!board.getUnassignedOrders().isEmpty()) {
+            line += "，" + board.getUnassignedOrders().size() + " 張單排不下留在待排單";
+        }
+        if (!board.getPendingConfirmOrders().isEmpty()) {
+            line += "，" + board.getPendingConfirmOrders().size() + " 張單還沒確認所以沒排";
+        }
+        if (!board.getNotices().isEmpty()) {
+            line += "。提醒：" + String.join("；", board.getNotices());
+        }
+        return line;
+    }
+
+    /** 一張請假單一行；照片網址、審核欄位對 AI 沒用，不帶 */
+    private String leaveLine(DriverLeaveResponse leave) {
+        String when;
+        if (leave.fullDay()) {
+            when = "全天";
+        } else {
+            when = leave.leaveStart() + "～" + leave.leaveEnd();
+        }
+        String line = leave.driverName() + " " + leave.workDate() + " " + when
+                + "，假別 " + leave.leaveType() + "，申請方式 " + leave.requestMode();
+        if (leave.requestReason() != null && !leave.requestReason().isBlank()) {
+            line += "，事由：" + leave.requestReason();
+        }
+        return line + "（" + leave.requestedAt().toLocalDate() + " 送出）";
+    }
+
+    private String exceptionLine(ExceptionCaseResponse item) {
+        String line = "案件 " + item.getId() + " " + item.getType() + "，訂單 " + item.getSourceOrderNumber();
+        if (item.getShortageBoxCount() != null && item.getShortageBoxCount() > 0) {
+            line += "，短少 " + item.getShortageBoxCount() + " 箱";
+        }
+        if (item.getDamagedBoxCount() != null && item.getDamagedBoxCount() > 0) {
+            line += "，損毀 " + item.getDamagedBoxCount() + " 箱";
+        }
+        if (item.getFollowUpOrderNumber() != null) {
+            line += "，補送單 " + item.getFollowUpOrderNumber() + "（" + item.getFollowUpDeliveryDate()
+                    + "，" + item.getFollowUpOrderStatus() + "）";
+        }
+        if (item.getDescription() != null && !item.getDescription().isBlank()) {
+            line += "，說明：" + item.getDescription();
+        }
+        // queuedAt 有值代表已過隔日 06:00、進了確認區，主管現在就能處理
+        line += item.getQueuedAt() == null ? "；尚未進入確認區" : "；已在確認區等主管確認";
+        return line + "（" + item.getCreatedAt().toLocalDate() + " 建立）";
+    }
+
+    private String maintenanceLine(VehiclesDTO vehicle, String warehouseName) {
+        VehicleMaintenanceSummaryResponse maintenance = vehicle.getMaintenance();
+        String line = vehicle.getPlateNumber() + "（" + warehouseName + "）狀態 " + vehicle.getStatus()
+                + "，里程 " + kmText(maintenance.getCurrentOdometerKm())
+                + "，小保剩 " + kmText(maintenance.getMinorRemainingKm())
+                + "，大保剩 " + kmText(maintenance.getMajorRemainingKm())
+                + "，退役剩 " + kmText(maintenance.getRetirementRemainingKm())
+                + "，判定 " + maintenance.getDecision();
+        if (!maintenance.getReasons().isEmpty()) {
+            line += "：" + String.join("；", maintenance.getReasons());
+        }
+        return line;
+    }
+
+    /** 沒設定間隔或沒有里程時是 null，講「未知」比印出 null 清楚 */
+    private String kmText(Integer km) {
+        if (km == null) {
+            return "未知";
+        }
+        return km + " km";
+    }
+
+    private String deviationLine(RouteDeviationResponse deviation, String driverName) {
+        String line = driverName + "：" + deviation.getStartedAt().toLocalTime().withNano(0) + " 開始偏離";
+        if (deviation.getStartDistanceMeters() != null) {
+            line += "，當時離預定路線 " + Math.round(deviation.getStartDistanceMeters()) + " 公尺";
+        }
+        if (deviation.getEscalatedAt() != null) {
+            line += "，已升級警報";
+        }
+        return line;
+    }
+
+    /** 每日趨勢不帶：查一年就是 366 筆，AI 要逐日數字時改查較短的區間 */
+    private List<String> summaryLines(ReportResponses.Summary summary, String warehouseName) {
+        String scope = warehouseName == null || warehouseName.isBlank() ? "全部倉庫" : warehouseName;
+        List<String> lines = new ArrayList<>();
+        lines.add(summary.getFrom() + " ～ " + summary.getTo() + " " + scope);
+        lines.add("訂單 " + summary.getTotalOrders() + " 張、" + summary.getTotalBoxes() + " 箱、"
+                + summary.getDistinctStores() + " 間門市");
+        lines.add("待確認 " + summary.getPendingConfirmationOrders()
+                + "、已確認未排 " + summary.getConfirmedUnassignedOrders()
+                + "、已排入路線 " + summary.getAssignedOrders()
+                + "、配送中 " + summary.getInDeliveryOrders()
+                + "、完成 " + summary.getCompletedOrders()
+                + "、失敗 " + summary.getFailedOrders()
+                + "、取消 " + summary.getCancelledOrders());
+        lines.add("已發布路線 " + summary.getPublishedRoutes() + " 條、出車司機 " + summary.getDispatchedDrivers()
+                + " 位、出車車輛 " + summary.getDispatchedVehicles() + " 台");
+        if (summary.getCompletionRatePercent() == null) {
+            lines.add("完成率：這段期間沒有可計算的訂單");
+        } else {
+            lines.add("完成率 " + summary.getCompletionRatePercent() + "%（" + summary.getCompletionRateDefinition() + "）");
+        }
+        return lines;
     }
 
     private String addAssignDriverAction(String conversationId, String date, String warehouseName, String
@@ -747,17 +1073,7 @@ public class AiAssistantService {
         List<String> lines = new ArrayList<>();
         lines.add("已把「" + template.getName() + "」套用到 " + date + "，寫成草稿，尚未發布：");
         for (DispatchResponse board : boards) {
-            String line = board.getWarehouse().getName() + " 排出 " + board.getRoutes().size() + " 條路線";
-            if (!board.getUnassignedOrders().isEmpty()) {
-                line += "，" + board.getUnassignedOrders().size() + " 張單排不下留在待排單";
-            }
-            if (!board.getPendingConfirmOrders().isEmpty()) {
-                line += "，" + board.getPendingConfirmOrders().size() + " 張單還沒確認所以沒排";
-            }
-            if (!board.getNotices().isEmpty()) {
-                line += "。提醒：" + String.join("；", board.getNotices());
-            }
-            lines.add(line);
+            lines.add(boardSummary(board));
         }
         return String.join("\n", lines);
     }
@@ -931,12 +1247,17 @@ public class AiAssistantService {
      * <p>看整個看板而不是只看要改的那條：確認時 reassign 會先經過 DispatchGuardService.assertCanReplan，
      * 該倉當天只要有一條已發布就整個擋下。在加入清單當下擋，
      * 調度員才不會排完好幾項、按確認才被整批打回。</p>
+     *
+     * <p>清單裡已經有那天的撤回就放行：確認時撤回排在改派之前，輪到這個動作時路線已經是草稿。</p>
      */
-    private void ensureNotPublished(DispatchResponse board) {
+    private void ensureNotPublished(String conversationId, DispatchResponse board) {
+        if (hasPendingWithdraw(conversationId, board.getDate())) {
+            return;
+        }
         for (DispatchResponse.RouteResponse route : board.getRoutes()) {
             if (route.getStatus() == RouteStatus.PUBLISHED) {
                 throw new IllegalArgumentException(board.getDate() + " " + board.getWarehouse().getName()
-                        + " 的排班已發布，要修改請先到派車看板撤回");
+                        + " 的排班已發布，要修改請先撤回（proposeWithdraw 或到派車看板）");
             }
         }
     }

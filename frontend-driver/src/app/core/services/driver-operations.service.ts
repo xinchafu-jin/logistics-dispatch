@@ -20,6 +20,7 @@ import {
   DriverProfileDto,
   DriverTasksResponse,
   DriverShiftDto,
+  DriverAssignmentDto,
   GpsPingRequest,
   GpsRouteRequest,
   GpsRouteResponse,
@@ -73,6 +74,12 @@ export class DriverOperationsService {
   getPublishedShifts(from: string, to: string): Observable<DriverShiftDto[]> {
     const params = new HttpParams().set('from', from).set('to', to);
     return this.http.get<DriverShiftDto[]>('/api/driver/shifts', {params});
+  }
+
+  /** 期間內已發布給自己的路線：那天在哪個倉庫、開哪台車（草稿不會回） */
+  getAssignments(from: string, to: string): Observable<DriverAssignmentDto[]> {
+    const params = new HttpParams().set('from', from).set('to', to);
+    return this.http.get<DriverAssignmentDto[]>('/api/driver/assignments', {params});
   }
 
   getTodayTasks(): Observable<DriverTasksResponse> {

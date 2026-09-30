@@ -443,6 +443,30 @@ class DeliveryServiceTest {
         assertTrue(response.getFollowUpOrderNumber().startsWith("NS-"), response.getFollowUpOrderNumber());
     }
 
+    @Test
+    void 司機回報結案改期_原單FAILED_補送單DR開頭直接進待排車_抵達紀錄補上處理時間() {
+        order.setStatus(OrderStatus.IN_DELIVERY);
+        DeliveryRecordsEntity inProgress = new DeliveryRecordsEntity();
+        inProgress.setId(80L);
+        inProgress.setOrderId(ORDER_ID);
+        inProgress.setArrivedAt(LocalDateTime.now(TAIPEI).minusMinutes(5));
+        inProgress.setNoSignature(false);
+        when(deliveryRecordsDAO.findFirstByOrderIdOrderByIdDesc(ORDER_ID)).thenReturn(Optional.of(inProgress));
+        LocalDate tomorrow = LocalDate.now(TAIPEI).plusDays(1);
+        LocalDateTime now = LocalDateTime.now(TAIPEI);
+
+        OrdersEntity followUp = service.redeliverAfterDriverReport(order, tomorrow, now);
+
+        assertEquals(OrderStatus.FAILED, order.getStatus());
+        assertEquals(OrderStatus.CONFIRMED, followUp.getStatus(), "主管結案時已決定補送，不再走待確認");
+        assertEquals(OrderType.REDELIVERY, followUp.getOrderType());
+        assertEquals(ORDER_ID, followUp.getParentOrderId());
+        assertEquals(tomorrow, followUp.getDeliveryDate());
+        assertTrue(followUp.getOrderNumber().startsWith("DR-"), followUp.getOrderNumber());
+        assertEquals(now, inProgress.getHandledAt());
+        assertNull(inProgress.getDeliveredAt(), "沒有送達，不能被報表算成已交貨");
+    }
+
     private void givenActiveDriver(long driverId) {
         DriversEntity driver = new DriversEntity();
         driver.setId(driverId);

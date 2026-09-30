@@ -178,6 +178,14 @@ public class DispatchWorkflowService {
         return dispatchBoardService.getBoards(date);
     }
 
+    /**
+     * 只檢查不撤回：AI 把撤回加入待執行清單時先問一次，已經有單開始配送就當場講，
+     * 不必等調度員按確認才被打回。有人已記出車里程要到真的撤回時（prepareWithdraw）才擋得到。
+     */
+    public void assertCanWithdraw(LocalDate date) {
+        dispatchGuardService.assertCanWithdraw(date);
+    }
+
     @Transactional
     public List<DispatchResponse> withdraw(LocalDate date) {
         dispatchGuardService.assertCanWithdraw(date);
