@@ -40,6 +40,7 @@ import {DriverCasesService, driverCaseCategoryLabel} from '../../../../core/serv
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
+import {shouldSubmitChatOnEnter} from './chat-enter';
 
 // case：已接收、還沒結案的司機回報，一件一串；對話仍屬於回報的司機，但跟一般對話分開
 type ChatContact =
@@ -894,6 +895,25 @@ export class DispatchShell implements OnInit {
   private isOpenCase(caseId: number): boolean {
     const contact = this.selectedChatContact();
     return contact.kind === 'case' && contact.caseId === caseId;
+  }
+
+  /** 三種聊天共用快捷鍵；只攔截真正要送出的 Enter，不影響換行或中文輸入法選字。 */
+  protected onChatKeydown(event: KeyboardEvent, kind: ChatContact['kind']): void {
+    if (!shouldSubmitChatOnEnter(event)) {
+      return;
+    }
+    event.preventDefault();
+    switch (kind) {
+      case 'ai':
+        this.chatSend();
+        break;
+      case 'driver':
+        this.sendDriverMessage();
+        break;
+      case 'case':
+        this.sendCaseMessage();
+        break;
+    }
   }
 
   protected chatSend(): void {

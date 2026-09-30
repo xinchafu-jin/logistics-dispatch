@@ -505,6 +505,7 @@
                       name="chatInput"
                       aria-label="輸入給 AI 調度助理的訊息"
                       [(ngModel)]="chatInput"
+                      (keydown)="onChatKeydown($event, 'ai')"
                     ></textarea>
                   </mat-form-field>
                   <!-- 等回覆中或只有空白時停用；只有圖示所以要 aria-label -->
@@ -555,6 +556,7 @@
                       name="driverChatInput"
                       [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
                       [(ngModel)]="driverChatInput"
+                      (keydown)="onChatKeydown($event, 'driver')"
                     ></textarea>
                   </mat-form-field>
                   <!-- 送出中或只有空白時停用；只有圖示所以要 aria-label -->
@@ -628,6 +630,7 @@
                         name="caseChatInput"
                         [attr.aria-label]="'輸入給 ' + contact.name + ' 的訊息'"
                         [(ngModel)]="caseChatInput"
+                        (keydown)="onChatKeydown($event, 'case')"
                       ></textarea>
                     </mat-form-field>
                     <button
