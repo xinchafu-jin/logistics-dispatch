@@ -1,6 +1,7 @@
 import {Component, DestroyRef, OnInit, TemplateRef, computed, effect, inject, signal, output, viewChild} from '@angular/core';
 import {DOCUMENT} from '@angular/common';
 import {HttpErrorResponse} from '@angular/common/http';
+import {marked} from 'marked';
 import {takeUntilDestroyed, toSignal} from '@angular/core/rxjs-interop';
 import {MatListModule} from '@angular/material/list';
 import {
@@ -39,6 +40,7 @@ import {DriverCasesService, driverCaseCategoryLabel} from '../../../../core/serv
 import {DriverChatSocketService} from '../../../../core/services/driver-chat-socket.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {FormsModule} from '@angular/forms';
+import {shouldSubmitChatOnEnter} from './chat-enter';
 
 // case：已接收、還沒結案的司機回報，一件一串；對話仍屬於回報的司機，但跟一般對話分開
 type ChatContact =
@@ -59,6 +61,9 @@ type StickyNoteDockSide = 'left' | 'right';
 interface ChatMessage {
   role: ChatMessageRole;
   text: string;
+  // 助理回覆的 Markdown 轉出來的 HTML；收到時算一次存起來，不在模板裡每次變更偵測都重轉。
+  // 調度員自己打的字沒有這個欄位，一律當純文字顯示
+  html?: string;
 }
 
 @Component({
@@ -114,8 +119,12 @@ export class DispatchShell implements OnInit {
   protected readonly chatOutput = signal<ChatMessage[]>([]);
   //聊天室輸入內容
   protected readonly chatInput = signal("");
-  //等待回復開關
-  protected readonly chatWaiting = false;
+  // 等 AI 回覆中：顯示「思考中」並鎖住送出鈕，模型加上工具呼叫常常要十幾秒，沒有提示會以為沒送出
+  protected readonly chatWaiting = signal(false);
+  // AI 對話與待執行清單的錯誤訊息，空字串代表沒有錯誤；確認被擋時後端會一次回好幾行
+  protected readonly aiChatError = signal('');
+  // 清單的刪除、清除、確認送出中：鎖住清單上的按鈕，避免連按確認把同一批動作送兩次
+  protected readonly aiPlanBusy = signal(false);
   // 任務開關
   readonly panelOpenState = signal(false);
   //司機訊息
@@ -888,27 +897,83 @@ export class DispatchShell implements OnInit {
     return contact.kind === 'case' && contact.caseId === caseId;
   }
 
+  /** 三種聊天共用快捷鍵；只攔截真正要送出的 Enter，不影響換行或中文輸入法選字。 */
+  protected onChatKeydown(event: KeyboardEvent, kind: ChatContact['kind']): void {
+    if (!shouldSubmitChatOnEnter(event)) {
+      return;
+    }
+    event.preventDefault();
+    switch (kind) {
+      case 'ai':
+        this.chatSend();
+        break;
+      case 'driver':
+        this.sendDriverMessage();
+        break;
+      case 'case':
+        this.sendCaseMessage();
+        break;
+    }
+  }
+
   protected chatSend(): void {
-    const message = this.chatInput();
+    const message = this.chatInput().trim();
+    // 空白不送；等回覆中再按一次直接忽略，不然後端會同時跑兩輪對話、記憶順序會亂
+    if (!message || this.chatWaiting()) {
+      return;
+    }
 
     this.chatOutput.update((messages) => [...messages, {role: 'user', text: message}]);
     this.chatInput.set('');
+    this.aiChatError.set('');
+    this.chatWaiting.set(true);
 
     this.api.chatWithAi(message).subscribe({
       next: (chat) => {
-        this.chatOutput.update((messages) => [...messages, {role: 'assistant', text: chat.reply}]);
+        this.chatWaiting.set(false);
+        this.chatOutput.update((messages) => [...messages, this.assistantMessage(chat.reply)]);
         // 回應帶的是整份清單（不是只有這次新增的），直接整包換掉；AI 回覆的文字不能當清單內容
         this.applyPlan(chat.pendingActions);
-      }
+      },
+      error: (error: HttpErrorResponse) => {
+        this.chatWaiting.set(false);
+        this.aiChatError.set(this.aiErrorMessage(error, 'AI 助理沒有回應，請稍後再試。'));
+        // 失敗前工具可能已經把動作加進清單，重讀一次才不會畫面跟後端對不上
+        this.loadPlan();
+      },
     });
   }
 
+  /**
+   * 助理的訊息：模型常回 Markdown（條列、粗體、表格），轉成 HTML 給模板用 [innerHTML] 顯示。
+   *
+   * 這裡只轉不消毒：[innerHTML] 綁定時 Angular 會自己拿掉 script、onclick 這類危險內容。
+   * 不可以改用 bypassSecurityTrustHtml，模型的輸出可能夾帶訂單備註等外部文字。
+   * breaks：模型習慣一行一件事、只換一次行，標準 Markdown 會把它們接成同一段。
+   */
+  private assistantMessage(text: string): ChatMessage {
+    const html = marked.parse(text, {async: false, gfm: true, breaks: true});
+    return {role: 'assistant', text, html};
+  }
 
+  /**
+   * 後端的錯誤格式是 ApiResponse.failure(message)，有訊息就直接顯示。
+   * status 0 是連不到後端或逾時，這時沒有 body，要另外講。
+   */
+  private aiErrorMessage(error: HttpErrorResponse, fallback: string): string {
+    if (error.status === 0) {
+      return '連不到伺服器，請確認網路後再試。';
+    }
+    return error.error?.message ?? fallback;
+  }
+
+  // 讀清單失敗不顯示錯誤：這是開面板、出錯後的背景同步，下一次操作會再讀
   private loadPlan(): void {
     this.api.getAiPlan().subscribe({
       next: (actions) => {
         this.applyPlan(actions);
-      }
+      },
+      error: () => {},
     })
 
   }
@@ -919,18 +984,39 @@ export class DispatchShell implements OnInit {
 
   // 刪除
   protected delAllPlan(): void {
+    if (this.aiPlanBusy()) {
+      return;
+    }
+    this.aiPlanBusy.set(true);
+    this.aiChatError.set('');
     this.api.clearAiPlan().subscribe({
       next: () => {
-        this.loadPlan();
-      }
+        this.aiPlanBusy.set(false);
+        this.applyPlan([]);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.aiPlanBusy.set(false);
+        this.aiChatError.set(this.aiErrorMessage(error, '清單沒有清除，請稍後再試。'));
+      },
     })
   }
 
   protected delPan(id: string): void {
+    if (this.aiPlanBusy()) {
+      return;
+    }
+    this.aiPlanBusy.set(true);
+    this.aiChatError.set('');
     this.api.removeAiPlanAction(id).subscribe({
-      next: (action) => {
-        this.loadPlan();
-      }
+      // 後端回的就是刪除後的整份清單，不必再查一次
+      next: (actions) => {
+        this.aiPlanBusy.set(false);
+        this.applyPlan(actions);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.aiPlanBusy.set(false);
+        this.aiChatError.set(this.aiErrorMessage(error, '項目沒有移除，請稍後再試。'));
+      },
     })
 
   }
@@ -939,14 +1025,24 @@ export class DispatchShell implements OnInit {
   protected openConfirmPlan(): void {
     this.dialog.open(this.confirmPlanDialog(), {panelClass: this.theme.dialogPanelClass()}).afterClosed().subscribe((ok) => {
       // 按取消是 false；點背景、按 Esc 是 undefined，只有按「執行」才是 true
-      if (!ok) {
+      if (!ok || this.aiPlanBusy()) {
         return;
       }
+      this.aiPlanBusy.set(true);
+      this.aiChatError.set('');
       this.api.confirmAiPlan().subscribe({
         next: () => {
+          this.aiPlanBusy.set(false);
           this.applyPlan([]);
+          this.chatOutput.update((messages) => [...messages, this.assistantMessage('已執行完成，待執行清單已清空。')]);
           // 看板在另一個元件，資料庫已經被 AI 改過，要它重讀，不然舊畫面一拖曳就會蓋回去
           this.boardEvents.notifyBoardChanged();
+        },
+        error: (error: HttpErrorResponse) => {
+          this.aiPlanBusy.set(false);
+          // 確認是整批交易，失敗就一筆都沒寫入；清單後端會留著，讓調度員照訊息調整後再按一次
+          this.aiChatError.set(this.aiErrorMessage(error, '執行失敗，沒有任何動作生效，請稍後再試。'));
+          this.loadPlan();
         },
       });
     });

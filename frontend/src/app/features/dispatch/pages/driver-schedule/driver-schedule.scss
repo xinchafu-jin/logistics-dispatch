@@ -2,14 +2,14 @@
 // 面板、表格、表單都用 styles.scss 的 .ui-*；這裡只放矩陣的格子、班別顏色與本頁版面
 :host { display: block; }
 
-.panel-note { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
+.panel-note { color: var(--muted); font-size: 0.875rem; font-weight: 400; }
 
 // ── 頂部列 ──
-.month-control { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem; }
+.month-control { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.875rem; }
 .month-field { width: 170px; }
 
 .schedule-stats {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 auto 0 0; font-size: 0.75rem;
+  display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 auto 0 0; font-size: 0.875rem;
   div { display: flex; gap: 4px; }
   dt { color: var(--muted); }
   dd { margin: 0; font-family: var(--font-mono); font-weight: 600; }
@@ -20,14 +20,14 @@
 
 .schedule-missing {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; padding: 16px;
-  h3 { margin: 0; font-size: 1rem; }
-  p { margin: 4px 0 0; color: var(--muted); font-size: 0.8125rem; }
+  h3 { margin: 0; font-size: 1.0625rem; }
+  p { margin: 4px 0 0; color: var(--muted); font-size: 0.9375rem; }
 }
 
 // ── 每週快速套用 ──
 .batch-selection-heading {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  span { margin-right: auto; color: var(--muted); font-size: 0.75rem; }
+  span { margin-right: auto; color: var(--muted); font-size: 0.875rem; }
 }
 
 .batch-driver-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -36,12 +36,12 @@
   padding: 4px 10px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
   &.is-selected { background: var(--accent-soft); border-color: var(--accent); }
   > span { display: grid; }
-  small { color: var(--muted); font-size: 0.6875rem; }
+  small { color: var(--muted); font-size: 0.75rem; }
 }
 
 .batch-weekdays,
 .batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.batch-actions > span { margin-right: auto; color: var(--muted); font-size: 0.75rem; }
+.batch-actions > span { margin-right: auto; color: var(--muted); font-size: 0.875rem; }
 
 // ── 月班表矩陣＋班次設定 ──
 .schedule-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; align-items: start; }
@@ -55,7 +55,7 @@
   td { position: relative; min-width: 58px; height: 54px; }
 
   // 欄頭日期固定在上、司機欄固定在左（捲動時不跟著跑）
-  thead th { position: sticky; top: 0; z-index: 2; min-width: 58px; padding: 6px 4px; font-size: 0.6875rem; }
+  thead th { position: sticky; top: 0; z-index: 2; min-width: 58px; padding: 6px 4px; font-size: 0.75rem; }
   thead th strong, thead th span { display: block; }
   thead th span { color: var(--muted); font-weight: 400; }
   thead th.is-sunday span { color: var(--danger); }
@@ -68,8 +68,8 @@
 
 .driver-name-trigger {
   display: grid; gap: 2px; width: 100%; padding: 0; color: inherit; background: none; border: 0; font: inherit; text-align: left; cursor: pointer;
-  strong { font-size: 0.8125rem; }
-  span { color: var(--muted); font-size: 0.6875rem; font-weight: 400; }
+  strong { font-size: 0.9375rem; }
+  span { color: var(--muted); font-size: 0.75rem; font-weight: 400; }
   &:hover strong { color: var(--accent); }
   &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
@@ -77,7 +77,7 @@
 // 班次按鈕：上班主色、休假灰、請假提醒色、未排定紅（發布前要排完）
 .shift-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 100%; height: 100%; min-height: 54px; padding: 4px;
-  color: var(--muted); background: transparent; border: 0; font: inherit; font-size: 0.6875rem; cursor: pointer;
+  color: var(--muted); background: transparent; border: 0; font: inherit; font-size: 0.75rem; cursor: pointer;
   &:hover { background: var(--row-hover); }
   &:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   &.is-selected { color: var(--text); background: var(--row-selected); box-shadow: inset 0 0 0 1px var(--accent); }
@@ -87,10 +87,7 @@
 }
 
 .shift-cell mat-icon,
-.fixed-holiday mat-icon { width: 18px; height: 18px; font-size: 18px; }
-
-.fixed-holiday { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 54px; color: var(--subtle); font-size: 0.6875rem; }
-.missing-shift { display: grid; min-height: 54px; place-items: center; color: var(--subtle); font-size: 0.75rem; }
+.missing-shift { display: grid; min-height: 54px; place-items: center; color: var(--subtle); font-size: 0.875rem; }
 
 // 已核准的預排請假：格子右上角的小標記
 .leave-cell-marker {
@@ -102,7 +99,7 @@
 // 滑過司機名字時的本月請假小視窗
 .driver-leave-tooltip {
   position: fixed; z-index: 100; display: grid; gap: 8px; width: min(320px, calc(100vw - 24px)); max-height: min(320px, calc(100vh - 24px));
-  overflow: auto; padding: 12px; font-size: 0.75rem; box-shadow: 0 6px 16px rgb(0 0 0 / 16%);
+  overflow: auto; padding: 12px; font-size: 0.875rem; box-shadow: 0 6px 16px rgb(0 0 0 / 16%);
   article { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--border); }
   small { color: var(--muted); }
 }
@@ -117,7 +114,7 @@
 
 .partial-leave-editor {
   display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 4px;
-  h4 { margin: 0; font-size: 0.8125rem; }
+  h4 { margin: 0; font-size: 0.9375rem; }
   p { margin: 0; }
   .ui-btn-default { justify-self: start; }
 }
@@ -125,7 +122,7 @@
 .editor-placeholder {
   display: grid; justify-items: center; gap: 6px;
   mat-icon { width: 28px; height: 28px; color: var(--subtle); font-size: 28px; }
-  h3 { margin: 0; color: var(--text); font-size: 0.875rem; }
+  h3 { margin: 0; color: var(--text); font-size: 1rem; }
   p { margin: 0; }
 }
 
@@ -134,15 +131,15 @@
 .review-table td { vertical-align: top; }
 
 .review-table {
-  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.75rem; }
+  td small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.875rem; }
   select.ui-input { min-width: 110px; }
   textarea.ui-input { width: 100%; min-width: 200px; min-height: 56px; }
 }
 
 .review-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-.review-error { display: block; margin-top: 4px; color: var(--danger); font-size: 0.75rem; }
+.review-error { display: block; margin-top: 4px; color: var(--danger); font-size: 0.875rem; }
 .history-row td { background: var(--surface); }
-.review-history p { margin: 0 0 4px; font-size: 0.75rem; }
+.review-history p { margin: 0 0 4px; font-size: 0.875rem; }
 
 @media (max-width: 1100px) {
   .schedule-workspace { grid-template-columns: minmax(0, 1fr); }

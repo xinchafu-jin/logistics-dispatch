@@ -170,6 +170,9 @@ public class DispatchService {
                 order.setRouteId(saveRoute.getId());
                 order.setSequence(sequence);
                 order.setAssignedVehicleId(vehicle.getId());
+                // 跟著路線寫司機，跟 reassign 一致；這台車沒對應司機時就是 null。
+                // 看板的「司機位置」圖層靠這欄找司機手上的單，留 null 的話地圖上畫不出司機
+                order.setAssignedDriverId(saveRoute.getDriverId());
                 // 排進路線＝route_id 有值即可，不再另設狀態；訂單留在 CONFIRMED
                 ordersDAO.save(order);
 

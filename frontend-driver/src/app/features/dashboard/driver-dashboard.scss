@@ -134,9 +134,12 @@
 .outline-action mat-icon,
 .danger-action mat-icon,
 .bottom-navigation mat-icon,
-.empty-state mat-icon {
+.empty-state mat-icon,
+.attendance-drawer-handle > mat-icon {
   width: 18px;
   height: 18px;
+  font-size: 18px;
+  line-height: 18px;
 }
 
 .map-content {
@@ -305,6 +308,7 @@ h2 {
   height: 16px;
   color: #0e7663;
   font-size: 16px;
+  line-height: 16px;
 }
 
 .map-stop-address span {
@@ -367,11 +371,6 @@ h2 {
   cursor: grabbing;
 }
 
-.attendance-drawer-handle > mat-icon {
-  width: 18px;
-  height: 18px;
-}
-
 .attendance-drawer-grip {
   justify-self: center;
   width: 20px;
@@ -417,9 +416,14 @@ h2 {
   line-height: 1.4;
 }
 
-.task-navigation-button mat-icon {
+.task-navigation-button mat-icon,
+.task-loading-button mat-icon,
+.task-arrive-button mat-icon,
+.task-delivery-button mat-icon {
   width: 17px;
   height: 17px;
+  font-size: 17px;
+  line-height: 17px;
 }
 
 .navigation-route-detail {
@@ -798,17 +802,13 @@ h2 {
   font-weight: 800;
 }
 
-// 點交與抵達都是該站當下的主要動作，用同一種強調樣式
+// 點交、抵達、交貨都是該站當下的主要動作，用同一種強調樣式
 .task-loading-button,
-.task-arrive-button {
+.task-arrive-button,
+.task-delivery-button {
   border-color: #70aa9c;
   color: #174c40;
   background: #cceee2;
-}
-
-.task-delivery-button {
-  color: #226c5a;
-  background: #163b35;
 }
 
 .task-status {
@@ -835,7 +835,8 @@ h2 {
 }
 
 .task-status.is-failed,
-.task-status.is-cancelled {
+.task-status.is-cancelled,
+.task-status.is-no_signature {
   color: #8a4a4a;
   background: #f8e6e3;
 }
@@ -1025,7 +1026,7 @@ h2 {
   font-weight: 700;
   white-space: nowrap;
 }
-.loading-mismatch-button mat-icon { width: 15px; height: 15px; font-size: 15px; }
+.loading-mismatch-button mat-icon { width: 15px; height: 15px; font-size: 15px; line-height: 15px; }
 .loading-action-panel .loading-mismatch-hint { font-size: 11px; }
 .loading-order-note { color: var(--loading-muted); font-size: 12px; }
 .loading-order-note summary { min-height: 30px; cursor: pointer; }
@@ -1087,6 +1088,7 @@ h2 {
 }
 
 .delivery-cancel-button {
+  grid-column: 1 / -1;
   border-color: #bfd5cc;
   color: #42635a;
   background: transparent;
@@ -1097,6 +1099,8 @@ h2 {
 .mileage-end-button mat-icon {
   width: 16px;
   height: 16px;
+  font-size: 16px;
+  line-height: 16px;
 }
 
 .emergency-leave-history {

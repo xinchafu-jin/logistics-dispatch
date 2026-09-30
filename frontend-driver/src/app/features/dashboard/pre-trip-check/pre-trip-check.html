@@ -16,7 +16,8 @@
   @if (loading()) {
     <p class="notice" role="status">正在確認檢查紀錄…</p>
   }
-  @if (error()) {
+  <!-- 表單開著時錯誤顯示在送出鈕下面（見表單最後）：表單很長，放在這裡司機按完送出根本看不到 -->
+  @if (error() && !showForm()) {
     <p class="notice is-error" role="alert">
       {{ error() }}
       @if (!result()) {
@@ -235,6 +236,10 @@
       </button>
       @if (unansweredCount() > 0) {
         <small class="remaining">還有 {{ unansweredCount() }} 項沒選</small>
+      }
+      <!-- 送出被後端擋下的原因：緊貼送出鈕，按完不用往上捲就看得到 -->
+      @if (error()) {
+        <p class="notice is-error" role="alert">{{ error() }}</p>
       }
     </form>
   }

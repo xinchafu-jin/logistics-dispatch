@@ -8,7 +8,7 @@
 }
 
 // 頁面最下方「正在同步資料...」與載入錯誤的說明文字
-.dashboard-description { max-width: 520px; margin: 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.65; }
+.dashboard-description { max-width: 520px; margin: 0; color: var(--muted); font-size: 1rem; line-height: 1.65; }
 
 // ── 地圖圖層選單：疊在淺色底圖右上，加了 .map-control 不分深淺色都用淺色色票（理由見 styles.scss）──
 // 按鈕外觀是 .ui-btn-default .ui-btn-icon，只把透明底改成實心，不然底圖會透出來
@@ -24,7 +24,7 @@
 .map-layer-menu-panel {
   position: absolute; top: 40px; right: 0; display: grid; min-width: 180px; gap: 8px; padding: 12px;
   color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
-  box-shadow: 0 6px 16px rgb(0 0 0 / 16%); font-size: 0.75rem;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 16%); font-size: 0.875rem;
 }
 
 // ── 日期列：單行橫排的日期按鈕；整列可左右拖曳切換前後一天（位移量由 --day-swipe-offset 帶進來）──
@@ -42,7 +42,7 @@
 .dispatch-day-card {
   display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; min-height: 32px; padding: 4px 10px;
   color: var(--text); background: var(--input-bg); border: 1px solid var(--border); border-radius: 3px;
-  font: inherit; font-size: 0.8125rem; white-space: nowrap; cursor: pointer; scroll-snap-align: start;
+  font: inherit; font-size: 0.9375rem; white-space: nowrap; cursor: pointer; scroll-snap-align: start;
   &.is-selected { background: var(--accent-soft); border-color: var(--accent); }
   // 日期已過還有單沒結束，處理完就會從日期列消失；選中時框線加成兩圈（四周一樣粗）
   &.is-unresolved { background: var(--danger-soft); border-color: var(--danger); }
@@ -51,24 +51,24 @@
   &:disabled { cursor: wait; }
 }
 
-.dispatch-day-date { font-family: var(--font-mono); font-weight: 600; }
+.dispatch-day-date { font-family: var(--font-mono); font-size: 1.0625rem; font-weight: 600; }
 
 .dispatch-day-status {
-  color: var(--muted); font-size: 0.75rem;
+  color: var(--muted); font-size: 0.9375rem;
   &[data-status='IN_PROGRESS'] { color: var(--accent); }
   &[data-status='PUBLISHED'], &[data-status='CLOSED'] { color: var(--ok); }
   &[data-status='UNRESOLVED'] { color: var(--danger); }
 }
 
-.dispatch-day-pending { padding: 1px 5px; color: var(--warn); background: var(--warn-soft); border-radius: 2px; font-size: 0.6875rem; }
+.dispatch-day-pending { padding: 1px 5px; color: var(--warn); background: var(--warn-soft); border-radius: 2px; font-size: 0.75rem; }
 
 // ── 頂部工具列：上排常配編組分頁（.ui-tabs-bar）、下排排車條件與動作（.ui-toolbar），同一塊灰底 ──
 .board-head { background: var(--surface); border-bottom: 1px solid var(--border); border-radius: 3px 3px 0 0; }
-.tab-add { font-size: 1rem; }
+.tab-add { font-size: 1.0625rem; }
 
 .toolbar-field {
-  display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.75rem;
-  strong { color: var(--text); font-family: var(--font-mono); font-size: 0.8125rem; }
+  display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.875rem;
+  strong { color: var(--text); font-family: var(--font-mono); font-size: 0.9375rem; }
 }
 
 .toolbar-spacer { flex: 1; }
@@ -81,11 +81,11 @@
 
 // 錯誤用正文色＋紅框紅底：深色的 --danger 直接當小字顏色對比不到 AA
 .template-error,
-.board-error { margin: 0; padding: 8px 10px; background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 4px; font-size: 0.8125rem; }
+.board-error { margin: 0; padding: 8px 10px; background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 4px; font-size: 0.9375rem; }
 .template-error { margin: 12px 12px 0; }
-.board-status { margin: 0; color: var(--muted); font-size: 0.8125rem; }
-.board-notice { margin: 0; padding: 6px 10px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 4px; font-size: 0.8125rem; }
-.board-empty { margin: 0; padding: 8px; color: var(--muted); font-size: 0.75rem; }
+.board-status { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+.board-notice { margin: 0; padding: 6px 10px; background: var(--accent-soft); border: 1px solid var(--border); border-radius: 4px; font-size: 0.9375rem; }
+.board-empty { margin: 0; padding: 8px; color: var(--muted); font-size: 0.875rem; }
 .tab-panel { display: grid; gap: 12px; padding: 12px; }
 
 // ── 看板：左邊車道格子（一排 3 格，填滿就再長一排）、右邊固定的待排單區；窄螢幕改上下 ──
@@ -115,16 +115,16 @@
 // 裝載量（等寬字）靠左、狀態標籤靠右；保養提醒自己換一行（快到了黃色，跑完會超過紅色，發布會被擋）
 .lane-header {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
-  h4 { margin: 0; font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; }
+  h4 { margin: 0; font-family: var(--font-mono); font-size: 0.875rem; font-weight: 600; }
 }
 
 .lane-driver-status {
   margin: 0 0 0 auto;
-  span { padding: 1px 6px; color: var(--accent); border: 1px solid var(--border); border-radius: 2px; font-size: 0.6875rem; }
+  span { padding: 1px 6px; color: var(--accent); border: 1px solid var(--border); border-radius: 2px; font-size: 0.75rem; }
   span.is-warning { color: var(--danger); border-color: var(--danger); }
 }
 
-.lane-maintenance { flex-basis: 100%; margin: 0; color: var(--warn); font-size: 0.6875rem; line-height: 1.5; }
+.lane-maintenance { flex-basis: 100%; margin: 0; color: var(--warn); font-size: 0.75rem; line-height: 1.5; }
 .lane-maintenance.is-blocked { color: var(--danger); }
 
 // 司機、車輛兩個下拉並排；未指派是待辦而不是錯誤，用虛線提示，不搶超載那條紅框的注意力
@@ -133,7 +133,7 @@
 .board-driver {
   width: 100%; height: 30px; padding: 0 6px;
   color: var(--text); background: var(--input-bg); border: 1px solid var(--border); border-radius: 3px;
-  font: inherit; font-size: 0.75rem;
+  font: inherit; font-size: 0.875rem;
   &.is-unassigned { color: var(--muted); border-style: dashed; }
   &:disabled { cursor: not-allowed; opacity: 0.6; }
 }
@@ -144,7 +144,7 @@
 
 .lane-store {
   display: inline-flex; align-items: center; padding: 1px 2px 1px 6px; cursor: grab;
-  color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 3px; font-size: 0.75rem;
+  color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 3px; font-size: 0.875rem;
   button { padding: 0 4px; color: var(--muted); background: transparent; border: 0; font: inherit; line-height: 1; cursor: pointer; }
   button:disabled { cursor: default; }
   &.cdk-drag-preview { box-shadow: 0 4px 12px rgb(0 0 0 / 16%); }
@@ -152,7 +152,7 @@
 }
 
 .lane-store-add,
-.lane-store-sort { height: 22px; padding: 0 6px; background: transparent; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 0.75rem; }
+.lane-store-sort { height: 22px; padding: 0 6px; background: transparent; border: 1px solid var(--border); border-radius: 3px; font: inherit; font-size: 0.875rem; }
 .lane-store-add { color: var(--muted); border-style: dashed; }
 .lane-store-sort { color: var(--accent); cursor: pointer; }
 .lane-store-sort:disabled { cursor: default; opacity: 0.5; }
@@ -166,13 +166,13 @@
   margin: 0; padding: 7px 9px; line-height: 1.4; cursor: grab;
   color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: 3px;
   header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px; }
-  header > span { color: var(--subtle); font-family: var(--font-mono); font-size: 0.6875rem; }
-  strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-  em { padding: 1px 5px; color: var(--muted); background: var(--surface-active); border-radius: 2px; font-size: 0.6875rem; font-style: normal; }
+  header > span { color: var(--subtle); font-family: var(--font-mono); font-size: 0.75rem; }
+  strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
+  em { padding: 1px 5px; color: var(--muted); background: var(--surface-active); border-radius: 2px; font-size: 0.75rem; font-style: normal; }
   // 窄格子寬度不夠時：門市名稱至少留 4 個字，先截後面的箱數與時間
   p { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 0; }
-  b { min-width: 4em; overflow: hidden; font-size: 0.8125rem; text-overflow: ellipsis; white-space: nowrap; }
-  p span { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted); font-family: var(--font-mono); font-size: 0.6875rem; text-overflow: ellipsis; white-space: nowrap; }
+  b { min-width: 4em; overflow: hidden; font-size: 0.9375rem; text-overflow: ellipsis; white-space: nowrap; }
+  p span { min-width: 0; margin-left: auto; overflow: hidden; color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
   &:active { cursor: grabbing; }
   // 已送達、配送中、配送失敗的單：留在格子裡看進度但不能拖，淡一點跟待送的單分開
   &.is-done { cursor: default; opacity: 0.6; }
@@ -192,7 +192,7 @@
 
 .pending-pool {
   padding: 10px; background: var(--surface);
-  > h4 { margin: 0 0 8px; font-size: 0.8125rem; }
+  > h4 { margin: 0 0 8px; font-size: 0.9375rem; }
   .board-dropzone { padding: 0; }
 }
 
@@ -200,7 +200,7 @@
 .pending-group {
   display: grid; gap: 6px; margin-bottom: 10px; padding: 8px;
   background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 4px;
-  h5 { display: flex; justify-content: space-between; margin: 0; font-size: 0.75rem; }
+  h5 { display: flex; justify-content: space-between; margin: 0; font-size: 0.875rem; }
 }
 
 .pending-order-card { cursor: default; }
@@ -209,7 +209,7 @@
 .pending-confirm-button {
   height: 24px; padding: 0 8px; cursor: pointer;
   color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 3px;
-  font: inherit; font-size: 0.6875rem;
+  font: inherit; font-size: 0.75rem;
   &:disabled { cursor: wait; opacity: 0.6; }
 }
 
@@ -221,12 +221,13 @@
 
 .published-route-header {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;
-  strong { display: block; overflow-wrap: anywhere; font-size: 0.875rem; }
-  p { margin: 4px 0 0; color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; }
+  > div { min-width: 0; }
+  strong { display: block; overflow-wrap: anywhere; font-size: 1rem; }
+  p { margin: 4px 0 0; color: var(--muted); font-family: var(--font-mono); font-size: 0.875rem; }
 }
 
 .published-route-state {
-  flex: 0 0 auto; padding: 1px 6px; color: var(--ok); border: 1px solid var(--border); border-radius: 2px; font-size: 0.6875rem;
+  flex: 0 0 auto; padding: 1px 6px; color: var(--ok); border: 1px solid var(--border); border-radius: 2px; font-size: 0.75rem;
   &.is-exception { color: var(--danger); background: var(--danger-soft); border-color: var(--danger); }
 }
 
@@ -244,25 +245,26 @@
 .route-live-summary {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px 0;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-  p { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 0.75rem; }
-  span { display: block; margin-bottom: 2px; color: var(--muted); font-size: 0.6875rem; }
+  p { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 0.875rem; }
+  span { display: block; margin-bottom: 2px; color: var(--muted); font-size: 0.75rem; }
 }
 
-.published-order-list { display: grid; gap: 6px; margin-top: 10px; }
+.published-order-list { display: grid; gap: 6px; min-width: 0; width: 100%; margin-top: 10px; }
 
 .published-order-card {
-  padding: 6px 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+  min-width: 0; width: 100%; max-width: 100%; padding: 6px 8px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
   &.is-failed { border-color: var(--danger); }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  strong { min-width: 0; overflow: hidden; font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; }
-  em { flex: 0 0 auto; color: var(--muted); font-size: 0.6875rem; font-style: normal; }
-  p { margin: 4px 0 0; color: var(--muted); font-family: var(--font-mono); font-size: 0.6875rem; }
+  header { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  strong { flex: 1 1 0; min-width: 0; overflow: hidden; font-size: 0.875rem; text-overflow: ellipsis; white-space: nowrap; }
+  em { flex: 0 0 auto; color: var(--muted); font-size: 0.75rem; font-style: normal; }
+  p { min-width: 0; margin: 4px 0 0; overflow-wrap: anywhere; color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; }
 }
 
 .dispatch-attention {
   display: grid; gap: 8px; padding: 12px;
-  h4 { display: flex; align-items: center; justify-content: space-between; margin: 0; font-size: 0.875rem; }
-  h4 span { color: var(--muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; }
+  h4 { display: flex; align-items: center; justify-content: space-between; margin: 0; font-size: 1rem; }
+  h4 span { color: var(--muted); font-family: var(--font-mono); font-size: 0.875rem; font-weight: 500; }
 }
 
 // 偏離路線排在最上面，改用淡底色跟下面的異常、GPS 分開（不用左側粗線）
@@ -272,12 +274,12 @@
   &.is-gps, &.is-deviation { border-color: var(--warn); }
   &.is-deviation { background: var(--warn-soft); }
   &.is-deviation-alarm { background: var(--danger-soft); border-color: var(--danger); }
-  strong { display: block; overflow-wrap: anywhere; font-size: 0.75rem; }
-  p { margin: 4px 0 0; color: var(--muted); font-size: 0.6875rem; }
+  strong { display: block; overflow-wrap: anywhere; font-size: 0.875rem; }
+  p { margin: 4px 0 0; color: var(--muted); font-size: 0.75rem; }
 }
 
 .status-legend {
-  display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 0.6875rem;
+  display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 0.75rem;
   span { display: inline-flex; align-items: center; gap: 5px; }
   i { display: inline-block; width: 9px; height: 9px; flex-basis: 9px; }
 }

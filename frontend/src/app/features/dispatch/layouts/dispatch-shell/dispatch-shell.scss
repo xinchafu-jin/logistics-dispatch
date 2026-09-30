@@ -257,7 +257,7 @@ app-brand-logo {
   margin: 0;
   overflow: hidden;
   color: var(--text);
-  font-size: 1rem;
+  font-size: 1.125rem;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -265,7 +265,7 @@ app-brand-logo {
 
 .workspace-status {
   color: var(--muted);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
 }
 
 .workspace-actions {
@@ -748,6 +748,97 @@ app-brand-logo {
 .chat-message.is-user {
   align-self: flex-end;
   color: var(--accent);
+}
+
+.chat-message--waiting {
+  color: var(--subtle);
+}
+
+// 助理回覆（Markdown 轉的 HTML）。換行已經變成 <p>、<br>，pre-wrap 要關掉，
+// 不然標籤之間的換行字元會再多空一行
+.chat-message--md {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+// innerHTML 塞進來的標籤沒有元件的 scoped 屬性，一般選擇器選不到，所以要 ::ng-deep；
+// 前面都掛著 .chat-message--md，不會漏到別的元件
+.chat-message--md ::ng-deep {
+  p,
+  ul,
+  ol,
+  table,
+  pre,
+  blockquote {
+    margin: 0 0 6px;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  ul,
+  ol {
+    padding-left: 1.25em;
+  }
+
+  // 面板很窄，模型真的回了標題也不放大，只加粗
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 0 0 4px;
+    font-size: 1em;
+    font-weight: 600;
+  }
+
+  // display: block 才能讓表格自己橫向捲動，欄位多時不會把整個面板撐寬
+  table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+  }
+
+  th,
+  td {
+    padding: 3px 8px;
+    border: 1px solid var(--border, currentColor);
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+  }
+
+  pre {
+    overflow-x: auto;
+  }
+
+  a {
+    color: var(--accent);
+  }
+}
+
+// pre-line：確認被擋時後端一次回好幾行（每天一行），要照換行顯示；
+// max-height + 捲動：訊息很長時不能把清單和輸入框擠出面板
+.chat-panel__error {
+  flex: none;
+  max-height: 96px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.9375rem;
+  white-space: pre-line;
 }
 
 // 訊息下方的時間與已讀
