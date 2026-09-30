@@ -2615,7 +2615,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     }
 
     const maplibregl = await import('maplibre-gl');
-    maplibregl.setWorkerUrl('/maplibre/maplibre-gl-worker.mjs');
+    // 資料夾改名的原因見後台 live-fleet-map.ts：讓修正 .mjs MIME 之前快取的舊 worker 失效
+    maplibregl.setWorkerUrl('/maplibre-v2/maplibre-gl-worker.mjs');
     this.maplibre = maplibregl;
     this.driverMap = new maplibregl.Map({
       container: mapElement,
