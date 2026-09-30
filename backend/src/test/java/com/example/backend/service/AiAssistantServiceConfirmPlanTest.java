@@ -67,7 +67,8 @@ class AiAssistantServiceConfirmPlanTest {
         });
 
         service = new AiAssistantService(null, null, null, "http://unused", null, null,
-                dispatchWorkflowService, driversService, warehousesService, null, null);
+                dispatchWorkflowService, driversService, warehousesService, null, null,
+                null, null, null, null, null);
     }
 
     @Test
