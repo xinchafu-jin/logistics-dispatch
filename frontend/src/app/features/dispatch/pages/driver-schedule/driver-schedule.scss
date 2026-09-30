@@ -87,9 +87,6 @@
 }
 
 .shift-cell mat-icon,
-.fixed-holiday mat-icon { width: 18px; height: 18px; font-size: 18px; }
-
-.fixed-holiday { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 54px; color: var(--subtle); font-size: 0.75rem; }
 .missing-shift { display: grid; min-height: 54px; place-items: center; color: var(--subtle); font-size: 0.875rem; }
 
 // 已核准的預排請假：格子右上角的小標記
