@@ -17,8 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.*;
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -228,13 +229,15 @@ public class DriverScheduleService {
             throw new IllegalArgumentException("班表內沒有司機班次，無法發布");
         }
 
+        markUnassignedSundaysAsDayOff(shifts);
+
         DriverShiftsEntity unassigned = shifts.stream()
                 .filter(shift -> shift.getShiftType() == ShiftType.UNASSIGNED)
                 .findFirst()
                 .orElse(null);
         if (unassigned != null) {
             throw new IllegalArgumentException(
-                    "班表尚未排完：司機 ID " + unassigned.getDriverId()
+                    "班表尚未排完：" + driverLabel(unassigned.getDriverId())
                             + " 在 " + unassigned.getWorkDate() + " 尚未安排"
             );
         }
@@ -294,6 +297,44 @@ public class DriverScheduleService {
         return toMonthDTO(month);
     }
 
+    /** 週日預設公休：新建的班次先排成休假，主管要排週日出車再自己改成上班。 */
+    private boolean isDefaultDayOff(LocalDate date) {
+        return date.getDayOfWeek() == DayOfWeek.SUNDAY;
+    }
+
+    private void markDefaultDayOff(DriverShiftsEntity shift) {
+        shift.setShiftType(ShiftType.DAY_OFF);
+        shift.setWorkStart(null);
+        shift.setWorkEnd(null);
+        shift.setChangeReason("週日公定公休");
+    }
+
+    /**
+     * 發布前把還是「尚未安排」的週日補成休假。
+     *
+     * <p>週日預設公休：主管沒特別排的週日不必一格一格點，也不會因為漏排週日而發布不出去。
+     * 只動 UNASSIGNED：週日已經被排成上班或請假的，是主管的決定，保留原樣。</p>
+     */
+    private void markUnassignedSundaysAsDayOff(List<DriverShiftsEntity> shifts) {
+        List<DriverShiftsEntity> changed = new ArrayList<>();
+        for (DriverShiftsEntity shift : shifts) {
+            if (shift.getShiftType() == ShiftType.UNASSIGNED && isDefaultDayOff(shift.getWorkDate())) {
+                markDefaultDayOff(shift);
+                changed.add(shift);
+            }
+        }
+        if (!changed.isEmpty()) {
+            driverShiftsDAO.saveAll(changed);
+        }
+    }
+
+    /** 錯誤訊息用：調度員認得的是姓名，不是 ID；司機已被刪除時才退回顯示 ID */
+    private String driverLabel(Long driverId) {
+        return driversDAO.findById(driverId)
+                .map(driver -> "司機 " + driver.getName())
+                .orElse("司機 ID " + driverId);
+    }
+
     private DriverShiftsEntity newUnassignedShift(Long monthId, DriversEntity driver, LocalDate date) {
         DriverShiftsEntity shift = new DriverShiftsEntity();
         shift.setScheduleMonthId(monthId);
@@ -303,6 +344,9 @@ public class DriverScheduleService {
         shift.setWorkStart(driver.getWorkStart());
         shift.setWorkEnd(driver.getWorkEnd());
         shift.setChangeReason("系統建立班表");
+        if (isDefaultDayOff(date)) {
+            markDefaultDayOff(shift);
+        }
         return shift;
     }
 
@@ -315,6 +359,10 @@ public class DriverScheduleService {
         shift.setWorkStart(driver.getWorkStart());
         shift.setWorkEnd(driver.getWorkEnd());
         shift.setChangeReason("新到職，系統預設上班");
+        // 新到職預設上班，但週日照樣預設公休
+        if (isDefaultDayOff(date)) {
+            markDefaultDayOff(shift);
+        }
         return shift;
     }
 
