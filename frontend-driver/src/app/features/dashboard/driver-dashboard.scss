@@ -835,7 +835,8 @@ h2 {
 }
 
 .task-status.is-failed,
-.task-status.is-cancelled {
+.task-status.is-cancelled,
+.task-status.is-no_signature {
   color: #8a4a4a;
   background: #f8e6e3;
 }

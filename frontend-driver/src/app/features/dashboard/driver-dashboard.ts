@@ -1618,7 +1618,8 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     return (
       stop.orderStatus === 'COMPLETED' ||
       stop.orderStatus === 'CANCELLED' ||
-      stop.orderStatus === 'FAILED'
+      stop.orderStatus === 'FAILED' ||
+      stop.orderStatus === 'NO_SIGNATURE'
     );
   }
 
@@ -1639,6 +1640,7 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
       COMPLETED: '已交貨',
       CANCELLED: '已取消',
       FAILED: '配送失敗',
+      NO_SIGNATURE: '無人簽收',
     };
 
     return labels[status];

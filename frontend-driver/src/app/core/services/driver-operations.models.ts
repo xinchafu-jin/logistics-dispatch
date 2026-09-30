@@ -476,7 +476,8 @@ export type DriverTaskOrderStatus =
   | 'IN_DELIVERY'
   | 'COMPLETED'
   | 'CANCELLED'
-  | 'FAILED';
+  | 'FAILED'
+  | 'NO_SIGNATURE';
 
 // ── 司機聊天室（對應後端 DriverPortalController 的 /api/driver/messages）──────────
 
