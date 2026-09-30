@@ -296,7 +296,7 @@ POST /api/driver/mileage/end
 | `/api/driver/loading` | `{ orderId, loadedBoxCount, notes }`：倉庫點交，一次一張單。箱數相符轉 `LOADED`；不符則原單 `FAILED`，並建立異常單與明日補送單 |
 | `/api/driver/gps` | `{ lat, lng }` |
 | `/api/driver/arrive` | `{ orderId }`：訂單須為 `LOADED`（已點交） |
-| `/api/driver/deliver` | `{ orderId, boxCount, notes, photo }` |
+| `/api/driver/deliver` | `{ orderId, boxCount, notes, photoUrl }`：司機確認交貨，不登記貨物損毀；損毀由門市回報。舊版相容欄位 `damagedBoxCount` 僅接受省略或 `0`，大於 `0` 回傳 `400`，不建立配送損毀異常 |
 | `/api/driver/no-signature` | `{ orderId, photo }` |
 | `/api/driver/exception` | `{ category, description }` |
 | `/api/driver/mileage/start` | `{ odometer }` |
@@ -319,6 +319,19 @@ PATCH /api/exceptions/{id} — Request:
 ```
 
 ## 報表
+
+### 發車前檢點表
+
+`GET /api/reports/pre-trip` 僅主管可查詢，使用報表共用的 `date` 或 `period/from/to`，
+支援 `warehouseId`、`storeId`（路線所屬門市）、`driverId`、`vehicleId`／`vehicleIds`。
+回傳 `{ from, to, inspections }`，每次提交各一筆，包含未通過、重檢與已作廢紀錄，不顯示未來日期或未來提交時間。
+各列提供檢查時間、人車與路線識別、酒測值、15 項檢點結果、異常項目、備註、作廢時間及照片存在旗標。
+車輛與司機篩選依檢查時保存的 ID；舊路線刪除仍保留檢查，但無法還原倉庫、門市時不推定歷史歸屬。
+`checks[].normal` 是 `true`（正常）、`false`（異常）或 `null`（未記錄），不補假值。
+
+`GET /api/reports/pre-trip/{inspectionId}/photos/{alcohol|fault}` 僅主管可讀，
+透過登入驗證讀取酒測器或車況異常照片，回應 `Cache-Control: no-store`，不公開檔名或儲存路徑。
+歷史報表 Excel 同時包含「發車前檢點表」與「檢點項目明細」兩張工作表。
 
 ```
 GET /api/reports/summary?date=2026-09-21

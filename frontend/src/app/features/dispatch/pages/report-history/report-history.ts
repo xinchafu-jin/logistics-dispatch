@@ -8,14 +8,15 @@ import {MatInputModule} from '@angular/material/input';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {AdminThemeService} from '../../../../core/theme/admin-theme.service';
 import {DriverDto, OrderDto, ReportCollectionDto, ReportQuery, ReportSummaryDto, ReportPerformanceDto, StoreDto, VehicleDto, WarehouseDto,
-  ReportOutcomesDto, ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
+  ReportOutcomesDto, ReportOrderOutcomeDto, ReportPreTripDto, ReportPreTripInspectionDto,
+  ReportPreTripCheckDto} from '../../../../core/services/dispatch-api.models';
 import {REPORT_CASE_METRICS, matchesReportCase} from '../../report-delivery-cases';
 import {ORDER_PROGRESS_METRICS, matchesOrderProgress} from '../../report-unsettled-orders';
 import {ReportLoadingItem, loadingItemStatusLabel, loadingMismatchSummary, reportLoadingItems} from '../../report-loading-items';
 import {isOverdueUnsettledOrder} from '../../report-overdue-orders';
 
 type PreviewSheet = 'overview' | 'orders' | 'routes' | 'attendance' | 'vehicles' | 'warehouses' | 'stores' | 'exceptions' | 'notes'
-  | 'delivery-quality' | 'recovery' | 'loading-quality';
+  | 'delivery-quality' | 'recovery' | 'loading-quality' | 'pre-trip';
 type ReportHistoryPeriod = 'year' | 'month' | 'week' | 'day' | 'custom';
 interface ReportRow {
   [key: string]: unknown;
@@ -87,6 +88,7 @@ interface ReportPreview {
   orders: OrderDto[];
   storeDirectory: StoreDto[];
   outcomes: ReportOutcomesDto | null;
+  preTrips: ReportPreTripDto | null;
 }
 
 interface RouteLegReportRow {
@@ -106,6 +108,7 @@ const SHEETS: ReadonlyArray<{id: PreviewSheet; label: string; icon: string}> = [
   {id: 'orders', label: '訂單明細', icon: 'receipt_long'},
   {id: 'routes', label: '路線里程油費', icon: 'route'},
   {id: 'attendance', label: '司機打卡', icon: 'badge'},
+  {id: 'pre-trip', label: '發車前檢點表', icon: 'checklist'},
   {id: 'recovery', label: '補送追蹤', icon: 'restart_alt'},
   {id: 'delivery-quality', label: '配送結果', icon: 'fact_check'},
   {id: 'loading-quality', label: '出貨點交', icon: 'inventory'},
@@ -120,6 +123,7 @@ const METRICS: Partial<Record<PreviewSheet, {id: string; label: string}[]>> = {
   orders: ORDER_PROGRESS_METRICS.map(({id, label}) => ({id, label})),
   attendance: [{id: 'clocked-in', label: '已打上班卡'}, {id: 'on-time', label: '準時上班'}, {id: 'late', label: '遲到'},
     {id: 'missing-clock-in', label: '缺上班卡'}, {id: 'overtime', label: '有加班'}],
+  'pre-trip': [{id: 'passed', label: '檢查通過'}, {id: 'failed', label: '未通過'}, {id: 'invalidated', label: '已作廢紀錄'}],
   vehicles: [{id: 'distance-recorded', label: '有可核對實際里程'}],
   recovery: [{id: 'attempted', label: '已執行補送'}, {id: 'outstanding', label: '未確認補送交付'}, {id: 'delivered', label: '補送已交貨'}],
   'delivery-quality': [{id: 'full', label: '完整交付'}, {id: 'incomplete', label: '交貨不完整'},
@@ -145,6 +149,7 @@ export class ReportHistory implements OnInit, OnDestroy {
   private readonly router = inject(Router);
   private previewRequest?: Subscription;
   private filterRequest?: Subscription;
+  private inspectionPhotoRequest?: Subscription;
 
   readonly sheets = SHEETS;
   readonly from = signal(this.today());
@@ -177,6 +182,10 @@ export class ReportHistory implements OnInit, OnDestroy {
   readonly exporting = signal(false);
   readonly errorMessage = signal('');
   readonly detailError = signal('');
+  readonly inspectionError = signal('');
+  protected readonly inspectionPhoto = signal<{
+    inspectionId: number; label: string; url: string | null; error: string | null;
+  } | null>(null);
   readonly filterError = signal('');
   readonly metric = signal('');
 
@@ -276,9 +285,14 @@ export class ReportHistory implements OnInit, OnDestroy {
     return 'custom';
   }
 
-  ngOnDestroy(): void { this.previewRequest?.unsubscribe(); this.filterRequest?.unsubscribe(); }
+  ngOnDestroy(): void {
+    this.previewRequest?.unsubscribe();
+    this.filterRequest?.unsubscribe();
+    this.clearInspectionPhoto();
+  }
 
   private invalidatePreview(): void {
+    this.clearInspectionPhoto();
     this.previewRequest?.unsubscribe();
     this.preview.set(null);
     this.loading.set(false);
@@ -306,6 +320,7 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
 
   protected selectSheet(sheet: PreviewSheet): void {
+    this.clearInspectionPhoto();
     this.selectedSheet.set(sheet);
     this.metric.set('');
     void this.router.navigate([], {relativeTo: this.route, queryParams: {sheet, metric: null}, queryParamsHandling: 'merge'});
@@ -325,6 +340,8 @@ export class ReportHistory implements OnInit, OnDestroy {
     this.preview.set(null);
     this.errorMessage.set('');
     this.detailError.set('');
+    this.inspectionError.set('');
+    this.clearInspectionPhoto();
     const query = this.reportQuery();
     void this.router.navigate([], {relativeTo: this.route, queryParams: {
       from: this.from(), to: this.to(), vehicleId: null, tonnage: this.tonnage(),
@@ -344,6 +361,9 @@ export class ReportHistory implements OnInit, OnDestroy {
       storeDirectory: this.previewSource('門市資料', this.api.getStores()),
       outcomes: this.api.getReportOutcomes({...query, includeDetails: true}).pipe(catchError((error: unknown) => {
         this.detailError.set(this.loadError('配送／補送／點交明細', error)); return of(null);
+      })),
+      preTrips: this.api.getReportPreTrip(query).pipe(catchError((error: unknown) => {
+        this.inspectionError.set(this.loadError('發車前檢點表', error)); return of(null);
       })),
     }).subscribe({
       next: (preview) => {
@@ -366,6 +386,7 @@ export class ReportHistory implements OnInit, OnDestroy {
     const status = typeof error === 'object' && error !== null && 'status' in error ? Number(error.status) : NaN;
     if (status === 401) return `「${label}」未載入：登入已失效，請重新登入。`;
     if (status === 403) return `「${label}」未載入：目前帳號沒有查詢權限。`;
+    if (status === 404 && label === '發車前檢點表') return `「${label}」未載入：後端尚未提供此查詢（HTTP 404），請更新並重啟後端後重試。`;
     if (status === 0) return `「${label}」未載入：無法連線到後端服務，請確認服務已啟動後重試。`;
     if (status >= 500) return `「${label}」未載入：後端查詢失敗（HTTP ${status}），請確認資料庫更新完成後重試。`;
     return `「${label}」未載入，請重新預覽。`;
@@ -387,12 +408,17 @@ export class ReportHistory implements OnInit, OnDestroy {
         ['門市', this.selectedStoreLabel()],
         ['司機', this.selectedDriverLabel()],
         ['噸位', this.selectedTonnageLabel()],
+        ['發車前檢點表', preview.preTrips ? '包含檢點紀錄與各項結果' : '檢點表未載入，本次未匯出'],
         ['匯出時間', new Intl.DateTimeFormat('zh-TW', {dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Taipei'}).format(new Date())],
       ]);
       this.appendSheet(xlsx, workbook, '營運總覽', this.overviewExportRows(preview.summary));
       this.appendSheet(xlsx, workbook, '訂單明細', this.orderExportRows(preview));
       this.appendSheet(xlsx, workbook, '路線里程油費', this.routeExportRows(preview));
       this.appendSheet(xlsx, workbook, '司機出勤', this.attendanceExportRows(preview));
+      if (preview.preTrips) {
+        this.appendSheet(xlsx, workbook, '發車前檢點表', this.inspectionExportRows(preview));
+        this.appendSheet(xlsx, workbook, '檢點項目明細', this.inspectionItemExportRows(preview));
+      }
       this.appendSheet(xlsx, workbook, '出車收車明細', this.tripExportRows(preview));
       this.appendSheet(xlsx, workbook, '各倉人車比較', [
         ['倉庫', '已打上班卡', '應打上班卡', '打卡率', '準時班次', '準時上班率', '已完成打卡班次', '加班班次', '加班率', '加班分鐘', '出車趟次', '收車趟次', '已記錄實際公里'],
@@ -451,6 +477,84 @@ export class ReportHistory implements OnInit, OnDestroy {
   }
 
   protected loadingItemLabel(item: ReportLoadingItem): string { return loadingItemStatusLabel(item.status); }
+
+  protected inspectionRows(report: ReportPreview): ReportPreTripInspectionDto[] {
+    const metric = this.selectedSheet() === 'pre-trip' ? this.metric() : '';
+    return (report.preTrips?.inspections ?? []).filter(row => {
+      if (metric === 'passed') return row.passed === true;
+      if (metric === 'failed') return row.passed === false;
+      if (metric === 'invalidated') return row.invalidatedAt !== null;
+      return true;
+    });
+  }
+
+  protected inspectionGroups(row: ReportPreTripInspectionDto): {name: string; items: ReportPreTripCheckDto[]}[] {
+    const groups = new Map<string, ReportPreTripCheckDto[]>();
+    for (const check of row.checks) groups.set(check.group, [...(groups.get(check.group) ?? []), check]);
+    return [...groups].map(([name, items]) => ({name, items}));
+  }
+
+  protected inspectionResult(row: ReportPreTripInspectionDto): string {
+    return row.passed === true ? '通過' : row.passed === false ? '未通過' : '結果未記錄';
+  }
+
+  protected inspectionCheckLabel(normal: boolean | null): string {
+    return normal === true ? '正常' : normal === false ? '異常' : '未記錄';
+  }
+
+  protected inspectionAbnormalLabel(row: ReportPreTripInspectionDto): string {
+    const items = row.abnormalItems.join('、');
+    const incomplete = row.alcoholMgL === null || row.checks.some(check => check.normal === null);
+    return incomplete ? `${items ? items + '；' : ''}部分項目未記錄` : items || '無';
+  }
+
+  protected inspectionAlcohol(row: ReportPreTripInspectionDto): string {
+    return row.alcoholMgL === null ? '--' : row.alcoholMgL.toFixed(2);
+  }
+
+  protected inspectionCount(rows: ReportPreTripInspectionDto[], passed: boolean): number {
+    return rows.filter(row => row.passed === passed).length;
+  }
+
+  protected invalidatedInspectionCount(rows: ReportPreTripInspectionDto[]): number {
+    return rows.filter(row => row.invalidatedAt !== null).length;
+  }
+
+  protected openInspectionPhoto(row: ReportPreTripInspectionDto, kind: 'alcohol' | 'fault'): void {
+    this.clearInspectionPhoto();
+    const label = kind === 'alcohol' ? '酒測器照片' : '車況異常照片';
+    this.inspectionPhoto.set({inspectionId: row.inspectionId, label, url: null, error: null});
+    this.inspectionPhotoRequest = this.api.getReportPreTripPhoto(row.inspectionId, kind).subscribe({
+      next: blob => this.inspectionPhoto.set({inspectionId: row.inspectionId, label,
+        url: URL.createObjectURL(blob), error: null}),
+      error: error => this.inspectionPhoto.set({inspectionId: row.inspectionId, label, url: null,
+        error: error.status === 404 ? '這筆照片檔案已不存在。' : this.loadError(label, error)}),
+    });
+  }
+
+  protected clearInspectionPhoto(): void {
+    this.inspectionPhotoRequest?.unsubscribe();
+    const url = this.inspectionPhoto()?.url;
+    if (url) URL.revokeObjectURL(url);
+    this.inspectionPhoto.set(null);
+  }
+
+  private inspectionExportRows(report: ReportPreview): unknown[][] {
+    return [['紀錄編號', '檢查日期', '送出時間', '司機', '司機帳號', '車牌', '出貨倉庫', '路線', '路線版本',
+      '酒測 mg/L', '檢查結果', '紀錄狀態', '作廢時間', '異常項目', '備註', '酒測照片', '異常照片'],
+      ...this.inspectionRows(report).map(row => [row.inspectionId, row.workDate, row.submittedAt,
+        row.driverName ?? `司機 #${row.driverId}`, row.driverAccount, row.plateNumber ?? `車輛 #${row.vehicleId}`,
+        row.warehouseName, row.routeId, row.routeVersion, row.alcoholMgL, this.inspectionResult(row),
+        row.invalidatedAt ? '已作廢' : '留存', row.invalidatedAt, this.inspectionAbnormalLabel(row), row.note,
+        row.hasAlcoholPhoto ? '有' : '未附', row.hasFaultPhoto ? '有' : '未附'])];
+  }
+
+  private inspectionItemExportRows(report: ReportPreview): unknown[][] {
+    return [['紀錄編號', '檢查日期', '送出時間', '司機', '車牌', '分組', '檢查項目', '結果', '紀錄狀態'],
+      ...this.inspectionRows(report).flatMap(row => row.checks.map(check => [row.inspectionId, row.workDate,
+        row.submittedAt, row.driverName ?? `司機 #${row.driverId}`, row.plateNumber ?? `車輛 #${row.vehicleId}`,
+        check.group, check.label, this.inspectionCheckLabel(check.normal), row.invalidatedAt ? '已作廢' : '留存']))];
+  }
 
   protected exceptionStatusCount(rows: ReportRow[], status: 'OPEN' | 'CLOSED'): number {
     return rows.filter(row => row.status === status).length;

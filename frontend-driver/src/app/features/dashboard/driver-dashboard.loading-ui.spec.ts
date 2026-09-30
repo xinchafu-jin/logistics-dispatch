@@ -83,6 +83,36 @@ describe('Driver warehouse loading checklist UI', () => {
     await render();
   }
 
+  it.each(['tasks', 'map'])('keeps only delivery, no-signature and cancel actions in the %s delivery panel', async (tab) => {
+    page.todayTasks.update((tasks: any) => ({...tasks, routes: [{...tasks.routes[0], stops: [stop(1, 'IN_DELIVERY')]}]}));
+    const route = page.todayTasks().routes[0];
+    page.selectedTask.set({route, stop: firstStop()});
+    page.attendanceViewState.set('ready');
+    page.activeTab.set(tab);
+    page.openDeliveryAction(firstStop());
+    await render();
+    const panel = fixture.nativeElement.querySelector('[aria-label="交貨處理"]') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect([...panel.querySelectorAll('.delivery-action-buttons button')]
+      .map(button => button.textContent?.replace(/check_circle|warning_amber/g, '').trim()))
+      .toEqual(['確認交貨', '無人簽收', '取消']);
+    expect(panel.textContent).not.toMatch(/貨況異常|貨物損毀|損毀箱數/);
+  });
+
+  it('confirms normal delivery without sending any merchant damage count', async () => {
+    page.todayTasks.update((tasks: any) => ({...tasks, routes: [{...tasks.routes[0], stops: [stop(1, 'IN_DELIVERY')]}]}));
+    const deliver = vi.fn((request: {orderId: number}) => of({orderId: request.orderId, orderStatus: 'COMPLETED'}));
+    Object.assign(api, {deliver});
+    page.openDeliveryAction(firstStop());
+    page.deliveryNotes.set('門市已收貨');
+    await render();
+    (fixture.nativeElement.querySelector('.delivery-complete-button') as HTMLButtonElement).click();
+    await render();
+    expect(deliver).toHaveBeenCalledWith({orderId: 1, boxCount: 10, photoUrl: undefined, notes: '門市已收貨'});
+    expect(deliver.mock.calls[0][0]).not.toHaveProperty('damagedBoxCount');
+    expect(firstStop().orderStatus).toBe('COMPLETED');
+  });
+
   it('shows product names, right-hand box counts and checkboxes without actual-quantity or per-product note inputs', async () => {
     await open();
     const panel = fixture.nativeElement.querySelector('.loading-action-panel');

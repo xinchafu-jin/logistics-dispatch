@@ -198,6 +198,11 @@ describe('caseCategoryOption', () => {
     expect(caseCategoryOption('VEHICLE').label).toBe('車輛問題');
     expect(caseCategoryOption('UNKNOWN' as never).code).toBe('OTHER');
   });
+
+  it('貨物支援提示不再要求司機在交貨時登記損毀箱數', () => {
+    expect(caseCategoryOption('GOODS').notice).toContain('貨物損毀由門市回報');
+    expect(caseCategoryOption('GOODS').notice).not.toContain('任務卡「交貨」裡填');
+  });
 });
 
 describe('composeCaseDescription', () => {

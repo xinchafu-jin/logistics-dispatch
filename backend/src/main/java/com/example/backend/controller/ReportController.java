@@ -8,6 +8,15 @@ import com.example.backend.service.ReportPerformanceService;
 import com.example.backend.dto.respones.ReportPerformanceResponse;
 import com.example.backend.dto.respones.ReportOutcomesResponse;
 import com.example.backend.service.ReportOutcomesService;
+import com.example.backend.service.ReportPreTripService;
+import com.example.backend.dto.respones.ReportPreTripResponse;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,6 +27,7 @@ import java.time.LocalDate;
 import java.time.DayOfWeek;
 import java.time.ZoneId;
 import java.time.temporal.TemporalAdjusters;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Set;
 
@@ -31,12 +41,39 @@ public class ReportController {
     private final ReportService reportService;
     private final ReportPerformanceService performanceService;
     private final ReportOutcomesService outcomesService;
+    private final ReportPreTripService preTripService;
 
     public ReportController(ReportService reportService, ReportPerformanceService performanceService,
-            ReportOutcomesService outcomesService) {
+            ReportOutcomesService outcomesService, ReportPreTripService preTripService) {
         this.reportService = reportService;
         this.performanceService = performanceService;
         this.outcomesService = outcomesService;
+        this.preTripService = preTripService;
+    }
+
+    @GetMapping("/pre-trip")
+    public ReportPreTripResponse preTrip(
+            @RequestParam(required = false) ReportPeriod period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(required = false) Long driverId,
+            @RequestParam(required = false) Long vehicleId,
+            @RequestParam(required = false) List<Long> vehicleIds) {
+        return preTripService.history(range(period, date, from, to), warehouseId, storeId, driverId,
+                selectedVehicles(vehicleId, vehicleIds));
+    }
+
+    @GetMapping("/pre-trip/{inspectionId}/photos/{kind}")
+    public ResponseEntity<Resource> preTripPhoto(@PathVariable Long inspectionId, @PathVariable String kind) {
+        var photo = preTripService.photo(inspectionId, kind);
+        if (!Files.isRegularFile(photo)) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .contentType(MediaTypeFactory.getMediaType(photo.getFileName().toString())
+                        .orElse(MediaType.APPLICATION_OCTET_STREAM))
+                .body(new FileSystemResource(photo));
     }
 
     @GetMapping("/outcomes")

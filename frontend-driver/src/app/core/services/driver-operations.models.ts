@@ -297,7 +297,6 @@ export interface DeliverRequest {
   orderId: number;
   boxCount: number;
   shortageBoxCount?: number;
-  damagedBoxCount?: number;
   replacementRequiredBoxCount?: number;
   photoUrl?: string;
   notes?: string;

@@ -44,6 +44,7 @@ import {
   ReportSummaryDto,
   ReportPerformanceDto,
   ReportOutcomesDto,
+  ReportPreTripDto,
   RouteDeviationDto,
   RouteMetricsDto,
   ScheduleMonthDto,
@@ -254,6 +255,14 @@ export class DispatchApiService {
 
   getReportExceptions(query: ReportQuery): Observable<ReportCollectionDto> {
     return this.http.get<ReportCollectionDto>(`${API_ROOT}/reports/exceptions`, {params: this.reportParams(query)});
+  }
+
+  getReportPreTrip(query: ReportQuery): Observable<ReportPreTripDto> {
+    return this.http.get<ReportPreTripDto>(`${API_ROOT}/reports/pre-trip`, {params: this.reportParams(query)});
+  }
+
+  getReportPreTripPhoto(inspectionId: number, kind: 'alcohol' | 'fault'): Observable<Blob> {
+    return this.http.get(`${API_ROOT}/reports/pre-trip/${inspectionId}/photos/${kind}`, {responseType: 'blob'});
   }
 
   publishScheduleMonth(scheduleMonthId: number): Observable<ScheduleMonthDto> {

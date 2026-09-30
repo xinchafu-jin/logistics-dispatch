@@ -342,8 +342,8 @@ const OTHER_CASE_CATEGORY: CaseCategoryOption = {code: 'OTHER', label: '其他',
 
 /**
  * 司機可以選的分類，順序就是支援中心格子的順序。
- * 沒有「門市拒收」：業務上沒有這種情境。無人簽收、交貨短少破損、點交不符都有專用按鈕，
- * 那些才會改訂單狀態、建補送單；案件只負責「先問調度中心怎麼辦」，不改任何狀態。
+ * 沒有「門市拒收」：業務上沒有這種情境。無人簽收、點交不符走專用按鈕，
+ * 貨物損毀由門市回報；案件只負責「先問調度中心怎麼辦」，不改任何狀態。
  */
 export const CASE_CATEGORIES: readonly CaseCategoryOption[] = [
   {
@@ -379,7 +379,7 @@ export const CASE_CATEGORIES: readonly CaseCategoryOption[] = [
     label: '貨物問題',
     icon: 'inventory_2',
     quickPicks: ['外箱破損', '貨物傾倒', '裝錯貨（別家門市的貨）', '少箱'],
-    notice: '交貨時短少或破損的箱數，還是要在任務卡「交貨」裡填，系統會自動建立異常單。這裡是先回報、問怎麼處理。',
+    notice: '這裡用來回報配送途中的貨物狀況、詢問調度中心如何處理。交貨後的貨物損毀由門市回報，司機端不登記損毀箱數。',
   },
   {
     code: 'PERSONAL',
@@ -989,12 +989,6 @@ export class DriverDashboard implements AfterViewInit, OnDestroy {
     this.casePhoto.set(null);
     this.caseFormError.set(null);
     this.supportView.set({kind: 'create', category});
-  }
-
-  /** 任務卡的「貨況異常」：直接打開建立案件，分類是貨物問題、帶入這張單 */
-  protected reportStopIssue(stop: DriverTaskStop): void {
-    this.startCase('GOODS', stop.orderId);
-    this.openSupportSheet();
   }
 
   protected isCasePickSelected(pick: string): boolean {

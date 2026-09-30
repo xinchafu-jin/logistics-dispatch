@@ -33,6 +33,18 @@ describe('DispatchApiService', () => {
     request.flush({from: '2026-09-28', to: '2026-09-28'});
   });
 
+  it('reads pre-trip history using the report filters and loads its photos as authenticated API blobs', () => {
+    service.getReportPreTrip({from: '2026-09-28', to: '2026-09-30', warehouseId: 1,
+      driverId: 3, vehicleIds: [4, 5], storeId: 8}).subscribe();
+    const history = httpTesting.expectOne('/api/reports/pre-trip?from=2026-09-28&to=2026-09-30&warehouseId=1&driverId=3&vehicleIds=4,5&storeId=8');
+    expect(history.request.method).toBe('GET');
+    history.flush({from: '2026-09-28', to: '2026-09-30', inspections: []});
+    service.getReportPreTripPhoto(11, 'alcohol').subscribe();
+    const photo = httpTesting.expectOne('/api/reports/pre-trip/11/photos/alcohol');
+    expect(photo.request.responseType).toBe('blob');
+    photo.flush(new Blob(['photo'], {type: 'image/png'}));
+  });
+
   it('withdraws publication for the selected date without rewriting orders', () => {
     service.withdrawDispatch('2026-09-27').subscribe((boards) => expect(boards).toEqual([]));
     const request = httpTesting.expectOne('/api/dispatch/withdraw?date=2026-09-27');

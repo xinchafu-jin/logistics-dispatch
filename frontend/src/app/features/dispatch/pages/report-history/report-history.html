@@ -49,6 +49,7 @@
   @if (errorMessage()) { <p class="ui-alert is-warn" role="alert"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ errorMessage() }}</p> }
   @if (filterError()) { <p class="ui-alert is-warn" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ filterError() }}</p> }
   @if (detailError()) { <p class="ui-alert is-warn" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ detailError() }}</p> }
+  @if (inspectionError()) { <p class="ui-alert is-warn" role="status"><mat-icon aria-hidden="true">warning_amber</mat-icon>{{ inspectionError() }}</p> }
   <!-- 預覽區塊永遠渲染：載入中、載入失敗時分頁列仍在，內容區換成狀態訊息 -->
   <section class="ui-panel preview-shell" aria-label="主管歷史報表預覽" [attr.aria-busy]="loading()">
     <header class="ui-panel__header">
@@ -75,6 +76,74 @@
           <label class="metric-filter"><span>顯示項目</span><select class="ui-input" [value]="metric()" (change)="updateMetric($event)"><option value="">全部</option>@for (item of metricOptions(); track item.id) { <option [value]="item.id">{{ item.label }}</option> }</select></label>
         }
         @switch (selectedSheet()) {
+          @case ('pre-trip') {
+            <p class="sheet-note">每次送出的發車前檢查各留一筆，重檢、未通過及已作廢紀錄都可查閱。展開下方紀錄可查看酒測、行車紀錄器、五油、三水、二胎、四燈與照片。</p>
+            @if (report.preTrips) {
+              @let inspections = inspectionRows(report);
+              <div class="exception-summary inspection-summary">
+                <span class="ui-tag">檢點紀錄 {{ inspections.length }} 筆</span>
+                <span class="ui-tag">通過 {{ inspectionCount(inspections, true) }} 筆</span>
+                <span class="ui-tag is-warn">未通過 {{ inspectionCount(inspections, false) }} 筆</span>
+                <span class="ui-tag">其中已作廢 {{ invalidatedInspectionCount(inspections) }} 筆</span>
+              </div>
+              <div class="ui-panel ui-table-wrap">
+                <table class="ui-table inspection-table">
+                  <thead><tr><th>日期 / 檢查時間</th><th>司機</th><th>車牌 / 出貨倉庫</th><th>路線</th><th>酒測 mg/L</th><th>檢查結果</th><th>紀錄狀態</th><th>異常項目</th><th>備註</th></tr></thead>
+                  <tbody>
+                    @for (row of inspections; track row.inspectionId) {
+                      <tr>
+                        <td class="ui-mono">{{ row.workDate }}<small>{{ value(row.submittedAt) }}</small></td>
+                        <td>{{ row.driverName ?? ('司機 #' + row.driverId) }}<small>{{ value(row.driverAccount) }}</small></td>
+                        <td class="ui-mono">{{ row.plateNumber ?? ('車輛 #' + row.vehicleId) }}<small>{{ value(row.warehouseName) }}</small></td>
+                        <td class="ui-mono">#{{ row.routeId }}</td>
+                        <td class="ui-mono">{{ inspectionAlcohol(row) }}</td>
+                        <td><span class="ui-tag" [class.is-warn]="row.passed === false">{{ inspectionResult(row) }}</span></td>
+                        <td>{{ row.invalidatedAt ? '已作廢' : '留存' }}@if (row.invalidatedAt) { <small>{{ value(row.invalidatedAt) }}</small> }</td>
+                        <td class="wrap-cell">{{ inspectionAbnormalLabel(row) }}</td>
+                        <td class="wrap-cell">{{ value(row.note) }}</td>
+                      </tr>
+                      <tr class="sub-row">
+                        <td colspan="9">
+                          <details class="item-details inspection-details">
+                            <summary [attr.aria-label]="'檢點紀錄 ' + row.inspectionId + '，查看各項結果與照片'">查看各項檢點紀錄與照片 · #{{ row.inspectionId }}</summary>
+                            <div class="inspection-groups">
+                              @for (group of inspectionGroups(row); track group.name) {
+                                <section class="inspection-group" [attr.aria-label]="group.name">
+                                  <h4>{{ group.name }}</h4>
+                                  <ul>
+                                    @for (check of group.items; track check.key) {
+                                      <li><span>{{ check.label }}</span><strong [class.is-normal]="check.normal === true" [class.is-abnormal]="check.normal === false"><mat-icon aria-hidden="true">{{ check.normal === true ? 'check_circle' : check.normal === false ? 'error' : 'help_outline' }}</mat-icon>{{ inspectionCheckLabel(check.normal) }}</strong></li>
+                                    }
+                                  </ul>
+                                </section>
+                              }
+                            </div>
+                            <div class="inspection-evidence">
+                              <span class="sheet-note">酒測 {{ inspectionAlcohol(row) }} mg/L · 路線版本 {{ row.routeVersion }}</span>
+                              @if (row.hasAlcoholPhoto) { <button type="button" class="ui-btn-default" (click)="openInspectionPhoto(row, 'alcohol')"><mat-icon aria-hidden="true">image</mat-icon>查看酒測器照片</button> }
+                              @if (row.hasFaultPhoto) { <button type="button" class="ui-btn-default" (click)="openInspectionPhoto(row, 'fault')"><mat-icon aria-hidden="true">image</mat-icon>查看車況異常照片</button> }
+                              @if (!row.hasAlcoholPhoto && !row.hasFaultPhoto) { <span class="sheet-note">這筆紀錄未附照片。</span> }
+                            </div>
+                            @if (inspectionPhoto(); as photo) {
+                              @if (photo.inspectionId === row.inspectionId) {
+                                <figure class="inspection-photo" aria-live="polite">
+                                  <figcaption>{{ photo.label }}<button type="button" class="ui-btn-default" (click)="clearInspectionPhoto()">關閉照片</button></figcaption>
+                                  @if (photo.url) { <img [src]="photo.url" [alt]="photo.label + '，檢點紀錄 ' + row.inspectionId" /> }
+                                  @else { <p [attr.role]="photo.error ? 'alert' : 'status'">{{ photo.error ?? '照片載入中…' }}</p> }
+                                </figure>
+                              }
+                            }
+                          </details>
+                        </td>
+                      </tr>
+                    } @empty { <tr><td colspan="9" class="ui-empty">這個期間沒有符合條件的發車前檢點紀錄。</td></tr> }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="ui-empty"><p>檢點紀錄未載入，請重新預覽。</p><button type="button" class="ui-btn-default" (click)="createPreview()">重新載入報表</button></div>
+            }
+          }
           @case ('delivery-quality') {
             <p class="sheet-note">按到期應配送訂單列出司機交貨紀錄；「未結訂單異常」包含超過收貨截止仍未交付，及逾期才交付的訂單。應送以訂單箱數為準，實送依交貨紀錄，無人簽收記 0 箱。缺少實送紀錄顯示「--」，不當作 0 箱或門市驗收。</p>
             @if (report.outcomes) {

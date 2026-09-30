@@ -2,7 +2,7 @@ import {TestBed} from '@angular/core/testing';
 import {ActivatedRoute, convertToParamMap, Router} from '@angular/router';
 import {DispatchApiService} from '../../../../core/services/dispatch-api.service';
 import {ReportHistory} from './report-history';
-import {ReportOrderOutcomeDto} from '../../../../core/services/dispatch-api.models';
+import {ReportOrderOutcomeDto, ReportPreTripInspectionDto} from '../../../../core/services/dispatch-api.models';
 import {provideNativeDateAdapter} from '@angular/material/core';
 import {of, Subject, throwError} from 'rxjs';
 
@@ -26,6 +26,7 @@ describe('ReportHistory links from the supervisor summary', () => {
       'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions']) api[name] = vi.fn(() => of({}));
     api['getReportSummary'] = vi.fn(() => of({from: '2026-09-28', to: '2026-09-28', dailyTrend: []}));
     api['getReportOutcomes'] = vi.fn(() => of({orders: []}));
+    api['getReportPreTrip'] = vi.fn(() => of({from: '2026-09-28', to: '2026-09-28', inspections: []}));
     api['getOrders'] = vi.fn(() => of([]));
     api['getWarehouses'] = vi.fn(() => of([{id: 1, name: '第一倉'}]));
     api['getStores'] = vi.fn(() => of([{id: 2, name: '第一店'}]));
@@ -33,6 +34,124 @@ describe('ReportHistory links from the supervisor summary', () => {
     api['getVehicles'] = vi.fn(() => of([{id: 4, plateNumber: 'ABC-1234', vehicleType: '3.5噸貨車'}]));
     return api;
   }
+
+  function inspection(id: number, overrides: Partial<ReportPreTripInspectionDto> = {}): ReportPreTripInspectionDto {
+    const groups: [string, string, string][] = [
+      ['dashcam', '行車紀錄器', '開機且正常錄影'], ['engineOil', '五油', '引擎機油'],
+      ['brakeFluid', '五油', '煞車油'], ['powerSteeringFluid', '五油', '動力方向盤油'],
+      ['transmissionOil', '五油', '變速箱油'], ['fuel', '五油', '燃油'],
+      ['coolant', '三水', '冷卻水'], ['batteryWater', '三水', '電瓶水'], ['washerFluid', '三水', '雨刷水'],
+      ['tirePressure', '二胎', '胎壓'], ['tireTread', '二胎', '胎紋'],
+      ['headlights', '四燈', '頭燈'], ['turnSignals', '四燈', '方向燈'],
+      ['brakeLights', '四燈', '煞車燈'], ['dashboardLights', '四燈', '儀表板燈'],
+    ];
+    return {inspectionId: id, workDate: '2026-09-28', submittedAt: '2026-09-28T08:00:00',
+      driverId: 3, driverName: '陳柏宇', driverAccount: 'DRV001', vehicleId: 4, plateNumber: 'KAE-2081',
+      warehouseId: 1, warehouseName: '高雄左營倉', routeId: 12, routeVersion: 1, alcoholMgL: 0,
+      passed: true, invalidatedAt: null, note: null, hasAlcoholPhoto: true, hasFaultPhoto: false,
+      abnormalItems: [], checks: groups.map(([key, group, label]) => ({key, group, label, normal: true})), ...overrides};
+  }
+
+  it('renders each pre-trip attempt and all 15 recorded checks including faults and unknown values', () => {
+    const failed = inspection(1, {passed: false, alcoholMgL: 0.12, abnormalItems: ['酒測', '煞車燈'],
+      note: '煞車燈待修', invalidatedAt: '2026-09-28T09:00:00'});
+    failed.checks[13].normal = false;
+    failed.checks[6].normal = null;
+    const api = previewApi();
+    api['getReportPreTrip'] = vi.fn(() => of({inspections: [failed, inspection(2)]}));
+    TestBed.configureTestingModule({imports: [ReportHistory], providers: [
+      provideNativeDateAdapter(),
+      {provide: ActivatedRoute, useValue: {snapshot: {queryParamMap: convertToParamMap({
+        from: '2026-09-28', to: '2026-09-28', sheet: 'pre-trip'})}}},
+      {provide: Router, useValue: {navigate: vi.fn(() => Promise.resolve(true))}},
+      {provide: DispatchApiService, useValue: api},
+    ]});
+    const fixture = TestBed.createComponent(ReportHistory);
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.sheet-tabs')?.textContent).toContain('發車前檢點表');
+    expect(element.querySelector('.inspection-summary')?.textContent).toContain('檢點紀錄 2 筆');
+    expect(element.querySelectorAll('.inspection-group li')).toHaveLength(30);
+    expect(element.querySelectorAll('.inspection-group .is-abnormal')).toHaveLength(1);
+    expect(element.querySelector('.inspection-table')?.textContent).toContain('未記錄');
+    expect(element.querySelector('.inspection-table')?.textContent).toContain('部分項目未記錄');
+    expect(element.querySelector('.inspection-table')?.textContent).toContain('0.12');
+    expect(element.querySelector('.inspection-table')?.textContent).toContain('煞車燈待修');
+    expect(element.querySelector('.inspection-table')?.textContent).toContain('已作廢');
+    expect(element.querySelector('.inspection-evidence button')?.textContent).toContain('酒測器照片');
+    fixture.destroy();
+  });
+
+  it('exports the same selected inspection records and all their checks without replacing unknown results', () => {
+    const page = open({sheet: 'pre-trip', metric: 'failed'}) as any;
+    const failed = inspection(1, {passed: false, note: '煞車燈待修', abnormalItems: ['煞車燈']});
+    failed.checks[13].normal = false; failed.checks[6].normal = null;
+    const data = {preTrips: {inspections: [failed, inspection(2), inspection(3, {invalidatedAt: '2026-09-28T09:00:00'})]}};
+    expect(page.inspectionRows(data).map((row: ReportPreTripInspectionDto) => row.inspectionId)).toEqual([1]);
+    expect(page.inspectionExportRows(data)).toHaveLength(2);
+    const items = page.inspectionItemExportRows(data);
+    expect(items).toHaveLength(16);
+    expect(items.find((row: unknown[]) => row.includes('冷卻水'))).toContain('未記錄');
+    expect(items.find((row: unknown[]) => row.includes('煞車燈'))).toContain('異常');
+    page.metric.set('invalidated');
+    expect(page.inspectionRows(data).map((row: ReportPreTripInspectionDto) => row.inspectionId)).toEqual([3]);
+    page.metric.set('');
+    expect(page.inspectionExportRows(data)).toHaveLength(4);
+    expect(page.inspectionItemExportRows(data)).toHaveLength(46);
+  });
+
+  it('keeps other report sheets available when inspection history fails and reports the missing source', () => {
+    const page = open({sheet: 'pre-trip'}) as any;
+    const api = TestBed.inject(DispatchApiService) as any;
+    Object.assign(api, previewApi());
+    api.getReportPreTrip = vi.fn(() => throwError(() => ({status: 403})));
+    (ReportHistory.prototype as any).createPreview.call(page);
+    expect(page.preview()).not.toBeNull();
+    expect(page.preview().preTrips).toBeNull();
+    expect(page.inspectionError()).toContain('發車前檢點表');
+    expect(page.inspectionError()).toContain('沒有查詢權限');
+  });
+
+  it('loads private inspection photos and revokes them when switching reports', () => {
+    const page = open({sheet: 'pre-trip'}) as any;
+    const api = TestBed.inject(DispatchApiService) as any;
+    const createUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:inspection-photo');
+    const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    api.getReportPreTripPhoto = vi.fn(() => of(new Blob(['photo'], {type: 'image/png'})));
+    page.openInspectionPhoto(inspection(7), 'alcohol');
+    expect(api.getReportPreTripPhoto).toHaveBeenCalledWith(7, 'alcohol');
+    expect(page.inspectionPhoto()).toMatchObject({inspectionId: 7, url: 'blob:inspection-photo', error: null});
+    page.selectSheet('attendance');
+    expect(page.inspectionPhoto()).toBeNull();
+    expect(revokeUrl).toHaveBeenCalledWith('blob:inspection-photo');
+    createUrl.mockRestore(); revokeUrl.mockRestore();
+  });
+
+  it('explains that the new inspection endpoint needs a backend update when it returns 404', () => {
+    const page = open({sheet: 'pre-trip'}) as any;
+    const api = TestBed.inject(DispatchApiService) as any;
+    Object.assign(api, previewApi());
+    api.getReportPreTrip = vi.fn(() => throwError(() => ({status: 404})));
+    (ReportHistory.prototype as any).createPreview.call(page);
+    expect(page.preview()).not.toBeNull();
+    expect(page.inspectionError()).toContain('更新並重啟後端');
+  });
+
+  it('cancels stale photo loads and explains missing photo files without hiding inspection history', () => {
+    const page = open({sheet: 'pre-trip'}) as any;
+    const api = TestBed.inject(DispatchApiService) as any;
+    const pending = new Subject<Blob>();
+    api.getReportPreTripPhoto = vi.fn(() => pending);
+    page.openInspectionPhoto(inspection(1), 'alcohol');
+    page.clearInspectionPhoto();
+    pending.next(new Blob(['stale']));
+    expect(page.inspectionPhoto()).toBeNull();
+    api.getReportPreTripPhoto = vi.fn(() => throwError(() => ({status: 404})));
+    page.openInspectionPhoto(inspection(2), 'fault');
+    expect(page.inspectionPhoto()).toMatchObject({inspectionId: 2, url: null, error: '這筆照片檔案已不存在。'});
+    page.ngOnDestroy();
+    expect(page.inspectionPhoto()).toBeNull();
+  });
 
   it.each([
     [500, '後端查詢失敗'], [0, '無法連線到後端服務'], [401, '登入已失效'], [403, '沒有查詢權限'],
@@ -108,7 +227,7 @@ describe('ReportHistory links from the supervisor summary', () => {
     (ReportHistory.prototype as any).createPreview.call(page);
 
     for (const name of ['getReportPerformance', 'getReportSummary', 'getReportAttendance', 'getReportRoutes',
-      'getReportDrivers', 'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions']) {
+      'getReportDrivers', 'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions', 'getReportPreTrip']) {
       expect(api[name].mock.lastCall[0].vehicleIds).toEqual([7, 9]);
     }
     expect(api.getReportOutcomes.mock.lastCall[0].vehicleIds).toEqual([7, 9]);
@@ -330,7 +449,7 @@ describe('ReportHistory links from the supervisor summary', () => {
       const page = open({from: '2026-09-28', to: '2026-10-04', sheet: 'attendance', metric: 'late', warehouseId: '12'}) as any;
       const api = TestBed.inject(DispatchApiService) as any;
       const reads = ['getReportPerformance', 'getReportAttendance', 'getReportRoutes', 'getReportDrivers',
-        'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions'];
+        'getReportVehicles', 'getReportWarehouses', 'getReportStores', 'getReportExceptions', 'getReportPreTrip'];
       for (const name of reads) api[name] = vi.fn(() => of({}));
       api.getReportSummary = vi.fn((query: any) => of({from: query.from, to: query.to}));
       api.getReportOutcomes = vi.fn((query: any) => of({from: query.from, to: query.to, orders: []}));

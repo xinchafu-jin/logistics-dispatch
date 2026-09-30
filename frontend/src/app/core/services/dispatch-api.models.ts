@@ -380,6 +380,42 @@ export interface ReportCollectionDto<T = Record<string, unknown>> {
   [key: string]: string | number | boolean | null | T[];
 }
 
+export interface ReportPreTripCheckDto {
+  key: string;
+  group: string;
+  label: string;
+  normal: boolean | null;
+}
+
+export interface ReportPreTripInspectionDto {
+  inspectionId: number;
+  workDate: string;
+  submittedAt: string;
+  driverId: number;
+  driverName: string | null;
+  driverAccount: string | null;
+  vehicleId: number;
+  plateNumber: string | null;
+  warehouseId: number | null;
+  warehouseName: string | null;
+  routeId: number;
+  routeVersion: number;
+  alcoholMgL: number | null;
+  passed: boolean | null;
+  invalidatedAt: string | null;
+  note: string | null;
+  hasAlcoholPhoto: boolean;
+  hasFaultPhoto: boolean;
+  checks: ReportPreTripCheckDto[];
+  abnormalItems: string[];
+}
+
+export interface ReportPreTripDto {
+  from: string;
+  to: string;
+  inspections: ReportPreTripInspectionDto[];
+}
+
 export interface ReportWorkforceDto {
   scheduledWorkShifts: number; excusedFullDayShifts: number; dueShifts: number;
   attendedShifts: number; onTimeShifts: number; lateShifts: number; missingClockInShifts: number;

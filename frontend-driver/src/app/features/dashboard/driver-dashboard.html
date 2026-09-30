@@ -302,15 +302,6 @@
                   </button>
                   <button
                     type="button"
-                    class="delivery-exception-button"
-                    (click)="reportStopIssue(currentTask.stop)"
-                    [disabled]="isTaskSubmitting()"
-                  >
-                    <mat-icon aria-hidden="true">report_problem</mat-icon>
-                    貨況異常
-                  </button>
-                  <button
-                    type="button"
                     class="delivery-cancel-button"
                     (click)="closeDeliveryAction()"
                   >
@@ -785,16 +776,6 @@
                                   <mat-icon aria-hidden="true">warning_amber</mat-icon>
                                   無人簽收
                                 </button>
-                                <!-- 開支援中心的建立案件：分類是貨物問題、帶入這張單 -->
-                                <button
-                                  type="button"
-                                  class="delivery-exception-button"
-                                  (click)="reportStopIssue(stop)"
-                                  [disabled]="isTaskSubmitting()"
-                                >
-                                  <mat-icon aria-hidden="true">report_problem</mat-icon>
-                                  貨況異常
-                                </button>
                                 <button
                                   type="button"
                                   class="delivery-cancel-button"
@@ -1121,7 +1102,7 @@
   </nav>
 </main>
 
-<!-- 支援中心：交給 MatBottomSheet 開啟（openSupportCenter、reportStopIssue），不另外開元件。
+<!-- 支援中心：交給 MatBottomSheet 開啟（openSupportCenter），不另外開元件。
      放在最外層、不能包在 @if 裡，否則切到別的分頁時 ViewChild 找不到。
      裡面三頁由 supportView 決定：home 首頁、create 建立案件、thread 對話（一般對話或某件案件） -->
 <ng-template #driverChatSheet>

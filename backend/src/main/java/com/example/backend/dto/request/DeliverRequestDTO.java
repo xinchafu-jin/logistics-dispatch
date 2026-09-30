@@ -1,6 +1,7 @@
 package com.example.backend.dto.request;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
@@ -26,6 +27,7 @@ public class DeliverRequestDTO {
     private Integer shortageBoxCount;
 
     @PositiveOrZero(message = "損壞箱數不能小於 0")
+    @Max(value = 0, message = "貨物損毀由門市回報，司機端不可登記損毀箱數")
     private Integer damagedBoxCount;
 
     @PositiveOrZero(message = "需要補送箱數不能小於 0")
